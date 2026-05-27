@@ -268,6 +268,29 @@ export async function getTenantContactChannels(
   return fromConfig(t.name, (t.branding?.config ?? {}) as Record<string, unknown>);
 }
 
+export type TenantDomainRow = {
+  id: string;
+  hostname: string;
+  verified: boolean;
+  isPrimary: boolean;
+};
+
+/** Custom domains attached to a tenant, for the settings "Custom domains" card. */
+export async function listTenantDomains(slug: string): Promise<TenantDomainRow[]> {
+  // Built-in demo tenants are immutable fixtures with no real domain provisioning.
+  if (isDemoMode()) return [];
+  const t = await prisma.tenant.findUnique({
+    where: { slug },
+    select: {
+      domains: {
+        select: { id: true, hostname: true, verified: true, isPrimary: true },
+        orderBy: [{ isPrimary: "desc" }, { hostname: "asc" }],
+      },
+    },
+  });
+  return t?.domains ?? [];
+}
+
 export async function listAdminTenants(): Promise<AdminTenantRow[]> {
   if (isDemoMode()) {
     return listDemoTenants()

@@ -57,6 +57,8 @@ type Props = {
   initialCheckoutTitle: string;
   initialCheckoutNote: string;
   lastSaved?: string;
+  /** Custom-domain card, rendered in the sections column (its own save flow). */
+  domains?: React.ReactNode;
 };
 
 const SECTIONS = [
@@ -75,6 +77,7 @@ export function TenantSettingsView({
   initialCheckoutTitle,
   initialCheckoutNote,
   lastSaved,
+  domains,
 }: Props) {
   /* ---------- order-number format ---------- */
   const [prefix, setPrefix] = useState(format.prefix);
@@ -629,6 +632,9 @@ export function TenantSettingsView({
               </div>
             </div>
           </section>
+
+          {/* ---------- custom domains (self-contained card) ---------- */}
+          {domains}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { getTenantOrderFormat, getTenantContactChannels } from "@/lib/admin/data";
+import { getTenantOrderFormat, getTenantContactChannels, listTenantDomains } from "@/lib/admin/data";
 import { TenantSettingsView } from "@/components/admin/TenantSettingsView";
+import { DomainManager } from "@/components/admin/DomainManager";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,10 @@ export default async function TenantSettingsPage({
 }) {
   const { slug } = await params;
 
-  const [tenant, contact] = await Promise.all([
+  const [tenant, contact, domains] = await Promise.all([
     getTenantOrderFormat(slug),
     getTenantContactChannels(slug),
+    listTenantDomains(slug),
   ]);
   if (!tenant || !contact) notFound();
 
@@ -28,6 +30,7 @@ export default async function TenantSettingsPage({
       initialChannels={contact.contactChannels}
       initialCheckoutTitle={contact.checkoutTitle}
       initialCheckoutNote={contact.checkoutNote}
+      domains={<DomainManager slug={slug} initialDomains={domains} />}
     />
   );
 }
