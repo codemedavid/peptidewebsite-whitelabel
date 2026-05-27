@@ -1,0 +1,1 @@
+{"kind":"FETCH","data":{"headers":{},"body":"{\"id\":\"cmpmssuo8000ymoq1ivxsw12x\",\"slug\":\"acme\",\"status\":\"active\"}","status":200,"url":""},"revalidate":300,"tags":["tenant-host:acme.localhost"]}

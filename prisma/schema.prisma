@@ -1,0 +1,445 @@
+// Multi-tenant peptide SaaS — shared schema, row-level tenancy.
+// One DB. tenant_id is the leading column of every tenant-scoped index.
+// RLS policies (see prisma/rls.sql) are the defense-in-depth backstop.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // Supabase pooled connection
+  directUrl = env("DIRECT_URL") // for migrations
+}
+
+// ──────────────────────────── Tenancy & plans ────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  status    String   @default("active") // active | suspended | trial
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id])
+  createdAt DateTime @default(now())
+
+  // Per-tenant order-number format: { prefix, separator, scheme: 'random'|'sequential', digits }.
+  orderNumberFormat Json @default("{}")
+  // Monotonic counter for scheme=sequential. Atomically incremented per order (see lib/orders/order-number.ts).
+  orderSeq          Int  @default(1000)
+
+  domains           Domain[]
+  integrations      TenantIntegration[]
+  featureOverrides  TenantFeatureOverride[]
+  contacts          Contact[]
+  products          Product[]
+  carts             Cart[]
+  orders            Order[]
+  events            Event[]
+  emailLogs         EmailLog[]
+  automationRuns    AutomationRun[]
+  automationMetrics AutomationMetric[]
+
+  // ── Storefront / white-label layer (added) ──
+  members  TenantUser[]
+  branding Branding?
+  settings TenantSettings?
+  pages    Page[]
+  blogs    BlogPost[]
+  coupons  Coupon[]
+  media    MediaAsset[]
+
+  @@index([planId])
+  @@map("tenants")
+}
+
+model Domain {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  hostname  String  @unique // store.acme.com | acme.peptide.app
+  verified  Boolean @default(false)
+  isPrimary Boolean @default(false)
+
+  @@index([tenantId])
+  @@map("domains")
+}
+
+model Plan {
+  id       String        @id @default(cuid())
+  key      String        @unique // basic | ecommerce | growth
+  name     String
+  tenants  Tenant[]
+  features PlanFeature[]
+
+  @@map("plans")
+}
+
+model Feature {
+  id              String                  @id @default(cuid())
+  key             String                  @unique // matches FEATURES catalog, e.g. automation.abandoned_cart
+  description     String?
+  plans           PlanFeature[]
+  tenantOverrides TenantFeatureOverride[]
+
+  @@map("features")
+}
+
+model PlanFeature {
+  planId    String
+  featureId String
+  plan      Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureId])
+  @@map("plan_features")
+}
+
+// Per-tenant grant/revoke on top of the plan (trials, custom deals, beta access).
+model TenantFeatureOverride {
+  tenantId  String
+  featureId String
+  enabled   Boolean
+  expiresAt DateTime?
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  feature   Feature   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, featureId])
+  @@map("tenant_feature_overrides")
+}
+
+// ──────────────────────────── Integrations ────────────────────────────
+
+model TenantIntegration {
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider String // posthog | stripe | resend | mailgun | sendgrid
+  enabled  Boolean @default(false) // the on/off toggle — never deletes creds
+
+  // Envelope-encrypted credential blob: { ciphertext, iv, tag }. Never store plaintext.
+  encryptedCredentials Json
+  dataKeyId            String // which wrapped data key (DEK) encrypted this
+  config               Json   @default("{}") // non-secret config (host, from-address, ...)
+
+  lastHealthCheckAt DateTime?
+  healthOk          Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@map("tenant_integrations")
+}
+
+// ──────────────────────────── People & commerce ────────────────────────────
+
+model Contact {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distinctId   String // analytics identity (anon or user id)
+  email        String?
+  unsubscribed Boolean  @default(false)
+  traits       Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  carts     Cart[]
+  orders    Order[]
+  emailLogs EmailLog[]
+
+  @@unique([tenantId, distinctId])
+  @@index([tenantId, email])
+  @@map("contacts")
+}
+
+model Product {
+  id         String  @id @default(cuid())
+  tenantId   String
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku        String
+  name       String
+  priceCents Int
+  currency   String  @default("USD")
+  active     Boolean @default(true)
+
+  // ── Storefront fields (added) ──
+  slug        String? // unique per tenant → /products/[slug]
+  description String?
+  images      Json     @default("[]") // ImageKit ids/urls
+  stock       Int      @default(0)
+  status      String   @default("active") // draft | active | archived
+  metadata    Json     @default("{}") // peptide compliance: purity %, COA url, research-use-only
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, slug])
+  @@index([tenantId, active])
+  @@index([tenantId, status])
+  @@map("products")
+}
+
+model Cart {
+  id         String     @id @default(cuid())
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId  String?
+  contact    Contact?   @relation(fields: [contactId], references: [id])
+  distinctId String
+  status     String     @default("open") // open | converted | abandoned
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([tenantId, distinctId, status])
+  @@map("carts")
+}
+
+model CartItem {
+  id         String  @id @default(cuid())
+  cartId     String
+  cart       Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Int     @default(1)
+  priceCents Int
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+model Order {
+  id                    String      @id @default(cuid())
+  tenantId              String
+  tenant                Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId             String?
+  contact               Contact?    @relation(fields: [contactId], references: [id])
+  distinctId            String
+  orderNumber           String // tenant-facing formatted code, e.g. ABC-1001 (see lib/orders/order-number.ts)
+  status                String      @default("paid") // paid | fulfilled | refunded
+  totalCents            Int
+  currency              String      @default("USD")
+  stripePaymentIntentId String?
+  items                 OrderItem[]
+  createdAt             DateTime    @default(now())
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, distinctId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Int
+  priceCents Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ──────────────────────────── Events, email, automation ────────────────────────────
+
+// Outbox + audit trail. Source of truth for replay/reconciliation.
+model Event {
+  id         String   @id // ULID (time-sortable)
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distinctId String
+  name       String // matches EVENTS catalog, e.g. cart_item_added
+  props      Json     @default("{}")
+  ts         DateTime @default(now())
+
+  // outbox dispatch tracking
+  analyticsSent  Boolean @default(false)
+  automationSent Boolean @default(false)
+
+  @@index([tenantId, name, ts])
+  @@index([tenantId, distinctId, ts])
+  @@map("events")
+}
+
+model EmailLog {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId         String?
+  contact           Contact? @relation(fields: [contactId], references: [id])
+  provider          String // resend | sendgrid | mailgun
+  providerMessageId String?  @unique // dedupe / open-click correlation
+  template          String
+  flow              String? // abandoned_cart | welcome | reorder | dunning
+  status            String   @default("sent") // sent | delivered | opened | clicked | bounced | failed
+  idempotencyKey    String?  @unique
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId, flow, createdAt])
+  @@map("email_logs")
+}
+
+// Tracks the state of a journey/workflow instance (mirrors Inngest run for in-app visibility).
+model AutomationRun {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  functionId   String // abandoned-cart | welcome | reorder | win-back
+  distinctId   String
+  status       String    @default("running") // running | completed | cancelled | failed | skipped
+  inngestRunId String?
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+
+  @@index([tenantId, functionId, status])
+  @@map("automation_runs")
+}
+
+// Pre-aggregated KPIs so the dashboard never recomputes from raw events.
+model AutomationMetric {
+  id                    String @id @default(cuid())
+  tenantId              String
+  tenant                Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  period                String // e.g. 2026-05 or 2026-05-26
+  emailsSent            Int    @default(0)
+  cartsRecovered        Int    @default(0)
+  revenueRecoveredCents Int    @default(0)
+
+  @@unique([tenantId, period])
+  @@map("automation_metrics")
+}
+
+// ──────────────────────────── Auth & roles (RBAC) ────────────────────────────
+// Supabase Auth issues identity (auth.users.id). Authorization lives here.
+
+// Global platform operators (you + your team). role: super_admin | support
+model PlatformUser {
+  id        String   @id // = Supabase auth.users.id
+  email     String   @unique
+  role      String   @default("super_admin")
+  createdAt DateTime @default(now())
+
+  @@map("platform_users")
+}
+
+// Tenant membership. One auth user can belong to many tenants.
+// role: owner | tenant_admin | staff
+model TenantUser {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String // = Supabase auth.users.id
+  email     String
+  role      String   @default("staff")
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, userId]) // one membership per user per tenant
+  @@index([userId]) // "which tenants does this user belong to?"
+  @@map("tenant_users")
+}
+
+// ──────────────────────────── Branding / theming ────────────────────────────
+
+model Branding {
+  id         String  @id @default(cuid())
+  tenantId   String  @unique
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logoUrl    String?
+  faviconUrl String?
+  themeId    String  @default("default") // preset key
+  colors     Json    @default("{}") // { primary, secondary, accent, background, foreground, ... }
+  fonts      Json    @default("{}") // { heading, body }
+  config     Json    @default("{}") // full storefront Brand config (sections, pages, hero/catalog copy, footer, admin) — see storefront/types Brand
+  radius     String  @default("0.5rem")
+  customCss  String?
+
+  @@map("branding")
+}
+
+model TenantSettings {
+  id           String  @id @default(cuid())
+  tenantId     String  @unique
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  storeName    String?
+  supportEmail String?
+  currency     String  @default("USD")
+  compliance   Json    @default("{}") // age gate, research-use-only, region blocks
+  navigation   Json    @default("{}")
+  footer       Json    @default("{}")
+
+  @@map("tenant_settings")
+}
+
+// ──────────────────────────── CMS: pages, blog, coupons, media ────────────────────────────
+
+// Page = ordered, typed sections rendered by the modular section builder.
+model Page {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  slug      String
+  title     String
+  sections  Json     @default("[]") // [{ type: "hero", props: {...} }, ...]
+  status    String   @default("draft") // draft | published | archived
+  seo       Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@map("pages")
+}
+
+model BlogPost {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  slug        String
+  title       String
+  body        Json      @default("{}")
+  coverUrl    String?
+  status      String    @default("draft") // draft | published | archived
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, publishedAt])
+  @@map("blog_posts")
+}
+
+// Storefront discount codes (backs the ecommerce.discounts feature).
+model Coupon {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code           String
+  percentOff     Int?
+  amountOffCents Int?
+  active         Boolean   @default(true)
+  expiresAt      DateTime?
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+  @@map("coupons")
+}
+
+// ImageKit-backed media library per tenant (logos, product images, blog covers).
+model MediaAsset {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  imagekitId String
+  url        String
+  type       String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("media_assets")
+}
