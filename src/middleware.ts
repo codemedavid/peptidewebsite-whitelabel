@@ -5,6 +5,10 @@ const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(
   /:\d+$/,
   "",
 );
+// Explicit admin host override. Set this to the bare deployment host (e.g. a
+// Vercel URL like "myapp.vercel.app") when you don't have an `admin.<root>`
+// subdomain yet and want the Super Admin served at the root of that host.
+const ADMIN_HOST = process.env.NEXT_PUBLIC_ADMIN_HOST?.replace(/:\d+$/, "");
 
 /**
  * Edge middleware: host-based routing + Supabase token refresh — NO database
@@ -33,9 +37,16 @@ export async function middleware(req: NextRequest) {
   // path "/" — the tenant storefront does, on tenant subdomains). We serve it at
   // the BARE root of the admin host by rewriting "/x" → "/admin/x" internally,
   // so the browser URL stays clean (localhost:3100/tenants, not /admin/tenants).
-  //   - admin.<root>  → the production admin host
-  //   - localhost     → the dev convenience host (no tenant subdomain) is the admin
-  const isAdmin = host === `admin.${ROOT}` || host === "localhost";
+  //   - admin.<root>          → the production admin host
+  //   - localhost             → the dev convenience host (no tenant subdomain)
+  //   - NEXT_PUBLIC_ADMIN_HOST → explicit override for a bare deployment host
+  //   - *.vercel.app          → Vercel URLs can't host an `admin.` subdomain, so
+  //                             serve the admin at their root out of the box
+  const isAdmin =
+    host === `admin.${ROOT}` ||
+    host === "localhost" ||
+    (ADMIN_HOST !== undefined && host === ADMIN_HOST) ||
+    host.endsWith(".vercel.app");
   const rebuild = () => {
     if (isAdmin) {
       const path = url.pathname;
