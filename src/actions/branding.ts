@@ -186,3 +186,51 @@ export async function saveContactChannelsAction(
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/**
+ * Set the password that gates the tenant's storefront admin (`<slug>.<root>/#admin`).
+ * Stored in the shared `branding.config` blob as `adminPassword`; a blank value
+ * clears the override and the gate falls back to the built-in default ("admin").
+ * Read-modify-write so it never clobbers the rest of the storefront Brand config.
+ */
+export async function saveAdminPasswordAction(
+  slug: string,
+  password: string,
+): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+
+  const adminPassword = (password ?? "").trim();
+  if (adminPassword.length > 0 && adminPassword.length < 4) {
+    return { error: "Use at least 4 characters, or leave blank for the default." };
+  }
+
+  if (isDemoMode()) {
+    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    saveDemoBranding(slug, { config: { ...current, adminPassword } });
+    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
+  if (!tenant) return { error: "Tenant not found." };
+
+  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const config = { ...current, adminPassword } as Prisma.InputJsonValue;
+
+  await prisma.branding.upsert({
+    where: { tenantId: tenant.id },
+    update: { config },
+    create: { tenantId: tenant.id, config },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

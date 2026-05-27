@@ -268,6 +268,25 @@ export async function getTenantContactChannels(
   return fromConfig(t.name, (t.branding?.config ?? {}) as Record<string, unknown>);
 }
 
+/** Current storefront-admin password override (blank = falls back to "admin").
+ *  Read from the shared branding.config blob, same as the contact channels. */
+export async function getTenantAdminPassword(slug: string): Promise<string | null> {
+  const fromConfig = (config: Record<string, unknown>): string =>
+    typeof config.adminPassword === "string" ? config.adminPassword : "";
+
+  if (isDemoMode()) {
+    if (!listDemoTenants().some((t) => t.slug === slug)) return null;
+    return fromConfig((getDemoBranding(slug).config ?? {}) as Record<string, unknown>);
+  }
+
+  const t = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { branding: { select: { config: true } } },
+  });
+  if (!t) return null;
+  return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>);
+}
+
 export type TenantDomainRow = {
   id: string;
   hostname: string;

@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction } from "@/actions/onboarding";
-import { saveContactChannelsAction } from "@/actions/branding";
+import { saveContactChannelsAction, saveAdminPasswordAction } from "@/actions/branding";
 import { CONTACT_CHANNEL_META } from "@/lib/storefront/contact-channels";
 import {
   formatOrderNumber,
@@ -56,6 +56,8 @@ type Props = {
   initialChannels: ContactChannel[];
   initialCheckoutTitle: string;
   initialCheckoutNote: string;
+  /** Storefront-admin password override; blank means the default ("admin"). */
+  initialAdminPassword: string;
   lastSaved?: string;
   /** Custom-domain card, rendered in the sections column (its own save flow). */
   domains?: React.ReactNode;
@@ -65,6 +67,7 @@ const SECTIONS = [
   { id: "orders", label: "Order numbers" },
   { id: "channels", label: "Checkout channels" },
   { id: "copy", label: "Checkout copy" },
+  { id: "admin", label: "Admin access" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -76,6 +79,7 @@ export function TenantSettingsView({
   initialChannels,
   initialCheckoutTitle,
   initialCheckoutNote,
+  initialAdminPassword,
   lastSaved,
   domains,
 }: Props) {
@@ -90,6 +94,10 @@ export function TenantSettingsView({
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
 
+  /* ---------- storefront-admin password ---------- */
+  const [adminPassword, setAdminPassword] = useState(initialAdminPassword);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
   /* baseline for dirty tracking; advances on a successful save */
   const baseline = useRef({
     prefix: format.prefix,
@@ -99,10 +107,16 @@ export function TenantSettingsView({
     channels: JSON.stringify(initialChannels),
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
+    adminPassword: initialAdminPassword,
   });
 
   const [saving, setSaving] = useState<SectionId | "all" | null>(null);
-  const [saved, setSaved] = useState<Record<SectionId, boolean>>({ orders: false, channels: false, copy: false });
+  const [saved, setSaved] = useState<Record<SectionId, boolean>>({
+    orders: false,
+    channels: false,
+    copy: false,
+    admin: false,
+  });
   const [errors, setErrors] = useState<Partial<Record<SectionId, string>>>({});
 
   const ordersDirty =
@@ -112,7 +126,8 @@ export function TenantSettingsView({
     digits !== baseline.current.digits;
   const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
   const copyDirty = title !== baseline.current.title || note !== baseline.current.note;
-  const anyDirty = ordersDirty || channelsDirty || copyDirty;
+  const adminDirty = adminPassword !== baseline.current.adminPassword;
+  const anyDirty = ordersDirty || channelsDirty || copyDirty || adminDirty;
 
   /* ---------- order-number validation + preview ---------- */
   const prefixValid = PREFIX_RE.test(prefix);
@@ -168,11 +183,26 @@ export function TenantSettingsView({
     return false;
   }
 
+  async function saveAdminPassword(): Promise<boolean> {
+    setSaving("admin");
+    setErrors((e) => ({ ...e, admin: undefined }));
+    const res = await saveAdminPasswordAction(slug, adminPassword);
+    setSaving(null);
+    if ("ok" in res) {
+      baseline.current = { ...baseline.current, adminPassword };
+      setSaved((s) => ({ ...s, admin: true }));
+      return true;
+    }
+    setErrors((e) => ({ ...e, admin: res.error }));
+    return false;
+  }
+
   async function saveAll() {
     setSaving("all");
     if (ordersDirty && prefixValid) await saveOrders();
     // Channels + copy share one action, so a single call flushes both.
     if ((channelsDirty || copyDirty) && incompleteChannels.length === 0) await saveChannelsAndCopy("channels");
+    if (adminDirty) await saveAdminPassword();
     setSaving(null);
   }
 
@@ -185,6 +215,7 @@ export function TenantSettingsView({
     setChannels(JSON.parse(b.channels));
     setTitle(b.title);
     setNote(b.note);
+    setAdminPassword(b.adminPassword);
     setErrors({});
   }
 
@@ -193,6 +224,7 @@ export function TenantSettingsView({
     orders: useRef<HTMLElement>(null),
     channels: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
+    admin: useRef<HTMLElement>(null),
   };
   const [active, setActive] = useState<SectionId>("orders");
   useEffect(() => {
@@ -216,6 +248,7 @@ export function TenantSettingsView({
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
     copy: "2",
+    admin: adminPassword.trim() ? "Custom" : "Default",
   };
 
   const mark = name.slice(0, 2).toUpperCase();
@@ -627,6 +660,96 @@ export function TenantSettingsView({
                     </>
                   ) : (
                     "Save copy"
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* ---------- storefront admin access ---------- */}
+          <section className="set-card" ref={refs.admin} data-section="admin">
+            <div className="set-card-head">
+              <div>
+                <span className="set-eyebrow">Access</span>
+                <h2>Admin access</h2>
+                <p className="set-desc">
+                  The password the tenant uses to open their store admin at{" "}
+                  <code>{domain}/#admin</code>. Share it with the store owner — it&apos;s separate from
+                  your platform login.
+                </p>
+              </div>
+              <span className={"badge " + (adminPassword.trim() ? "badge-success" : "badge-neutral")}>
+                {adminPassword.trim() ? "Custom password" : "Default password"}
+              </span>
+            </div>
+            <div className="set-card-body">
+              {!adminPassword.trim() && (
+                <div className="set-notice" style={{ marginBottom: 14 }}>
+                  <Ic.AlertCircle />
+                  <div>
+                    No password set — this admin currently accepts the default <code>admin</code>, which
+                    anyone could guess. Set a unique password below.
+                  </div>
+                </div>
+              )}
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Admin password</div>
+                  <div className="set-row-help">At least 4 characters. Leave blank to fall back to the default.</div>
+                </div>
+                <div className="set-row-control">
+                  <div className="set-field-row">
+                    <input
+                      className="input mono"
+                      type={showAdminPassword ? "text" : "password"}
+                      value={adminPassword}
+                      placeholder="default: admin"
+                      autoComplete="off"
+                      onChange={(e) => {
+                        setAdminPassword(e.target.value);
+                        setSaved((s) => ({ ...s, admin: false }));
+                        setErrors((er) => ({ ...er, admin: undefined }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setShowAdminPassword((v) => !v)}
+                    >
+                      {showAdminPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {errors.admin && <div className="set-err">{errors.admin}</div>}
+                </div>
+              </div>
+            </div>
+            <div className="set-foot">
+              <span className="hint">
+                <Ic.AlertCircle />
+                Takes effect immediately for new admin logins.
+              </span>
+              <div className="set-foot-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!adminDirty || saving !== null}
+                  onClick={() => {
+                    setAdminPassword(baseline.current.adminPassword);
+                    setErrors((e) => ({ ...e, admin: undefined }));
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  className="btn btn-accent btn-sm"
+                  onClick={saveAdminPassword}
+                  disabled={!adminDirty || saving !== null}
+                >
+                  {saving === "admin" ? "Saving…" : saved.admin && !adminDirty ? (
+                    <>
+                      <Ic.Check /> Saved
+                    </>
+                  ) : (
+                    "Save password"
                   )}
                 </button>
               </div>
