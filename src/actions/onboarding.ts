@@ -19,6 +19,7 @@ import {
   type CreateTenantState,
 } from "@/actions/demo";
 import type { DemoFeatureMap } from "@/lib/demo/fixtures";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
 
@@ -121,7 +122,7 @@ export async function saveBranding(
   });
 
   revalidatePath("/admin");
-  revalidateTag(`tenant-host:${data.slug}.${ROOT}`); // storefront re-reads branding
+  revalidateTenant(tenant.id, data.slug); // storefront re-reads branding
   return { ok: true };
 }
 
@@ -219,7 +220,7 @@ export async function saveFeatures(
   revalidatePath("/admin");
   revalidatePath(`/admin/tenants/${slug}`);
   revalidatePath(`/admin/tenants/${slug}/features`);
-  revalidateTag(`tenant-host:${slug}.${ROOT}`); // storefront re-reads entitlements (nav + route guards)
+  revalidateTenant(tenant.id, slug); // storefront re-reads entitlements (nav + route guards)
   return { ok: true };
 }
 

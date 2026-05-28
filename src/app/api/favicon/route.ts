@@ -2,7 +2,9 @@ import { getTenantIdOrNull } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
 
-export const dynamic = "force-dynamic";
+// Dynamic via host header; the inner tenant context is `unstable_cache`-deduped
+// across requests, and the response itself is served with a long s-maxage so
+// CDNs hold it between brand mutations (which bust `tenant:<id>`).
 
 /**
  * Per-tenant favicon: a monogram tile in the tenant's brand color.
@@ -36,7 +38,7 @@ export async function GET() {
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=60, s-maxage=300",
+      "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
     },
   });
 }
@@ -56,7 +58,7 @@ function faviconResponse(faviconUrl: string): Response {
     return new Response(body, {
       headers: {
         "Content-Type": contentType || "application/octet-stream",
-        "Cache-Control": "public, max-age=60, s-maxage=300",
+        "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
   }

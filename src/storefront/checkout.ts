@@ -5,10 +5,13 @@
 // Messenger don't reliably prefill a DM, so callers also copy the summary to the
 // clipboard as a fallback.
 
-import type { Brand, ContactChannel, ContactChannelType, Product } from "./types";
+import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product } from "./types";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
+
+/** What the customer paid with, gathered before the order is handed off. */
+export type CheckoutPayment = { methodName: string; hasProof: boolean };
 
 /** The shipping + contact details collected at checkout. */
 export type CheckoutCustomer = {
@@ -64,6 +67,11 @@ export function activeChannels(brand: Brand): ContactChannel[] {
   return (brand.contactChannels ?? []).filter((c) => c.enabled && c.destination.trim());
 }
 
+/** Active payment methods, in the order configured by the store admin. */
+export function activePaymentMethods(methods: PaymentMethod[]): PaymentMethod[] {
+  return methods.filter((m) => m.active).sort((a, b) => a.order - b.order);
+}
+
 function money(amount: number, currency: string): string {
   return `${currency}${amount.toLocaleString()}`;
 }
@@ -73,6 +81,7 @@ export function buildOrderMessage(
   brand: Brand,
   lines: CartLine[],
   customer: CheckoutCustomer,
+  payment?: CheckoutPayment,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -94,6 +103,17 @@ export function buildOrderMessage(
     .filter(Boolean)
     .join(", ");
 
+  const paymentLines = payment
+    ? [
+        "",
+        "Payment:",
+        `Method: ${payment.methodName || "—"}`,
+        payment.hasProof
+          ? "Proof of payment: attached — sending in this chat"
+          : "Proof of payment: —",
+      ]
+    : [];
+
   return [
     `New order — ${brand.name}`,
     "",
@@ -107,6 +127,7 @@ export function buildOrderMessage(
     `Email: ${customer.email}`,
     `Phone: ${customer.phone}`,
     `Shipping: ${ship || "—"}`,
+    ...paymentLines,
   ].join("\n");
 }
 

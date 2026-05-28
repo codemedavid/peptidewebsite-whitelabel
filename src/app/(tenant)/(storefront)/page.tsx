@@ -5,7 +5,10 @@ import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
 import type { Brand } from "@/storefront/types";
 
-export const dynamic = "force-dynamic"; // tenant-specific; resolved per request
+// Dynamic-by-default because we read the tenant from the request host
+// (middleware sets x-tenant-host). The hot data calls (tenant context, branding,
+// entitlements) are wrapped in `unstable_cache` so per-host renders re-use the
+// same DB result for 5 min and are busted by tag on tenant mutations.
 
 export default async function HomePage() {
   const tenantId = await getTenantId();

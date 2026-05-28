@@ -7,7 +7,8 @@ import { Gate } from "@/components/Gate";
 import { FEATURES } from "@/lib/features/catalog";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+// Dynamic by request host; product lookups are tenant-scoped and short, and
+// the surrounding tenant context is `unstable_cache`-deduped across requests.
 
 export default async function ProductPage({
   params,

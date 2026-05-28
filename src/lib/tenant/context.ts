@@ -1,30 +1,43 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/features/entitlements";
 import type { FeatureKey } from "@/lib/features/catalog";
 import { isDemoMode, getDemoContext } from "@/lib/demo/fixtures";
 
+// Cross-request cache: per-tenant identity + branding + settings. Tagged so
+// branding/settings mutations can revalidateTag(`tenant:<id>`) and the next
+// request reads fresh data without paying for a full DB round-trip first.
+const loadTenant = (tenantId: string) =>
+  unstable_cache(
+    () =>
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          plan: { select: { key: true, name: true } },
+          branding: true,
+          settings: true,
+        },
+      }),
+    ["tenant-row", tenantId],
+    { tags: [`tenant:${tenantId}`], revalidate: 300 },
+  )();
+
 /**
  * Everything a tenant-scoped page needs in one cached call:
  * identity, branding, settings, and resolved entitlements.
- * `cache()` dedupes across a single render pass.
+ * Outer `cache()` dedupes within a single render; inner `unstable_cache`
+ * dedupes across requests (5 min TTL, tag-invalidated by mutations).
  */
 export const getTenantContext = cache(async (tenantId: string) => {
   if (isDemoMode()) return getDemoContext(tenantId);
 
   const [tenant, entitlements] = await Promise.all([
-    prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        plan: { select: { key: true, name: true } },
-        branding: true,
-        settings: true,
-      },
-    }),
+    loadTenant(tenantId),
     getEntitlements(tenantId),
   ]);
 

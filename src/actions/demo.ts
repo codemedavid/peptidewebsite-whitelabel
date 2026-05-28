@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { isDemoMode, createDemoTenant, saveDemoBranding, saveDemoOrderFormat, saveDemoFeatures, type DemoBranding, type DemoFeatureMap } from "@/lib/demo/fixtures";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   normalizeOrderNumberFormat,
   validatePrefix,
@@ -76,7 +77,7 @@ export async function saveBrandingDemoAction(
 
   saveDemoBranding(slug, branding);
   revalidatePath("/admin");
-  revalidatePath("/", "layout"); // storefronts re-read branding
+  revalidateTenant(slug, slug); // storefronts re-read branding (demo: id = slug)
   return { ok: true };
 }
 
@@ -90,6 +91,6 @@ export async function saveFeaturesDemoAction(
 
   saveDemoFeatures(slug, map);
   revalidatePath("/admin");
-  revalidatePath("/", "layout"); // storefronts re-read entitlements (nav + route guards)
+  revalidateTenant(slug, slug); // storefronts re-read entitlements (nav + route guards)
   return { ok: true };
 }

@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode, getDemoEntitlements } from "@/lib/demo/fixtures";
@@ -11,24 +12,35 @@ export class FeatureLockedError extends Error {
   }
 }
 
+// Cross-request cache for the plan-feature joins. Same tag as the tenant row
+// so any branding/settings/plan mutation invalidates the entitlement set too.
+const loadEntitlements = (tenantId: string) =>
+  unstable_cache(
+    () =>
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
+          featureOverrides: {
+            select: { enabled: true, expiresAt: true, feature: { select: { key: true } } },
+          },
+        },
+      }),
+    ["tenant-entitlements", tenantId],
+    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:entitlements`], revalidate: 300 },
+  )();
+
 /**
  * Resolved feature set for a tenant = plan features ∪ enabled overrides − revocations.
- * `cache()` dedupes within a single request; back with KV (5 min TTL) in production.
+ * Outer `cache()` dedupes within a render; inner `unstable_cache` (5 min) dedupes
+ * across requests and is tag-busted by entitlement-mutating actions.
  */
 export const getEntitlements = cache(
   async (tenantId: string): Promise<Set<FeatureKey>> => {
     // Demo mode: resolve from file-backed plan + override map (no DB).
     if (isDemoMode()) return getDemoEntitlements(tenantId);
 
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
-        featureOverrides: {
-          select: { enabled: true, expiresAt: true, feature: { select: { key: true } } },
-        },
-      },
-    });
+    const tenant = await loadEntitlements(tenantId);
     if (!tenant) return new Set();
 
     const set = new Set<FeatureKey>(

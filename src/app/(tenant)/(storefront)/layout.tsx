@@ -65,6 +65,11 @@ export default async function StorefrontLayout({
     <div style={cssVars} className="min-h-screen bg-background text-foreground">
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      {/* Preload the font CSS so the network request starts before HTML parsing
+          reaches the stylesheet tag; the actual <link rel="stylesheet"> still
+          applies the rules (and Google's CSS sets font-display: swap so text
+          paints without waiting on the font binaries). */}
+      <link rel="preload" as="style" href={fontsHref} />
       <link rel="stylesheet" href={fontsHref} />
 
       {isStorefrontHome ? (

@@ -8,6 +8,7 @@ import { getPlatformUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
 
 export type BrandingAssetKind = "logo" | "favicon";
 export type UploadAssetResult = { url: string | null } | { error: string };
@@ -52,7 +53,7 @@ export async function uploadBrandingAssetAction(
     const dataUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
     saveDemoBranding(slug, kind === "logo" ? { logoUrl: dataUrl } : { faviconUrl: dataUrl });
     revalidatePath("/admin");
-    revalidatePath("/", "layout"); // storefronts re-read branding
+    revalidateTenant(slug, slug); // storefronts re-read branding (demo: id = slug)
     return { url: dataUrl };
   }
 
@@ -89,7 +90,7 @@ export async function uploadBrandingAssetAction(
     });
 
     revalidatePath("/admin");
-    revalidatePath("/", "layout");
+    revalidateTenant(tenant.id, slug);
     return { url: uploaded.url };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Upload failed." };
@@ -107,7 +108,7 @@ export async function removeBrandingAssetAction(
   if (isDemoMode()) {
     saveDemoBranding(slug, kind === "logo" ? { logoUrl: null } : { faviconUrl: null });
     revalidatePath("/admin");
-    revalidatePath("/", "layout");
+    revalidateTenant(slug, slug);
     return { url: null };
   }
 
@@ -122,7 +123,7 @@ export async function removeBrandingAssetAction(
     data: kind === "logo" ? { logoUrl: null } : { faviconUrl: null },
   });
   revalidatePath("/admin");
-  revalidatePath("/", "layout");
+  revalidateTenant(tenant.id, slug);
   return { url: null };
 }
 
@@ -160,7 +161,7 @@ export async function saveContactChannelsAction(
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
     saveDemoBranding(slug, { config: { ...current, ...contactFields } });
     revalidatePath("/admin");
-    revalidatePath("/", "layout"); // storefronts re-read branding
+    revalidateTenant(slug, slug);
     return { ok: true };
   }
 
@@ -183,7 +184,7 @@ export async function saveContactChannelsAction(
   });
 
   revalidatePath("/admin");
-  revalidatePath("/", "layout");
+  revalidateTenant(tenant.id, slug);
   return { ok: true };
 }
 
@@ -208,7 +209,7 @@ export async function saveAdminPasswordAction(
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
     saveDemoBranding(slug, { config: { ...current, adminPassword } });
     revalidatePath("/admin");
-    revalidatePath("/", "layout");
+    revalidateTenant(slug, slug);
     return { ok: true };
   }
 
@@ -231,6 +232,6 @@ export async function saveAdminPasswordAction(
   });
 
   revalidatePath("/admin");
-  revalidatePath("/", "layout");
+  revalidateTenant(tenant.id, slug);
   return { ok: true };
 }
