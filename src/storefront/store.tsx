@@ -288,9 +288,17 @@ export function StoreProvider({
           ? (next as (p: PaymentMethod[]) => PaymentMethod[])(paymentMethods)
           : next;
       setPaymentsState(value);
-      void savePaymentMethodsAction(value).then((r) => {
-        if (r && "error" in r) toast(r.error);
-      });
+      // Surface failures loudly — a rejected save (e.g. no admin session) would
+      // otherwise leave the UI looking saved while the DB never changed.
+      savePaymentMethodsAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save payment methods: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save payment methods — please sign in again and retry.");
+        });
     },
     [toast, paymentMethods],
   );

@@ -211,6 +211,7 @@
   background: transparent;
   outline: none;
   font: inherit;
+  font-size: 16px;
   color: var(--brand-text);
   height: 100%;
 }
@@ -310,6 +311,7 @@
   border: 1px solid var(--brand-border);
   background: var(--brand-surface); color: var(--brand-text);
   font: inherit;
+  font-size: 16px;
 }
 .sf-root .sf-cart__field input[aria-invalid="true"] { border-color: #d23; }
 
@@ -1705,7 +1707,7 @@
   border-radius: var(--radius-pill);
   background: var(--brand-background);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   outline: none;
   text-align: center;
   letter-spacing: 0.2em;
@@ -2107,7 +2109,7 @@
 .sf-root .admin-input, .sf-root .admin-textarea, .sf-root .admin-select {
   width: 100%;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--brand-text);
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);

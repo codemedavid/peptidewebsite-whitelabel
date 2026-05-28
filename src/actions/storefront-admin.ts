@@ -70,6 +70,16 @@ async function requireStorefrontAdmin(): Promise<string | null> {
   return tenantId;
 }
 
+/**
+ * Whether the caller holds a valid storefront-admin session for this tenant.
+ * The storefront UI uses this to gate the admin on a REAL server session rather
+ * than the bypassable sessionStorage flag — without it, a stale flag would let a
+ * user into the admin with no cookie, and every save would be silently rejected.
+ */
+export async function hasStorefrontAdminSessionAction(): Promise<boolean> {
+  return (await requireStorefrontAdmin()) !== null;
+}
+
 /** Coerce untrusted client input into clean PaymentMethod rows. */
 function normalizeMethods(input: unknown): PaymentMethod[] {
   if (!Array.isArray(input)) return [];

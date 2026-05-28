@@ -17,6 +17,7 @@ import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { ADMIN_AUTH_KEY } from "./admin/authKey";
 import { isPageVisible } from "./visibility";
+import { hasStorefrontAdminSessionAction } from "@/actions/storefront-admin";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
@@ -52,14 +53,38 @@ function Shell() {
   // Resolve initial route + auth after mount (avoids SSR hash mismatch).
   useEffect(() => {
     setPage(pageFromHash());
-    try {
-      setAdminAuthed(sessionStorage.getItem(ADMIN_AUTH_KEY) === "1");
-    } catch {
-      /* ignore */
-    }
+
+    // The admin gate is a REAL server session, not just the sessionStorage flag.
+    // We optimistically trust the flag for instant UI, then confirm against the
+    // server: if there's no valid sf_admin_session cookie, force re-login (and
+    // clear the stale flag) so the user can't sit in the admin issuing saves
+    // that would be silently rejected.
+    const verifyAdmin = () => {
+      let optimistic = false;
+      try {
+        optimistic = sessionStorage.getItem(ADMIN_AUTH_KEY) === "1";
+      } catch {
+        /* ignore */
+      }
+      setAdminAuthed(optimistic);
+      void hasStorefrontAdminSessionAction()
+        .then((ok) => {
+          setAdminAuthed(ok);
+          try {
+            if (ok) sessionStorage.setItem(ADMIN_AUTH_KEY, "1");
+            else sessionStorage.removeItem(ADMIN_AUTH_KEY);
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {});
+    };
+    if (pageFromHash() === "admin") verifyAdmin();
+
     const onHash = () => {
       const next = pageFromHash();
       setPage(next);
+      if (next === "admin") verifyAdmin();
       if (next !== "catalog") window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
     window.addEventListener("hashchange", onHash);
