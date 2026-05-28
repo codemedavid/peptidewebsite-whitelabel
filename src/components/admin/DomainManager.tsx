@@ -1,77 +1,31 @@
 "use client";
 
 // Custom-domain management for a tenant, shown as a card on the tenant Settings
-// page. Lets an operator attach a domain the customer owns (e.g. shop.acme.com),
-// shows the DNS records to set, and verifies it against Vercel. Once verified and
-// marked primary, resolveTenantByHost() routes that hostname to this tenant.
+// page. A custom domain is a simple host → tenant mapping: the operator has
+// already (a) attached the domain in the Vercel project and (b) confirmed the
+// customer pointed DNS at the platform. Saving the hostname here is what makes
+// resolveTenantByHost() route requests to this tenant.
 
 import { useState } from "react";
 import { Ic } from "@/components/admin/shell/primitives";
 import {
   addTenantDomainAction,
-  verifyTenantDomainAction,
   removeTenantDomainAction,
   setPrimaryTenantDomainAction,
 } from "@/actions/admin";
 import type { TenantDomainRow } from "@/lib/admin/data";
-import type { DomainStatus, VerificationRecord } from "@/lib/domains/verify";
 
 type Props = {
   slug: string;
   initialDomains: TenantDomainRow[];
 };
 
-type Row = TenantDomainRow & { status?: DomainStatus };
-
-/** Recommended DNS record for pointing a hostname at Vercel. */
-function recommendedRecord(hostname: string): VerificationRecord {
-  // 2 labels (acme.com) = apex → A record; more (shop.acme.com) = subdomain → CNAME.
-  const isApex = hostname.split(".").length <= 2;
-  return isApex
-    ? { type: "A", domain: hostname, value: "76.76.21.21" }
-    : { type: "CNAME", domain: hostname, value: "cname.vercel-dns.com" };
-}
-
-function DnsRecords({ hostname, status }: { hostname: string; status?: DomainStatus }) {
-  // Prefer Vercel's own verification records; otherwise show the standard record.
-  const records =
-    status && status.verification.length > 0
-      ? status.verification
-      : [recommendedRecord(hostname)];
-  return (
-    <div className="dm-dns">
-      <div className="dm-dns-title">Add these DNS records at your domain provider</div>
-      <table className="dm-dns-table">
-        <thead>
-          <tr>
-            <th>Type</th>
-            <th>Name</th>
-            <th>Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((r, i) => (
-            <tr key={i}>
-              <td className="mono">{r.type}</td>
-              <td className="mono">{r.domain}</td>
-              <td className="mono">{r.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="dm-dns-hint">
-        DNS changes can take a few minutes (sometimes up to 48h) to propagate. Click Verify once set.
-      </div>
-    </div>
-  );
-}
-
 export function DomainManager({ slug, initialDomains }: Props) {
-  const [domains, setDomains] = useState<Row[]>(initialDomains);
+  const [domains, setDomains] = useState<TenantDomainRow[]>(initialDomains);
   const [input, setInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // hostname currently working
+  const [busy, setBusy] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
 
   function setError(hostname: string, msg?: string) {
@@ -94,30 +48,8 @@ export function DomainManager({ slug, initialDomains }: Props) {
       .replace(/\/.*$/, "")
       .replace(/:\d+$/, "")
       .replace(/\.$/, "");
-    setDomains((d) => [
-      ...d,
-      { id: hostname, hostname, verified: res.status.verified, isPrimary: false, status: res.status },
-    ]);
+    setDomains((d) => [...d, { id: hostname, hostname, verified: true, isPrimary: false }]);
     setInput("");
-  }
-
-  async function verify(hostname: string) {
-    setBusy(hostname);
-    setError(hostname);
-    const res = await verifyTenantDomainAction(slug, hostname);
-    setBusy(null);
-    if ("error" in res) {
-      setError(hostname, res.error);
-      return;
-    }
-    setDomains((d) =>
-      d.map((x) =>
-        x.hostname === hostname ? { ...x, verified: res.status.verified, status: res.status } : x,
-      ),
-    );
-    if (!res.status.verified) {
-      setError(hostname, "DNS not detected yet — check the records and try again shortly.");
-    }
   }
 
   async function remove(hostname: string) {
@@ -153,19 +85,17 @@ export function DomainManager({ slug, initialDomains }: Props) {
           <span className="set-eyebrow">Domains</span>
           <h2>Custom domains</h2>
           <p className="set-desc">
-            Point a domain the customer owns (e.g. <code>shop.acme.com</code>) at this store. The
-            platform subdomain always works; add a custom domain to use their own branding.
+            Map a domain the customer owns (e.g. <code>shop.acme.com</code>) to this store. Before
+            adding it here, attach the domain in your Vercel project and have the customer point its
+            DNS at the platform — then save the hostname below and it will route immediately.
           </p>
         </div>
-        <span className={"badge " + (domains.some((d) => d.verified) ? "badge-success" : "badge-neutral")}>
-          {domains.length === 0
-            ? "None"
-            : `${domains.filter((d) => d.verified).length}/${domains.length} verified`}
+        <span className={"badge " + (domains.length > 0 ? "badge-success" : "badge-neutral")}>
+          {domains.length === 0 ? "None" : `${domains.length} mapped`}
         </span>
       </div>
 
       <div className="set-card-body">
-        {/* add form */}
         <div className="dm-add">
           <input
             className="input"
@@ -187,7 +117,6 @@ export function DomainManager({ slug, initialDomains }: Props) {
         </div>
         {addError && <div className="set-err" role="alert" style={{ marginTop: 8 }}>{addError}</div>}
 
-        {/* list */}
         {domains.length === 0 ? (
           <div className="set-notice" style={{ marginTop: 14 }}>
             <Ic.Globe />
@@ -198,7 +127,7 @@ export function DomainManager({ slug, initialDomains }: Props) {
             {domains.map((d) => {
               const working = busy === d.hostname;
               return (
-                <div key={d.hostname} className={"dm-item" + (d.verified ? " verified" : "")}>
+                <div key={d.hostname} className="dm-item verified">
                   <div className="dm-item-head">
                     <div className="dm-item-name">
                       <Ic.Globe />
@@ -206,33 +135,15 @@ export function DomainManager({ slug, initialDomains }: Props) {
                         {d.hostname}
                       </a>
                       {d.isPrimary && <span className="badge badge-accent">Primary</span>}
-                      {d.verified ? (
-                        <span className="badge badge-success">
-                          <Ic.CheckCircle /> Verified
-                        </span>
-                      ) : (
-                        <span className="badge badge-warn">
-                          <Ic.AlertCircle /> Pending DNS
-                        </span>
-                      )}
                     </div>
                     <div className="dm-item-actions">
-                      {d.verified && !d.isPrimary && (
+                      {!d.isPrimary && (
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => makePrimary(d.hostname)}
                           disabled={working}
                         >
                           Make primary
-                        </button>
-                      )}
-                      {!d.verified && (
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => verify(d.hostname)}
-                          disabled={working}
-                        >
-                          {working ? "Checking…" : (<><Ic.Refresh /> Verify</>)}
                         </button>
                       )}
                       <button
@@ -245,7 +156,6 @@ export function DomainManager({ slug, initialDomains }: Props) {
                       </button>
                     </div>
                   </div>
-                  {!d.verified && <DnsRecords hostname={d.hostname} status={d.status} />}
                   {rowError[d.hostname] && (
                     <div className="set-err" role="alert" style={{ marginTop: 8 }}>
                       {rowError[d.hostname]}
@@ -261,8 +171,7 @@ export function DomainManager({ slug, initialDomains }: Props) {
       <div className="set-foot">
         <span className="hint">
           <Ic.AlertCircle />
-          DNS verification only checks the customer's records. Attach the domain to the hosting
-          project (Vercel dashboard or a wildcard) so it can route + issue TLS.
+          Mapped domains route to this store immediately. The primary is the canonical URL.
         </span>
       </div>
     </section>
