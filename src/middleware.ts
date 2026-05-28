@@ -61,6 +61,14 @@ export async function middleware(req: NextRequest) {
         request: { headers: requestHeaders },
       });
     }
+    // Tenant hosts: /admin is the password-only tenant login. The /admin URL
+    // slot is already taken by the platform Super Admin under (platform), so we
+    // rewrite to (tenant)/tenant-admin internally while keeping the public URL.
+    if (url.pathname === "/admin" || url.pathname === "/admin/") {
+      return NextResponse.rewrite(new URL("/tenant-admin", req.url), {
+        request: { headers: requestHeaders },
+      });
+    }
     // Marketing site (apex / www) and tenant hosts pass through; the tenant
     // (storefront / dashboard) routes live under the (tenant) group at root.
     return NextResponse.next({ request: { headers: requestHeaders } });

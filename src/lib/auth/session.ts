@@ -1,48 +1,25 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "./supabase-server";
-import { roleAtLeast, type TenantRole } from "./rbac";
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
+import { readTenantAdminCookie } from "./tenant-admin";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo/fixtures";
 
 export type TenantSession = {
-  userId: string;
-  email: string;
   tenantId: string;
-  role: string;
 };
 
 /**
- * Resolve the current user's membership IN THE CURRENT TENANT.
- * The tenant comes from the host (x-tenant-id), so a user logged into
- * acme.app who points at bigcorp.app has no membership → null. This is
- * the authorization boundary between tenants.
+ * Resolve the tenant admin session for the CURRENT tenant (from the host).
+ * A cookie issued for one tenant is rejected on another host — that's the
+ * cross-tenant authorization boundary.
  */
 export async function getTenantSession(): Promise<TenantSession | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return null;
-
-  const membership = await prisma.tenantUser.findUnique({
-    where: { tenantId_userId: { tenantId, userId: user.id } },
-    select: { role: true, email: true },
-  });
-  if (!membership) return null;
-
-  return { userId: user.id, email: membership.email, tenantId, role: membership.role };
-}
-
-export async function requireTenantRole(min: TenantRole): Promise<TenantSession> {
-  const session = await getTenantSession();
-  if (!session || !roleAtLeast(session.role, min)) {
-    throw new Error("FORBIDDEN");
-  }
-  return session;
+  const cookie = await readTenantAdminCookie();
+  if (!cookie || cookie.tenantId !== tenantId) return null;
+  return { tenantId };
 }
 
 /** Platform-plane (super_admin/support) — used by the (platform) admin app. */

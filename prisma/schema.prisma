@@ -28,6 +28,10 @@ model Tenant {
   // Monotonic counter for scheme=sequential. Atomically incremented per order (see lib/orders/order-number.ts).
   orderSeq          Int  @default(1000)
 
+  // Password-only tenant admin login (slug.<root>/admin). Hash is scrypt-derived
+  // ("scrypt$<salt-hex>$<hash-hex>"). Null = password not yet set by the platform owner.
+  adminPasswordHash String?
+
   domains           Domain[]
   integrations      TenantIntegration[]
   featureOverrides  TenantFeatureOverride[]

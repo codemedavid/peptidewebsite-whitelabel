@@ -8,6 +8,7 @@ import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, planLimits, formatPesos } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
 import { suspendTenantAction } from "@/actions/admin";
+import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
 import type { TenantDetail } from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
@@ -258,6 +259,8 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
           </div>
         </div>
 
+        <AdminPasswordCard slug={tenant.slug} />
+
         <div className="card">
           <div className="card-head">
             <h3 className="card-title">Plan &amp; limits</h3>
@@ -294,6 +297,66 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPasswordCard({ slug }: { slug: string }) {
+  const { showToast } = useAdminUI();
+  const [pending, startTransition] = useTransition();
+  const [pwd, setPwd] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = () => {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setTenantAdminPasswordAction(slug, pwd);
+      if ("error" in res) {
+        setErr(res.error);
+      } else {
+        setPwd("");
+        showToast("Tenant admin password updated.");
+      }
+    });
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h3 className="card-title">Admin password</h3>
+          <div className="card-sub">
+            Tenant signs in at <span className="mono">{slug}.{ROOT}/admin</span> with this password.
+          </div>
+        </div>
+      </div>
+      <div className="card-body" style={{ display: "grid", gap: 8, padding: 16 }}>
+        <input
+          type="password"
+          value={pwd}
+          onChange={(e) => setPwd(e.target.value)}
+          placeholder="New password (min 6 chars)"
+          autoComplete="new-password"
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--bg-canvas)",
+            fontSize: 13,
+          }}
+        />
+        {err && <div style={{ fontSize: 12, color: "var(--danger)" }}>{err}</div>}
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={save}
+          disabled={pending || pwd.length < 6}
+          style={{ justifySelf: "start" }}
+        >
+          {pending ? "Saving…" : "Set password"}
+        </button>
       </div>
     </div>
   );

@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getTenantSession } from "@/lib/auth/session";
-import { signOutAction } from "@/actions/auth";
+import { getTenantContext } from "@/lib/tenant/context";
+import { signOutTenantAdminAction } from "@/actions/tenant-admin";
 
 /**
- * Tenant backoffice. Guarded: only members of THIS tenant (resolved from the
- * host) may enter. Non-members / logged-out users are bounced.
+ * Tenant backoffice. Guarded: only callers holding a valid tenant-admin cookie
+ * for THIS tenant (resolved from the host) may enter. Anyone else is bounced
+ * to /admin — the password-only login page.
  */
 export default async function DashboardLayout({
   children,
@@ -12,28 +15,17 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await getTenantSession();
+  if (!session) redirect("/admin");
 
-  if (!session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">
-          You don’t have access to this dashboard.{" "}
-          <Link href="/login" className="text-primary underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    );
-  }
+  const { tenant } = await getTenantContext(session.tenantId);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 w-60 border-r border-border p-6">
         <div className="mb-6 text-sm text-muted-foreground">
-          <p>
-            {session.email} · {session.role}
-          </p>
-          <form action={signOutAction.bind(null, "/login")} className="mt-1">
+          <p className="font-medium text-foreground">{tenant.name}</p>
+          <p className="text-xs">Admin</p>
+          <form action={signOutTenantAdminAction} className="mt-1">
             <button type="submit" className="text-primary underline">
               Sign out
             </button>
