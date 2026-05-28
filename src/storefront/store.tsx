@@ -30,6 +30,7 @@ import {
   SEED_REVIEWS,
   SEED_SHIPPING_LOCATIONS,
 } from "./data";
+import { savePaymentMethodsAction } from "@/actions/storefront-admin";
 import type {
   Brand,
   Category,
@@ -81,6 +82,10 @@ export type Store = {
   /** Empty the cart (after a successful checkout hand-off). */
   clearCart: () => void;
 
+  /** Generate the next order number for this tenant using their configured format.
+   *  Sequential orders increment a per-tenant counter stored in localStorage. */
+  nextOrderNumber: () => string;
+
   toast: (msg: string) => void;
   toastMsg: string;
 };
@@ -130,7 +135,12 @@ export function StoreProvider({
   const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(SEED_SHIPPING_LOCATIONS);
   const [coaReports, setCoaState] = useState<CoaReport[]>(SEED_COA_REPORTS);
   const [promoCodes, setPromoState] = useState<PromoCode[]>(SEED_PROMO_CODES);
-  const [paymentMethods, setPaymentsState] = useState<PaymentMethod[]>(SEED_PAYMENT_METHODS);
+  // Payment methods load from the DB server-side (page.tsx spreads
+  // branding.config into the brand prop), so they're identical on every device.
+  // Seed defaults apply only until the owner saves the first time.
+  const [paymentMethods, setPaymentsState] = useState<PaymentMethod[]>(
+    brandSeed.paymentMethods ?? SEED_PAYMENT_METHODS,
+  );
   const [faqGroups, setFaqState] = useState<FaqGroup[]>(SEED_FAQ_GROUPS);
   const [protocols, setProtocolsState] = useState<Protocol[]>(SEED_PROTOCOLS);
   const [reviews, setReviewsState] = useState<Review[]>(SEED_REVIEWS);
@@ -149,7 +159,10 @@ export function StoreProvider({
     setShippingState(load(NS + "shipping", SEED_SHIPPING_LOCATIONS));
     setCoaState(load(NS + "coa", SEED_COA_REPORTS));
     setPromoState(load(NS + "promo", SEED_PROMO_CODES));
-    setPaymentsState(load(NS + "payments", SEED_PAYMENT_METHODS));
+    // NOTE: payment methods are intentionally NOT hydrated from localStorage —
+    // they come from the DB via the server-provided brand prop, so a stale local
+    // copy can't override what the owner configured (this was the cross-device
+    // checkout bug). They persist through savePaymentMethodsAction instead.
     setFaqState(load(NS + "faq", SEED_FAQ_GROUPS));
     setProtocolsState(load(NS + "protocols", SEED_PROTOCOLS));
     setReviewsState(load(NS + "reviews", SEED_REVIEWS));
@@ -204,7 +217,6 @@ export function StoreProvider({
   const setShippingLocations = useMemo(() => makeSetter<ShippingLocation[]>("shipping", "SHIPPING_LOCATIONS", setShippingState), []);
   const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), []);
   const setPromoCodes = useMemo(() => makeSetter<PromoCode[]>("promo", "PROMO_CODES", setPromoState), []);
-  const setPaymentMethods = useMemo(() => makeSetter<PaymentMethod[]>("payments", "PAYMENT_METHODS", setPaymentsState), []);
   const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), []);
   const setProtocols = useMemo(() => makeSetter<Protocol[]>("protocols", "PROTOCOLS", setProtocolsState), []);
   const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), []);
@@ -223,6 +235,20 @@ export function StoreProvider({
     w.PROTOCOLS = protocols;
     w.REVIEWS = reviews;
   });
+
+  const nextOrderNumber = useCallback(() => {
+    const fmt = brand.orderNumberFormat ?? { prefix: "ORD", separator: "-", scheme: "sequential" as const, digits: 4 };
+    let num: number;
+    if (fmt.scheme === "sequential") {
+      const key = NS + "order_seq";
+      const seq = parseInt(localStorage.getItem(key) || "1000", 10);
+      num = seq + 1;
+      try { localStorage.setItem(key, String(num)); } catch { /* quota — non-fatal */ }
+    } else {
+      num = Math.floor(Math.random() * 10 ** fmt.digits);
+    }
+    return `${fmt.prefix}${fmt.separator}${String(num).padStart(fmt.digits, "0")}`;
+  }, [brand.orderNumberFormat]);
 
   const addToCart = useCallback((product: Product) => {
     setCart((c) => [...c, product]);
@@ -250,6 +276,25 @@ export function StoreProvider({
     toastTimer.current = setTimeout(() => setToastMsg(""), 1600);
   }, []);
 
+  // Payment methods persist to the DB (not localStorage) so every device sees
+  // the owner's configured set. The server action gates on the storefront-admin
+  // session; the local state updates optimistically and we only surface failures.
+  const setPaymentMethods = useCallback(
+    (next: Updater<PaymentMethod[]>) => {
+      // Resolve once OUTSIDE the state updater so the save fires exactly once
+      // (a side effect inside the updater would double-fire under StrictMode).
+      const value =
+        typeof next === "function"
+          ? (next as (p: PaymentMethod[]) => PaymentMethod[])(paymentMethods)
+          : next;
+      setPaymentsState(value);
+      void savePaymentMethodsAction(value).then((r) => {
+        if (r && "error" in r) toast(r.error);
+      });
+    },
+    [toast, paymentMethods],
+  );
+
   const value: Store = {
     brand, setTweak,
     products, setProducts,
@@ -263,6 +308,7 @@ export function StoreProvider({
     protocols, setProtocols,
     reviews, setReviews,
     cart, addToCart, decrementCart, removeLine, clearCart,
+    nextOrderNumber,
     toast, toastMsg,
   };
 

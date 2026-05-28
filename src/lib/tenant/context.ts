@@ -21,6 +21,7 @@ const loadTenant = (tenantId: string) =>
           plan: { select: { key: true, name: true } },
           branding: true,
           settings: true,
+          orderNumberFormat: true,
         },
       }),
     ["tenant-row", tenantId],

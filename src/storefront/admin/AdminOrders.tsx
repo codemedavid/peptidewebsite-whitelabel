@@ -97,6 +97,7 @@ export function AdminOrders({
       const q = query.toLowerCase();
       list = list.filter(
         (o) =>
+          (o.orderNumber || "").toLowerCase().includes(q) ||
           o.id.toLowerCase().includes(q) ||
           o.customer?.name?.toLowerCase().includes(q) ||
           o.customer?.email?.toLowerCase().includes(q) ||
@@ -263,7 +264,7 @@ export function AdminOrders({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by customer name, email, phone, or order ID…"
+              placeholder="Search by order number, customer name, email, or phone…"
             />
           </label>
         </div>
@@ -331,7 +332,7 @@ export function AdminOrders({
                   onChange={() => toggle(o.id)}
                 />
               </label>
-              <div className="admin-order-card__id">Order #{o.id}</div>
+              <div className="admin-order-card__id">Order {o.orderNumber || `#${o.id.slice(0, 8)}`}</div>
               <OrderStatusPill status={o.status} />
               <PaymentStatusPill status={o.paymentStatus} />
             </div>

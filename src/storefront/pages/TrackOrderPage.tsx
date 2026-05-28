@@ -1,18 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import type { Brand } from "../types";
+import type { Brand, Order } from "../types";
 import { BackLink } from "../components/BackLink";
+import { useStore } from "../store";
+
+const STATUS_LABELS: Record<Order["status"], string> = {
+  new: "Order Received",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+const STATUS_DOT: Record<Order["status"], string> = {
+  new: "#f59e0b",
+  confirmed: "#3b82f6",
+  processing: "#8b5cf6",
+  shipped: "#06b6d4",
+  delivered: "#22c55e",
+  cancelled: "#ef4444",
+};
 
 export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+  const { orders } = useStore();
   const [orderNumber, setOrderNumber] = useState("");
-  const [result, setResult] = useState<{ number: string; status: string; eta: string } | null>(null);
+  const [result, setResult] = useState<Order | "not_found" | null>(null);
+  const [searched, setSearched] = useState("");
 
   const lookup = () => {
-    const n = orderNumber.trim();
+    const n = orderNumber.trim().toUpperCase();
     if (!n) return;
-    // Demo lookup — a real implementation would query a backend.
-    setResult({ number: n, status: "In transit", eta: "1–3 business days" });
+    const order = orders.find(
+      (o) =>
+        (o.orderNumber || "").toUpperCase() === n ||
+        o.id.toUpperCase() === n,
+    );
+    setSearched(orderNumber.trim());
+    setResult(order ?? "not_found");
   };
 
   return (
@@ -49,16 +75,43 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
           </button>
         </div>
 
-        {result && (
+        {result === "not_found" && (
           <div className="track-result">
-            <span className="track-result__dot" />
+            <span className="track-result__dot" style={{ background: "#ef4444" }} />
             <div>
-              <div style={{ fontWeight: 600, color: "var(--brand-main)" }}>
-                Order {result.number}
-              </div>
+              <div style={{ fontWeight: 600, color: "var(--brand-main)" }}>Order not found</div>
               <div style={{ fontSize: 14, color: "var(--brand-text-muted)" }}>
-                {result.status} · ETA {result.eta}
+                No order matching &ldquo;{searched}&rdquo; was found. Please double-check the number and try again.
               </div>
+            </div>
+          </div>
+        )}
+
+        {result && result !== "not_found" && (
+          <div className="track-result">
+            <span
+              className="track-result__dot"
+              style={{ background: STATUS_DOT[result.status] }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, color: "var(--brand-main)", marginBottom: 2 }}>
+                Order {result.orderNumber || `#${result.id.slice(0, 8)}`}
+              </div>
+              <div style={{ fontSize: 14, color: "var(--brand-text-muted)", marginBottom: 6 }}>
+                {STATUS_LABELS[result.status]} &middot;{" "}
+                {new Date(result.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+              </div>
+              {result.trackingNumber && (
+                <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.6 }}>
+                  <strong>Courier:</strong> {result.courier || "—"}&nbsp;&nbsp;
+                  <strong>Tracking #:</strong> {result.trackingNumber}
+                </div>
+              )}
+              {result.shippingNote && (
+                <div style={{ fontSize: 13, marginTop: 4, color: "var(--brand-text-muted)" }}>
+                  {result.shippingNote}
+                </div>
+              )}
             </div>
           </div>
         )}

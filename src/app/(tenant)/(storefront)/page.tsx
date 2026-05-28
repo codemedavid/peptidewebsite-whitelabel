@@ -1,6 +1,7 @@
 import { getTenantId } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
+import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
 import type { Brand } from "@/storefront/types";
@@ -31,6 +32,10 @@ export default async function HomePage() {
     ...config,
     name: config.name || settings?.storeName || tenant.name || BRAND.name,
     logoUrl: config.logoUrl || ((branding?.logoUrl as string | null) ?? "") || BRAND.logoUrl,
+    orderNumberFormat: normalizeOrderNumberFormat(
+      (tenant as Record<string, unknown>).orderNumberFormat,
+      tenant.name,
+    ),
   };
 
   return <StorefrontApp brand={brand} />;

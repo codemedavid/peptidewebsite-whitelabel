@@ -212,41 +212,7 @@ export const SEED_CATEGORIES: Category[] = [
   { id: "insulin", label: "Insulin Pens" },
 ];
 
-export const SEED_ORDERS: Order[] = [
-  {
-    id: "BRC-2843", status: "new", paymentStatus: "pending", paymentMethod: "GCash",
-    date: "2026-05-27T03:10:40",
-    customer: { name: "Love Gabuat", email: "gabuatlovemarie@gmail.com", phone: "09270832083", contactMethod: "Instagram" },
-    shipping: { address: "Blk 46 Lot 13, Phase 1, San Lorenzo Village", barangay: "Puan", city: "Davao", province: "Davao del Sur", postal: "8000", country: "Philippines", region: "MINDANAO", fee: 100 },
-    courier: "LBC Express", trackingNumber: "", shippingNote: "",
-    items: [{ name: "Tirzepatide 15mg (kit)", qty: 1, price: 1500 }],
-    paymentProof: null,
-  },
-  {
-    id: "BRC-8260", status: "new", paymentStatus: "pending", paymentMethod: "GCash",
-    date: "2026-05-26T22:18:33",
-    customer: { name: "Jewel Rose De Asis barrios", email: "barriosjewel@gmail.com", phone: "09171234567", contactMethod: "Instagram" },
-    shipping: { address: "123 Sample Street, Phase 2", barangay: "Pinyahan", city: "Quezon City", province: "Metro Manila", postal: "1100", country: "Philippines", region: "LUZON", fee: 180 },
-    courier: "J&T Express", trackingNumber: "", shippingNote: "",
-    items: [
-      { name: "Tirzepatide 30mg (kit)", qty: 1, price: 2500 },
-      { name: "10pcs 10ml BacWater", qty: 30, price: 92.67 },
-    ],
-    paymentProof: null,
-  },
-  {
-    id: "BRC-3905", status: "processing", paymentStatus: "paid", paymentMethod: "GCash",
-    date: "2026-05-26T05:20:48",
-    customer: { name: "Thealyssa Sonia Castro", email: "thealyssasoniacastro@icloud.com", phone: "09181234567", contactMethod: "Instagram" },
-    shipping: { address: "45 Riverside Drive", barangay: "Lahug", city: "Cebu City", province: "Cebu", postal: "6000", country: "Philippines", region: "VISAYAS", fee: 150 },
-    courier: "LBC Express", trackingNumber: "LBC123456789", shippingNote: "Shipped via LBC Express",
-    items: [
-      { name: "Tirzepatide 30mg (kit)", qty: 1, price: 2500 },
-      { name: "5-Amino (kit)", qty: 1, price: 1400 },
-    ],
-    paymentProof: null,
-  },
-];
+export const SEED_ORDERS: Order[] = [];
 
 export const SEED_SHIPPING_LOCATIONS: ShippingLocation[] = [
   { id: "s1", code: "LBC_METRO_MANILA", name: "LBC - Metro Manila", price: 150, active: true },

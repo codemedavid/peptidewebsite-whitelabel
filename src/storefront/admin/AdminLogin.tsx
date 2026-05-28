@@ -3,17 +3,27 @@
 import { useState } from "react";
 import type { Brand } from "../types";
 import { ADMIN_AUTH_KEY } from "./authKey";
+import { signInStorefrontAdminAction } from "@/actions/storefront-admin";
 
 export { ADMIN_AUTH_KEY };
 
 export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () => void }) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
-  const correct = (brand.adminPassword || "").trim() || "admin";
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  // The password is verified server-side (against branding.config) and, on
+  // success, the server issues a signed session cookie. Without it, the save
+  // actions reject writes — so the sessionStorage flag below is now only a UI
+  // hint for which screen to show, not the actual security boundary.
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pw.trim() === correct) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const result = await signInStorefrontAdminAction(pw);
+    setBusy(false);
+    if ("ok" in result) {
       try {
         sessionStorage.setItem(ADMIN_AUTH_KEY, "1");
       } catch {
@@ -21,7 +31,7 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
       }
       onSuccess();
     } else {
-      setError("Incorrect password.");
+      setError(result.error || "Incorrect password.");
       setTimeout(() => setError(""), 2200);
     }
   };
@@ -55,8 +65,8 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
           }}
         />
         <div className="admin-login__error">{error}</div>
-        <button type="submit" className="btn btn-primary admin-login__submit">
-          Enter Dashboard
+        <button type="submit" className="btn btn-primary admin-login__submit" disabled={busy}>
+          {busy ? "Checking…" : "Enter Dashboard"}
         </button>
         <div className="admin-login__hint">
           Default password is{" "}

@@ -82,6 +82,7 @@ export function buildOrderMessage(
   lines: CartLine[],
   customer: CheckoutCustomer,
   payment?: CheckoutPayment,
+  orderNumber?: string,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -115,7 +116,7 @@ export function buildOrderMessage(
     : [];
 
   return [
-    `New order — ${brand.name}`,
+    `${orderNumber ? `Order #${orderNumber} — ` : "New order — "}${brand.name}`,
     "",
     "Items:",
     items,

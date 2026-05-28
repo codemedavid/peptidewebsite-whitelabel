@@ -113,7 +113,7 @@ export function AdminOrderDetail({
             </svg>
             Back to Orders
           </a>
-          <h1 className="admin-detail__id">Order #{o.id}</h1>
+          <h1 className="admin-detail__id">Order {o.orderNumber || `#${o.id.slice(0, 8)}`}</h1>
         </div>
 
         <div className="admin-detail__card">

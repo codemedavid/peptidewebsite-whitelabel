@@ -30,6 +30,8 @@ export type OrderItem = { name: string; qty: number; price: number };
 
 export type Order = {
   id: string;
+  /** Tenant-facing formatted code, e.g. ABC-1001. Assigned at checkout hand-off. */
+  orderNumber?: string;
   status: "new" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
   paymentStatus: "pending" | "paid";
   paymentMethod: string;
@@ -255,6 +257,21 @@ export type Brand = {
   contactChannels?: ContactChannel[];
   checkoutTitle?: string;
   checkoutNote?: string;
+
+  // Payment methods the customer pays through (bank/e-wallet + QR). Edited in the
+  // storefront #admin and persisted server-side in branding.config so every
+  // device/customer sees the same configured set (not the seed defaults). Absent
+  // until the store owner saves at least once → storefront falls back to seeds.
+  paymentMethods?: PaymentMethod[];
+
+  /** Order-number format configured by the super admin (prefix, separator, scheme, digits).
+   *  Used by the storefront store to generate order numbers at checkout time. */
+  orderNumberFormat?: {
+    prefix: string;
+    separator: string;
+    scheme: "random" | "sequential";
+    digits: number;
+  };
 
   // static
   nav: NavItem[];

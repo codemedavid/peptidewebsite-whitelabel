@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
+import type { Order } from "../types";
 import { readImageFile } from "../admin/shared";
 import {
   activeChannels,
@@ -40,7 +41,7 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, paymentMethods, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, paymentMethods, setOrders, nextOrderNumber, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
@@ -110,11 +111,47 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   function placeOrder(channelType: string) {
     const channel = channels.find((c) => c.type === channelType);
     if (!channel) return;
+
+    // Generate order number and persist a local order record so the customer
+    // can track it via TrackOrderPage and the store admin can manage it.
+    const orderNum = nextOrderNumber();
+    const newOrder: Order = {
+      id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+      orderNumber: orderNum,
+      status: "new",
+      paymentStatus: requiresPayment && proof ? "paid" : "pending",
+      paymentMethod: selectedMethod?.name || "",
+      date: new Date().toISOString(),
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        contactMethod: CHANNEL_LABELS[channel.type],
+      },
+      shipping: {
+        address: customer.address,
+        barangay: "",
+        city: customer.city,
+        province: customer.province,
+        postal: customer.postal,
+        country: customer.country,
+        region: "",
+        fee: 0,
+      },
+      courier: "",
+      trackingNumber: "",
+      shippingNote: "",
+      items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product) })),
+      paymentProof: proof || null,
+    };
+    setOrders((prev) => [newOrder, ...prev]);
+
     const message = buildOrderMessage(
       brand,
       lines,
       customer,
       requiresPayment ? { methodName: selectedMethod?.name ?? "", hasProof: !!proof } : undefined,
+      orderNum,
     );
 
     // Open the chat first — synchronously within the click — so the popup
@@ -124,8 +161,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     void navigator.clipboard?.writeText(message).catch(() => {});
     toast(
       channelPrefills(channel.type)
-        ? `Opening ${CHANNEL_LABELS[channel.type]}…`
-        : `Order copied — paste it in ${CHANNEL_LABELS[channel.type]}`,
+        ? `Order ${orderNum} placed — opening ${CHANNEL_LABELS[channel.type]}…`
+        : `Order ${orderNum} — copied, paste it in ${CHANNEL_LABELS[channel.type]}`,
     );
     clearCart();
     onClose();

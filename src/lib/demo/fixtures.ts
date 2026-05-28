@@ -266,6 +266,7 @@ export function getDemoContext(idOrSlug: string) {
       id: t.id, name: t.name, slug: t.slug, status: "active",
       plan: { key: t.plan, name: planNames[t.plan] ?? t.plan },
       branding: null, settings: null,
+      orderNumberFormat: getDemoOrderFormat(t.slug),
     },
     branding: {
       themeId: override.themeId ?? t.themeId,
