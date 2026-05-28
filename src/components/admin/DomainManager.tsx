@@ -14,7 +14,7 @@ import {
   setPrimaryTenantDomainAction,
 } from "@/actions/admin";
 import type { TenantDomainRow } from "@/lib/admin/data";
-import type { DomainStatus, VerificationRecord } from "@/lib/vercel/domains";
+import type { DomainStatus, VerificationRecord } from "@/lib/domains/verify";
 
 type Props = {
   slug: string;
@@ -261,7 +261,8 @@ export function DomainManager({ slug, initialDomains }: Props) {
       <div className="set-foot">
         <span className="hint">
           <Ic.AlertCircle />
-          Verified domains route to this store immediately. The primary is the canonical URL.
+          DNS verification only checks the customer's records. Attach the domain to the hosting
+          project (Vercel dashboard or a wildcard) so it can route + issue TLS.
         </span>
       </div>
     </section>

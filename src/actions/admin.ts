@@ -4,12 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
-import {
-  addDomainToProject,
-  removeDomainFromProject,
-  getDomainStatus,
-  type DomainStatus,
-} from "@/lib/vercel/domains";
+import { checkDnsStatus, type DomainStatus } from "@/lib/domains/verify";
 
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
@@ -50,10 +45,11 @@ export async function deleteTenantAction(slug: string): Promise<AdminActionResul
 /* ============================================================
    Custom domains (per-tenant)
 
-   A custom domain like `shop.acme.com` must be (1) attached to the Vercel
-   project so Vercel routes it here + issues TLS, and (2) marked `verified` in
-   our DB so resolveTenantByHost() will accept it. We provision via the Vercel
-   API and only flip `verified` once Vercel confirms DNS is configured.
+   A custom domain like `shop.acme.com` is tracked in our DB and marked
+   `verified` once its DNS points at the platform. We verify by resolving the
+   hostname's DNS records directly (no external API). The domain still needs
+   to be attached to the hosting project (Vercel dashboard / wildcard) for
+   TLS + routing — DNS verification confirms the customer's side is correct.
    ============================================================ */
 
 export type DomainOpResult = { ok: true; status: DomainStatus } | { error: string };
@@ -83,7 +79,7 @@ async function tenantIdForSlug(slug: string): Promise<string | null> {
   return t?.id ?? null;
 }
 
-/** Attach a new custom domain to a tenant and register it with Vercel. */
+/** Attach a new custom domain to a tenant. */
 export async function addTenantDomainAction(slug: string, rawHost: string): Promise<DomainOpResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Custom domains aren't available for demo tenants." };
@@ -105,21 +101,19 @@ export async function addTenantDomainAction(slug: string, rawHost: string): Prom
       : { error: "That domain is already in use by another tenant." };
   }
 
-  const attach = await addDomainToProject(host);
-  if (!attach.ok) return { error: attach.error };
+  // Probe DNS once on add so the UI knows whether the customer already configured it.
+  const status = await checkDnsStatus(host);
 
-  await prisma.domain.create({ data: { tenantId, hostname: host, verified: false } });
+  await prisma.domain.create({
+    data: { tenantId, hostname: host, verified: status.verified },
+  });
+  if (status.verified) revalidateTag(`tenant-host:${host}`);
   revalidatePath(`/admin/tenants/${slug}/settings`);
 
-  // Surface the (likely not-yet-configured) status so the UI can show DNS records.
-  const status = await getDomainStatus(host);
-  return {
-    ok: true,
-    status: status.ok ? status.data : { verified: false, misconfigured: true, verification: [] },
-  };
+  return { ok: true, status };
 }
 
-/** Re-check a domain's DNS with Vercel and flip `verified` when it's good. */
+/** Re-check a domain's DNS and flip `verified` when it points at the platform. */
 export async function verifyTenantDomainAction(slug: string, rawHost: string): Promise<DomainOpResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Custom domains aren't available for demo tenants." };
@@ -134,22 +128,21 @@ export async function verifyTenantDomainAction(slug: string, rawHost: string): P
   });
   if (!domain || domain.tenant.slug !== slug) return { error: "Domain not found for this tenant." };
 
-  const status = await getDomainStatus(host);
-  if (!status.ok) return { error: status.error };
+  const status = await checkDnsStatus(host);
 
-  if (status.data.verified !== domain.verified) {
+  if (status.verified !== domain.verified) {
     await prisma.domain.update({
       where: { id: domain.id },
-      data: { verified: status.data.verified },
+      data: { verified: status.verified },
     });
     // Bust the cached host→tenant lookup so resolve.ts sees the new state at once.
     revalidateTag(`tenant-host:${host}`);
     revalidatePath(`/admin/tenants/${slug}/settings`);
   }
-  return { ok: true, status: status.data };
+  return { ok: true, status };
 }
 
-/** Remove a custom domain from a tenant and detach it from Vercel. */
+/** Remove a custom domain from a tenant. */
 export async function removeTenantDomainAction(slug: string, rawHost: string): Promise<AdminActionResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Custom domains aren't available for demo tenants." };
@@ -163,9 +156,6 @@ export async function removeTenantDomainAction(slug: string, rawHost: string): P
     select: { id: true, tenant: { select: { slug: true } } },
   });
   if (!domain || domain.tenant.slug !== slug) return { error: "Domain not found for this tenant." };
-
-  const detach = await removeDomainFromProject(host);
-  if (!detach.ok) return { error: detach.error };
 
   await prisma.domain.delete({ where: { id: domain.id } });
   revalidateTag(`tenant-host:${host}`);
