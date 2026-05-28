@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
@@ -11,22 +10,22 @@ const RESERVED_SUBDOMAINS = new Set(["www", "admin"]);
 
 export type ResolvedTenant = { id: string; slug: string; status: string };
 
-function stripPort(host: string) {
-  return host.replace(/:\d+$/, "");
+function normalizeHost(host: string) {
+  return host.replace(/:\d+$/, "").toLowerCase();
 }
 
 /**
  * Resolve a hostname → tenant.
  * - `slug.<ROOT>` and `slug.localhost` → platform subdomain
- * - anything else → verified custom domain
+ * - anything else → custom domain stored in the Domain table
  *
- * NOTE: this hits the DB on a cache miss. In production, mirror the
- * host→tenant map into Vercel Edge Config / Upstash KV (populate on
- * domain verify) so middleware resolution is sub-ms. See docs §2.2.
+ * No request-level cache: Domain.hostname is unique-indexed and the row count
+ * is small, so the DB lookup is fast and we'd rather pay it than risk a stale
+ * negative result pinning a freshly-added domain to /unknown-tenant.
  */
-async function lookup(host: string): Promise<ResolvedTenant | null> {
-  const h = stripPort(host);
-  const rootHost = stripPort(ROOT);
+export async function resolveTenantByHost(host: string): Promise<ResolvedTenant | null> {
+  const h = normalizeHost(host);
+  const rootHost = normalizeHost(ROOT);
 
   const isPlatformSubdomain =
     h.endsWith(`.${rootHost}`) || h.endsWith(".localhost");
@@ -42,16 +41,15 @@ async function lookup(host: string): Promise<ResolvedTenant | null> {
     if (t) return t;
     // An explicit subdomain was requested but matches no tenant. Do NOT fall
     // back to the dev default below — that would silently show the default
-    // tenant for every typo'd or not-yet-created slug, making subdomains look
-    // like they're ignored. Surface it as unknown instead.
+    // tenant for every typo'd or not-yet-created slug.
     return null;
-  } else {
-    const domain = await prisma.domain.findUnique({
-      where: { hostname: h },
-      select: { verified: true, tenant: { select: { id: true, slug: true, status: true } } },
-    });
-    if (domain?.verified) return domain.tenant;
   }
+
+  const domain = await prisma.domain.findUnique({
+    where: { hostname: h },
+    select: { tenant: { select: { id: true, slug: true, status: true } } },
+  });
+  if (domain) return domain.tenant;
 
   // DEV convenience: a BARE apex host with no subdomain label (plain `localhost`,
   // the root domain itself, or an IP) falls back to a default tenant so you can
@@ -64,11 +62,4 @@ async function lookup(host: string): Promise<ResolvedTenant | null> {
     });
   }
   return null;
-}
-
-export function resolveTenantByHost(host: string) {
-  return unstable_cache(() => lookup(host), ["tenant-by-host", host], {
-    revalidate: 300, // 5 min
-    tags: [`tenant-host:${stripPort(host)}`],
-  })();
 }

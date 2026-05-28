@@ -22,7 +22,9 @@ const ADMIN_HOST = process.env.NEXT_PUBLIC_ADMIN_HOST?.replace(/:\d+$/, "");
  */
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
-  const host = (req.headers.get("host") ?? "").replace(/:\d+$/, "");
+  const host = (req.headers.get("host") ?? "")
+    .replace(/:\d+$/, "")
+    .toLowerCase();
 
   // Strip any client-supplied tenant headers before we set our own.
   const requestHeaders = new Headers(req.headers);
