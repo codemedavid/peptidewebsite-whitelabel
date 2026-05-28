@@ -16,6 +16,7 @@ import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
+import { isAdminViewVisible } from "../visibility";
 
 type View =
   | "dashboard"
@@ -46,8 +47,12 @@ export function AdminPage({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
 
+  // A view whose storefront page was just turned off in the super admin should
+  // not stay visible — bounce back to the dashboard.
+  const activeView: View = isAdminViewVisible(brand, view) ? view : "dashboard";
+
   // Sub-view routing
-  if (view === "add-product") {
+  if (activeView === "add-product") {
     return (
       <AdminAddProduct
         brand={brand}
@@ -65,7 +70,7 @@ export function AdminPage({
       />
     );
   }
-  if (view === "products") {
+  if (activeView === "products") {
     return (
       <AdminProductsList
         brand={brand}
@@ -81,10 +86,10 @@ export function AdminPage({
       />
     );
   }
-  if (view === "categories") {
+  if (activeView === "categories") {
     return <AdminCategoriesManager brand={brand} onBack={() => setView("dashboard")} />;
   }
-  if (view === "orders") {
+  if (activeView === "orders") {
     return (
       <AdminOrders
         brand={brand}
@@ -96,7 +101,7 @@ export function AdminPage({
       />
     );
   }
-  if (view === "order-detail" && viewingOrder) {
+  if (activeView === "order-detail" && viewingOrder) {
     return (
       <AdminOrderDetail
         brand={brand}
@@ -108,13 +113,13 @@ export function AdminPage({
       />
     );
   }
-  if (view === "shipping") return <AdminShippingLocations brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
-  if (view === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "shipping") return <AdminShippingLocations brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
 
   const stats = [
     { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
@@ -137,7 +142,7 @@ export function AdminPage({
     { id: "faq", label: "FAQ", hint: "Manage content", icon: "help", tint: "green" },
     { id: "proto", label: "Protocols", hint: "Peptide guides", icon: "shield", tint: "pink" },
     { id: "reviews", label: "Reviews", hint: "Manage testimonials", icon: "star", tint: "pink" },
-  ];
+  ].filter((q) => isAdminViewVisible(brand, q.id));
 
   const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
   const catCounts = categories
