@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Product } from "@/storefront/types";
 import { planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 import type { HeroTypography } from "@/lib/theme/tokens";
 import {
@@ -99,6 +100,7 @@ const DATA_FILE = path.join(DATA_DIR, "tenants.json");
 const BRANDING_FILE = path.join(DATA_DIR, "branding.json");
 const FEATURES_FILE = path.join(DATA_DIR, "features.json");
 const ORDER_FORMAT_FILE = path.join(DATA_DIR, "order-format.json");
+const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
 
 export type DemoBranding = {
   themeId?: string;
@@ -129,6 +131,33 @@ export function saveDemoBranding(slug: string, branding: DemoBranding): void {
   all[slug] = { ...all[slug], ...branding };
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(BRANDING_FILE, JSON.stringify(all, null, 2));
+}
+
+// ── Storefront products (demo persistence) ──
+// The file-backed analogue of the real `products` table. Once the store owner
+// saves/deletes a product in demo mode, the whole tenant's storefront product
+// set lives here (keyed by slug) and survives reloads. Until then the builtin
+// fixture products (DemoTenant.products) are the seed — see the page loader.
+
+function readStoreProducts(): Record<string, Product[]> {
+  try {
+    return JSON.parse(fs.readFileSync(PRODUCTS_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+/** Saved storefront products for a tenant, or null if none have been saved. */
+export function getDemoStoreProducts(slug: string): Product[] | null {
+  return readStoreProducts()[slug] ?? null;
+}
+
+/** Persist the full storefront product set for a tenant (demo mode). */
+export function saveDemoStoreProducts(slug: string, products: Product[]): void {
+  const all = readStoreProducts();
+  all[slug] = products;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(all, null, 2));
 }
 
 /**

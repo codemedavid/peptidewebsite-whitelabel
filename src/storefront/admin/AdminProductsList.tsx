@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
+import { deleteProductsAction, listProductsAction } from "@/actions/products";
 
 export function AdminProductsList({
   brand,
@@ -15,8 +16,9 @@ export function AdminProductsList({
   onAdd: () => void;
   onEdit: (p: Product) => void;
 }) {
-  const { products, setProducts, categories } = useStore();
+  const { products, setProducts, categories, toast } = useStore();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
 
   const toggle = (id: string) => {
     const next = new Set(selected);
@@ -29,14 +31,55 @@ export function AdminProductsList({
     else setSelected(new Set(products.map((p) => p.id)));
   };
 
-  const remove = (id: string) => {
-    if (!confirm("Delete this product?")) return;
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+  // Delete persists to the DB first (deleteProductsAction); only on success do
+  // we drop it from local state, so the UI never claims a delete the server
+  // refused (e.g. a product still linked to an order).
+  const deleteIds = async (ids: string[], confirmMsg: string) => {
+    if (!ids.length || busy) return;
+    if (!confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      const res = await deleteProductsAction(ids);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      const gone = new Set(ids);
+      setProducts((prev) => prev.filter((p) => !gone.has(p.id)));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    } catch {
+      toast("Couldn't delete — please sign in again and retry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = (id: string) => void deleteIds([id], "Delete this product?");
+  const deleteSelected = () =>
+    void deleteIds([...selected], `Delete ${selected.size} product(s)?`);
+
+  // Reload the catalog from the DB (the source of truth).
+  const refresh = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await listProductsAction(brand.currency || "₱");
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setProducts(res.products);
+      setSelected(new Set());
+      toast("Products refreshed");
+    } catch {
+      toast("Couldn't refresh products.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const catLabel = (id: string) =>
@@ -74,13 +117,13 @@ export function AdminProductsList({
             <span>Products</span>
           </h1>
           <div style={{ display: "flex", gap: 10 }}>
-            <button className="admin-btn admin-btn--ghost" onClick={onAdd}>
+            <button className="admin-btn admin-btn--ghost" onClick={refresh} disabled={busy}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
               </svg>
-              Refresh
+              {busy ? "Working…" : "Refresh"}
             </button>
             <button className="admin-btn" onClick={onAdd}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -90,6 +133,29 @@ export function AdminProductsList({
               Add New
             </button>
           </div>
+        </div>
+
+        <div className="admin-orders__bulkbar">
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={selected.size === products.length && products.length > 0}
+              onChange={toggleAll}
+            />
+            <span>Select All ({products.length})</span>
+          </label>
+          <button
+            className="admin-btn admin-btn--danger-soft"
+            disabled={!selected.size || busy}
+            onClick={deleteSelected}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+            Delete Selected{selected.size > 0 ? ` (${selected.size})` : ""}
+          </button>
         </div>
 
         <div className="admin-table-wrap">

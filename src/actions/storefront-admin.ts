@@ -8,7 +8,7 @@ import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   setStorefrontAdminCookie,
   clearStorefrontAdminCookie,
-  readStorefrontAdminCookie,
+  requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
 import type { PaymentMethod } from "@/storefront/types";
 
@@ -59,15 +59,6 @@ export async function signInStorefrontAdminAction(password: string): Promise<Act
 export async function signOutStorefrontAdminAction(): Promise<ActionResult> {
   await clearStorefrontAdminCookie();
   return { ok: true };
-}
-
-/** Require a valid storefront-admin session for the CURRENT tenant. */
-async function requireStorefrontAdmin(): Promise<string | null> {
-  const tenantId = await getTenantIdOrNull();
-  if (!tenantId) return null;
-  const cookie = await readStorefrontAdminCookie();
-  if (!cookie || cookie.tenantId !== tenantId) return null;
-  return tenantId;
 }
 
 /**

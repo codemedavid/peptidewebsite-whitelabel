@@ -22,6 +22,7 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
   if (!tenant) return { error: "Tenant not found." };
   const next = tenant.status === "suspended" ? "active" : "suspended";
   await prisma.tenant.update({ where: { id: tenant.id }, data: { status: next } });
+  revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
   revalidatePath(`/admin/tenants/${slug}`);
@@ -35,6 +36,7 @@ export async function deleteTenantAction(slug: string): Promise<AdminActionResul
   const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
   await prisma.tenant.delete({ where: { id: tenant.id } });
+  revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
   return { ok: true };

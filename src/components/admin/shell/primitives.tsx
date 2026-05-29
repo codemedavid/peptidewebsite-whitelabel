@@ -143,8 +143,35 @@ export function tenantInitials(name: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-export function TenantAvatar({ name, size = 32 }: { name: string; size?: number }) {
+export function TenantAvatar({ name, logoUrl, size = 32 }: { name: string; logoUrl?: string; size?: number }) {
   const [c1, c2] = tenantColor(name);
+  if (logoUrl) {
+    return (
+      <div
+        className="tenant-avatar"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size >= 40 ? 10 : 8,
+          overflow: "hidden",
+          background: "#f1f5f9",
+          flexShrink: 0,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logoUrl}
+          alt={name}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          onError={(e) => {
+            const wrapper = (e.target as HTMLImageElement).parentElement;
+            if (wrapper) wrapper.setAttribute("data-fallback", "1");
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      </div>
+    );
+  }
   return (
     <div
       className="tenant-avatar"

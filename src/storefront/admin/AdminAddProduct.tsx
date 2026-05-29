@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
+import { saveProductAction, uploadProductImageAction } from "@/actions/products";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -117,7 +118,7 @@ export function AdminAddProduct({
   onCancel: () => void;
   onSaved: (p: Product) => void;
 }) {
-  const { products, setProducts, categories } = useStore();
+  const { products, setProducts, categories, toast } = useStore();
 
   const isEdit = !!initial?.id;
   const [name, setName]             = useState<string>(initial?.name || "");
@@ -142,21 +143,43 @@ export function AdminAddProduct({
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   const [image, setImage]           = useState<string>(initial?.image || "");
   const [imageDrag, setImageDrag]   = useState<boolean>(false);
+  const [uploading, setUploading]   = useState<boolean>(false);
+  const [uploadErr, setUploadErr]   = useState<string>("");
+  const [saving, setSaving]         = useState<boolean>(false);
 
   const currency = brand.currency || "₱";
   const fileRef = useRef<HTMLInputElement>(null);
-  const canSave = name.trim() && description.trim() && category && Number(price) >= 0;
+  const canSave = !!(name.trim() && description.trim() && category && Number(price) >= 0);
 
-  const handleImage = (file: File | undefined) => {
+  // Upload the chosen file to the tenant's ImageKit folder (server action) and
+  // store the returned hosted URL. No more base64 in the DB — and if ImageKit
+  // isn't configured the action returns a clear message we surface inline.
+  const handleImage = async (file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setImage(e.target?.result as string);
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith("image/")) {
+      setUploadErr("Please choose an image file.");
+      return;
+    }
+    setUploadErr("");
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await uploadProductImageAction(fd);
+      if ("url" in res) {
+        setImage(res.url);
+      } else {
+        setUploadErr(res.error);
+      }
+    } catch {
+      setUploadErr("Upload failed — please try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const save = () => {
-    if (!canSave) return;
+  const save = async () => {
+    if (!canSave || saving) return;
     const product: Product = {
       id: initial?.id || `p${Date.now()}`,
       name: name.trim(),
@@ -179,20 +202,31 @@ export function AdminAddProduct({
       image: image || null,
     };
 
-    if (isEdit) {
+    setSaving(true);
+    try {
+      const res = await saveProductAction(product);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      // The server returns the canonical product (with its DB id, which differs
+      // from the temporary client id on create). Reconcile local state by it.
+      const saved = res.product;
       setProducts((prev) => {
-        const i = prev.findIndex((p) => p.id === product.id);
+        const i = prev.findIndex((p) => p.id === product.id || (isEdit && p.id === initial?.id));
         if (i >= 0) {
           const next = [...prev];
-          next[i] = product;
+          next[i] = saved;
           return next;
         }
-        return [...prev, product];
+        return [...prev, saved];
       });
-    } else {
-      setProducts((prev) => [...prev, product]);
+      onSaved(saved);
+    } catch {
+      toast("Couldn't save — please sign in again and retry.");
+    } finally {
+      setSaving(false);
     }
-    onSaved(product);
   };
 
   // Suppress unused variable warning — products is used only to satisfy the
@@ -221,13 +255,13 @@ export function AdminAddProduct({
           </svg>
           Cancel
         </button>
-        <button className="admin-form__save" onClick={save} disabled={!canSave}>
+        <button className="admin-form__save" onClick={save} disabled={!canSave || saving}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
             <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
           </svg>
-          Save
+          {saving ? "Saving…" : "Save"}
         </button>
       </header>
 
@@ -387,16 +421,24 @@ export function AdminAddProduct({
 
           <div
             className={`admin-image-drop ${imageDrag ? "is-dragover" : ""}`}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => { if (!uploading) fileRef.current?.click(); }}
             onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setImageDrag(true); }}
             onDragLeave={() => setImageDrag(false)}
             onDrop={(e: React.DragEvent<HTMLDivElement>) => {
               e.preventDefault();
               setImageDrag(false);
-              handleImage(e.dataTransfer.files?.[0]);
+              if (!uploading) void handleImage(e.dataTransfer.files?.[0]);
             }}
           >
-            {image ? (
+            {uploading ? (
+              <>
+                <div className="admin-image-drop__icon">
+                  <span className="sf-page-spinner__ring" style={{ width: 28, height: 28 }} />
+                </div>
+                <div className="admin-image-drop__title">Uploading…</div>
+                <div className="admin-image-drop__sub">Sending to ImageKit</div>
+              </>
+            ) : image ? (
               <div className="admin-image-drop__preview">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={image} alt="preview" />
@@ -423,13 +465,23 @@ export function AdminAddProduct({
               type="file"
               accept="image/*"
               style={{ display: "none" }}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleImage(e.target.files?.[0])}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => void handleImage(e.target.files?.[0])}
             />
           </div>
 
+          {uploadErr && (
+            <div
+              className="admin-field__hint"
+              style={{ marginTop: 10, color: "#c0392b" }}
+              role="alert"
+            >
+              {uploadErr}
+            </div>
+          )}
+
           <div className="admin-image-actions">
-            <button className="admin-image-btn" type="button"
-              onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); fileRef.current?.click(); }}>
+            <button className="admin-image-btn" type="button" disabled={uploading}
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); if (!uploading) fileRef.current?.click(); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

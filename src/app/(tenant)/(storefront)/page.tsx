@@ -1,10 +1,13 @@
-import { getTenantId } from "@/lib/tenant/headers";
+import { getTenantId, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
+import { withTenant } from "@/lib/db/tenant-client";
+import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
+import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
-import type { Brand } from "@/storefront/types";
+import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
 // (middleware sets x-tenant-host). The hot data calls (tenant context, branding,
@@ -38,5 +41,29 @@ export default async function HomePage() {
     ),
   };
 
-  return <StorefrontApp brand={brand} />;
+  // Products are the source of truth in the DB. Load the tenant's catalog
+  // server-side (demo: file-backed store, seeded from the builtin fixtures) and
+  // hand it to the storefront — both the public catalog and the #admin manager
+  // render from this set, and the admin's writes persist back through
+  // actions/products.ts. The brand's currency symbol drives display formatting.
+  let products: Product[] = [];
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const saved = getDemoStoreProducts(slug);
+    products = saved
+      ? saved
+      : getDemoProducts(tenantId).map((dp) =>
+          dbProductToStorefront(dp as unknown as DbProductRow, brand.currency || "₱"),
+        );
+  } else {
+    const rows = await withTenant(tenantId, (db) =>
+      db.product.findMany({
+        where: { status: { not: "archived" } },
+        orderBy: { createdAt: "asc" },
+      }),
+    );
+    products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
+  }
+
+  return <StorefrontApp brand={brand} products={products} />;
 }

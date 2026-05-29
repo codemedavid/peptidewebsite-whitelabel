@@ -3365,3 +3365,38 @@
   display: flex; justify-content: flex-end; gap: 8px;
 }
 
+/* ---------- NAV PROGRESS BAR + PAGE SPINNER ---------- */
+@keyframes sf-nav-bar {
+  0%   { width: 0%; opacity: 1; }
+  80%  { width: 85%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+@keyframes sf-spin {
+  to { transform: rotate(360deg); }
+}
+/* Fixed top progress bar — appears immediately on any hash navigation */
+.sf-nav-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 3px;
+  z-index: 9999;
+  background: var(--brand-main, #6c63ff);
+  border-radius: 0 2px 2px 0;
+  animation: sf-nav-bar 1.8s ease-out forwards;
+  pointer-events: none;
+}
+/* Centred spinner shown while a dynamic page chunk downloads */
+.sf-page-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+}
+.sf-page-spinner__ring {
+  width: 40px; height: 40px;
+  border: 3px solid color-mix(in srgb, var(--brand-main, #6c63ff) 25%, transparent);
+  border-top-color: var(--brand-main, #6c63ff);
+  border-radius: 50%;
+  animation: sf-spin 0.7s linear infinite;
+}
+

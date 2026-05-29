@@ -124,12 +124,16 @@ function applyBrandStyle(b: Brand) {
 export function StoreProvider({
   children,
   brand: brandSeed = BRAND,
+  products: productsSeed,
 }: {
   children: ReactNode;
   brand?: Brand;
+  /** Products loaded server-side from the DB (source of truth). Falls back to
+   *  the design seeds only when none were provided. */
+  products?: Product[];
 }) {
   const [brand, setBrandState] = useState<Brand>(brandSeed);
-  const [products, setProductsState] = useState<Product[]>(SEED_PRODUCTS);
+  const [products, setProductsState] = useState<Product[]>(productsSeed ?? SEED_PRODUCTS);
   const [categories, setCategoriesState] = useState<Category[]>(SEED_CATEGORIES);
   const [orders, setOrdersState] = useState<Order[]>(SEED_ORDERS);
   const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(SEED_SHIPPING_LOCATIONS);
@@ -153,7 +157,10 @@ export function StoreProvider({
     // Brand overrides merge on top of the tenant-seeded defaults.
     const savedBrand = load<Partial<Brand> | null>(NS + "brand", null);
     if (savedBrand) setBrandState((b) => ({ ...b, ...savedBrand }));
-    setProductsState(load(NS + "products", SEED_PRODUCTS));
+    // NOTE: products are intentionally NOT hydrated from localStorage — they're
+    // the DB's source of truth, loaded server-side and passed in as `productsSeed`
+    // (mirroring payment methods). A stale local copy would otherwise mask what
+    // the owner saved / shadow another device. Writes persist via actions/products.
     setCategoriesState(load(NS + "categories", SEED_CATEGORIES));
     setOrdersState(load(NS + "orders", SEED_ORDERS));
     setShippingState(load(NS + "shipping", SEED_SHIPPING_LOCATIONS));
@@ -211,7 +218,19 @@ export function StoreProvider({
     };
   }
 
-  const setProducts = useMemo(() => makeSetter<Product[]>("products", "PRODUCTS", setProductsState), []);
+  // Products persist to the DB through actions/products (the admin calls them
+  // directly), so this setter only updates local state + the window mirror for
+  // optimistic UI — it deliberately skips localStorage so a stale local copy
+  // can never shadow the server's set on the next load.
+  const setProducts = useMemo<Store["setProducts"]>(
+    () => (next) =>
+      setProductsState((prev) => {
+        const value = typeof next === "function" ? (next as (p: Product[]) => Product[])(prev) : next;
+        (window as unknown as Record<string, unknown>).PRODUCTS = value;
+        return value;
+      }),
+    [],
+  );
   const setCategories = useMemo(() => makeSetter<Category[]>("categories", "CATEGORIES", setCategoriesState), []);
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), []);
   const setShippingLocations = useMemo(() => makeSetter<ShippingLocation[]>("shipping", "SHIPPING_LOCATIONS", setShippingState), []);

@@ -301,6 +301,7 @@ export function AdminLabResults({
 }) {
   const { coaReports, setCoaReports } = useStore();
   const [editing, setEditing] = useState<CoaReportEditing | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const commit = (next: CoaReport[]) => {
     setCoaReports(next);
@@ -330,6 +331,17 @@ export function AdminLabResults({
     setEditing(null);
   };
 
+  const toggleReport = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  const toggleAll = () => {
+    if (selected.size === coaReports.length) setSelected(new Set());
+    else setSelected(new Set(coaReports.map((r) => r.id)));
+  };
+
   const remove = (id: string) => {
     if (
       !confirm(
@@ -338,6 +350,14 @@ export function AdminLabResults({
     )
       return;
     commit(coaReports.filter((r) => r.id !== id));
+    setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  };
+
+  const deleteSelected = () => {
+    if (!selected.size) return;
+    if (!confirm(`Delete ${selected.size} lab report(s)?`)) return;
+    commit(coaReports.filter((r) => !selected.has(r.id)));
+    setSelected(new Set());
   };
 
   return (
@@ -424,9 +444,32 @@ export function AdminLabResults({
           </div>
         </div>
 
+        <div className="admin-orders__bulkbar">
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={selected.size === coaReports.length && coaReports.length > 0}
+              onChange={toggleAll}
+            />
+            <span>Select All ({coaReports.length})</span>
+          </label>
+          <button
+            className="admin-btn admin-btn--danger-soft"
+            disabled={!selected.size}
+            onClick={deleteSelected}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+            Delete Selected{selected.size > 0 ? ` (${selected.size})` : ""}
+          </button>
+        </div>
+
         <div className="admin-coa-list">
           {coaReports.map((r) => (
-            <div key={r.id} className="admin-coa-card">
+            <div key={r.id} className={`admin-coa-card ${selected.has(r.id) ? "is-selected" : ""}`}>
               <div className="admin-coa-card__thumb">
                 {r.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -519,6 +562,13 @@ export function AdminLabResults({
                 </div>
               </div>
               <div className="admin-coa-card__foot">
+                <label className="admin-check" style={{ marginRight: "auto" }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.id)}
+                    onChange={() => toggleReport(r.id)}
+                  />
+                </label>
                 <button
                   className="admin-btn admin-btn--ghost"
                   style={{ padding: "6px 14px", fontSize: 13 }}

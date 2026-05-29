@@ -52,7 +52,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
 
       <div className="card" style={{ marginBottom: 20, overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <TenantAvatar name={tenant.name} size={56} />
+          <TenantAvatar name={tenant.name} logoUrl={tenant.logoUrl} size={56} />
           <div style={{ flex: 1, minWidth: 220 }}>
             <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
               <h1 className="page-title" style={{ marginBottom: 0 }}>

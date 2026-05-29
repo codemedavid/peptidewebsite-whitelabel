@@ -16,6 +16,25 @@ export function AdminCategoriesManager({
   const [cats, setCats] = useState<Category[]>(
     categories.filter((c) => c.id !== "all"),
   );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleCat = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  const toggleAll = () => {
+    if (selected.size === cats.length) setSelected(new Set());
+    else setSelected(new Set(cats.map((c) => c.id)));
+  };
+
+  const deleteSelected = () => {
+    if (!selected.size) return;
+    if (!confirm(`Delete ${selected.size} categor${selected.size === 1 ? "y" : "ies"}? Products in them will keep their category id.`)) return;
+    commit(cats.filter((c) => !selected.has(c.id)));
+    setSelected(new Set());
+  };
 
   const commit = (next: Category[]) => {
     setCats(next);
@@ -90,9 +109,38 @@ export function AdminCategoriesManager({
           </button>
         </div>
 
+        <div className="admin-orders__bulkbar">
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={selected.size === cats.length && cats.length > 0}
+              onChange={toggleAll}
+            />
+            <span>Select All ({cats.length})</span>
+          </label>
+          <button
+            className="admin-btn admin-btn--danger-soft"
+            disabled={!selected.size}
+            onClick={deleteSelected}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+            Delete Selected{selected.size > 0 ? ` (${selected.size})` : ""}
+          </button>
+        </div>
+
         <div className="admin-cats-mgr">
           {cats.map((c) => (
             <div key={c.id} className="admin-cat-row">
+              <input
+                type="checkbox"
+                checked={selected.has(c.id)}
+                onChange={() => toggleCat(c.id)}
+                style={{ marginRight: 4 }}
+              />
               <span className="admin-cat-row__handle" aria-label="Drag">
                 <svg
                   width="16"

@@ -159,7 +159,7 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                 <tr key={t.id} onClick={() => router.push(`/tenants/${t.slug}`)}>
                   <td>
                     <div className="tenant-cell">
-                      <TenantAvatar name={t.name} />
+                      <TenantAvatar name={t.name} logoUrl={t.logoUrl} />
                       <div>
                         <div className="tenant-name">{t.name}</div>
                         <div className="tenant-domain">{t.slug}</div>

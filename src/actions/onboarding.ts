@@ -70,8 +70,9 @@ export async function createTenant(input: z.infer<typeof createTenantSchema>) {
     return t;
   });
 
-  // Invalidate the host→tenant cache for the new subdomain.
+  // Invalidate the host→tenant cache for the new subdomain + admin data caches.
   revalidateTag(`tenant-host:${data.slug}.${ROOT}`);
+  revalidateTag("admin:data");
 
   return { id: tenant.id, slug: tenant.slug };
 }

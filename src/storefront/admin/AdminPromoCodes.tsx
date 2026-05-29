@@ -157,6 +157,7 @@ export function AdminPromoCodes({
   const { promoCodes, setPromoCodes } = useStore();
   const [editing, setEditing] = useState<EditingPromo | null>(null);
   const [query, setQuery] = useState<string>("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const currency = brand.currency || "₱";
 
   const commit = (next: PromoCode[]) => setPromoCodes(next);
@@ -190,6 +191,25 @@ export function AdminPromoCodes({
   const remove = (id: string) => {
     if (!confirm("Delete this promo code?")) return;
     commit(promoCodes.filter((c) => c.id !== id));
+    setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  };
+
+  const toggleCode = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  const toggleAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((c) => c.id)));
+  };
+
+  const deleteSelected = () => {
+    if (!selected.size) return;
+    if (!confirm(`Delete ${selected.size} promo code(s)?`)) return;
+    commit(promoCodes.filter((c) => !selected.has(c.id)));
+    setSelected(new Set());
   };
 
   const filtered = promoCodes.filter(
@@ -244,9 +264,39 @@ export function AdminPromoCodes({
           </label>
         </div>
 
+        <div className="admin-orders__bulkbar">
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={selected.size === filtered.length && filtered.length > 0}
+              onChange={toggleAll}
+            />
+            <span>Select All ({filtered.length})</span>
+          </label>
+          <button
+            className="admin-btn admin-btn--danger-soft"
+            disabled={!selected.size}
+            onClick={deleteSelected}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+            Delete Selected{selected.size > 0 ? ` (${selected.size})` : ""}
+          </button>
+        </div>
+
         {filtered.map((c) => (
-          <div key={c.id} className="promo-card">
+          <div key={c.id} className={`promo-card ${selected.has(c.id) ? "is-selected" : ""}`}>
             <div className="promo-card__row1">
+              <label className="admin-check" style={{ marginRight: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(c.id)}
+                  onChange={() => toggleCode(c.id)}
+                />
+              </label>
               <h3 className="promo-card__code">{c.code || "—"}</h3>
               <div className="promo-card__icons">
                 <button className="admin-icon-btn promo-card__edit" title="Edit"

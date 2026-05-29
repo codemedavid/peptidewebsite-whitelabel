@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { getTenantIdOrNull } from "@/lib/tenant/headers";
 
 /**
  * Server session for the tenant's self-service storefront admin (the password
@@ -81,4 +82,19 @@ export async function readStorefrontAdminCookie(): Promise<{ tenantId: string } 
   const token = jar.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return parseToken(token);
+}
+
+/**
+ * Require a valid storefront-admin session for the CURRENT request's tenant and
+ * return that tenantId (or null). The tenant is resolved server-side from the
+ * request host — never trusted from the client — and the cookie must have been
+ * issued for that same tenant, so a session for store A can't mutate store B.
+ * Shared by every storefront-admin server action (auth, payments, products).
+ */
+export async function requireStorefrontAdmin(): Promise<string | null> {
+  const tenantId = await getTenantIdOrNull();
+  if (!tenantId) return null;
+  const cookie = await readStorefrontAdminCookie();
+  if (!cookie || cookie.tenantId !== tenantId) return null;
+  return tenantId;
 }

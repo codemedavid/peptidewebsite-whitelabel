@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/features/entitlements";
 import { planFeatureSet, FEATURE_META, ALL_FEATURES, FEATURE_GROUPS, type FeatureKey } from "@/lib/features/catalog";
@@ -30,6 +31,7 @@ export type AdminTenantRow = {
   status: string;
   planKey: string;
   themeId: string;
+  logoUrl?: string;
   owner: string;
   email: string;
   createdAt: string; // ISO date (YYYY-MM-DD)
@@ -204,14 +206,22 @@ function demoRow(t: DemoTenant): AdminTenantRow {
    Public API
    ============================================================ */
 
+const _cachedTenantNames = unstable_cache(
+  async () => {
+    const ts = await prisma.tenant.findMany({ select: { slug: true, name: true } });
+    return { count: ts.length, bySlug: Object.fromEntries(ts.map((t) => [t.slug, t.name])) };
+  },
+  ["admin-tenant-names"],
+  { tags: ["admin:data"], revalidate: 120 },
+);
+
 /** Lightweight slug→name map + count, for the shell layout (crumbs + badge). */
 export async function listTenantNames(): Promise<{ count: number; bySlug: Record<string, string> }> {
   if (isDemoMode()) {
     const ts = listDemoTenants();
     return { count: ts.length, bySlug: Object.fromEntries(ts.map((t) => [t.slug, t.name])) };
   }
-  const ts = await prisma.tenant.findMany({ select: { slug: true, name: true } });
-  return { count: ts.length, bySlug: Object.fromEntries(ts.map((t) => [t.slug, t.name])) };
+  return _cachedTenantNames();
 }
 
 /** Tenant name + normalized order-number format for the settings editor. */
@@ -310,56 +320,60 @@ export async function listTenantDomains(slug: string): Promise<TenantDomainRow[]
   return t?.domains ?? [];
 }
 
+const _cachedAdminTenants = unstable_cache(
+  async (): Promise<AdminTenantRow[]> => {
+    const [tenants, revenue] = await Promise.all([
+      prisma.tenant.findMany({
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          createdAt: true,
+          plan: { select: { key: true } },
+          branding: { select: { themeId: true, logoUrl: true } },
+          members: { where: { role: "owner" }, select: { email: true }, take: 1 },
+          _count: { select: { orders: true } },
+          featureOverrides: { select: { enabled: true, feature: { select: { key: true } } } },
+        },
+      }),
+      prisma.order.groupBy({ by: ["tenantId"], _sum: { totalCents: true } }),
+    ]);
+    const revByTenant = new Map(revenue.map((r) => [r.tenantId, r._sum.totalCents ?? 0]));
+    return tenants
+      .map((t): AdminTenantRow => {
+        const email = t.members[0]?.email;
+        return {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          status: t.status,
+          planKey: t.plan.key,
+          themeId: t.branding?.themeId ?? "clinical-white",
+          logoUrl: t.branding?.logoUrl ?? undefined,
+          owner: nameFromEmail(email),
+          email: email ?? "—",
+          createdAt: isoDate(t.createdAt),
+          revenueCents: revByTenant.get(t.id) ?? 0,
+          orders: t._count.orders,
+          features: countFeatures(
+            t.plan.key,
+            t.featureOverrides.map((o) => ({ enabled: o.enabled, key: o.feature.key })),
+          ),
+        };
+      })
+      .sort((a, b) => b.revenueCents - a.revenueCents);
+  },
+  ["admin-tenant-list"],
+  { tags: ["admin:data"], revalidate: 120 },
+);
+
 export async function listAdminTenants(): Promise<AdminTenantRow[]> {
   if (isDemoMode()) {
-    return listDemoTenants()
-      .map(demoRow)
-      .sort((a, b) => b.revenueCents - a.revenueCents);
+    return listDemoTenants().map(demoRow).sort((a, b) => b.revenueCents - a.revenueCents);
   }
-
-  const [tenants, revenue] = await Promise.all([
-    prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        createdAt: true,
-        plan: { select: { key: true } },
-        branding: { select: { themeId: true } },
-        members: { where: { role: "owner" }, select: { email: true }, take: 1 },
-        _count: { select: { orders: true } },
-        featureOverrides: { select: { enabled: true, feature: { select: { key: true } } } },
-      },
-    }),
-    prisma.order.groupBy({ by: ["tenantId"], _sum: { totalCents: true } }),
-  ]);
-
-  const revByTenant = new Map(revenue.map((r) => [r.tenantId, r._sum.totalCents ?? 0]));
-
-  return tenants
-    .map((t): AdminTenantRow => {
-      const email = t.members[0]?.email;
-      return {
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        status: t.status,
-        planKey: t.plan.key,
-        themeId: t.branding?.themeId ?? "clinical-white",
-        owner: nameFromEmail(email),
-        email: email ?? "—",
-        createdAt: isoDate(t.createdAt),
-        revenueCents: revByTenant.get(t.id) ?? 0,
-        orders: t._count.orders,
-        features: countFeatures(
-          t.plan.key,
-          t.featureOverrides.map((o) => ({ enabled: o.enabled, key: o.feature.key })),
-        ),
-      };
-    })
-    .sort((a, b) => b.revenueCents - a.revenueCents);
+  return _cachedAdminTenants();
 }
 
 export async function getPlatformOverview(): Promise<OverviewData> {
@@ -508,6 +522,85 @@ function demoActivity(rows: AdminTenantRow[]): ActivityItem[] {
   }));
 }
 
+const _cachedTenantDetail = unstable_cache(
+  async (slug: string): Promise<TenantDetail | null> => {
+    const t = await prisma.tenant.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        createdAt: true,
+        plan: { select: { key: true } },
+        branding: { select: { themeId: true } },
+        members: { where: { role: "owner" }, select: { email: true }, take: 1 },
+        _count: { select: { orders: true, contacts: true } },
+      },
+    });
+    if (!t) return null;
+
+    const [revAgg, orders24mo, recentOrders, events, enabled] = await Promise.all([
+      prisma.order.aggregate({ where: { tenantId: t.id }, _sum: { totalCents: true } }),
+      prisma.order.findMany({
+        where: { tenantId: t.id, createdAt: { gte: new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1) } },
+        select: { createdAt: true, totalCents: true },
+      }),
+      prisma.order.findMany({
+        where: { tenantId: t.id },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        select: {
+          orderNumber: true,
+          totalCents: true,
+          status: true,
+          createdAt: true,
+          contact: { select: { email: true } },
+          _count: { select: { items: true } },
+        },
+      }),
+      safeTenantEvents(t.id),
+      getEntitlements(t.id),
+    ]);
+
+    const ceiling = planFeatureSet(t.plan.key);
+    const email = t.members[0]?.email;
+    const lifetime = revAgg._sum.totalCents ?? 0;
+
+    return {
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      status: t.status,
+      planKey: t.plan.key,
+      themeId: t.branding?.themeId ?? "clinical-white",
+      owner: nameFromEmail(email),
+      email: email ?? "—",
+      createdAt: isoDate(t.createdAt),
+      revenueCents: lifetime,
+      orders: t._count.orders,
+      features: enabled.size,
+      monthlyRevenue: monthlyRevenue(orders24mo, 0),
+      recentOrders: recentOrders.map((o) => ({
+        orderNumber: o.orderNumber,
+        date: isoDate(o.createdAt),
+        customer: nameFromEmail(o.contact?.email),
+        items: o._count.items,
+        totalCents: o.totalCents,
+        status: o.status,
+      })),
+      featureStates: featureStates(ceiling, enabled),
+      enabledFeatures: enabled.size,
+      totalFeatures: ceilingPlusEnabled(ceiling, enabled),
+      lifetimeRevenueCents: lifetime,
+      visitors: t._count.contacts,
+      audit: events,
+    };
+  },
+  ["admin-tenant-detail"],
+  { tags: ["admin:data"], revalidate: 120 },
+);
+
 export async function getAdminTenantDetail(slug: string): Promise<TenantDetail | null> {
   if (isDemoMode()) {
     const t = listDemoTenants().find((x) => x.slug === slug);
@@ -527,79 +620,7 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
       audit: demoAudit(row),
     };
   }
-
-  const t = await prisma.tenant.findUnique({
-    where: { slug },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-      createdAt: true,
-      plan: { select: { key: true } },
-      branding: { select: { themeId: true } },
-      members: { where: { role: "owner" }, select: { email: true }, take: 1 },
-      _count: { select: { orders: true, contacts: true } },
-    },
-  });
-  if (!t) return null;
-
-  const [revAgg, orders24mo, recentOrders, events, enabled] = await Promise.all([
-    prisma.order.aggregate({ where: { tenantId: t.id }, _sum: { totalCents: true } }),
-    prisma.order.findMany({
-      where: { tenantId: t.id, createdAt: { gte: new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1) } },
-      select: { createdAt: true, totalCents: true },
-    }),
-    prisma.order.findMany({
-      where: { tenantId: t.id },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-      select: {
-        orderNumber: true,
-        totalCents: true,
-        status: true,
-        createdAt: true,
-        contact: { select: { email: true } },
-        _count: { select: { items: true } },
-      },
-    }),
-    safeTenantEvents(t.id),
-    getEntitlements(t.id),
-  ]);
-
-  const ceiling = planFeatureSet(t.plan.key);
-  const email = t.members[0]?.email;
-  const lifetime = revAgg._sum.totalCents ?? 0;
-
-  return {
-    id: t.id,
-    name: t.name,
-    slug: t.slug,
-    status: t.status,
-    planKey: t.plan.key,
-    themeId: t.branding?.themeId ?? "clinical-white",
-    owner: nameFromEmail(email),
-    email: email ?? "—",
-    createdAt: isoDate(t.createdAt),
-    revenueCents: lifetime,
-    orders: t._count.orders,
-    features: enabled.size,
-    monthlyRevenue: monthlyRevenue(orders24mo, 0),
-    recentOrders: recentOrders.map((o) => ({
-      orderNumber: o.orderNumber,
-      date: isoDate(o.createdAt),
-      customer: nameFromEmail(o.contact?.email),
-      items: o._count.items,
-      totalCents: o.totalCents,
-      status: o.status,
-    })),
-    featureStates: featureStates(ceiling, enabled),
-    enabledFeatures: enabled.size,
-    totalFeatures: ceilingPlusEnabled(ceiling, enabled),
-    lifetimeRevenueCents: lifetime,
-    visitors: t._count.contacts,
-    audit: events,
-  };
+  return _cachedTenantDetail(slug);
 }
 
 /* ============================================================

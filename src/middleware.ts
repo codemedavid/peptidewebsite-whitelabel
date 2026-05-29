@@ -22,9 +22,17 @@ const ADMIN_HOST = process.env.NEXT_PUBLIC_ADMIN_HOST?.replace(/:\d+$/, "");
  */
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
-  const host = (req.headers.get("host") ?? "")
-    .replace(/:\d+$/, "")
-    .toLowerCase();
+  const rawHost = (req.headers.get("host") ?? "").toLowerCase();
+  const host = rawHost.replace(/:\d+$/, "");
+
+  // Canonicalize www → apex. Redirect www.anything to the bare hostname so both
+  // variants always resolve and there's one canonical URL for SEO / cookies.
+  if (host.startsWith("www.")) {
+    const apex = rawHost.replace(/^www\./, "");
+    const canonical = new URL(req.url);
+    canonical.host = apex;
+    return NextResponse.redirect(canonical, { status: 301 });
+  }
 
   // Strip any client-supplied tenant headers before we set our own.
   const requestHeaders = new Headers(req.headers);

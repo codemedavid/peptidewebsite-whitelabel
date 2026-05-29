@@ -234,7 +234,7 @@ export function DashboardView({ data }: { data: OverviewData }) {
                 style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderBottom: i < data.topTenants.length - 1 ? "1px solid var(--border-soft)" : "none" }}
               >
                 <div style={{ width: 18, color: "var(--ink-400)", fontSize: 12, fontVariantNumeric: "tabular-nums", textAlign: "center" }}>{i + 1}</div>
-                <TenantAvatar name={t.name} />
+                <TenantAvatar name={t.name} logoUrl={t.logoUrl} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="tenant-name">{t.name}</div>
                   <div className="tenant-domain">{t.slug}</div>
