@@ -1285,6 +1285,173 @@
   .sf-root .track-form .btn { width: 100%; }
 }
 
+/* Fulfillment journey — recorded, timestamped status timeline. */
+.sf-root .track-journey,
+.sf-root .track-summary {
+  margin-top: 16px;
+  padding: 20px 24px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-md);
+}
+
+.sf-root .track-journey__title,
+.sf-root .track-summary__title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-text-muted);
+  margin: 0 0 16px;
+}
+
+.sf-root .track-journey__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sf-root .track-journey__step {
+  display: flex;
+  gap: 14px;
+  min-height: 48px;
+}
+
+.sf-root .track-journey__marker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sf-root .track-journey__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-border);
+  background: var(--brand-surface);
+  margin-top: 2px;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.sf-root .track-journey__line {
+  flex: 1;
+  width: 2px;
+  background: var(--brand-border);
+  margin: 2px 0;
+}
+
+.sf-root .track-journey__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 16px;
+}
+
+.sf-root .track-journey__label {
+  font-weight: 600;
+  color: var(--brand-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sf-root .track-journey__time {
+  font-size: 13px;
+  color: var(--brand-text-muted);
+}
+
+.sf-root .track-journey__badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--brand-button-text);
+  background: var(--brand-accent);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+
+/* Done steps — filled accent dot + connector. */
+.sf-root .track-journey__step.is-done .track-journey__dot,
+.sf-root .track-journey__step.is-current .track-journey__dot {
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+}
+.sf-root .track-journey__step.is-done .track-journey__line {
+  background: var(--brand-accent);
+}
+
+/* Current step — emphasized ring. */
+.sf-root .track-journey__step.is-current .track-journey__dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-accent) 22%, transparent);
+}
+
+/* Upcoming steps — muted. */
+.sf-root .track-journey__step.is-upcoming .track-journey__label {
+  color: var(--brand-text-muted);
+  font-weight: 500;
+}
+
+/* Cancelled terminal node. */
+.sf-root .track-journey__step.is-cancelled .track-journey__dot {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+.sf-root .track-journey__step.is-cancelled .track-journey__label {
+  color: #ef4444;
+}
+
+/* Order summary — items + totals (no customer info). */
+.sf-root .track-summary__items {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sf-root .track-summary__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.sf-root .track-summary__qty {
+  color: var(--brand-text-muted);
+}
+
+.sf-root .track-summary__amt {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sf-root .track-summary__totals {
+  border-top: 1px solid var(--brand-border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sf-root .track-summary__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--brand-text-muted);
+}
+
+.sf-root .track-summary__row--total {
+  color: var(--brand-main);
+  font-weight: 700;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
 /* ---- FAQ ---- */
 .sf-root .faq__chips {
   display: flex;

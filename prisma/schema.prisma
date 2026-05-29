@@ -277,6 +277,10 @@ model StorefrontOrder {
   customer Json @default("{}") // { name, email, phone, contactMethod }
   shipping Json @default("{}") // { address, barangay, city, province, postal, country, region, fee }
   items    Json @default("[]") // [{ name, qty, price }]
+  // Append-only fulfillment journey: one entry per status transition, oldest
+  // first, e.g. [{ status: "new", at }, { status: "confirmed", at }, …]. Drives
+  // the storefront Track page's timeline. Seeded with the "new" event at create.
+  statusHistory Json @default("[]")
 
   courier        String   @default("")
   trackingNumber String   @default("")

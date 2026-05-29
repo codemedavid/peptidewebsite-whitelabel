@@ -30,11 +30,22 @@ export type Category = { id: string; label: string };
 
 export type OrderItem = { name: string; qty: number; price: number };
 
+export type OrderStatus =
+  | "new"
+  | "confirmed"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
+/** One entry in an order's fulfillment journey — a status and when it was set. */
+export type OrderStatusEvent = { status: OrderStatus; at: string };
+
 export type Order = {
   id: string;
   /** Tenant-facing formatted code, e.g. ABC-1001. Assigned at checkout hand-off. */
   orderNumber?: string;
-  status: "new" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
+  status: OrderStatus;
   paymentStatus: "pending" | "paid";
   paymentMethod: string;
   date: string;
@@ -58,6 +69,8 @@ export type Order = {
   trackingNumber: string;
   shippingNote: string;
   items: OrderItem[];
+  /** Fulfillment journey, oldest event first. Optional on legacy/demo orders. */
+  statusHistory?: OrderStatusEvent[];
   paymentProof: string | null;
 };
 

@@ -28,7 +28,7 @@ import {
   saveDemoStoreOrders,
   nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
-import type { Order, OrderItem } from "@/storefront/types";
+import type { Order, OrderItem, OrderStatusEvent } from "@/storefront/types";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -82,6 +82,22 @@ function normalizeItems(input: unknown): OrderItem[] {
   });
 }
 
+/** Coerce an untrusted status-history blob into clean, ordered journey events. */
+function normalizeStatusHistory(input: unknown): OrderStatusEvent[] {
+  const arr = Array.isArray(input) ? input : [];
+  return arr
+    .slice(0, 50)
+    .map((e) => {
+      const x = (e ?? {}) as Record<string, unknown>;
+      const status = STATUSES.includes(x.status as Order["status"])
+        ? (x.status as Order["status"])
+        : null;
+      const at = str(x.at, 40);
+      return status && at ? { status, at } : null;
+    })
+    .filter((e): e is OrderStatusEvent => e !== null);
+}
+
 /** Coerce an untrusted checkout payload into a clean storefront Order. */
 function normalizeOrderInput(input: unknown): Order {
   const o = (input ?? {}) as Record<string, unknown>;
@@ -117,6 +133,7 @@ function normalizeOrderInput(input: unknown): Order {
     trackingNumber: str(o.trackingNumber, 120),
     shippingNote: str(o.shippingNote, 500),
     items: normalizeItems(o.items),
+    statusHistory: normalizeStatusHistory(o.statusHistory),
     // Only accept a hosted URL here — the proof is uploaded separately via
     // uploadPaymentProofAction, which returns the ImageKit URL (or, when
     // ImageKit isn't configured, a data URL fallback). Cap generously so a
@@ -139,6 +156,7 @@ type DbOrderRow = {
   customer: unknown;
   shipping: unknown;
   items: unknown;
+  statusHistory: unknown;
   courier: string;
   trackingNumber: string;
   shippingNote: string;
@@ -156,6 +174,7 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     customer: row.customer,
     shipping: row.shipping,
     items: row.items,
+    statusHistory: row.statusHistory,
     courier: row.courier,
     trackingNumber: row.trackingNumber,
     shippingNote: row.shippingNote,
@@ -178,6 +197,7 @@ function orderToDbCreate(tenantId: string, p: Order) {
     customer: p.customer as unknown as Prisma.InputJsonValue,
     shipping: p.shipping as unknown as Prisma.InputJsonValue,
     items: p.items as unknown as Prisma.InputJsonValue,
+    statusHistory: (p.statusHistory ?? []) as unknown as Prisma.InputJsonValue,
     courier: p.courier,
     trackingNumber: p.trackingNumber,
     shippingNote: p.shippingNote,
@@ -253,6 +273,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
   const p = normalizeOrderInput(input);
   if (!p.items.length) return { error: "Your cart is empty." };
+
+  // Seed the fulfillment journey with the opening event so the Track page can
+  // show "Order received" with a real timestamp from the moment of checkout.
+  if (!p.statusHistory || p.statusHistory.length === 0) {
+    p.statusHistory = [{ status: p.status, at: p.date }];
+  }
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
@@ -345,6 +371,11 @@ export type TrackedOrder = {
   courier: string;
   trackingNumber: string;
   shippingNote: string;
+  // Order summary (no customer PII) + the fulfillment journey, so the Track page
+  // can show what was ordered, the total, and the timestamped status timeline.
+  items: OrderItem[];
+  shippingFee: number;
+  statusHistory: OrderStatusEvent[];
 };
 export type TrackOrderResult =
   | { ok: true; order: TrackedOrder }
@@ -370,6 +401,9 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
     courier: o.courier,
     trackingNumber: o.trackingNumber,
     shippingNote: o.shippingNote,
+    items: o.items,
+    shippingFee: o.shipping?.fee ?? 0,
+    statusHistory: o.statusHistory ?? [],
   });
   const matches = (o: Order) =>
     (o.orderNumber || "").toUpperCase() === code.toUpperCase() ||
@@ -451,6 +485,9 @@ export async function updateStorefrontOrderAction(
     const list = getDemoStoreOrders(slug);
     const i = list.findIndex((x) => x.id === orderId);
     if (i < 0) return { error: "Order not found." };
+    const newStatus = data.status as Order["status"] | undefined;
+    const statusChanged = !!newStatus && newStatus !== list[i].status;
+    const history = normalizeStatusHistory(list[i].statusHistory);
     const next: Order = {
       ...list[i],
       ...(data.status ? { status: data.status as Order["status"] } : {}),
@@ -458,6 +495,9 @@ export async function updateStorefrontOrderAction(
       ...(data.courier !== undefined ? { courier: data.courier as string } : {}),
       ...(data.trackingNumber !== undefined ? { trackingNumber: data.trackingNumber as string } : {}),
       ...(data.shippingNote !== undefined ? { shippingNote: data.shippingNote as string } : {}),
+      statusHistory: statusChanged
+        ? [...history, { status: newStatus, at: new Date().toISOString() }]
+        : history,
     };
     const updated = list.map((x, j) => (j === i ? next : x));
     saveDemoStoreOrders(slug, updated);
@@ -466,8 +506,21 @@ export async function updateStorefrontOrderAction(
 
   try {
     const row = await withTenant(tenantId, async (db) => {
+      // Read the current row first so we can append to the journey only when the
+      // status actually changes (and never lose earlier events).
+      const current = await db.storefrontOrder.findFirst({ where: { id: orderId } });
+      if (!current) return null;
+      const next: Prisma.StorefrontOrderUpdateInput = { ...data };
+      const newStatus = data.status as Order["status"] | undefined;
+      if (newStatus && newStatus !== current.status) {
+        const history = normalizeStatusHistory(current.statusHistory);
+        next.statusHistory = [
+          ...history,
+          { status: newStatus, at: new Date().toISOString() },
+        ] as unknown as Prisma.InputJsonValue;
+      }
       // updateMany is tenant-scoped by the extension; the bare-id update isn't.
-      await db.storefrontOrder.updateMany({ where: { id: orderId }, data });
+      await db.storefrontOrder.updateMany({ where: { id: orderId }, data: next });
       return db.storefrontOrder.findFirst({ where: { id: orderId } });
     });
     if (!row) return { error: "Order not found." };
