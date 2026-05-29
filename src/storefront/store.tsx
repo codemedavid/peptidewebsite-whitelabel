@@ -154,9 +154,12 @@ export function StoreProvider({
 
   // Hydrate from localStorage after mount (avoids SSR/client mismatch).
   useEffect(() => {
-    // Brand overrides merge on top of the tenant-seeded defaults.
-    const savedBrand = load<Partial<Brand> | null>(NS + "brand", null);
-    if (savedBrand) setBrandState((b) => ({ ...b, ...savedBrand }));
+    // NOTE: brand is intentionally NOT hydrated from localStorage — it comes
+    // from the DB via the server-provided `brand` prop (branding.config). A
+    // stale local copy would otherwise mask what the operator saved in the
+    // platform admin (e.g. a "Show legal row" toggle turned off would reappear
+    // because an old cached brand still had footerShowLegal: true). Same class
+    // of cross-device bug as products / payment methods below.
     // NOTE: products are intentionally NOT hydrated from localStorage — they're
     // the DB's source of truth, loaded server-side and passed in as `productsSeed`
     // (mirroring payment methods). A stale local copy would otherwise mask what
@@ -177,22 +180,16 @@ export function StoreProvider({
 
   useEffect(() => applyBrandStyle(brand), [brand]);
 
-  // Live branding edits: merge, persist, re-apply palette.
+  // Live branding edits: merge in-memory and re-apply palette. NOT persisted to
+  // localStorage — brand is DB-sourced (branding.config via the server prop), so
+  // a cached copy would mask later operator saves (see hydration note above).
   const setTweak = useCallback(
     (keyOrEdits: keyof Brand | Partial<Brand>, val?: unknown) => {
       const edits: Partial<Brand> =
         typeof keyOrEdits === "object" && keyOrEdits !== null
           ? keyOrEdits
           : ({ [keyOrEdits]: val } as Partial<Brand>);
-      setBrandState((prev) => {
-        const next = { ...prev, ...edits };
-        try {
-          window.localStorage.setItem(NS + "brand", JSON.stringify(next));
-        } catch {
-          /* quota — non-fatal */
-        }
-        return next;
-      });
+      setBrandState((prev) => ({ ...prev, ...edits }));
     },
     [],
   );
