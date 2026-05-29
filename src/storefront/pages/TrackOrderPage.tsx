@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand, Order } from "../types";
 import { BackLink } from "../components/BackLink";
 import { useStore } from "../store";
+import { trackStorefrontOrderAction, type TrackedOrder } from "@/actions/orders";
 
 const STATUS_LABELS: Record<Order["status"], string> = {
   new: "Order Received",
@@ -24,21 +25,37 @@ const STATUS_DOT: Record<Order["status"], string> = {
 };
 
 export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+  // Orders live in the DB now, so look up by order number through the public,
+  // tenant-scoped action (returns only status/tracking, no customer PII). Fall
+  // back to the local just-placed copy so a fresh order tracks instantly even
+  // before the round-trip completes.
   const { orders } = useStore();
   const [orderNumber, setOrderNumber] = useState("");
-  const [result, setResult] = useState<Order | "not_found" | null>(null);
+  const [result, setResult] = useState<TrackedOrder | "not_found" | null>(null);
   const [searched, setSearched] = useState("");
 
-  const lookup = () => {
-    const n = orderNumber.trim().toUpperCase();
+  const toTracked = (o: Order): TrackedOrder => ({
+    orderNumber: o.orderNumber || o.id,
+    status: o.status,
+    date: o.date,
+    courier: o.courier,
+    trackingNumber: o.trackingNumber,
+    shippingNote: o.shippingNote,
+  });
+
+  const lookup = async () => {
+    const n = orderNumber.trim();
     if (!n) return;
-    const order = orders.find(
+    setSearched(n);
+    const local = orders.find(
       (o) =>
-        (o.orderNumber || "").toUpperCase() === n ||
-        o.id.toUpperCase() === n,
+        (o.orderNumber || "").toUpperCase() === n.toUpperCase() ||
+        o.id.toUpperCase() === n.toUpperCase(),
     );
-    setSearched(orderNumber.trim());
-    setResult(order ?? "not_found");
+    const res = await trackStorefrontOrderAction(n);
+    if ("ok" in res && res.order) setResult(res.order);
+    else if (local) setResult(toTracked(local));
+    else setResult("not_found");
   };
 
   return (
@@ -63,11 +80,11 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
               placeholder={brand.trackPlaceholder || "Enter Order Number (e.g., TBS-1234)"}
               onChange={(e) => setOrderNumber(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") lookup();
+                if (e.key === "Enter") void lookup();
               }}
             />
           </label>
-          <button className="btn btn-primary" onClick={lookup}>
+          <button className="btn btn-primary" onClick={() => void lookup()}>
             {brand.trackCta || "Track Order"}
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M13 5l7 7-7 7" />
@@ -95,7 +112,7 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
             />
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, color: "var(--brand-main)", marginBottom: 2 }}>
-                Order {result.orderNumber || `#${result.id.slice(0, 8)}`}
+                Order {result.orderNumber}
               </div>
               <div style={{ fontSize: 14, color: "var(--brand-text-muted)", marginBottom: 6 }}>
                 {STATUS_LABELS[result.status]} &middot;{" "}

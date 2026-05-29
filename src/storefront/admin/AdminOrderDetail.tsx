@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Brand, Order } from "../types";
-import { useStore } from "../store";
+import { updateStorefrontOrderAction } from "@/actions/orders";
 
 function formatPHP(n: number): string {
   return (
@@ -47,11 +47,11 @@ export function AdminOrderDetail({
   order: Order;
   onBack: () => void;
 }) {
-  const { setOrders } = useStore();
   const [o, setO] = useState<Order>(order);
   const [tracking, setTracking] = useState<string>(o.trackingNumber || "");
   const [courier, setCourier] = useState<string>(o.courier || "LBC Express");
   const [note, setNote] = useState<string>(o.shippingNote || "");
+  const [saving, setSaving] = useState<boolean>(false);
 
   void brand;
 
@@ -62,35 +62,36 @@ export function AdminOrderDetail({
   const ship = o.shipping?.fee || 0;
   const total = sub + ship;
 
-  const syncBack = (updated: Order) => {
-    setOrders((prev) =>
-      prev.map((x) => (x.id === updated.id ? updated : x)),
-    );
-  };
-
-  const confirmOrder = () => {
-    const next: Order = { ...o, status: "confirmed" };
+  // Persist a patch to the DB (store admin gated). Optimistically apply locally,
+  // roll back + surface the error if the write fails.
+  const persist = async (patch: Partial<Order>) => {
+    const prev = o;
+    const next: Order = { ...o, ...patch };
     setO(next);
-    syncBack(next);
+    setSaving(true);
+    const res = await updateStorefrontOrderAction(o.id, patch);
+    setSaving(false);
+    if ("error" in res) {
+      setO(prev);
+      alert(res.error);
+      return false;
+    }
+    setO(res.order);
+    return true;
   };
 
-  const changeStatus = (status: Order["status"]) => {
-    const next: Order = { ...o, status };
-    setO(next);
-    syncBack(next);
-  };
+  const confirmOrder = () => void persist({ status: "confirmed" });
 
-  const saveTracking = () => {
-    const next: Order = {
-      ...o,
+  const changeStatus = (status: Order["status"]) => void persist({ status });
+
+  const saveTracking = async () => {
+    const ok = await persist({
       courier,
       trackingNumber: tracking,
       shippingNote: note,
       status: tracking ? "shipped" : o.status,
-    };
-    setO(next);
-    syncBack(next);
-    alert("Tracking info saved.");
+    });
+    if (ok) alert("Tracking info saved.");
   };
 
   return (
@@ -281,9 +282,10 @@ export function AdminOrderDetail({
             />
             <button
               className="admin-detail__save-tracking"
-              onClick={saveTracking}
+              onClick={() => void saveTracking()}
+              disabled={saving}
             >
-              Save Tracking Info
+              {saving ? "Saving…" : "Save Tracking Info"}
             </button>
           </div>
 

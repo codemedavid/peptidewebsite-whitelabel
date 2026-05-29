@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Brand, Order } from "../types";
-import { useStore } from "../store";
+import {
+  listStorefrontOrdersAction,
+  deleteStorefrontOrdersAction,
+} from "@/actions/orders";
 
 function totalOf(o: Order): number {
   return (
@@ -67,12 +70,27 @@ export function AdminOrders({
   onBack: () => void;
   onView: (o: Order) => void;
 }) {
-  const { orders, setOrders } = useStore();
+  // Orders are DB-backed (source of truth). Load the tenant's set on mount and
+  // re-fetch after deletes / on Refresh, rather than reading browser localStorage.
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<string>("all");
   const [query, setQuery] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   void brand;
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const res = await listStorefrontOrdersAction();
+    if ("ok" in res) setOrders(res.orders);
+    else alert(res.error);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const stats = useMemo(() => {
     const s: Record<string, number> = {};
@@ -168,18 +186,28 @@ export function AdminOrders({
     else setSelected(new Set(filtered.map((o) => o.id)));
   };
 
-  const deleteSelected = () => {
+  const deleteSelected = async () => {
     if (!selected.size) return;
     if (!confirm(`Delete ${selected.size} order(s)?`)) return;
-    setOrders(orders.filter((o) => !selected.has(o.id)));
+    const res = await deleteStorefrontOrdersAction([...selected]);
+    if ("error" in res) {
+      alert(res.error);
+      return;
+    }
     setSelected(new Set());
+    await refresh();
   };
 
-  const deleteAll = () => {
+  const deleteAll = async () => {
     if (!confirm(`Delete ALL ${orders.length} orders? This cannot be undone.`))
       return;
-    setOrders([]);
+    const res = await deleteStorefrontOrdersAction(orders.map((o) => o.id));
+    if ("error" in res) {
+      alert(res.error);
+      return;
+    }
     setSelected(new Set());
+    await refresh();
   };
 
   return (
@@ -213,7 +241,8 @@ export function AdminOrders({
           </h1>
           <button
             className="admin-btn"
-            onClick={() => setOrders([...orders])}
+            onClick={() => void refresh()}
+            disabled={loading}
           >
             <svg
               viewBox="0 0 24 24"
@@ -396,7 +425,7 @@ export function AdminOrders({
 
         {filtered.length === 0 && (
           <div className="admin-empty-set" style={{ padding: "60px 20px" }}>
-            No orders match the current filter.
+            {loading ? "Loading orders…" : "No orders match the current filter."}
           </div>
         )}
       </main>

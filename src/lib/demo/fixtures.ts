@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Product } from "@/storefront/types";
+import type { Order, Product } from "@/storefront/types";
 import { slugify } from "@/lib/storefront/product-mapping";
 import { planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 import type { HeroTypography } from "@/lib/theme/tokens";
@@ -102,6 +102,7 @@ const BRANDING_FILE = path.join(DATA_DIR, "branding.json");
 const FEATURES_FILE = path.join(DATA_DIR, "features.json");
 const ORDER_FORMAT_FILE = path.join(DATA_DIR, "order-format.json");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
+const ORDERS_FILE = path.join(DATA_DIR, "storefront-orders.json");
 
 export type DemoBranding = {
   themeId?: string;
@@ -159,6 +160,43 @@ export function saveDemoStoreProducts(slug: string, products: Product[]): void {
   all[slug] = products;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(all, null, 2));
+}
+
+// ── Storefront orders (demo persistence) ──
+// The file-backed analogue of the real `storefront_orders` table — the orders
+// customers place at checkout, keyed by tenant slug. Proof of payment is a data
+// URL in demo (ImageKit URL in prod), same as product images.
+
+function readStoreOrders(): Record<string, Order[]> {
+  try {
+    return JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeStoreOrders(all: Record<string, Order[]>): void {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(ORDERS_FILE, JSON.stringify(all, null, 2));
+}
+
+/** A tenant's storefront orders, newest first (empty if none placed yet). */
+export function getDemoStoreOrders(slug: string): Order[] {
+  return readStoreOrders()[slug] ?? [];
+}
+
+/** Prepend a newly placed order to the tenant's list (demo mode). */
+export function addDemoStoreOrder(slug: string, order: Order): void {
+  const all = readStoreOrders();
+  all[slug] = [order, ...(all[slug] ?? [])];
+  writeStoreOrders(all);
+}
+
+/** Replace the tenant's full order list (used by status/tracking edits + deletes). */
+export function saveDemoStoreOrders(slug: string, orders: Order[]): void {
+  const all = readStoreOrders();
+  all[slug] = orders;
+  writeStoreOrders(all);
 }
 
 /**

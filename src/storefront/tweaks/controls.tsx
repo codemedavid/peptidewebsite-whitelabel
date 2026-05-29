@@ -14,6 +14,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { uploadStorefrontImageAction } from "@/actions/media";
 
 const __TWEAKS_STYLE = `
   .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
@@ -469,7 +470,7 @@ export function ColorField({
   );
 }
 
-// ── Logo upload: drag-drop / click-to-pick, persists as data URL ────────────
+// ── Logo upload: drag-drop / click-to-pick → ImageKit, persists the hosted URL ─
 export function LogoUpload({
   value,
   onChange,
@@ -479,29 +480,35 @@ export function LogoUpload({
 }) {
   const inputRef = useReactRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleFile = (file: File | undefined) => {
+  const handleFile = async (file: File | undefined) => {
     setError("");
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Please pick an image file.");
       return;
     }
-    if (file.size > 600 * 1024) {
-      setError("Keep it under 600 KB — config gets bloated otherwise.");
-      return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "branding");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("url" in res) onChange(res.url);
+      else setError(res.error);
+    } catch {
+      setError("Upload failed — please try again.");
+    } finally {
+      setUploading(false);
     }
-    const reader = new FileReader();
-    reader.onload = (e) => onChange(String(e.target?.result ?? ""));
-    reader.onerror = () => setError("Couldn't read file.");
-    reader.readAsDataURL(file);
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    handleFile(e.dataTransfer.files?.[0]);
+    void handleFile(e.dataTransfer.files?.[0]);
   };
 
   const styles: Record<string, CSSProperties> = {
@@ -572,7 +579,11 @@ export function LogoUpload({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={styles.labelTitle}>Logo</div>
           <div style={styles.label}>
-            {dragging ? "Drop image here" : "Click or drop an image (PNG/SVG, ≤600 KB)"}
+            {uploading
+              ? "Uploading…"
+              : dragging
+                ? "Drop image here"
+                : "Click or drop an image (PNG/SVG/JPG)"}
           </div>
         </div>
         {value && (
@@ -593,7 +604,7 @@ export function LogoUpload({
         type="file"
         accept="image/*"
         style={{ display: "none" }}
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => void handleFile(e.target.files?.[0])}
       />
       {error && <div style={styles.err}>{error}</div>}
     </div>

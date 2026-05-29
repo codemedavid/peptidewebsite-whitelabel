@@ -38,6 +38,7 @@ const TENANT_MODELS = new Set<string>([
   "product",
   "cart",
   "order",
+  "storefrontOrder",
   "event",
   "emailLog",
   "automationRun",

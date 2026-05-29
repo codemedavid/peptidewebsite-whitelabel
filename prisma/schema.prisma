@@ -39,6 +39,7 @@ model Tenant {
   products          Product[]
   carts             Cart[]
   orders            Order[]
+  storefrontOrders  StorefrontOrder[]
   events            Event[]
   emailLogs         EmailLog[]
   automationRuns    AutomationRun[]
@@ -249,6 +250,39 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+// Manual-checkout storefront orders — the DB home for the rich order the
+// storefront builds at checkout (customer + shipping + items + proof of
+// payment). Kept separate from the Stripe/analytics `Order` above, which is
+// keyed to totals/payment-intents and feeds the platform revenue dashboards;
+// mixing the two enums/shapes would corrupt those aggregates. Proof of payment
+// is hosted on ImageKit (paymentProofUrl) — never stored as a base64 data URL.
+model StorefrontOrder {
+  id              String  @id @default(cuid())
+  tenantId        String
+  tenant          Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderNumber     String // tenant-facing formatted code, e.g. ABC-1001
+  status          String  @default("new") // new | confirmed | processing | shipped | delivered | cancelled
+  paymentStatus   String  @default("pending") // pending | paid
+  paymentMethod   String  @default("")
+  paymentProofUrl String? // ImageKit-hosted proof of payment (never a data URL)
+
+  // Denormalized blobs — the storefront Order type's nested objects.
+  customer Json @default("{}") // { name, email, phone, contactMethod }
+  shipping Json @default("{}") // { address, barangay, city, province, postal, country, region, fee }
+  items    Json @default("[]") // [{ name, qty, price }]
+
+  courier        String   @default("")
+  trackingNumber String   @default("")
+  shippingNote   String   @default("")
+  placedAt       DateTime @default(now()) // the storefront-facing order date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, createdAt])
+  @@map("storefront_orders")
 }
 
 // ──────────────────────────── Events, email, automation ────────────────────────────

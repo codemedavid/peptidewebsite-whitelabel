@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
 import type { Order } from "../types";
-import { readImageFile } from "../admin/shared";
+import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import {
   activeChannels,
   activePaymentMethods,
@@ -49,8 +49,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // Payment step state: chosen method, uploaded proof-of-payment image, and a
   // separate "tried to send" flag so we only surface payment errors there.
   const [methodId, setMethodId] = useState("");
-  const [proof, setProof] = useState("");
+  const [proof, setProof] = useState(""); // ImageKit-hosted URL of the uploaded proof
   const [proofName, setProofName] = useState("");
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [drag, setDrag] = useState(false);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const proofRef = useRef<HTMLInputElement>(null);
@@ -76,6 +77,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       setMethodId("");
       setProof("");
       setProofName("");
+      setUploadingProof(false);
     }
   }, [open]);
 
@@ -98,13 +100,31 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const missing = FIELDS.filter((f) => f.required && !customer[f.key].trim());
   const detailsValid = missing.length === 0;
 
+  // Upload the proof screenshot to the tenant's ImageKit folder as soon as it's
+  // picked (mirrors the product-image flow), then keep only the hosted URL —
+  // never a base64 blob — so the order row stays small and the image is visible
+  // in ImageKit. The order is persisted on hand-off in placeOrder().
   const handleProof = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast("Please pick an image file.");
+      return;
+    }
+    setUploadingProof(true);
     try {
-      const dataUrl = await readImageFile(file, 4096);
-      setProof(dataUrl);
-      setProofName(file?.name || "proof");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Image upload failed.");
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await uploadPaymentProofAction(fd);
+      if ("url" in res) {
+        setProof(res.url);
+        setProofName(file.name || "proof");
+      } else {
+        toast(res.error);
+      }
+    } catch {
+      toast("Image upload failed — please try again.");
+    } finally {
+      setUploadingProof(false);
     }
   };
 
@@ -144,7 +164,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product) })),
       paymentProof: proof || null,
     };
+    // Keep a local copy for instant same-browser tracking, and persist to the DB
+    // (source of truth the store admin reads). The channel window is opened
+    // synchronously below so it isn't popup-blocked; the DB write fires after.
     setOrders((prev) => [newOrder, ...prev]);
+    void placeStorefrontOrderAction(newOrder)
+      .then((r) => {
+        if (r && "error" in r) toast(`Order placed, but saving it failed: ${r.error}`);
+      })
+      .catch(() => toast("Order placed, but it couldn't be saved to the store."));
 
     const message = buildOrderMessage(
       brand,
@@ -297,7 +325,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     void handleProof(e.dataTransfer.files?.[0]);
                   }}
                 >
-                  {proof ? (
+                  {uploadingProof ? (
+                    <>
+                      <span className="sf-cart__proof-title">Uploading…</span>
+                      <span className="sf-cart__proof-sub">Sending your screenshot</span>
+                    </>
+                  ) : proof ? (
                     <div className="sf-cart__proof-preview">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={proof} alt="Proof of payment" />

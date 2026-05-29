@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import type { Brand, PaymentMethod } from "../types";
 import { useStore } from "../store";
-import { readImageFile } from "./shared";
+import { uploadStorefrontImageAction } from "@/actions/media";
 
 // Editing state includes an optional _new flag not present on PaymentMethod.
 type EditingMethod = PaymentMethod & { _new?: boolean };
@@ -23,15 +23,29 @@ function AdminPaymentMethodForm({
   const [account, setAccount] = useState<string>(method.account || "");
   const [qrImage, setQrImage] = useState<string>(method.qrImage || "");
   const [drag, setDrag]       = useState<boolean>(false);
+  const [uploading, setUploading] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const canSave = name.trim() && number.trim() && account.trim();
+  const canSave = name.trim() && number.trim() && account.trim() && !uploading;
 
+  // Upload the QR image to the tenant's ImageKit folder and keep the hosted URL.
   const handleImage = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Please pick an image file.");
+      return;
+    }
+    setUploading(true);
     try {
-      const dataUrl = await readImageFile(file, 2048);
-      setQrImage(dataUrl);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Image upload failed.");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "payment-qr");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("url" in res) setQrImage(res.url);
+      else alert(res.error);
+    } catch {
+      alert("Image upload failed — please try again.");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -102,7 +116,9 @@ function AdminPaymentMethodForm({
                 void handleImage(e.dataTransfer.files?.[0]);
               }}
             >
-              {qrImage ? (
+              {uploading ? (
+                <div className="admin-image-drop__title">Uploading…</div>
+              ) : qrImage ? (
                 <div className="admin-image-drop__preview">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={qrImage} alt="QR preview" />

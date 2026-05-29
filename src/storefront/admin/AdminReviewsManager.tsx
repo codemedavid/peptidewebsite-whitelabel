@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Brand, Review } from "../types";
 import { useStore } from "../store";
+import { uploadStorefrontImageAction } from "@/actions/media";
 
 // Internal type used only in the admin manager: a Review that carries a
 // stable runtime id (not persisted) and an optional _new flag.
@@ -25,18 +26,26 @@ function ReviewModal({
   const [image, setImage] = useState(review.image || "");
   const [productId, setPid] = useState(review.productId || "");
   const [drag, setDrag] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const canSave = title.trim() || subtitle.trim() || image;
+  const canSave = (title.trim() || subtitle.trim() || image) && !uploading;
 
-  const handleImage = (file: File | undefined) => {
+  // Upload the review image to the tenant's ImageKit folder; store the URL.
+  const handleImage = async (file: File | undefined) => {
     if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert("Image is over 2 MB. Try a smaller file.");
-      return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "review");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("url" in res) setImage(res.url);
+      else alert(res.error);
+    } catch {
+      alert("Image upload failed — please try again.");
+    } finally {
+      setUploading(false);
     }
-    const reader = new FileReader();
-    reader.onload = (e) => setImage(String(e.target?.result ?? ""));
-    reader.readAsDataURL(file);
   };
 
   return (
@@ -72,10 +81,12 @@ function ReviewModal({
             onDrop={(e) => {
               e.preventDefault();
               setDrag(false);
-              handleImage(e.dataTransfer.files?.[0]);
+              void handleImage(e.dataTransfer.files?.[0]);
             }}
           >
-            {image ? (
+            {uploading ? (
+              <div style={{ padding: 24 }}>Uploading…</div>
+            ) : image ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={image} alt="Review preview" />
@@ -143,7 +154,7 @@ function ReviewModal({
               type="file"
               accept="image/*"
               style={{ display: "none" }}
-              onChange={(e) => handleImage(e.target.files?.[0])}
+              onChange={(e) => void handleImage(e.target.files?.[0])}
             />
           </div>
         </div>

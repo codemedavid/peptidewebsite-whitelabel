@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import type { Brand, CoaReport } from "../types";
 import { useStore } from "../store";
-import { readImageFile } from "./shared";
+import { uploadStorefrontImageAction } from "@/actions/media";
 
 // ─── CoaEditorModal ───────────────────────────────────────────────────────────
 
@@ -27,17 +27,30 @@ function CoaEditorModal({
   const [image, setImage] = useState<string>(report.image || "");
   const [link, setLink] = useState<string>(report.link || "");
   const [drag, setDrag] = useState<boolean>(false);
+  const [uploading, setUploading] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const canSave = name.trim();
+  const canSave = name.trim() && !uploading;
 
+  // Upload the certificate image to the tenant's ImageKit folder; store the URL.
   const onImage = async (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Please pick an image file.");
+      return;
+    }
+    setUploading(true);
     try {
-      const dataUrl = await readImageFile(file, 2500);
-      setImage(dataUrl);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not read image.");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "lab-result");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("url" in res) setImage(res.url);
+      else alert(res.error);
+    } catch {
+      alert("Image upload failed — please try again.");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -163,7 +176,9 @@ function CoaEditorModal({
               void onImage(e.dataTransfer.files?.[0]);
             }}
           >
-            {image ? (
+            {uploading ? (
+              <div style={{ padding: 24 }}>Uploading…</div>
+            ) : image ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={image} alt="Certificate preview" />

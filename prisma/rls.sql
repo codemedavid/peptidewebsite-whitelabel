@@ -35,9 +35,9 @@ DECLARE
   t text;
   tenant_tables text[] := ARRAY[
     'domains', 'tenant_integrations', 'tenant_feature_overrides', 'contacts',
-    'products', 'carts', 'orders', 'events', 'email_logs', 'automation_runs',
-    'automation_metrics', 'tenant_users', 'branding', 'tenant_settings',
-    'pages', 'blog_posts', 'coupons', 'media_assets'
+    'products', 'carts', 'orders', 'storefront_orders', 'events', 'email_logs',
+    'automation_runs', 'automation_metrics', 'tenant_users', 'branding',
+    'tenant_settings', 'pages', 'blog_posts', 'coupons', 'media_assets'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
