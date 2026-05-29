@@ -263,6 +263,11 @@ model StorefrontOrder {
   tenantId        String
   tenant          Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderNumber     String // tenant-facing formatted code, e.g. ABC-1001
+  // Client-supplied idempotency key (the checkout draft id). Lets a retry after a
+  // lost/timed-out response return the already-stored order instead of creating a
+  // duplicate. Nullable so legacy rows (and any non-idempotent caller) are exempt;
+  // NULLs are distinct in Postgres, so multiple null-key rows are allowed.
+  clientId        String?
   status          String  @default("new") // new | confirmed | processing | shipped | delivered | cancelled
   paymentStatus   String  @default("pending") // pending | paid
   paymentMethod   String  @default("")
@@ -281,6 +286,7 @@ model StorefrontOrder {
   updatedAt      DateTime @default(now()) @updatedAt
 
   @@unique([tenantId, orderNumber])
+  @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
   @@map("storefront_orders")
 }

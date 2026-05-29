@@ -19,12 +19,14 @@ import type { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { withTenant } from "@/lib/db/tenant-client";
+import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import {
   isDemoMode,
   getDemoStoreOrders,
   addDemoStoreOrder,
   saveDemoStoreOrders,
+  nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
 import type { Order, OrderItem } from "@/storefront/types";
 
@@ -162,11 +164,13 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
   return base;
 }
 
-/** Shape the normalized Order into the columns/JSON the DB row expects. */
+/** Shape the normalized Order into the columns/JSON the DB row expects.
+ *  Note: `orderNumber` is intentionally NOT set here — it is generated
+ *  server-side per tenant in createStorefrontOrder() and never trusted from the
+ *  client. */
 function orderToDbCreate(tenantId: string, p: Order) {
   return {
     tenantId,
-    orderNumber: p.orderNumber || p.id,
     status: p.status,
     paymentStatus: p.paymentStatus,
     paymentMethod: p.paymentMethod,
@@ -239,9 +243,9 @@ export async function uploadPaymentProofAction(formData: FormData): Promise<Uplo
 
 /**
  * Persist an order placed at checkout. PUBLIC: the tenant is resolved from the
- * request host. The orderNumber is generated client-side (per-tenant format); on
- * the rare unique collision we append a short suffix and retry once so a buyer's
- * checkout never hard-fails on a duplicate.
+ * request host (never the client). The order number is generated SERVER-SIDE,
+ * per tenant, and returned so the UI/chat/tracking all reference the exact value
+ * that was stored. Any client-supplied orderNumber is ignored.
  */
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
   const tenantId = await getTenantIdOrNull();
@@ -252,38 +256,84 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    const saved: Order = { ...p, id: p.id || `o-${Date.now()}` };
+    const id = p.id || `o-${Date.now()}`;
+    // Idempotent retry: the same draft id was already stored → return it, don't
+    // mint a second number / duplicate the order.
+    const existing = getDemoStoreOrders(slug).find((o) => o.id === id);
+    if (existing) return { ok: true, order: existing };
+    // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
+    const orderNumber = nextDemoOrderNumber(slug);
+    const saved: Order = { ...p, id, orderNumber };
     addDemoStoreOrder(slug, saved);
     return { ok: true, order: saved };
   }
 
   try {
-    const row = await withTenant(tenantId, async (db) => {
-      const data = orderToDbCreate(tenantId, p);
-      try {
-        return await db.storefrontOrder.create({ data });
-      } catch (e) {
-        // P2002 = unique(tenantId, orderNumber) collision across browsers.
-        if ((e as { code?: string }).code === "P2002") {
-          const suffix = `-${Math.abs(hashStr(p.id || data.orderNumber)) % 1000}`;
-          return db.storefrontOrder.create({
-            data: { ...data, orderNumber: `${data.orderNumber}${suffix}` },
-          });
-        }
-        throw e;
-      }
-    });
+    const row = await createStorefrontOrder(tenantId, p);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't place the order." };
   }
 }
 
-// A tiny deterministic hash so the collision-suffix doesn't need Math.random.
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return h;
+/**
+ * Create the order with a SERVER-generated, per-tenant order number. The number
+ * is RESERVED in its own committed transaction (the atomic Tenant.orderSeq
+ * increment, or a random-code probe), then the row is created in a second
+ * transaction. Keeping the reservation separate is deliberate: it means a
+ * committed orderSeq advance SURVIVES a failed create, so a retry always gets a
+ * strictly HIGHER number and can never re-collide — whereas folding both into
+ * one transaction would roll the increment back on a unique-collision and retry
+ * the very same number forever (e.g. against a legacy client-minted code that
+ * still occupies that slot). Like a database sequence, this can leave gaps when
+ * a create fails, which is harmless; what matters is that two orders never share
+ * a number and every stored row carries a consumed number. Any client-supplied
+ * orderNumber is ignored — the server is the sole authority.
+ *
+ * Idempotency: the checkout draft id is stored as `clientId` under
+ * @@unique([tenantId, clientId]). If a write COMMITTED but the response was lost
+ * and the buyer retried, the same clientId returns the already-stored order
+ * instead of creating a duplicate (the "await + keep cart on failure" flow would
+ * otherwise turn an ambiguous timeout into a second order).
+ */
+async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
+  const clientId = p.id || undefined;
+
+  // Fast path: this exact submission is already stored (a retry) → return it.
+  if (clientId) {
+    const existing = await withTenant(tenantId, (db) =>
+      db.storefrontOrder.findFirst({ where: { clientId } }),
+    );
+    if (existing) return existing;
+  }
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const orderNumber = await withTenant(tenantId, (db) =>
+      generateStorefrontOrderNumber(db, tenantId),
+    );
+    try {
+      return await withTenant(tenantId, (db) =>
+        db.storefrontOrder.create({ data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId } }),
+      );
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2002") {
+        // The collision is on one of two unique keys:
+        //  • (tenantId, clientId) — a concurrent/earlier attempt for this same
+        //    draft already won the race → that row IS this order (idempotent).
+        if (clientId) {
+          const existing = await withTenant(tenantId, (db) =>
+            db.storefrontOrder.findFirst({ where: { clientId } }),
+          );
+          if (existing) return existing;
+        }
+        //  • (tenantId, orderNumber) — a legacy code occupies this slot or a
+        //    random code hit; reserve a fresh, higher number next iteration.
+        if (attempt < attempts - 1) continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("Couldn't allocate a unique order number — please try again.");
 }
 
 // ── Track order — PUBLIC (lookup by order number) ────────────────────────────

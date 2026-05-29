@@ -41,10 +41,21 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, paymentMethods, setOrders, nextOrderNumber, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, paymentMethods, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
+  // True while the order is being persisted — drives the disabled/"Placing…"
+  // button UI. `placingRef` is the SYNCHRONOUS counterpart: React state lags a
+  // render, so two clicks in the same tick (fast double-click, or two different
+  // channel buttons) would both read a stale `placing===false`; the ref flips
+  // immediately and reliably rejects the second one.
+  const [placing, setPlacing] = useState(false);
+  const placingRef = useRef(false);
+  // Stable idempotency key for one logical order. Kept across a failed attempt
+  // so a retry returns the same stored order (server dedupes on it) instead of
+  // creating a duplicate; reset on success and when the drawer (re)opens.
+  const draftIdRef = useRef<string | null>(null);
 
   // Payment step state: chosen method, uploaded proof-of-payment image, and a
   // separate "tried to send" flag so we only surface payment errors there.
@@ -68,7 +79,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const selectedMethod = payMethods.find((m) => m.id === methodId);
   const paymentValid = !requiresPayment || (!!selectedMethod && !!proof);
 
-  // Reset to the cart step whenever the drawer is (re)opened.
+  // Reset to the cart step whenever the drawer is (re)opened. A fresh open is a
+  // new logical order, so clear the idempotency key and the in-flight lock.
   useEffect(() => {
     if (open) {
       setStep("cart");
@@ -78,6 +90,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       setProof("");
       setProofName("");
       setUploadingProof(false);
+      setPlacing(false);
+      placingRef.current = false;
+      draftIdRef.current = null;
     }
   }, [open]);
 
@@ -128,16 +143,34 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
   };
 
-  function placeOrder(channelType: string) {
+  async function placeOrder(channelType: string) {
     const channel = channels.find((c) => c.type === channelType);
-    if (!channel) return;
+    // Synchronous lock first (see placingRef note) — rejects a second click in
+    // the same tick before any state update or await.
+    if (!channel || placingRef.current) return;
+    placingRef.current = true;
+    setPlacing(true);
 
-    // Generate order number and persist a local order record so the customer
-    // can track it via TrackOrderPage and the store admin can manage it.
-    const orderNum = nextOrderNumber();
-    const newOrder: Order = {
-      id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
-      orderNumber: orderNum,
+    // One stable idempotency key per logical order, reused across retries so a
+    // committed-but-unacknowledged write isn't duplicated on the next attempt.
+    const draftId =
+      draftIdRef.current ??
+      (draftIdRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+
+    // Open the chat window synchronously, inside the click, so it isn't
+    // popup-blocked — then navigate it once the server confirms the order. We
+    // can't pass the prefilled URL yet because the authoritative order number
+    // only exists after the (awaited) persist below.
+    // NB: do NOT pass "noopener"/"noreferrer" here — they make window.open()
+    // return null, losing the handle we need to navigate after the await. We
+    // sever `opener` ourselves before navigating, for the same security benefit.
+    const chatWin = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+
+    // The order NUMBER is assigned SERVER-SIDE (per tenant); `id` here is the
+    // idempotency key the server stores as clientId — not the DB primary key.
+    const draft: Order = {
+      id: draftId,
       status: "new",
       paymentStatus: requiresPayment && proof ? "paid" : "pending",
       paymentMethod: selectedMethod?.name || "",
@@ -164,15 +197,43 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product) })),
       paymentProof: proof || null,
     };
-    // Keep a local copy for instant same-browser tracking, and persist to the DB
-    // (source of truth the store admin reads). The channel window is opened
-    // synchronously below so it isn't popup-blocked; the DB write fires after.
-    setOrders((prev) => [newOrder, ...prev]);
-    void placeStorefrontOrderAction(newOrder)
-      .then((r) => {
-        if (r && "error" in r) toast(`Order placed, but saving it failed: ${r.error}`);
-      })
-      .catch(() => toast("Order placed, but it couldn't be saved to the store."));
+
+    // Persist FIRST and wait for it. We only tell the customer the order is
+    // placed once it's actually stored, so a failed write can never silently
+    // drop the order (it previously lived only in this browser's localStorage).
+    let result: Awaited<ReturnType<typeof placeStorefrontOrderAction>>;
+    try {
+      result = await placeStorefrontOrderAction(draft);
+    } catch {
+      result = { error: "Network error — please try again." };
+    }
+
+    if (!result || "error" in result) {
+      chatWin?.close();
+      placingRef.current = false;
+      setPlacing(false);
+      // Keep the cart and the drawer open so the customer can retry — nothing
+      // was stored, so nothing is lost. draftIdRef is intentionally kept so the
+      // retry carries the same idempotency key (a committed-but-unacknowledged
+      // write returns the same order instead of duplicating it).
+      toast(`Couldn't place your order: ${result?.error ?? "please try again."}`);
+      return;
+    }
+
+    // Reconcile the local tracking copy with the authoritative server order
+    // (real per-tenant order number + DB id), so same-browser tracking and the
+    // chat message reference the exact stored values.
+    const order = result.order;
+    const orderNum = order.orderNumber || order.id;
+    setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+    // Also keep a customer-facing copy so this browser can one-tap track it from
+    // the Track page without retyping the order number. Drop the (potentially
+    // huge, base64) payment proof — it isn't needed for tracking and would eat
+    // localStorage quota / persist PII longer than necessary.
+    setMyOrders((prev) => [
+      { ...order, paymentProof: null },
+      ...prev.filter((o) => o.id !== order.id),
+    ]);
 
     const message = buildOrderMessage(
       brand,
@@ -182,10 +243,18 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       orderNum,
     );
 
-    // Open the chat first — synchronously within the click — so the popup
-    // isn't blocked, then copy the summary as a fallback (Telegram/Messenger
-    // can't prefill a DM; WhatsApp carries the text in the link).
-    window.open(channelUrl(channel, message), "_blank", "noreferrer");
+    // Navigate the pre-opened window to the channel, then copy the summary as a
+    // fallback (Telegram/Messenger can't prefill a DM; WhatsApp carries the text
+    // in the link).
+    const url = channelUrl(channel, message);
+    if (chatWin && !chatWin.closed) {
+      try { chatWin.opener = null; } catch { /* already cross-origin — ignore */ }
+      chatWin.location.href = url;
+    } else {
+      // Popup was blocked when we tried to pre-open it — open inline as a
+      // fallback; the clipboard copy below is the ultimate backstop.
+      window.open(url, "_blank", "noreferrer");
+    }
     void navigator.clipboard?.writeText(message).catch(() => {});
     toast(
       channelPrefills(channel.type)
@@ -193,6 +262,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         : `Order ${orderNum} — copied, paste it in ${CHANNEL_LABELS[channel.type]}`,
     );
     clearCart();
+    // Success: release the lock and retire this order's idempotency key so the
+    // next checkout starts a fresh logical order.
+    draftIdRef.current = null;
+    placingRef.current = false;
+    setPlacing(false);
     onClose();
   }
 
@@ -418,13 +492,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     <button
                       key={c.type}
                       className="btn btn-primary sf-cart__channel"
+                      disabled={placing}
+                      aria-busy={placing}
                       onClick={() => {
                         if (step === "details") setTouched(true);
                         if (step === "payment") setPaymentTouched(true);
-                        if (detailsValid && paymentValid) placeOrder(c.type);
+                        if (detailsValid && paymentValid) void placeOrder(c.type);
                       }}
                     >
-                      {CHANNEL_LABELS[c.type]}
+                      {placing ? "Placing order…" : CHANNEL_LABELS[c.type]}
                     </button>
                   ))}
                 </div>

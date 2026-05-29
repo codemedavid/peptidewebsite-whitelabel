@@ -24,12 +24,25 @@ const STATUS_DOT: Record<Order["status"], string> = {
   cancelled: "#ef4444",
 };
 
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
 export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   // Orders live in the DB now, so look up by order number through the public,
-  // tenant-scoped action (returns only status/tracking, no customer PII). Fall
-  // back to the local just-placed copy so a fresh order tracks instantly even
-  // before the round-trip completes.
-  const { orders } = useStore();
+  // tenant-scoped action (returns only status/tracking, no customer PII). The
+  // customer's own orders placed in THIS browser are cached locally (myOrders,
+  // localStorage-backed): we list them for one-tap tracking and render their
+  // last-known status INSTANTLY from cache while the server confirms the latest.
+  const { myOrders } = useStore();
   const [orderNumber, setOrderNumber] = useState("");
   const [result, setResult] = useState<TrackedOrder | "not_found" | null>(null);
   const [searched, setSearched] = useState("");
@@ -43,19 +56,28 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
     shippingNote: o.shippingNote,
   });
 
-  const lookup = async () => {
-    const n = orderNumber.trim();
+  // `override` lets the recent-orders buttons track directly (one tap) without a
+  // render round-trip through the input's state.
+  const lookup = async (override?: string) => {
+    const n = (override ?? orderNumber).trim();
     if (!n) return;
+    setOrderNumber(n);
     setSearched(n);
-    const local = orders.find(
+    const local = myOrders.find(
       (o) =>
         (o.orderNumber || "").toUpperCase() === n.toUpperCase() ||
         o.id.toUpperCase() === n.toUpperCase(),
     );
-    const res = await trackStorefrontOrderAction(n);
-    if ("ok" in res && res.order) setResult(res.order);
-    else if (local) setResult(toTracked(local));
-    else setResult("not_found");
+    // Show the cached copy immediately so tracking appears instantly; the server
+    // result below overwrites it with the authoritative latest status.
+    if (local) setResult(toTracked(local));
+    try {
+      const res = await trackStorefrontOrderAction(n);
+      if ("ok" in res && res.order) setResult(res.order);
+      else if (!local) setResult("not_found");
+    } catch {
+      if (!local) setResult("not_found");
+    }
   };
 
   return (
@@ -91,6 +113,30 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
             </svg>
           </button>
         </div>
+
+        {myOrders.length > 0 && (
+          <div className="track-recent">
+            <p className="track-recent__title">Your recent orders</p>
+            <ul className="track-recent__list">
+              {myOrders.map((o) => {
+                const num = o.orderNumber || o.id;
+                return (
+                  <li key={o.id}>
+                    <button
+                      type="button"
+                      className="track-recent__item"
+                      onClick={() => void lookup(num)}
+                    >
+                      <span className="track-recent__num">{num}</span>
+                      <span className="track-recent__date">{formatDate(o.date)}</span>
+                      <span className="track-recent__status">{STATUS_LABELS[o.status]}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {result === "not_found" && (
           <div className="track-result">

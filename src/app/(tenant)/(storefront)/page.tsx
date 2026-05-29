@@ -65,5 +65,5 @@ export default async function HomePage() {
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
 
-  return <StorefrontApp brand={brand} products={products} />;
+  return <StorefrontApp brand={brand} products={products} tenantKey={tenantId} />;
 }

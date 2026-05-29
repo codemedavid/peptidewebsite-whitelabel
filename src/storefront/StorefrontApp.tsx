@@ -196,13 +196,16 @@ function Shell() {
 export function StorefrontApp({
   brand = BRAND,
   products,
+  tenantKey,
 }: {
   brand?: Brand;
   products?: Product[];
+  /** Per-tenant id/slug used to namespace this storefront's localStorage. */
+  tenantKey?: string;
 }) {
   return (
     <div className="sf-root">
-      <StoreProvider brand={brand} products={products}>
+      <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell />
       </StoreProvider>
     </div>

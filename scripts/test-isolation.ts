@@ -205,6 +205,72 @@ async function suiteAppLayer(ddl: string) {
   const bRefs = bMedia.flatMap((m) => [m.url, m.imagekitId]);
   check("B's media all live under tenant/<B>/ and never reference A", bRefs.every((r) => r.includes(`tenant/${B}/`)) && !bRefs.some((r) => r.includes(A)));
 
+  // ── Per-tenant order numbering (the storefront checkout guarantee) ──────────
+  // Orders are numbered SERVER-SIDE per tenant via Tenant.orderSeq. This proves
+  // the three product requirements: numbers increment within a tenant, one
+  // tenant's orders never advance another's counter, and a cross-tenant id is a
+  // no-op at the data layer (what update/deleteStorefrontOrders rely on).
+  section("Per-tenant order numbering — server-generated, atomic, isolated");
+  const { generateStorefrontOrderNumber } = await import("../src/lib/orders/order-number");
+
+  // Mirrors createStorefrontOrder(): generate the number with the scoped client,
+  // then create the row — both through forTenant() so tenantId is stamped/enforced.
+  async function place(scoped: typeof a, tid: string) {
+    const orderNumber = await generateStorefrontOrderNumber(scoped, tid);
+    return scoped.storefrontOrder.create({ data: { tenantId: tid, orderNumber } });
+  }
+
+  // A's default format derives from its name "Acme Peptides" → prefix "AP";
+  // B "Rival Labs" → "RL". Both start from orderSeq 1000 (first order is 1001).
+  const a1 = await place(a, A);
+  const a2 = await place(a, A);
+  const a3 = await place(a, A);
+  eq("A: numbers increment per tenant", [a1, a2, a3].map((o) => o.orderNumber).join(","), "AP-1001,AP-1002,AP-1003");
+
+  const b1 = await place(b, B);
+  eq("B: first order is 1001 — A's 3 orders did NOT advance B's sequence", b1.orderNumber, "RL-1001");
+
+  const a4 = await place(a, A);
+  eq("A: resumes its OWN counter after B placed (no shared/global counter)", a4.orderNumber, "AP-1004");
+
+  const aSeq = (await db.tenant.findUniqueOrThrow({ where: { id: A }, select: { orderSeq: true } })).orderSeq;
+  const bSeq = (await db.tenant.findUniqueOrThrow({ where: { id: B }, select: { orderSeq: true } })).orderSeq;
+  eq("A.orderSeq advanced independently → 1004", aSeq, 1004);
+  eq("B.orderSeq advanced independently → 1001", bSeq, 1001);
+
+  // Cross-tenant mutation is a no-op (updateStorefrontOrderAction/deleteStorefrontOrdersAction
+  // run updateMany/deleteMany under forTenant, so a foreign id matches 0 rows).
+  const crossUpd = await a.storefrontOrder.updateMany({ where: { id: b1.id }, data: { status: "cancelled" } });
+  eq("A cannot update B's order (updateMany affects 0 rows)", crossUpd.count, 0);
+  const crossDel = await a.storefrontOrder.deleteMany({ where: { id: b1.id } });
+  eq("A cannot delete B's order (deleteMany affects 0 rows)", crossDel.count, 0);
+  const bSurvives = await b.storefrontOrder.findFirst({ where: { id: b1.id } });
+  check("B's order survives A's cross-tenant update/delete attempt", !!bSurvives && bSurvives.status === "new");
+
+  // Random scheme must check StorefrontOrder (not the separate Stripe Order table).
+  const planId = (await db.plan.findFirstOrThrow()).id;
+  const R = await db.tenant.create({
+    data: { name: "Rng Co", slug: "rng", planId, orderNumberFormat: { prefix: "RNG", separator: "-", scheme: "random", digits: 5 } },
+  });
+  const r = forTenant(R.id);
+  const rn = await generateStorefrontOrderNumber(r, R.id);
+  check("random scheme: produces a correctly formatted code", /^RNG-\d{5}$/.test(rn), `got ${rn}`);
+  await r.storefrontOrder.create({ data: { tenantId: R.id, orderNumber: rn } });
+  check("random scheme: the generated code persisted as a StorefrontOrder row", !!(await r.storefrontOrder.findFirst({ where: { orderNumber: rn } })));
+
+  // Idempotency key: a retry of the SAME checkout draft (same clientId) must not
+  // create a second order — the @@unique([tenantId, clientId]) rejects it.
+  await a.storefrontOrder.create({ data: { tenantId: A, orderNumber: "AP-DUP1", clientId: "draft-xyz" } });
+  let dupRejected = false;
+  try {
+    await a.storefrontOrder.create({ data: { tenantId: A, orderNumber: "AP-DUP2", clientId: "draft-xyz" } });
+  } catch (e) {
+    if ((e as { code?: string }).code === "P2002") dupRejected = true;
+  }
+  check("idempotency: same (tenant, clientId) rejected → no duplicate order on retry", dupRejected);
+  const bReuse = await b.storefrontOrder.create({ data: { tenantId: B, orderNumber: "RL-DUP1", clientId: "draft-xyz" } });
+  check("idempotency key is per-tenant (B may reuse A's clientId)", !!bReuse);
+
   await db.$disconnect();
   return { A, B };
 }

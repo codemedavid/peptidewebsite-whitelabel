@@ -1205,6 +1205,65 @@
 }
 .sf-root .track-form .input-wrap { flex: 1; height: 56px; min-width: 0; }
 .sf-root .track-form .btn { height: 56px; padding-inline: 28px; flex-shrink: 0; }
+/* Customer's own recent orders — one-tap tracking (store.myOrders). */
+.sf-root .track-recent {
+  margin: 0 0 24px;
+}
+
+.sf-root .track-recent__title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-text-muted);
+  margin: 0 0 10px;
+}
+
+.sf-root .track-recent__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sf-root .track-recent__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  text-align: left;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-sm);
+  color: var(--brand-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sf-root .track-recent__item:hover {
+  border-color: var(--brand-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.sf-root .track-recent__num {
+  font-weight: 700;
+}
+
+.sf-root .track-recent__date {
+  color: var(--brand-text-muted);
+  font-size: 13px;
+}
+
+.sf-root .track-recent__status {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-accent);
+}
+
 .sf-root .track-result {
   margin-top: 24px;
   padding: 20px 24px;

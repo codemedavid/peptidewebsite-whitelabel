@@ -58,6 +58,11 @@ export type Store = {
   setCategories: (next: Updater<Category[]>) => void;
   orders: Order[];
   setOrders: (next: Updater<Order[]>) => void;
+  /** Orders the CUSTOMER placed in THIS browser — drives the public Track page's
+   *  "your recent orders" one-tap list. Distinct from `orders` (the admin's full
+   *  list, seeded with sample data), so a visitor only ever sees their own. */
+  myOrders: Order[];
+  setMyOrders: (next: Updater<Order[]>) => void;
   shippingLocations: ShippingLocation[];
   setShippingLocations: (next: Updater<ShippingLocation[]>) => void;
   coaReports: CoaReport[];
@@ -82,10 +87,6 @@ export type Store = {
   /** Empty the cart (after a successful checkout hand-off). */
   clearCart: () => void;
 
-  /** Generate the next order number for this tenant using their configured format.
-   *  Sequential orders increment a per-tenant counter stored in localStorage. */
-  nextOrderNumber: () => string;
-
   toast: (msg: string) => void;
   toastMsg: string;
 };
@@ -103,7 +104,13 @@ function load<T>(key: string, seed: T): T {
   }
 }
 
-const NS = "sf_v1__";
+// Base prefix for this storefront's localStorage keys. The real namespace is
+// tenant-qualified per StoreProvider instance (see `NS` below) so two tenants
+// served from the SAME browser origin (shared staging/preview hosts, a
+// re-pointed custom domain, apex serving a default tenant) can never read or
+// overwrite each other's cached collections — especially the optimistic orders
+// mirror, which carries customer PII.
+const NS_BASE = "sf_v1__";
 
 /** Apply the brand palette to --brand-* custom properties (per applyBrandStyle). */
 function applyBrandStyle(b: Brand) {
@@ -125,17 +132,27 @@ export function StoreProvider({
   children,
   brand: brandSeed = BRAND,
   products: productsSeed,
+  tenantKey,
 }: {
   children: ReactNode;
   brand?: Brand;
   /** Products loaded server-side from the DB (source of truth). Falls back to
    *  the design seeds only when none were provided. */
   products?: Product[];
+  /** Stable per-tenant id/slug used to namespace this storefront's localStorage
+   *  keys. Omitted only by the admin live-preview (single-tenant, isolation
+   *  irrelevant), which falls back to the shared base prefix. */
+  tenantKey?: string;
 }) {
+  // Tenant-qualified localStorage namespace (stable for the life of this mount).
+  const NS = tenantKey ? `${NS_BASE}${tenantKey}__` : NS_BASE;
   const [brand, setBrandState] = useState<Brand>(brandSeed);
   const [products, setProductsState] = useState<Product[]>(productsSeed ?? SEED_PRODUCTS);
   const [categories, setCategoriesState] = useState<Category[]>(SEED_CATEGORIES);
   const [orders, setOrdersState] = useState<Order[]>(SEED_ORDERS);
+  // Customer's own placed orders — NOT seeded (a visitor must only see orders
+  // they actually placed in this browser, never the sample/admin data).
+  const [myOrders, setMyOrdersState] = useState<Order[]>([]);
   const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(SEED_SHIPPING_LOCATIONS);
   const [coaReports, setCoaState] = useState<CoaReport[]>(SEED_COA_REPORTS);
   const [promoCodes, setPromoState] = useState<PromoCode[]>(SEED_PROMO_CODES);
@@ -166,6 +183,7 @@ export function StoreProvider({
     // the owner saved / shadow another device. Writes persist via actions/products.
     setCategoriesState(load(NS + "categories", SEED_CATEGORIES));
     setOrdersState(load(NS + "orders", SEED_ORDERS));
+    setMyOrdersState(load(NS + "myorders", [] as Order[]));
     setShippingState(load(NS + "shipping", SEED_SHIPPING_LOCATIONS));
     setCoaState(load(NS + "coa", SEED_COA_REPORTS));
     setPromoState(load(NS + "promo", SEED_PROMO_CODES));
@@ -176,7 +194,7 @@ export function StoreProvider({
     setFaqState(load(NS + "faq", SEED_FAQ_GROUPS));
     setProtocolsState(load(NS + "protocols", SEED_PROTOCOLS));
     setReviewsState(load(NS + "reviews", SEED_REVIEWS));
-  }, []);
+  }, [NS]);
 
   useEffect(() => applyBrandStyle(brand), [brand]);
 
@@ -228,14 +246,24 @@ export function StoreProvider({
       }),
     [],
   );
-  const setCategories = useMemo(() => makeSetter<Category[]>("categories", "CATEGORIES", setCategoriesState), []);
-  const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), []);
-  const setShippingLocations = useMemo(() => makeSetter<ShippingLocation[]>("shipping", "SHIPPING_LOCATIONS", setShippingState), []);
-  const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), []);
-  const setPromoCodes = useMemo(() => makeSetter<PromoCode[]>("promo", "PROMO_CODES", setPromoState), []);
-  const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), []);
-  const setProtocols = useMemo(() => makeSetter<Protocol[]>("protocols", "PROTOCOLS", setProtocolsState), []);
-  const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- makeSetter closes over the stable per-mount NS
+  const setCategories = useMemo(() => makeSetter<Category[]>("categories", "CATEGORIES", setCategoriesState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setShippingLocations = useMemo(() => makeSetter<ShippingLocation[]>("shipping", "SHIPPING_LOCATIONS", setShippingState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setPromoCodes = useMemo(() => makeSetter<PromoCode[]>("promo", "PROMO_CODES", setPromoState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setProtocols = useMemo(() => makeSetter<Protocol[]>("protocols", "PROTOCOLS", setProtocolsState), [NS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), [NS]);
 
   // Keep window mirrors fresh on every render so any global readers stay in sync.
   useEffect(() => {
@@ -251,20 +279,6 @@ export function StoreProvider({
     w.PROTOCOLS = protocols;
     w.REVIEWS = reviews;
   });
-
-  const nextOrderNumber = useCallback(() => {
-    const fmt = brand.orderNumberFormat ?? { prefix: "ORD", separator: "-", scheme: "sequential" as const, digits: 4 };
-    let num: number;
-    if (fmt.scheme === "sequential") {
-      const key = NS + "order_seq";
-      const seq = parseInt(localStorage.getItem(key) || "1000", 10);
-      num = seq + 1;
-      try { localStorage.setItem(key, String(num)); } catch { /* quota — non-fatal */ }
-    } else {
-      num = Math.floor(Math.random() * 10 ** fmt.digits);
-    }
-    return `${fmt.prefix}${fmt.separator}${String(num).padStart(fmt.digits, "0")}`;
-  }, [brand.orderNumberFormat]);
 
   const addToCart = useCallback((product: Product) => {
     setCart((c) => [...c, product]);
@@ -324,6 +338,7 @@ export function StoreProvider({
     products, setProducts,
     categories, setCategories,
     orders, setOrders,
+    myOrders, setMyOrders,
     shippingLocations, setShippingLocations,
     coaReports, setCoaReports,
     promoCodes, setPromoCodes,
@@ -332,7 +347,6 @@ export function StoreProvider({
     protocols, setProtocols,
     reviews, setReviews,
     cart, addToCart, decrementCart, removeLine, clearCart,
-    nextOrderNumber,
     toast, toastMsg,
   };
 
