@@ -30,6 +30,7 @@ import {
   TweakSelect,
   TweakText,
   TweakToggle,
+  type ImageUploader,
 } from "./controls";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
@@ -201,11 +202,14 @@ export function BrandTweaksForm({
   setTweak,
   goPage,
   goHome,
+  uploadImage,
 }: {
   brand: Brand;
   setTweak: SetTweak;
   goPage: (page: string) => void;
   goHome: () => void;
+  /** Optional upload transport for the logo (platform admin passes an operator-auth one). */
+  uploadImage?: ImageUploader;
 }) {
   const [generating, setGenerating] = useState(false);
 
@@ -276,7 +280,7 @@ export function BrandTweaksForm({
 
       <TweakSection label="Identity" />
       <TweakText label="Brand name" value={t.name} onChange={(v) => setTweak("name", v)} />
-      <LogoUpload value={t.logoUrl} onChange={(v) => setTweak("logoUrl", v)} />
+      <LogoUpload value={t.logoUrl} onChange={(v) => setTweak("logoUrl", v)} upload={uploadImage} />
       <TweakText label="Logo URL" value={t.logoUrl} placeholder="or paste a URL" onChange={(v) => setTweak("logoUrl", v)} />
 
       <TweakSection label="Colors" />

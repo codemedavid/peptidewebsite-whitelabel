@@ -16,6 +16,11 @@ import {
 } from "react";
 import { uploadStorefrontImageAction } from "@/actions/media";
 
+// How LogoUpload sends a file. Defaults to the storefront-admin path; the
+// platform branding editor passes its own (slug-scoped, operator-authorized)
+// uploader so logo uploads work there too — see uploadStorefrontImageAsAdminAction.
+export type ImageUploader = (fd: FormData) => Promise<{ url: string } | { error: string }>;
+
 const __TWEAKS_STYLE = `
   .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
     max-height:calc(100vh - 32px);display:flex;flex-direction:column;
@@ -474,9 +479,12 @@ export function ColorField({
 export function LogoUpload({
   value,
   onChange,
+  upload = uploadStorefrontImageAction,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Override the upload transport (platform admin supplies an operator-auth one). */
+  upload?: ImageUploader;
 }) {
   const inputRef = useReactRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -495,7 +503,7 @@ export function LogoUpload({
       const fd = new FormData();
       fd.append("file", file);
       fd.append("kind", "branding");
-      const res = await uploadStorefrontImageAction(fd);
+      const res = await upload(fd);
       if ("url" in res) onChange(res.url);
       else setError(res.error);
     } catch {

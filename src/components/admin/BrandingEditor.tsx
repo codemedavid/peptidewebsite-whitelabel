@@ -36,6 +36,7 @@ import { StorefrontLivePreview } from "@/components/admin/StorefrontLivePreview"
 import { saveBrandingAction } from "@/actions/onboarding";
 import {
   uploadBrandingAssetAction,
+  uploadStorefrontImageAsAdminAction,
   removeBrandingAssetAction,
   type BrandingAssetKind,
 } from "@/actions/branding";
@@ -513,6 +514,7 @@ export function BrandingEditor({
                     setTweak={setTweak}
                     goPage={(p) => openStorefront(p)}
                     goHome={() => openStorefront()}
+                    uploadImage={(fd) => uploadStorefrontImageAsAdminAction(slug, fd)}
                   />
                 </div>
               </div>

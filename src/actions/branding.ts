@@ -97,6 +97,75 @@ export async function uploadBrandingAssetAction(
   }
 }
 
+export type UploadImageResult = { url: string } | { error: string };
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Upload an arbitrary storefront image (e.g. the logo picked in the Storefront
+ * tab of the branding editor) as a PLATFORM OPERATOR editing tenant `slug`.
+ *
+ * The storefront's own `uploadStorefrontImageAction` is gated on an
+ * `sf_admin_session` cookie for the tenant resolved from the request host — that
+ * never holds in the platform admin console (different auth, platform host), so
+ * uploads there failed with "Not signed in to the store admin." This is the
+ * operator-side equivalent: it authorizes via the platform session and resolves
+ * the tenant from the route `slug`, forcing the file into that tenant's own
+ * ImageKit folder. It returns just the hosted URL; the caller persists it onto
+ * the branding config via Save branding (it does NOT touch the DB itself).
+ */
+export async function uploadStorefrontImageAsAdminAction(
+  slug: string,
+  formData: FormData,
+): Promise<UploadImageResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };
+  if (file.size > MAX_IMAGE_BYTES) return { error: "Image too large (max 10 MB)." };
+  if (!file.type.startsWith("image/")) {
+    return { error: `Unsupported type: ${file.type || "unknown"}.` };
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+
+  // Demo mode: no DB / no ImageKit — round-trip the bytes as a data URL.
+  if (isDemoMode()) {
+    return { url: `data:${file.type};base64,${bytes.toString("base64")}` };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  if (!tenant) return { error: "Tenant not found." };
+
+  try {
+    const uploaded = await uploadTenantMedia({
+      tenantId: tenant.id,
+      file: bytes,
+      fileName: `branding-${file.name || "image"}`,
+      tags: ["branding"],
+    });
+    // Best-effort media-library audit row — the image is already hosted.
+    try {
+      await forTenant(tenant.id).mediaAsset.create({
+        data: {
+          tenantId: tenant.id,
+          imagekitId: uploaded.fileId,
+          url: uploaded.url,
+          type: "branding",
+        },
+      });
+    } catch {
+      /* non-fatal */
+    }
+    return { url: uploaded.url };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Upload failed." };
+  }
+}
+
 /** Clear a logo/favicon override (storefront falls back to the monogram). */
 export async function removeBrandingAssetAction(
   slug: string,

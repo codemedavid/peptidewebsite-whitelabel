@@ -190,15 +190,21 @@ export function AdminProductsList({
                     />
                   </td>
                   <td className="admin-cell-product">
-                    <div className="admin-cell-product__name">{p.name}</div>
+                    <button
+                      type="button"
+                      className="admin-cell-product__name"
+                      onClick={() => onEdit(p)}
+                    >
+                      {p.name}
+                    </button>
                     <div className="admin-cell-product__desc">{p.description}</div>
                   </td>
-                  <td><span style={{ fontSize: 14 }}>{catLabel(p.category)}</span></td>
-                  <td className="admin-cell-price">{currency}{(p.price || 0).toLocaleString()}</td>
-                  <td className="admin-cell-muted">{p.sizes || "No sizes"}</td>
-                  <td><span className="admin-pill admin-pill--dark">{p.purity || "—"}</span></td>
-                  <td className="admin-cell-price">{p.stock ?? 0}</td>
-                  <td>
+                  <td data-label="Category"><span style={{ fontSize: 14 }}>{catLabel(p.category)}</span></td>
+                  <td className="admin-cell-price" data-label="Price">{currency}{(p.price || 0).toLocaleString()}</td>
+                  <td className="admin-cell-muted" data-label="Sizes">{p.sizes || "No sizes"}</td>
+                  <td data-label="Purity"><span className="admin-pill admin-pill--dark">{p.purity || "—"}</span></td>
+                  <td className="admin-cell-price" data-label="Stock">{p.stock ?? 0}</td>
+                  <td data-label="Status">
                     <div className="admin-status-stack">
                       {p.featured && (
                         <span className="admin-pill admin-pill--featured">

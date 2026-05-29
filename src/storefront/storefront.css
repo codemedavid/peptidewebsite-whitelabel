@@ -2372,6 +2372,80 @@
 
   /* List screens (Products / Orders / …) — shrink the 28px serif page title. */
   .sf-root .admin-table__title { font-size: 22px; }
+
+  /* Products table → tappable cards.
+     The 9-column table can't fit a phone, so collapse each row into a card:
+     name (tap to edit), one-line desc, label:value rows, and full-size action
+     buttons that are no longer clipped off the right edge. */
+  .sf-root .admin-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .sf-root .admin-table,
+  .sf-root .admin-table tbody { display: block; width: 100%; }
+  .sf-root .admin-table thead { display: none; }
+  .sf-root .admin-table tbody tr {
+    display: block;
+    position: relative;
+    background: var(--brand-surface);
+    border: 1px solid var(--brand-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 16px 16px 12px;
+    margin-bottom: 12px;
+  }
+  .sf-root .admin-table tbody tr:hover td { background: none; }
+  .sf-root .admin-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .sf-root .admin-table tbody td:first-child { padding: 0; }
+  /* select checkbox → top-right corner of the card */
+  .sf-root .admin-table tbody tr > td:first-child {
+    position: absolute;
+    top: 16px;
+    right: 14px;
+  }
+  .sf-root .admin-cell-product {
+    min-width: 0;
+    padding-right: 34px;          /* clear the corner checkbox */
+    margin-bottom: 10px;
+  }
+  .sf-root .admin-cell-product__name { font-size: 16px; }
+  .sf-root .admin-cell-product__desc { max-width: none; }
+  /* metadata rows: "Label              value" */
+  .sf-root .admin-table tbody td[data-label] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-top: 1px solid var(--brand-border);
+    font-size: 14px;
+  }
+  .sf-root .admin-table tbody td[data-label]::before {
+    content: attr(data-label);
+    color: var(--brand-text-muted);
+    font-weight: 500;
+  }
+  .sf-root .admin-status-stack { flex-direction: row; align-items: center; }
+  /* action buttons row — full size, easy to tap */
+  .sf-root .admin-cell-actions {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--brand-border);
+  }
+  .sf-root .admin-cell-actions__group { display: flex; gap: 10px; }
+  .sf-root .admin-cell-actions .admin-icon-btn {
+    flex: 1;
+    width: auto;
+    height: 42px;
+    border: 1px solid var(--brand-border);
+  }
 }
 
 /* =========================================================
@@ -2381,7 +2455,9 @@
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow-x: auto;            /* wide 9-col table scrolls instead of clipping on narrow screens */
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-sm);
 }
 .sf-root .admin-table {
@@ -2415,7 +2491,16 @@
   color: var(--brand-text);
   font-size: 15px;
   margin-bottom: 2px;
+  /* clickable — tapping the product name opens its edit / detail view */
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color .15s;
 }
+.sf-root .admin-cell-product__name:hover { color: var(--brand-accent); }
 .sf-root .admin-cell-product__desc {
   font-size: 13px;
   color: var(--brand-text-muted);
@@ -2712,6 +2797,30 @@
 }
 .sf-root .admin-order-card__view:hover { opacity: 0.9; }
 .sf-root .admin-order-card__view svg { width: 16px; height: 16px; }
+
+/* Orders list on phones — tighten the card, keep the 4 stats as a 2-col grid,
+   and drop "View Details" to its own full-width, easy-to-tap row. */
+@media (max-width: 600px) {
+  .sf-root .admin-order-card { padding: 16px; }
+  .sf-root .admin-order-card__id { font-size: 18px; }
+  .sf-root .admin-order-card__top { gap: 10px; margin-bottom: 14px; }
+  .sf-root .admin-order-card__row {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 16px;
+  }
+  .sf-root .admin-order-card__view {
+    grid-column: 1 / -1;          /* span both columns on its own row */
+    width: 100%;
+    justify-content: center;
+    padding: 13px 18px;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  /* bulk-action bar: let the two delete buttons stack full-width */
+  .sf-root .admin-orders__bulkbar { padding: 14px 16px; }
+  .sf-root .admin-orders__bulkbar > div { width: 100%; }
+  .sf-root .admin-orders__bulkbar > div .admin-btn { flex: 1; justify-content: center; }
+}
 
 /* =========================================================
    ADMIN — Order Detail
