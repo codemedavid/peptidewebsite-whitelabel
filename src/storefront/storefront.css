@@ -1921,6 +1921,17 @@
 }
 @media (max-width: 560px) { .sf-root .admin-quick { grid-template-columns: 1fr; } }
 
+/* Dashboard top bar — phone layout. brand · "ADMIN DASHBOARD" pill · View
+   Website · Logout sat in a non-wrapping flex row and ran past the screen edge
+   on a phone. Drop the decorative status pill and tighten padding so brand
+   (left) + the two actions (right) fit one row; wrap stays on as a safety net. */
+@media (max-width: 600px) {
+  .sf-root .admin__bar { flex-wrap: wrap; gap: 10px 12px; padding: 12px var(--gutter); }
+  .sf-root .admin__pill { display: none; }
+  .sf-root .admin__bar-link { padding: 8px 4px; }
+  .sf-root .admin__logout { padding: 9px 18px; }
+}
+
 .sf-root .admin-cats { display: flex; flex-direction: column; gap: 10px; }
 .sf-root .admin-cat {
   display: flex; align-items: center; justify-content: space-between;
@@ -2322,6 +2333,46 @@
   color: var(--brand-text);
 }
 .sf-root .admin-image-btn svg { width: 16px; height: 16px; }
+
+/* ---- Add / Edit product + Payment-methods forms — phone layout -------------
+   .admin-form__bar (Back · title · Cancel · Save) was a non-wrapping flex row
+   sized for desktop, so on a phone the Save button ran off the right edge and
+   the serif title wrapped to two lines. Stack it into two rows — back + title,
+   then a 50/50 Cancel / Save pair — and dial card padding + heading sizes down
+   so the form fits a ~360px viewport. (Field rows already collapse to one
+   column at 700px above.) */
+@media (max-width: 600px) {
+  .sf-root .admin-form__bar {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    padding: 12px var(--gutter);
+  }
+  .sf-root .admin-form__back { font-size: 14px; padding: 4px 2px; }
+  .sf-root .admin-form__back svg { width: 16px; height: 16px; }
+  .sf-root .admin-form__title { font-size: 20px; flex: 1 1 auto; min-width: 0; }
+  .sf-root .admin-form__bar-spacer { display: none; }
+  .sf-root .admin-form__cancel,
+  .sf-root .admin-form__save {
+    flex: 1 1 calc(50% - 6px);   /* the two actions share the second row */
+    justify-content: center;
+    padding: 11px 12px;
+  }
+
+  .sf-root .admin-form__body { padding: 20px var(--gutter) 56px; gap: 18px; }
+  .sf-root .admin-form__card { padding: 20px 16px; }
+  .sf-root .admin-form__section { font-size: 19px; margin-bottom: 16px; }
+  .sf-root .admin-form__row { gap: 14px; margin-bottom: 14px; }
+  .sf-root .admin-section-head { flex-wrap: wrap; gap: 10px; }
+
+  .sf-root .admin-image-drop { padding: 30px 16px; }
+  .sf-root .admin-image-drop__icon { width: 52px; height: 52px; margin-bottom: 12px; }
+  .sf-root .admin-image-drop__icon svg { width: 26px; height: 26px; }
+  .sf-root .admin-image-drop__title { font-size: 16px; }
+  .sf-root .admin-image-actions { flex-wrap: wrap; }
+
+  /* List screens (Products / Orders / …) — shrink the 28px serif page title. */
+  .sf-root .admin-table__title { font-size: 22px; }
+}
 
 /* =========================================================
    ADMIN — Products list table
