@@ -74,6 +74,12 @@ export function AdminOrderDetail({
     syncBack(next);
   };
 
+  const changeStatus = (status: Order["status"]) => {
+    const next: Order = { ...o, status };
+    setO(next);
+    syncBack(next);
+  };
+
   const saveTracking = () => {
     const next: Order = {
       ...o,
@@ -119,25 +125,56 @@ export function AdminOrderDetail({
         <div className="admin-detail__card">
           <div className="admin-detail__status-row">
             <OrderStatusPill status={o.status} />
-            {o.status === "new" && (
-              <button
-                className="admin-btn admin-btn--green"
-                onClick={confirmOrder}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <label
+                className="admin-field__label"
+                htmlFor="order-status-select"
+                style={{ margin: 0 }}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                Order Status
+              </label>
+              <select
+                id="order-status-select"
+                className="admin-select"
+                value={o.status}
+                onChange={(e) =>
+                  changeStatus(e.target.value as Order["status"])
+                }
+              >
+                <option value="new">🕐 New</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="processing">📦 Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              {o.status === "new" && (
+                <button
+                  className="admin-btn admin-btn--green"
+                  onClick={confirmOrder}
                 >
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-                Confirm Order &amp; Deduct Stock
-              </button>
-            )}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                  Confirm Order &amp; Deduct Stock
+                </button>
+              )}
+            </div>
           </div>
 
           <h2 className="admin-detail__section-title">Customer Information</h2>
