@@ -10,6 +10,7 @@ import { AdminCategoriesManager } from "./AdminCategoriesManager";
 import { AdminOrders } from "./AdminOrders";
 import { AdminOrderDetail } from "./AdminOrderDetail";
 import { AdminShippingLocations } from "./AdminShippingLocations";
+import { AdminInventory } from "./AdminInventory";
 import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
@@ -26,6 +27,7 @@ type View =
   | "orders"
   | "order-detail"
   | "shipping"
+  | "inv"
   | "lab"
   | "promo"
   | "pay"
@@ -114,6 +116,7 @@ export function AdminPage({
     );
   }
   if (activeView === "shipping") return <AdminShippingLocations brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "inv") return <AdminInventory brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
@@ -123,7 +126,7 @@ export function AdminPage({
 
   const stats = [
     { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
-    { label: "Available Stock", value: products.length, icon: "trend", tint: "green" },
+    { label: "Available Stock", value: products.reduce((sum, p) => sum + (p.stock ?? 0), 0), icon: "trend", tint: "green" },
     { label: "Featured Items", value: products.filter((p) => p.featured).length, icon: "sparkle", tint: "yellow" },
     { label: "Categories", value: categories.filter((c) => c.id !== "all").length, icon: "users", tint: "cyan" },
   ];
@@ -226,6 +229,7 @@ export function AdminPage({
                     if (q.id === "manage") return setView("products");
                     if (q.id === "cats") return setView("categories");
                     if (q.id === "orders") return setView("orders");
+                    if (q.id === "inv") return setView("inv");
                     if (q.id === "ship") return setView("shipping");
                     if (q.id === "lab") return setView("lab");
                     if (q.id === "promo") return setView("promo");

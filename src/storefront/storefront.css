@@ -2162,6 +2162,23 @@
   -webkit-appearance: none;
   margin: 0;
 }
+/* Inline stock stepper used in the Inventory manager. */
+.sf-root .admin-stock-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sf-root .admin-input--stock {
+  width: 72px;
+  text-align: center;
+  padding: 8px 6px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.sf-root .admin-input--stock::-webkit-outer-spin-button, .sf-root .admin-input--stock::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .sf-root .admin-number__spin {
   position: absolute;
   right: 14px;
