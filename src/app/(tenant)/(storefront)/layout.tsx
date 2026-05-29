@@ -47,12 +47,20 @@ export default async function StorefrontLayout({
   const fonts = (branding?.fonts ?? {}) as { heading?: string; body?: string };
   // Hero typography lives on the storefront Brand config; load its distinct
   // title/body fonts (if any) alongside the theme fonts.
-  const heroConfig = (branding?.config ?? {}) as { heroTitleFont?: string; heroBodyFont?: string };
+  const heroConfig = (branding?.config ?? {}) as {
+    heroTitleFont?: string;
+    heroBodyFont?: string;
+    heroFieldStyles?: Record<string, { font?: string }>;
+  };
+  // Per-field hero text styling can each pick a distinct font — load them too,
+  // or the storefront would render those fields in a fallback face.
+  const fieldFonts = Object.values(heroConfig.heroFieldStyles ?? {}).map((s) => s?.font);
   const fontsHref = googleFontsUrl(
     fonts.heading ?? "Inter",
     fonts.body ?? "Inter",
     heroConfig.heroTitleFont,
     heroConfig.heroBodyFont,
+    ...fieldFonts,
   );
 
   // The home page renders the full white-label storefront app, which brings its

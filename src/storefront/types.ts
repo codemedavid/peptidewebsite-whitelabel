@@ -1,6 +1,8 @@
 // Domain types for the white-label storefront + its admin.
 // Ported from the Claude Design handoff bundle (window.PRODUCTS, CATEGORIES, …).
 
+import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
+
 export type Product = {
   id: string;
   name: string;
@@ -203,6 +205,12 @@ export type Brand = {
   heroBodySize?: "sm" | "md" | "lg";
   heroAlign?: "left" | "center";
   heroHighlight?: string;
+
+  // Per-field hero text styling (edited in the Hero copy section of the tweaks
+  // panel). Each of the six hero copy elements may carry its own font / size /
+  // weight / italic / transform / tracking overrides; unset attributes inherit
+  // the grouped hero typography above. See HeroFieldStyle in lib/theme/tokens.
+  heroFieldStyles?: Partial<Record<HeroTextField, HeroFieldStyle>>;
 
   catalogEyebrow: string;
   catalogTitle: string;

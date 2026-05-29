@@ -11,7 +11,7 @@
 import { Prisma } from "@prisma/client";
 import { getTenantSlug } from "@/lib/tenant/headers";
 import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
-import { withTenant, forTenant } from "@/lib/db/tenant-client";
+import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
@@ -222,7 +222,10 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 /** Delete one or more of the tenant's products by id. */
-export async function deleteProductsAction(ids: unknown): Promise<ActionResult> {
+export async function deleteProductsAction(
+  ids: unknown,
+  displaySymbol = "₱",
+): Promise<ActionResult> {
   const tenantId = await requireStorefrontAdmin();
   if (!tenantId) return { error: "Not signed in to the store admin." };
   const slug = await getTenantSlug();
@@ -234,8 +237,11 @@ export async function deleteProductsAction(ids: unknown): Promise<ActionResult> 
 
   if (isDemoMode()) {
     const dslug = slug ?? tenantId;
+    const symbol = str(displaySymbol, 8) || "₱";
     const remove = new Set(list);
-    const current = getDemoStoreProducts(dslug) ?? demoEffectiveProducts(dslug, "₱");
+    // Seed the baseline with the tenant's configured symbol so a first-delete
+    // doesn't persist the survivors under the wrong currency.
+    const current = getDemoStoreProducts(dslug) ?? demoEffectiveProducts(dslug, symbol);
     saveDemoStoreProducts(dslug, current.filter((p) => !remove.has(p.id)));
     revalidateTenant(dslug, dslug);
     return { ok: true };
@@ -299,18 +305,31 @@ export async function uploadProductImageAction(formData: FormData): Promise<Uplo
     };
   }
 
+  let uploaded;
   try {
-    const uploaded = await uploadTenantMedia({
+    uploaded = await uploadTenantMedia({
       tenantId,
       file: bytes,
       fileName: `product-${file.name || "image"}`,
       tags: ["product"],
     });
-    await forTenant(tenantId).mediaAsset.create({
-      data: { tenantId, imagekitId: uploaded.fileId, url: uploaded.url, type: "product" },
-    });
-    return { url: uploaded.url };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Upload failed." };
   }
+
+  // Record the asset for the tenant's media library — through withTenant so the
+  // app.tenant_id GUC is set and the RLS WITH CHECK on media_assets passes even
+  // under the RLS-forced app_user role. Best-effort: the image is already hosted,
+  // so a failed audit-row insert must never throw away a successful upload.
+  try {
+    await withTenant(tenantId, (db) =>
+      db.mediaAsset.create({
+        data: { tenantId, imagekitId: uploaded.fileId, url: uploaded.url, type: "product" },
+      }),
+    );
+  } catch {
+    /* non-fatal — media-library audit row only */
+  }
+
+  return { url: uploaded.url };
 }

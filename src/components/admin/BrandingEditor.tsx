@@ -521,7 +521,10 @@ export function BrandingEditor({
         </div>
 
         {/* ── Live preview ── */}
-        <div>
+        {/* Sticky + self-start so the preview stays in view while the (often
+            much taller) controls column scrolls; caps at viewport height and
+            scrolls internally if the preview itself overflows. */}
+        <div className="self-start lg:sticky lg:top-6 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
           <h2 className="mb-2 text-sm font-semibold">Live preview</h2>
           {tab === "brand" ? (
             <div

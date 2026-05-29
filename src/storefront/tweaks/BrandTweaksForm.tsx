@@ -13,6 +13,16 @@
 import { useState } from "react";
 import type { Brand } from "../types";
 import {
+  FONT_OPTIONS,
+  FONT_WEIGHTS,
+  WEIGHT_LABELS,
+  LETTER_SPACINGS,
+  HERO_FIELD_SIZES,
+  type FontWeight,
+  type HeroTextField,
+  type HeroFieldStyle,
+} from "@/lib/theme/tokens";
+import {
   ColorField,
   LogoUpload,
   TweakButton,
@@ -23,6 +33,107 @@ import {
 } from "./controls";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
+
+const INHERIT = "Inherit";
+
+// Per-field text-style controls for one hero copy element. Collapsed by default
+// to keep the panel scannable; writes a HeroFieldStyle patch up to setTweak.
+function HeroFieldStyle_({
+  style,
+  onChange,
+}: {
+  style: HeroFieldStyle;
+  onChange: (patch: Partial<HeroFieldStyle>) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const active = Object.values(style).some((v) => v !== undefined);
+
+  const weightLabel = (w?: FontWeight) => (w ? WEIGHT_LABELS[w] : INHERIT);
+  const spacingLabel = (em?: number) =>
+    em === undefined ? INHERIT : (Object.keys(LETTER_SPACINGS).find((k) => LETTER_SPACINGS[k] === em) ?? INHERIT);
+
+  return (
+    <div style={{ margin: "-4px 0 2px" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          appearance: "none",
+          border: 0,
+          background: "transparent",
+          cursor: "pointer",
+          padding: "2px 0",
+          font: "inherit",
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: ".03em",
+          color: active ? "rgba(41,38,27,.72)" : "rgba(41,38,27,.45)",
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+        }}
+      >
+        <span style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .12s", fontSize: 8 }}>▶</span>
+        Text style{active ? " •" : ""}
+      </button>
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 6 }}>
+          <TweakSelect
+            label="Font"
+            value={style.font ?? INHERIT}
+            options={[INHERIT, ...FONT_OPTIONS]}
+            onChange={(v) => onChange({ font: v === INHERIT ? undefined : v })}
+          />
+          <TweakSelect
+            label="Size"
+            value={style.size ? String(style.size) : INHERIT}
+            options={[INHERIT, ...HERO_FIELD_SIZES.map((s) => `${s}px`)]}
+            onChange={(v) => onChange({ size: v === INHERIT ? undefined : parseInt(v, 10) })}
+          />
+          <TweakSelect
+            label="Weight"
+            value={weightLabel(style.weight)}
+            options={[INHERIT, ...FONT_WEIGHTS.map((w) => WEIGHT_LABELS[w])]}
+            onChange={(v) =>
+              onChange({ weight: v === INHERIT ? undefined : FONT_WEIGHTS.find((w) => WEIGHT_LABELS[w] === v) })
+            }
+          />
+          <TweakSelect
+            label="Italic"
+            value={style.italic === undefined ? INHERIT : style.italic ? "Italic" : "Not italic"}
+            options={[INHERIT, "Italic", "Not italic"]}
+            onChange={(v) => onChange({ italic: v === INHERIT ? undefined : v === "Italic" })}
+          />
+          <TweakSelect
+            label="Transform"
+            value={
+              style.transform === undefined
+                ? INHERIT
+                : { uppercase: "UPPERCASE", lowercase: "lowercase", capitalize: "Capitalize", none: "None" }[style.transform]
+            }
+            options={[INHERIT, "UPPERCASE", "lowercase", "Capitalize", "None"]}
+            onChange={(v) =>
+              onChange({
+                transform:
+                  v === INHERIT
+                    ? undefined
+                    : (({ UPPERCASE: "uppercase", lowercase: "lowercase", Capitalize: "capitalize", None: "none" } as const)[
+                        v as "UPPERCASE" | "lowercase" | "Capitalize" | "None"
+                      ]),
+              })
+            }
+          />
+          <TweakSelect
+            label="Letter spacing"
+            value={spacingLabel(style.letterSpacing)}
+            options={[INHERIT, ...Object.keys(LETTER_SPACINGS)]}
+            onChange={(v) => onChange({ letterSpacing: v === INHERIT ? undefined : LETTER_SPACINGS[v] })}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const HERO_VARIANTS: Brand["heroVariant"][] = [
   "centered",
@@ -98,6 +209,18 @@ export function BrandTweaksForm({
     const i = HERO_VARIANTS.indexOf(t.heroVariant || "centered");
     setTweak("heroVariant", HERO_VARIANTS[(i + 1) % HERO_VARIANTS.length]);
   };
+
+  // Merge a per-field hero text-style patch into heroFieldStyles, pruning any
+  // attribute reset to "Inherit" (undefined) so the stored object stays minimal.
+  const setFieldStyle = (field: HeroTextField, patch: Partial<HeroFieldStyle>) => {
+    const all = t.heroFieldStyles ?? {};
+    const next: HeroFieldStyle = { ...(all[field] ?? {}), ...patch };
+    (Object.keys(next) as (keyof HeroFieldStyle)[]).forEach((k) => {
+      if (next[k] === undefined) delete next[k];
+    });
+    setTweak("heroFieldStyles", { ...all, [field]: next });
+  };
+  const fieldStyle = (field: HeroTextField): HeroFieldStyle => t.heroFieldStyles?.[field] ?? {};
 
   return (
     <>
@@ -181,11 +304,17 @@ export function BrandTweaksForm({
 
       <TweakSection label="Hero copy" />
       <TweakText label="Chip label" value={t.heroChipLabel} placeholder="defaults to brand name" onChange={(v) => setTweak("heroChipLabel", v)} />
+      <HeroFieldStyle_ style={fieldStyle("chip")} onChange={(p) => setFieldStyle("chip", p)} />
       <TweakText label="Line 1" value={t.heroLine1} onChange={(v) => setTweak("heroLine1", v)} />
+      <HeroFieldStyle_ style={fieldStyle("line1")} onChange={(p) => setFieldStyle("line1", p)} />
       <TweakText label="Line 2 (italic)" value={t.heroLine2} onChange={(v) => setTweak("heroLine2", v)} />
+      <HeroFieldStyle_ style={fieldStyle("line2")} onChange={(p) => setFieldStyle("line2", p)} />
       <TweakText label="Subhead" value={t.heroSub} onChange={(v) => setTweak("heroSub", v)} />
+      <HeroFieldStyle_ style={fieldStyle("sub")} onChange={(p) => setFieldStyle("sub", p)} />
       <TweakText label="Primary CTA" value={t.heroCta1} onChange={(v) => setTweak("heroCta1", v)} />
+      <HeroFieldStyle_ style={fieldStyle("cta1")} onChange={(p) => setFieldStyle("cta1", p)} />
       <TweakText label="Secondary CTA" value={t.heroCta2} onChange={(v) => setTweak("heroCta2", v)} />
+      <HeroFieldStyle_ style={fieldStyle("cta2")} onChange={(p) => setFieldStyle("cta2", p)} />
 
       <TweakSection label="Catalog" />
       <TweakText label="Eyebrow" value={t.catalogEyebrow} onChange={(v) => setTweak("catalogEyebrow", v)} />

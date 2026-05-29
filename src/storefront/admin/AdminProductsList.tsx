@@ -39,7 +39,7 @@ export function AdminProductsList({
     if (!confirm(confirmMsg)) return;
     setBusy(true);
     try {
-      const res = await deleteProductsAction(ids);
+      const res = await deleteProductsAction(ids, brand.currency || "₱");
       if ("error" in res) {
         toast(res.error);
         return;

@@ -59,22 +59,85 @@ export function presetTripleForRole(themeId: string, role: RoleKey): string {
 }
 
 // ── Google Fonts available to tenants ──
-export const FONT_OPTIONS = [
-  "Inter",
-  "Playfair Display",
-  "Space Grotesk",
-  "Oswald",
-  "Poppins",
-  "Montserrat",
-  "Lora",
-  "Roboto Slab",
-] as const;
-export type FontName = (typeof FONT_OPTIONS)[number];
+//
+// FONT_REGISTRY is the single source of truth for which Google fonts the
+// storefront can request and exactly which weights/italics each family offers.
+// The Google Fonts css2 endpoint is STRICT: requesting a weight a family lacks
+// (e.g. Oswald has no 800) returns HTTP 400 for the *entire* stylesheet, which
+// silently breaks every font on the page. So we never request a fixed weight
+// range — we look each family up here and emit only what it actually has.
+type FontEntry = {
+  /** Available weights we expose, within the 400–800 range the UI offers. */
+  weights: number[];
+  /** Whether the family ships an italic style. */
+  italic: boolean;
+  /** Generic CSS fallback so text still reads if the webfont fails to load. */
+  fallback: "serif" | "sans-serif";
+};
+
+export const FONT_REGISTRY: Record<string, FontEntry> = {
+  // Sans
+  Inter: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  "DM Sans": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  Manrope: { weights: [400, 500, 600, 700, 800], italic: false, fallback: "sans-serif" },
+  Poppins: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  Montserrat: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  "Work Sans": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  "Space Grotesk": { weights: [400, 500, 600, 700], italic: false, fallback: "sans-serif" },
+  Sora: { weights: [400, 500, 600, 700, 800], italic: false, fallback: "sans-serif" },
+  Outfit: { weights: [400, 500, 600, 700, 800], italic: false, fallback: "sans-serif" },
+  Figtree: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  "Plus Jakarta Sans": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  "IBM Plex Sans": { weights: [400, 500, 600, 700], italic: true, fallback: "sans-serif" },
+  Archivo: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "sans-serif" },
+  Oswald: { weights: [400, 500, 600, 700], italic: false, fallback: "sans-serif" },
+  Syne: { weights: [400, 500, 600, 700, 800], italic: false, fallback: "sans-serif" },
+  "Bebas Neue": { weights: [400], italic: false, fallback: "sans-serif" },
+  // Serif / display
+  "Playfair Display": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "serif" },
+  "DM Serif Display": { weights: [400], italic: true, fallback: "serif" },
+  "Cormorant Garamond": { weights: [400, 500, 600, 700], italic: true, fallback: "serif" },
+  Lora: { weights: [400, 500, 600, 700], italic: true, fallback: "serif" },
+  "Libre Baskerville": { weights: [400, 700], italic: true, fallback: "serif" },
+  Fraunces: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "serif" },
+  Spectral: { weights: [400, 500, 600, 700, 800], italic: true, fallback: "serif" },
+  Marcellus: { weights: [400], italic: false, fallback: "serif" },
+  "Bodoni Moda": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "serif" },
+  "Roboto Slab": { weights: [400, 500, 600, 700, 800], italic: false, fallback: "serif" },
+};
+
+/** Every selectable font, in registry (curated) order. */
+export const FONT_OPTIONS = Object.keys(FONT_REGISTRY) as readonly string[];
+export type FontName = string;
+
+/** CSS `font-family` value for a registered font, with its generic fallback. */
+export function fontFamilyValue(name?: string): string | undefined {
+  if (!name) return undefined;
+  const generic = FONT_REGISTRY[name]?.fallback ?? "sans-serif";
+  return `'${name}', ${generic}`;
+}
+
+/** The css2 query fragment for one family (`family=…`), requesting only the
+ *  weights/styles it actually offers. Unknown families fall back to the bare
+ *  form, which Google resolves to the family's default styles. */
+function familySpec(name: string): string {
+  const fam = `family=${name.replace(/ /g, "+")}`;
+  const entry = FONT_REGISTRY[name];
+  // Unknown family, or a single-weight family with no italic (e.g. Marcellus,
+  // Bebas Neue): css2 rejects an explicit `:wght@400` axis here, so go bare.
+  if (!entry || (entry.weights.length === 1 && !entry.italic)) return fam;
+  const ws = entry.weights;
+  if (entry.italic) {
+    const tuples = [...ws.map((w) => `0,${w}`), ...ws.map((w) => `1,${w}`)];
+    return `${fam}:ital,wght@${tuples.join(";")}`;
+  }
+  return `${fam}:wght@${ws.join(";")}`;
+}
 
 /**
  * Build a Google Fonts stylesheet URL for any number of families.
- * Variadic so callers can load heading + body + a distinct hero font in one
- * request (e.g. `googleFontsUrl(heading, body, heroTitle, heroBody)`).
+ * Variadic so callers can load heading + body + distinct hero fonts in one
+ * request (e.g. `googleFontsUrl(heading, body, heroTitle, heroBody, ...fields)`).
  */
 export function googleFontsUrl(...families: (string | undefined)[]): string {
   const set = new Set<string>();
@@ -82,9 +145,7 @@ export function googleFontsUrl(...families: (string | undefined)[]): string {
     if (f) set.add(f);
   }
   if (set.size === 0) set.add("Inter");
-  const params = [...set]
-    .map((f) => `family=${encodeURIComponent(f)}:wght@400;500;600;700;800`)
-    .join("&");
+  const params = [...set].map(familySpec).join("&");
   return `https://fonts.googleapis.com/css2?${params}&display=swap`;
 }
 
@@ -158,6 +219,69 @@ export type HeroTypography = {
   highlightColor?: string; // hex
   align?: HeroAlign;
 };
+
+// ── Per-field hero text styling ──
+// Beyond the grouped title/body typography above, each individual hero copy
+// element can carry its own style overrides (font, size, weight, italic,
+// transform, tracking). Everything is optional; unset attributes inherit the
+// grouped hero typography, then the storefront.css defaults.
+
+/** The hero copy elements that expose independent text-style controls. */
+export const HERO_TEXT_FIELDS = [
+  { key: "chip", label: "Chip label" },
+  { key: "line1", label: "Line 1" },
+  { key: "line2", label: "Line 2 (italic)" },
+  { key: "sub", label: "Subhead" },
+  { key: "cta1", label: "Primary CTA" },
+  { key: "cta2", label: "Secondary CTA" },
+] as const;
+export type HeroTextField = (typeof HERO_TEXT_FIELDS)[number]["key"];
+
+export type TextTransform = "none" | "uppercase" | "lowercase" | "capitalize";
+
+/** Friendly letter-spacing presets → em values. */
+export const LETTER_SPACINGS: Record<string, number> = {
+  Tighter: -0.04,
+  Tight: -0.02,
+  Normal: 0,
+  Wide: 0.04,
+  Wider: 0.08,
+};
+
+/** Absolute font sizes (px) the per-field size picker offers. */
+export const HERO_FIELD_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80, 96] as const;
+
+/** One hero copy element's optional style overrides. */
+export type HeroFieldStyle = {
+  font?: string; // family name; unset = inherit grouped/theme font
+  size?: number; // absolute px; rendered as a responsive clamp
+  weight?: FontWeight;
+  italic?: boolean;
+  transform?: TextTransform;
+  letterSpacing?: number; // em
+};
+
+/** Render an absolute px size as a responsive clamp so it never overflows on
+ *  mobile (min ≈ 60% of the chosen size, fluid in between). */
+export function heroFieldSizeClamp(px?: number): string | undefined {
+  if (!px) return undefined;
+  const min = Math.round(px * 0.6);
+  const vw = (px / 10).toFixed(2);
+  return `clamp(${min}px, ${vw}vw, ${px}px)`;
+}
+
+/** Resolve a HeroFieldStyle to inline CSS (only the set attributes). */
+export function heroFieldCss(style?: HeroFieldStyle): import("react").CSSProperties {
+  if (!style) return {};
+  const css: import("react").CSSProperties = {};
+  if (style.font) css.fontFamily = fontFamilyValue(style.font);
+  if (style.size) css.fontSize = heroFieldSizeClamp(style.size);
+  if (style.weight) css.fontWeight = style.weight;
+  if (style.italic !== undefined) css.fontStyle = style.italic ? "italic" : "normal";
+  if (style.transform) css.textTransform = style.transform;
+  if (style.letterSpacing !== undefined) css.letterSpacing = `${style.letterSpacing}em`;
+  return css;
+}
 
 // ── HSL <-> HEX (color pickers speak hex; our CSS vars speak "H S% L%") ──
 

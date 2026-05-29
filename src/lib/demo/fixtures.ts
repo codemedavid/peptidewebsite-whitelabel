@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Product } from "@/storefront/types";
+import { slugify } from "@/lib/storefront/product-mapping";
 import { planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 import type { HeroTypography } from "@/lib/theme/tokens";
 import {
@@ -317,7 +318,28 @@ export function getDemoProducts(idOrSlug: string) {
   return getDemoTenant(idOrSlug).products;
 }
 
-export function findDemoProduct(idOrSlug: string, slug: string) {
+export function findDemoProduct(idOrSlug: string, slug: string): DemoProduct | null {
+  // Once the owner has saved/added/deleted in demo mode, that file-backed set is
+  // authoritative — so the detail page round-trips edits and new products just
+  // like the catalog does. Storefront products have no slug, so match on the
+  // slug derived from the name (same rule new DB products get).
+  const saved = getDemoStoreProducts(idOrSlug);
+  if (saved) {
+    const p = saved.find((x) => slugify(x.name) === slug);
+    if (!p) return null;
+    return {
+      id: p.id,
+      name: p.name,
+      slug,
+      description: p.description,
+      priceCents: Math.round((p.price || 0) * 100),
+      currency: p.currency,
+      images: p.image ? [p.image] : [],
+      status: p.available === false ? "draft" : "active",
+      active: p.available !== false,
+      metadata: { purity: p.purity },
+    };
+  }
   return getDemoTenant(idOrSlug).products.find((x) => x.slug === slug) ?? null;
 }
 

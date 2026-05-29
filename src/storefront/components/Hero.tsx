@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP } from "@/lib/theme/tokens";
+import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP, heroFieldCss } from "@/lib/theme/tokens";
 import type { Brand } from "../types";
 
 export function Hero({
@@ -37,6 +37,17 @@ export function Hero({
   const chipDotStyle: CSSProperties = brand.heroHighlight ? { background: brand.heroHighlight } : {};
   const sectionStyle: CSSProperties = brand.heroAlign ? { textAlign: brand.heroAlign } : {};
 
+  // Per-field text-style overrides (Hero copy section of the tweaks panel).
+  // These layer *over* the grouped title/body styles above so a field-level
+  // choice always wins; unset attributes fall through to the grouped values.
+  const fs = brand.heroFieldStyles ?? {};
+  const chipStyle = heroFieldCss(fs.chip);
+  const line1Style = heroFieldCss(fs.line1);
+  const line2Style = heroFieldCss(fs.line2);
+  const subFieldStyle = heroFieldCss(fs.sub);
+  const cta1Style = heroFieldCss(fs.cta1);
+  const cta2Style = heroFieldCss(fs.cta2);
+
   const logoCard = brand.heroShowLogo !== false && (
     <div className="hero__logo-card">
       {brand.logoUrl ? (
@@ -52,7 +63,7 @@ export function Hero({
   );
 
   const chip = brand.heroShowChip !== false && (
-    <div className="hero__chip">
+    <div className="hero__chip" style={chipStyle}>
       <span className="hero__chip-dot" aria-hidden="true" style={chipDotStyle} />
       {(brand.heroChipLabel || brand.name)?.toUpperCase()}
     </div>
@@ -60,11 +71,11 @@ export function Hero({
 
   const headline = (
     <h1 className="hero__headline" style={headlineStyle}>
-      <span className="font-display" style={headlineSpanStyle}>{brand.heroLine1 || "Premium products,"}</span>
+      <span className="font-display" style={{ ...headlineSpanStyle, ...line1Style }}>{brand.heroLine1 || "Premium products,"}</span>
       {brand.heroLine2 && (
         <>
           {variant !== "editorial" && <br />}
-          <span className="font-display-italic hero__headline-accent" style={{ ...headlineSpanStyle, ...accentStyle }}>
+          <span className="font-display-italic hero__headline-accent" style={{ ...headlineSpanStyle, ...accentStyle, ...line2Style }}>
             {brand.heroLine2}
           </span>
         </>
@@ -73,19 +84,19 @@ export function Hero({
   );
 
   const sub = brand.heroShowSub !== false && brand.heroSub && (
-    <p className="hero__sub" style={subStyle}>{brand.heroSub}</p>
+    <p className="hero__sub" style={{ ...subStyle, ...subFieldStyle }}>{brand.heroSub}</p>
   );
 
   const ctas = brand.heroShowCtas !== false && (
     <div className="hero__ctas">
-      <button className="btn btn-primary" onClick={onPrimary}>
+      <button className="btn btn-primary" onClick={onPrimary} style={cta1Style}>
         {brand.heroCta1 || "Shop Now"}
         <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12h14M13 5l7 7-7 7" />
         </svg>
       </button>
       {brand.heroShowCta2 !== false && brand.heroCta2 && (
-        <button className="btn btn-secondary" onClick={onSecondary}>
+        <button className="btn btn-secondary" onClick={onSecondary} style={cta2Style}>
           {brand.heroCta2}
         </button>
       )}
