@@ -144,6 +144,18 @@ export const HERO_VARIANTS: Brand["heroVariant"][] = [
   "spotlight",
 ];
 
+// Friendly hero logo size presets (px). "Default" leaves heroLogoSize unset so
+// the storefront.css per-variant default applies. Larger sizes fill the hero
+// whitespace by enlarging the logo card.
+export const HERO_LOGO_SIZES: Record<string, number | undefined> = {
+  Default: undefined,
+  Medium: 160,
+  Large: 200,
+  "Extra large": 260,
+};
+export const HERO_LOGO_SIZE_LABEL = (size?: number): string =>
+  Object.entries(HERO_LOGO_SIZES).find(([, v]) => v === size)?.[0] ?? "Default";
+
 // Local, no-network hero composer — picks a layout + copy from the industry tag.
 // (The design called window.claude.complete; this keeps the feature usable offline.)
 export function composeHero(industry: string, brandName: string): Partial<Brand> {
@@ -297,6 +309,12 @@ export function BrandTweaksForm({
       <TweakSection label="Hero layout & elements" />
       <TweakSelect label="Layout variant" value={t.heroVariant || "centered"} onChange={(v) => setTweak("heroVariant", v as Brand["heroVariant"])} options={[...HERO_VARIANTS]} />
       <TweakToggle label="Show logo card" value={t.heroShowLogo !== false} onChange={(v) => setTweak("heroShowLogo", v)} />
+      <TweakSelect
+        label="Logo size"
+        value={HERO_LOGO_SIZE_LABEL(t.heroLogoSize)}
+        options={Object.keys(HERO_LOGO_SIZES)}
+        onChange={(v) => setTweak("heroLogoSize", HERO_LOGO_SIZES[v])}
+      />
       <TweakToggle label="Show chip" value={t.heroShowChip !== false} onChange={(v) => setTweak("heroShowChip", v)} />
       <TweakToggle label="Show subhead" value={t.heroShowSub !== false} onChange={(v) => setTweak("heroShowSub", v)} />
       <TweakToggle label="Show CTAs" value={t.heroShowCtas !== false} onChange={(v) => setTweak("heroShowCtas", v)} />

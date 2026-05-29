@@ -48,8 +48,14 @@ export function Hero({
   const cta1Style = heroFieldCss(fs.cta1);
   const cta2Style = heroFieldCss(fs.cta2);
 
+  // A custom hero logo size enlarges the card (and trims its padding) so the
+  // logo fills the space instead of sitting in the default whitespace.
+  const logoCardStyle: CSSProperties = brand.heroLogoSize
+    ? { width: brand.heroLogoSize, height: brand.heroLogoSize, padding: Math.round(brand.heroLogoSize * 0.06) }
+    : {};
+
   const logoCard = brand.heroShowLogo !== false && (
-    <div className="hero__logo-card">
+    <div className="hero__logo-card" style={logoCardStyle}>
       {brand.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={brand.logoUrl} alt={brand.name} />

@@ -183,6 +183,9 @@ export type Brand = {
 
   heroVariant: "centered" | "split" | "editorial" | "card" | "minimal" | "spotlight";
   heroShowLogo: boolean;
+  // Hero logo card size (px). Unset = the storefront.css default for the variant.
+  // Larger values shrink the surrounding whitespace by enlarging the logo card.
+  heroLogoSize?: number;
   heroShowChip: boolean;
   heroShowSub: boolean;
   heroShowCtas: boolean;
