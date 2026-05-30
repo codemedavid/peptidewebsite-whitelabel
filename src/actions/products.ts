@@ -78,6 +78,12 @@ function normalizeProductInput(input: unknown): Product {
     storage: str(o.storage, 200),
     sequence: str(o.sequence, 1000),
     sizes: str(o.sizes, 200),
+    reseller: ((): Product["reseller"] => {
+      const r = (o.reseller ?? {}) as Record<string, unknown>;
+      const vialsOnly = Math.max(0, num(r.vialsOnly));
+      const completeSet = Math.max(0, num(r.completeSet));
+      return vialsOnly > 0 || completeSet > 0 ? { vialsOnly, completeSet } : undefined;
+    })(),
   };
 }
 

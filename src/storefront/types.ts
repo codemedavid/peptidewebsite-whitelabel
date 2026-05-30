@@ -24,6 +24,9 @@ export type Product = {
   storage?: string;
   sequence?: string;
   sizes?: string;
+  /** Wholesale / reseller pricing tier (min. order applies). Both legs optional —
+   *  "vials only" = peptide + bac water; "complete set" = with syringes/swabs. */
+  reseller?: { vialsOnly?: number; completeSet?: number };
 };
 
 export type Category = { id: string; label: string };

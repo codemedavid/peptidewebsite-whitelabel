@@ -46,6 +46,9 @@ export type ProductMetadata = {
   currencySymbol?: string;
   /** Preserved so the product detail page's COA link keeps working. */
   coaUrl?: string;
+  /** Wholesale / reseller pricing tier (min. order applies). Only present when at
+   *  least one leg is set — see `cleanReseller` so an empty `{}` never persists. */
+  reseller?: { vialsOnly?: number; completeSet?: number };
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -153,6 +156,25 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     storage: meta.storage ?? "",
     sequence: meta.sequence ?? "",
     sizes: meta.sizes ?? "",
+    reseller: cleanReseller(meta.reseller),
+  };
+}
+
+/**
+ * Normalize a reseller tier to numbers, dropping empty/zero legs. Returns
+ * `undefined` when neither leg has a positive value so `compactMetadata`
+ * (which keeps empty objects) never persists a bare `{}` or a stale leg.
+ */
+function cleanReseller(
+  r: { vialsOnly?: number; completeSet?: number } | undefined,
+): { vialsOnly?: number; completeSet?: number } | undefined {
+  if (!r) return undefined;
+  const vialsOnly = Number(r.vialsOnly) || 0;
+  const completeSet = Number(r.completeSet) || 0;
+  if (!vialsOnly && !completeSet) return undefined;
+  return {
+    ...(vialsOnly ? { vialsOnly } : {}),
+    ...(completeSet ? { completeSet } : {}),
   };
 }
 
@@ -205,6 +227,7 @@ export function productToDbWrite(
       sequence: p.sequence || undefined,
       sizes: p.sizes || undefined,
       currencySymbol: displaySymbol || undefined,
+      reseller: cleanReseller(p.reseller),
     }),
   };
 }

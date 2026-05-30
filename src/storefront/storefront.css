@@ -1031,6 +1031,26 @@
   font-size: 22px;
   color: var(--brand-main);
 }
+/* Wholesale / reseller tiers shown under the retail price. Reset the inherited
+   display font (the price block is .font-display) so these read as small,
+   muted metadata rather than another headline. */
+.sf-root .product-card__reseller {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-family: var(--brand-body-font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  color: var(--brand-text-muted);
+}
+.sf-root .product-card__reseller-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  opacity: 0.8;
+}
 .sf-root .product-card__cta { width: 100%; padding: 12px 18px; }
 
 /* ---------- CATALOG / PRODUCT CARD — responsive ---------- */
@@ -1047,6 +1067,8 @@
   .sf-root .product-card__desc { font-size: 12.5px; margin-bottom: 10px; }
   .sf-root .product-card__foot { padding: 10px 14px 14px; gap: 10px; }
   .sf-root .product-card__price { font-size: 18px; }
+  .sf-root .product-card__reseller { font-size: 11px; }
+  .sf-root .product-card__reseller-label { font-size: 9px; }
   .sf-root .product-card__cta { padding: 11px 14px; font-size: 13px; gap: 6px; }
   .sf-root .product-card__badge { top: 10px; left: 10px; }
 }

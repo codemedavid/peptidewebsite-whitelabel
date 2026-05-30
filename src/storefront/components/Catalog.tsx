@@ -37,6 +37,23 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
         <div className="product-card__price font-display">
           {product.currency}
           {product.price.toLocaleString()}
+          {product.reseller && (product.reseller.vialsOnly || product.reseller.completeSet) ? (
+            <div className="product-card__reseller">
+              <span className="product-card__reseller-label">Reseller · min 10 orders</span>
+              {product.reseller.vialsOnly ? (
+                <span className="product-card__reseller-row">
+                  Vials only: {product.currency}
+                  {product.reseller.vialsOnly.toLocaleString()}
+                </span>
+              ) : null}
+              {product.reseller.completeSet ? (
+                <span className="product-card__reseller-row">
+                  Complete set: {product.currency}
+                  {product.reseller.completeSet.toLocaleString()}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <button className="btn btn-primary product-card__cta" onClick={onAdd}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

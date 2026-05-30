@@ -141,6 +141,8 @@ export function AdminAddProduct({
   const [available, setAvailable]   = useState<boolean>(initial?.available !== false);
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
+  const [resellerVials, setResellerVials] = useState<number | string>(initial?.reseller?.vialsOnly ?? 0);
+  const [resellerSet, setResellerSet]     = useState<number | string>(initial?.reseller?.completeSet ?? 0);
   const [image, setImage]           = useState<string>(initial?.image || "");
   const [imageDrag, setImageDrag]   = useState<boolean>(false);
   const [uploading, setUploading]   = useState<boolean>(false);
@@ -199,6 +201,10 @@ export function AdminAddProduct({
       available,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
+      reseller: {
+        vialsOnly: Number(resellerVials) || 0,
+        completeSet: Number(resellerSet) || 0,
+      },
       image: image || null,
     };
 
@@ -408,6 +414,26 @@ export function AdminAddProduct({
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountOn(e.target.checked)} />
                 <span>🏷️ Enable Discount</span>
               </label>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------- Reseller Pricing ---------- */}
+        <div className="admin-form__card">
+          <h2 className="admin-form__section">🤝 Reseller Pricing (min. 10 orders)</h2>
+          <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
+            Wholesale prices shown on the storefront card alongside the retail price.
+            Leave a field at 0 to hide that tier.
+          </div>
+
+          <div className="admin-form__row">
+            <div className="admin-field">
+              <label className="admin-field__label">Vials only ({currency})</label>
+              <NumberField value={resellerVials} onChange={setResellerVials} min={0} />
+            </div>
+            <div className="admin-field">
+              <label className="admin-field__label">Complete set ({currency})</label>
+              <NumberField value={resellerSet} onChange={setResellerSet} min={0} />
             </div>
           </div>
         </div>
