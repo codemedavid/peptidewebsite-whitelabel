@@ -7,7 +7,7 @@ import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { getPlatformUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
-import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
+import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 
 export type BrandingAssetKind = "logo" | "favicon";
@@ -203,8 +203,6 @@ export type ContactChannelsInput = {
   metaDescription: string;
 };
 
-/** Link-preview / SEO descriptions stay short — search + social truncate past this. */
-export const META_DESCRIPTION_MAX = 200;
 export type SaveResult = { ok: true } | { error: string };
 
 /**

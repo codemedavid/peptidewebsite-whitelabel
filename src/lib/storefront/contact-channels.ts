@@ -5,6 +5,9 @@
 
 import type { ContactChannel, ContactChannelType } from "@/storefront/types";
 
+/** Link-preview / SEO descriptions stay short — search + social truncate past this. */
+export const META_DESCRIPTION_MAX = 200;
+
 export const CONTACT_CHANNEL_META: {
   type: ContactChannelType;
   label: string;

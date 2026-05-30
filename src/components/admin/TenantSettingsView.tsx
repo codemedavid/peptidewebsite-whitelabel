@@ -12,8 +12,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction } from "@/actions/onboarding";
-import { saveContactChannelsAction, saveAdminPasswordAction, META_DESCRIPTION_MAX } from "@/actions/branding";
-import { CONTACT_CHANNEL_META } from "@/lib/storefront/contact-channels";
+import { saveContactChannelsAction, saveAdminPasswordAction } from "@/actions/branding";
+import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import {
   formatOrderNumber,
   normalizeOrderNumberFormat,
