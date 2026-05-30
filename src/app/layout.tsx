@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import TopLoadingBar from "./_components/TopLoadingBar";
 
 export const metadata: Metadata = {
   title: "Peptide White-Label SaaS",
@@ -14,7 +15,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <TopLoadingBar />
+        {children}
+      </body>
     </html>
   );
 }
