@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction } from "@/actions/onboarding";
-import { saveContactChannelsAction, saveAdminPasswordAction } from "@/actions/branding";
+import { saveContactChannelsAction, saveAdminPasswordAction, META_DESCRIPTION_MAX } from "@/actions/branding";
 import { CONTACT_CHANNEL_META } from "@/lib/storefront/contact-channels";
 import {
   formatOrderNumber,
@@ -56,6 +56,8 @@ type Props = {
   initialChannels: ContactChannel[];
   initialCheckoutTitle: string;
   initialCheckoutNote: string;
+  /** Link-preview / SEO description; blank falls back to a generic vertical line. */
+  initialMetaDescription: string;
   /** Storefront-admin password override; blank means the default ("admin"). */
   initialAdminPassword: string;
   lastSaved?: string;
@@ -79,6 +81,7 @@ export function TenantSettingsView({
   initialChannels,
   initialCheckoutTitle,
   initialCheckoutNote,
+  initialMetaDescription,
   initialAdminPassword,
   lastSaved,
   domains,
@@ -93,6 +96,7 @@ export function TenantSettingsView({
   const [channels, setChannels] = useState<ContactChannel[]>(initialChannels);
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
+  const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
 
   /* ---------- storefront-admin password ---------- */
   const [adminPassword, setAdminPassword] = useState(initialAdminPassword);
@@ -107,6 +111,7 @@ export function TenantSettingsView({
     channels: JSON.stringify(initialChannels),
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
+    metaDescription: initialMetaDescription,
     adminPassword: initialAdminPassword,
   });
 
@@ -125,7 +130,10 @@ export function TenantSettingsView({
     scheme !== baseline.current.scheme ||
     digits !== baseline.current.digits;
   const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
-  const copyDirty = title !== baseline.current.title || note !== baseline.current.note;
+  const copyDirty =
+    title !== baseline.current.title ||
+    note !== baseline.current.note ||
+    metaDescription !== baseline.current.metaDescription;
   const adminDirty = adminPassword !== baseline.current.adminPassword;
   const anyDirty = ordersDirty || channelsDirty || copyDirty || adminDirty;
 
@@ -172,10 +180,11 @@ export function TenantSettingsView({
       contactChannels: channels,
       checkoutTitle: title,
       checkoutNote: note,
+      metaDescription,
     });
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, channels: JSON.stringify(channels), title, note };
+      baseline.current = { ...baseline.current, channels: JSON.stringify(channels), title, note, metaDescription };
       setSaved((s) => ({ ...s, channels: true, copy: true }));
       return true;
     }
@@ -215,6 +224,7 @@ export function TenantSettingsView({
     setChannels(JSON.parse(b.channels));
     setTitle(b.title);
     setNote(b.note);
+    setMetaDescription(b.metaDescription);
     setAdminPassword(b.adminPassword);
     setErrors({});
   }
@@ -247,7 +257,7 @@ export function TenantSettingsView({
   const counts: Record<SectionId, string> = {
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
-    copy: "2",
+    copy: "3",
     admin: adminPassword.trim() ? "Custom" : "Default",
   };
 
@@ -626,6 +636,31 @@ export function TenantSettingsView({
                   </div>
                 </div>
               </div>
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Link preview description</div>
+                  <div className="set-row-help">
+                    The summary shown when the store link is shared (WhatsApp, social, search).
+                    Leave blank for a generic default.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <textarea
+                    className="input"
+                    style={{ height: "auto", minHeight: 76, padding: "8px 12px", lineHeight: 1.5, resize: "vertical" }}
+                    value={metaDescription}
+                    maxLength={META_DESCRIPTION_MAX}
+                    placeholder="Premium Peptides, Refined. Elevating expectations through quality, precision, and care."
+                    onChange={(e) => {
+                      setMetaDescription(e.target.value);
+                      setSaved((s) => ({ ...s, copy: false }));
+                    }}
+                  />
+                  <div className="set-counter">
+                    {metaDescription.length}/{META_DESCRIPTION_MAX}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -644,6 +679,7 @@ export function TenantSettingsView({
                   onClick={() => {
                     setTitle(baseline.current.title);
                     setNote(baseline.current.note);
+                    setMetaDescription(baseline.current.metaDescription);
                     setErrors((e) => ({ ...e, copy: undefined }));
                   }}
                 >

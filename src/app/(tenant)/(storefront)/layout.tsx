@@ -16,12 +16,14 @@ export async function generateMetadata(): Promise<Metadata> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { title: "Store not found" };
 
-  const { tenant, settings } = await getTenantContext(tenantId);
+  const { tenant, branding, settings } = await getTenantContext(tenantId);
   const name = settings?.storeName ?? tenant.name;
-  const compliance = (settings?.compliance ?? {}) as { researchUseOnly?: string };
+  const config = (branding?.config ?? {}) as { metaDescription?: string };
+  // Tenant-editable link-preview / SEO line (admin → Settings → Storefront copy).
+  // Falls back to a generic vertical default when the tenant hasn't set one.
   const description =
-    compliance.researchUseOnly ??
-    `${name} — research-grade peptides with third-party certificates of analysis.`;
+    (typeof config.metaDescription === "string" && config.metaDescription.trim()) ||
+    `${name} — premium peptides with third-party certificates of analysis.`;
 
   return {
     title: { default: name, template: `%s · ${name}` },

@@ -10,7 +10,7 @@ import {
   clearStorefrontAdminCookie,
   requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
-import type { PaymentMethod } from "@/storefront/types";
+import type { PaymentMethod, Protocol } from "@/storefront/types";
 
 export type ActionResult = { ok: true } | { error: string };
 
@@ -104,6 +104,58 @@ export async function savePaymentMethodsAction(methods: unknown): Promise<Action
   const paymentMethods = normalizeMethods(methods);
   const current = await readConfig(tenantId);
   const config = { ...current, paymentMethods };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/** Coerce untrusted client input into clean Protocol rows. */
+function normalizeProtocols(input: unknown): Protocol[] {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 200).map((p) => {
+    const o = (p ?? {}) as Record<string, unknown>;
+    const notes = Array.isArray(o.notes)
+      ? o.notes.map((n) => String(n ?? "").slice(0, 500)).filter(Boolean).slice(0, 50)
+      : [];
+    return {
+      category: String(o.category ?? "").slice(0, 120),
+      name: String(o.name ?? "").slice(0, 200),
+      dosage: String(o.dosage ?? "").slice(0, 200),
+      frequency: String(o.frequency ?? "").slice(0, 200),
+      duration: String(o.duration ?? "").slice(0, 200),
+      notes,
+      storage: String(o.storage ?? "").slice(0, 500),
+      image: typeof o.image === "string" ? o.image : "",
+    };
+  });
+}
+
+/**
+ * Persist the storefront's protocol guide into the shared `branding.config`
+ * blob (read-modify-write, mirroring savePaymentMethodsAction so it never
+ * clobbers the rest of the storefront Brand config). The storefront reads
+ * protocols from `branding.config` server-side on every render, so the owner's
+ * edits show on every device/customer — fixing the bug where the public
+ * protocol page fell back to the seed samples on other devices.
+ */
+export async function saveProtocolsAction(protocols: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeProtocols(protocols);
+  const current = await readConfig(tenantId);
+  const config = { ...current, protocols: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

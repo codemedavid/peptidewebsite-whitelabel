@@ -30,7 +30,7 @@ import {
   SEED_REVIEWS,
   SEED_SHIPPING_LOCATIONS,
 } from "./data";
-import { savePaymentMethodsAction } from "@/actions/storefront-admin";
+import { savePaymentMethodsAction, saveProtocolsAction } from "@/actions/storefront-admin";
 import type {
   Brand,
   Category,
@@ -163,7 +163,12 @@ export function StoreProvider({
     brandSeed.paymentMethods ?? SEED_PAYMENT_METHODS,
   );
   const [faqGroups, setFaqState] = useState<FaqGroup[]>(SEED_FAQ_GROUPS);
-  const [protocols, setProtocolsState] = useState<Protocol[]>(SEED_PROTOCOLS);
+  // Protocols load from the DB server-side (page → branding.config spread into
+  // the brand prop), same as payment methods, so they're identical on every
+  // device. Seed defaults apply only until the owner saves the first time.
+  const [protocols, setProtocolsState] = useState<Protocol[]>(
+    brandSeed.protocols ?? SEED_PROTOCOLS,
+  );
   const [reviews, setReviewsState] = useState<Review[]>(SEED_REVIEWS);
   const [cart, setCart] = useState<Product[]>([]);
   const [toastMsg, setToastMsg] = useState("");
@@ -192,7 +197,10 @@ export function StoreProvider({
     // copy can't override what the owner configured (this was the cross-device
     // checkout bug). They persist through savePaymentMethodsAction instead.
     setFaqState(load(NS + "faq", SEED_FAQ_GROUPS));
-    setProtocolsState(load(NS + "protocols", SEED_PROTOCOLS));
+    // NOTE: protocols are intentionally NOT hydrated from localStorage — they
+    // come from the DB via the server-provided brand prop (branding.config), so
+    // a stale local copy can't override what the owner saved (the cross-device
+    // bug). They persist through saveProtocolsAction instead.
     setReviewsState(load(NS + "reviews", SEED_REVIEWS));
   }, [NS]);
 
@@ -260,8 +268,6 @@ export function StoreProvider({
   const setPromoCodes = useMemo(() => makeSetter<PromoCode[]>("promo", "PROMO_CODES", setPromoState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setProtocols = useMemo(() => makeSetter<Protocol[]>("protocols", "PROTOCOLS", setProtocolsState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), [NS]);
 
@@ -332,6 +338,30 @@ export function StoreProvider({
         });
     },
     [toast, paymentMethods],
+  );
+
+  // Protocols persist to the DB (branding.config), not localStorage, so every
+  // device/customer sees the owner's configured guide. Mirrors setPaymentMethods:
+  // gated on the storefront-admin session; local state updates optimistically and
+  // we only surface failures.
+  const setProtocols = useCallback(
+    (next: Updater<Protocol[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: Protocol[]) => Protocol[])(protocols)
+          : next;
+      setProtocolsState(value);
+      saveProtocolsAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save protocols: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save protocols — please sign in again and retry.");
+        });
+    },
+    [toast, protocols],
   );
 
   const value: Store = {

@@ -200,7 +200,11 @@ export type ContactChannelsInput = {
   contactChannels: { type: string; destination: string; enabled: boolean }[];
   checkoutTitle: string;
   checkoutNote: string;
+  metaDescription: string;
 };
+
+/** Link-preview / SEO descriptions stay short — search + social truncate past this. */
+export const META_DESCRIPTION_MAX = 200;
 export type SaveResult = { ok: true } | { error: string };
 
 /**
@@ -218,13 +222,14 @@ export async function saveContactChannelsAction(
   const contactChannels = normalizeContactChannels(input.contactChannels);
   const checkoutTitle = (input.checkoutTitle ?? "").trim();
   const checkoutNote = (input.checkoutNote ?? "").trim();
+  const metaDescription = (input.metaDescription ?? "").trim().slice(0, META_DESCRIPTION_MAX);
 
   // A channel marked enabled but with no destination can't be used — reject so
   // the storefront never shows a dead button.
   const broken = contactChannels.find((c) => c.enabled && !c.destination);
   if (broken) return { error: `Add a destination for ${broken.type}, or turn it off.` };
 
-  const contactFields = { contactChannels, checkoutTitle, checkoutNote };
+  const contactFields = { contactChannels, checkoutTitle, checkoutNote, metaDescription };
 
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;

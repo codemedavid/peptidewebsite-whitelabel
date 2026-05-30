@@ -245,6 +245,7 @@ export type TenantContactChannels = {
   contactChannels: ContactChannel[];
   checkoutTitle: string;
   checkoutNote: string;
+  metaDescription: string;
 };
 
 /** Tenant name + its storefront order-contact channels for the settings editor.
@@ -262,6 +263,8 @@ export async function getTenantContactChannels(
       typeof config.checkoutTitle === "string" ? config.checkoutTitle : BRAND.checkoutTitle ?? "",
     checkoutNote:
       typeof config.checkoutNote === "string" ? config.checkoutNote : BRAND.checkoutNote ?? "",
+    metaDescription:
+      typeof config.metaDescription === "string" ? config.metaDescription : "",
   });
 
   if (isDemoMode()) {

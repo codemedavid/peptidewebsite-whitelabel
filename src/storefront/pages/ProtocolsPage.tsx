@@ -101,6 +101,22 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                   </svg>
                 </summary>
                 <div className="protocols__item-body">
+                  {p.image && (
+                    <div className="protocols__image" style={{ marginBottom: 20 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.image}
+                        alt={`${p.name} protocol`}
+                        style={{
+                          width: "100%",
+                          maxHeight: 420,
+                          objectFit: "contain",
+                          borderRadius: 12,
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  )}
                   <div className="protocols__pills">
                     <div className="protocols__pill">
                       <div className="eyebrow">Dosage</div>

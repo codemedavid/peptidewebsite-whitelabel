@@ -128,6 +128,10 @@ export type Protocol = {
   duration: string;
   notes: string[];
   storage: string;
+  /** Optional protocol image (hosted on the tenant's ImageKit folder, or a
+   *  data URL in demo mode). Shown on the public protocol page in place of /
+   *  alongside the written details. */
+  image?: string;
 };
 
 export type Review = {
@@ -284,12 +288,21 @@ export type Brand = {
   contactChannels?: ContactChannel[];
   checkoutTitle?: string;
   checkoutNote?: string;
+  // Link-preview / SEO description — shown when the storefront URL is shared
+  // (WhatsApp, social, search). Falls back to a generic line when blank.
+  metaDescription?: string;
 
   // Payment methods the customer pays through (bank/e-wallet + QR). Edited in the
   // storefront #admin and persisted server-side in branding.config so every
   // device/customer sees the same configured set (not the seed defaults). Absent
   // until the store owner saves at least once → storefront falls back to seeds.
   paymentMethods?: PaymentMethod[];
+
+  // Protocol guide entries. Edited in the storefront #admin and persisted
+  // server-side in branding.config (same mechanism as paymentMethods) so the
+  // owner's edits show on every device/customer rather than only the editing
+  // browser. Absent until the owner saves once → storefront falls back to seeds.
+  protocols?: Protocol[];
 
   /** Order-number format configured by the super admin (prefix, separator, scheme, digits).
    *  Used by the storefront store to generate order numbers at checkout time. */
