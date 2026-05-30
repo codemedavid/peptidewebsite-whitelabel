@@ -982,6 +982,10 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Make the card a query container so its internals (esp. the buy row) can
+     respond to the card's own width rather than the viewport — the grid hands
+     cards wildly different widths at the same viewport size. */
+  container-type: inline-size;
 }
 .sf-root .product-card__badge {
   position: absolute;
@@ -1124,6 +1128,29 @@
      but cap the media so it never dominates the viewport. */
   .sf-root .catalog__grid { grid-template-columns: 1fr; }
   .sf-root .product-card__media { aspect-ratio: 16 / 10; }
+}
+
+/* When a card is too narrow to fit the qty stepper + "Add to Cart" side by
+   side (~220px needed, and .card clips overflow so the button would otherwise
+   be cut off), stack them: full-width CTA under a centered stepper. Driven by
+   the card's own width so 2-up phone cards stack while wider cards don't. */
+@container (max-width: 240px) {
+  .sf-root .product-card__buy {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .sf-root .product-card__qty { align-self: center; justify-content: center; }
+  .sf-root .product-card__cta { width: 100%; }
+}
+
+/* Catalog controls: on phones let search + sort each take a full row instead
+   of the 280px-min search forcing an awkward overflow/wrap against the gutter. */
+@media (max-width: 560px) {
+  .sf-root .catalog__header { gap: 14px; }
+  .sf-root .catalog__controls { width: 100%; }
+  .sf-root .catalog__controls .input-wrap { min-width: 0; width: 100%; }
+  .sf-root .catalog__sort { width: 100%; }
 }
 
 /* ---------- FOOTER ---------- */
