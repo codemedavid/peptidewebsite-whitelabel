@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
+function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
+  const [qty, setQty] = useState(1);
   return (
     <article className="product-card card">
       {product.featured && (
@@ -55,14 +56,40 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
             </div>
           ) : null}
         </div>
-        <button className="btn btn-primary product-card__cta" onClick={onAdd}>
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
-          </svg>
-          Add to Cart
-        </button>
+        <div className="product-card__buy">
+          <div className="sf-qty product-card__qty">
+            <button
+              type="button"
+              aria-label={`Remove one ${product.name}`}
+              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              disabled={qty <= 1}
+            >
+              −
+            </button>
+            <span aria-live="polite">{qty}</span>
+            <button
+              type="button"
+              aria-label={`Add one ${product.name}`}
+              onClick={() => setQty((q) => q + 1)}
+            >
+              +
+            </button>
+          </div>
+          <button
+            className="btn btn-primary product-card__cta"
+            onClick={() => {
+              onAdd(qty);
+              setQty(1);
+            }}
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
+            </svg>
+            Add to Cart
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -76,7 +103,7 @@ export function Catalog({
 }: {
   products: Product[];
   category: string;
-  onAddToCart: (p: Product) => void;
+  onAddToCart: (p: Product, qty?: number) => void;
   brand: Brand;
 }) {
   const [query, setQuery] = useState("");
@@ -155,7 +182,7 @@ export function Catalog({
 
         <div className="catalog__grid">
           {filtered.map((p) => (
-            <ProductCard key={p.id} product={p} onAdd={() => onAddToCart(p)} />
+            <ProductCard key={p.id} product={p} onAdd={(qty) => onAddToCart(p, qty)} />
           ))}
           {filtered.length === 0 && (
             <div className="catalog__empty">

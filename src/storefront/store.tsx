@@ -79,7 +79,7 @@ export type Store = {
   setReviews: (next: Updater<Review[]>) => void;
 
   cart: Product[];
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product, qty?: number) => void;
   /** Remove one unit of the product from the cart. */
   decrementCart: (productId: string) => void;
   /** Remove every unit of the product (delete the line). */
@@ -280,8 +280,9 @@ export function StoreProvider({
     w.REVIEWS = reviews;
   });
 
-  const addToCart = useCallback((product: Product) => {
-    setCart((c) => [...c, product]);
+  const addToCart = useCallback((product: Product, qty: number = 1) => {
+    const n = Math.max(1, Math.floor(qty));
+    setCart((c) => [...c, ...Array.from({ length: n }, () => product)]);
   }, []);
 
   const decrementCart = useCallback((productId: string) => {
