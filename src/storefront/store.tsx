@@ -30,7 +30,7 @@ import {
   SEED_REVIEWS,
   SEED_SHIPPING_LOCATIONS,
 } from "./data";
-import { savePaymentMethodsAction, saveProtocolsAction } from "@/actions/storefront-admin";
+import { saveCategoriesAction, savePaymentMethodsAction, saveProtocolsAction } from "@/actions/storefront-admin";
 import type {
   Brand,
   Category,
@@ -148,7 +148,12 @@ export function StoreProvider({
   const NS = tenantKey ? `${NS_BASE}${tenantKey}__` : NS_BASE;
   const [brand, setBrandState] = useState<Brand>(brandSeed);
   const [products, setProductsState] = useState<Product[]>(productsSeed ?? SEED_PRODUCTS);
-  const [categories, setCategoriesState] = useState<Category[]>(SEED_CATEGORIES);
+  // Categories load from the DB server-side (page → branding.config spread into
+  // the brand prop), same as payment methods and protocols, so they're identical
+  // on every device/customer. Seed defaults apply only until the owner saves once.
+  const [categories, setCategoriesState] = useState<Category[]>(
+    brandSeed.categories ?? SEED_CATEGORIES,
+  );
   const [orders, setOrdersState] = useState<Order[]>(SEED_ORDERS);
   // Customer's own placed orders — NOT seeded (a visitor must only see orders
   // they actually placed in this browser, never the sample/admin data).
@@ -186,7 +191,10 @@ export function StoreProvider({
     // the DB's source of truth, loaded server-side and passed in as `productsSeed`
     // (mirroring payment methods). A stale local copy would otherwise mask what
     // the owner saved / shadow another device. Writes persist via actions/products.
-    setCategoriesState(load(NS + "categories", SEED_CATEGORIES));
+    // NOTE: categories are intentionally NOT hydrated from localStorage — they
+    // come from the DB via the server-provided brand prop (branding.config), so
+    // a stale local copy can't override what the owner saved (the cross-device
+    // bug). They persist through saveCategoriesAction instead.
     setOrdersState(load(NS + "orders", SEED_ORDERS));
     setMyOrdersState(load(NS + "myorders", [] as Order[]));
     setShippingState(load(NS + "shipping", SEED_SHIPPING_LOCATIONS));
@@ -255,8 +263,6 @@ export function StoreProvider({
     [],
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- makeSetter closes over the stable per-mount NS
-  const setCategories = useMemo(() => makeSetter<Category[]>("categories", "CATEGORIES", setCategoriesState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
@@ -362,6 +368,30 @@ export function StoreProvider({
         });
     },
     [toast, protocols],
+  );
+
+  // Categories persist to the DB (branding.config), not localStorage, so every
+  // device/customer sees the owner's configured tabs and the product form's
+  // dropdown stays in sync. Mirrors setProtocols: gated on the storefront-admin
+  // session; local state updates optimistically and we only surface failures.
+  const setCategories = useCallback(
+    (next: Updater<Category[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: Category[]) => Category[])(categories)
+          : next;
+      setCategoriesState(value);
+      saveCategoriesAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save categories: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save categories — please sign in again and retry.");
+        });
+    },
+    [toast, categories],
   );
 
   const value: Store = {

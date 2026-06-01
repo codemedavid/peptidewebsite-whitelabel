@@ -10,7 +10,7 @@ import {
   clearStorefrontAdminCookie,
   requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
-import type { PaymentMethod, Protocol } from "@/storefront/types";
+import type { Category, PaymentMethod, Protocol } from "@/storefront/types";
 
 export type ActionResult = { ok: true } | { error: string };
 
@@ -104,6 +104,58 @@ export async function savePaymentMethodsAction(methods: unknown): Promise<Action
   const paymentMethods = normalizeMethods(methods);
   const current = await readConfig(tenantId);
   const config = { ...current, paymentMethods };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Coerce untrusted client input into clean Category rows, and always guarantee
+ * the synthetic "all" tab is present exactly once and first (the storefront's
+ * "All Products" filter). Duplicate ids are dropped, blank labels fall back to
+ * the id so a row can never render empty.
+ */
+function normalizeCategories(input: unknown): Category[] {
+  const rows = Array.isArray(input) ? input : [];
+  const seen = new Set<string>();
+  const out: Category[] = [];
+  for (const c of rows.slice(0, 200)) {
+    const o = (c ?? {}) as Record<string, unknown>;
+    const id = String(o.id ?? "").slice(0, 64).trim();
+    if (!id || id === "all" || seen.has(id)) continue;
+    seen.add(id);
+    const label = String(o.label ?? "").slice(0, 120).trim() || id;
+    out.push({ id, label });
+  }
+  return [{ id: "all", label: "All Products" }, ...out];
+}
+
+/**
+ * Persist the storefront's product categories into the shared `branding.config`
+ * blob (read-modify-write, mirroring saveProtocolsAction so it never clobbers
+ * the rest of the storefront Brand config). The storefront reads categories from
+ * `branding.config` server-side on every render, so the owner's categories show
+ * on every device/customer and feed the product form's dropdown — fixing the bug
+ * where categories lived only in the editing browser's localStorage.
+ */
+export async function saveCategoriesAction(categories: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeCategories(categories);
+  const current = await readConfig(tenantId);
+  const config = { ...current, categories: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

@@ -304,6 +304,14 @@ export type Brand = {
   // browser. Absent until the owner saves once → storefront falls back to seeds.
   protocols?: Protocol[];
 
+  // Storefront product categories (the tabs customers filter by, and the
+  // dropdown the admin's product form offers). Edited in the storefront #admin
+  // and persisted server-side in branding.config (same mechanism as protocols)
+  // so the owner's categories show on every device/customer — not only the
+  // editing browser. Absent until the owner saves once → storefront falls back
+  // to the seed categories.
+  categories?: Category[];
+
   /** Order-number format configured by the super admin (prefix, separator, scheme, digits).
    *  Used by the storefront store to generate order numbers at checkout time. */
   orderNumberFormat?: {
