@@ -2970,14 +2970,22 @@
   transition: border-color .15s;
 }
 .sf-root .admin-cat-row:hover { border-color: color-mix(in srgb, var(--brand-accent) 40%, transparent); }
+.sf-root .admin-cat-row.is-drop-target {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-accent) 30%, transparent);
+}
 .sf-root .admin-cat-row__handle {
   color: var(--brand-text-muted);
   cursor: grab;
   flex-shrink: 0;
 }
-.sf-root .admin-cat-row__id { font-size: 13px; color: var(--brand-text-muted); font-family: ui-monospace, monospace; }
-.sf-root .admin-cat-row__name { flex: 1; }
-.sf-root .admin-cat-row input {
+.sf-root .admin-cat-row__handle:active { cursor: grabbing; }
+.sf-root .admin-cat-row__id { font-size: 13px; color: var(--brand-text-muted); font-family: ui-monospace, monospace; flex-shrink: 0; }
+.sf-root .admin-cat-row__name { flex: 1; min-width: 0; }
+/* Scope to the NAME text input only — a bare `.admin-cat-row input` also matched
+   the row's selection checkbox, giving it width:100% so it ate the whole flex row
+   and collapsed this field to 0px (labels rendered blank, count/id overflowed). */
+.sf-root .admin-cat-row__name input {
   width: 100%;
   font: inherit;
   border: 0;
@@ -2989,13 +2997,42 @@
   font-size: 15px;
   font-weight: 500;
 }
-.sf-root .admin-cat-row input:focus { background: var(--brand-background); box-shadow: 0 0 0 2px var(--brand-accent); }
+.sf-root .admin-cat-row__name input:focus { background: var(--brand-background); box-shadow: 0 0 0 2px var(--brand-accent); }
+/* The row's selection checkbox is a bare input (not wrapped in .admin-check), so
+   style it here to match the design-system checkbox and keep it from shrinking. */
+.sf-root .admin-cat-row > input[type="checkbox"] {
+  width: 18px; height: 18px;
+  appearance: none; -webkit-appearance: none;
+  border: 1.5px solid var(--brand-border);
+  border-radius: 4px;
+  background: var(--brand-surface);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+  transition: all .15s;
+}
+.sf-root .admin-cat-row > input[type="checkbox"]:checked {
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+}
+.sf-root .admin-cat-row > input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px; top: 1px;
+  width: 6px; height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 .sf-root .admin-cat-row__count {
   font-size: 12px;
   color: var(--brand-text-muted);
   padding: 4px 10px;
   background: var(--brand-background);
   border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* =========================================================

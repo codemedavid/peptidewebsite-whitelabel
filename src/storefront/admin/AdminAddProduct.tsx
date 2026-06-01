@@ -153,6 +153,14 @@ export function AdminAddProduct({
   const fileRef = useRef<HTMLInputElement>(null);
   const canSave = !!(name.trim() && description.trim() && category && Number(price) >= 0);
 
+  // Real categories the owner can assign (the synthetic "all" tab is a filter,
+  // not an assignable category).
+  const selectableCats = (categories || []).filter((c) => c.id !== "all");
+  // When editing a product whose category was since deleted, `category` holds an
+  // id that no longer exists in the list. Keep it visible/selectable so touching
+  // the dropdown doesn't silently reassign the product to a different category.
+  const categoryOrphaned = !!category && !selectableCats.some((c) => c.id === category);
+
   // Upload the chosen file to the tenant's ImageKit folder (server action) and
   // store the returned hosted URL. No more base64 in the DB — and if ImageKit
   // isn't configured the action returns a clear message we surface inline.
@@ -299,10 +307,22 @@ export function AdminAddProduct({
               <label className="admin-field__label">Category<span className="req">*</span></label>
               <select className="admin-select" value={category}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)}>
-                {(categories || []).filter((c) => c.id !== "all").map((c) => (
+                {selectableCats.length === 0 && (
+                  <option value="" disabled>No categories yet — add one first</option>
+                )}
+                {categoryOrphaned && (
+                  <option value={category}>(removed) {category}</option>
+                )}
+                {selectableCats.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
+              {selectableCats.length === 0 && (
+                <p className="admin-field__hint">
+                  Create a category in the <strong>Categories</strong> manager before
+                  adding products.
+                </p>
+              )}
             </div>
             <div className="admin-field">
               <label className="admin-field__label">Base Price ({currency})<span className="req">*</span></label>

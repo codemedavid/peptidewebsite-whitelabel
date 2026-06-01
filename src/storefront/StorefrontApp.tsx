@@ -104,6 +104,15 @@ function Shell() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  // If the active category is removed by the owner (live, or between loads),
+  // fall back to "All Products" so the catalog never dead-ends on a now-gone
+  // filter id with no chip highlighted.
+  useEffect(() => {
+    if (category !== "all" && !categories.some((c) => c.id === category)) {
+      setCategory("all");
+    }
+  }, [categories, category]);
+
   const goHome = () => {
     window.location.hash = "";
     setPage("home");

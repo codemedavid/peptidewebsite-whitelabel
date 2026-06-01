@@ -100,7 +100,11 @@ export function StorefrontLivePreview({ brand }: { brand: Brand }) {
                   <Hero brand={brand} onPrimary={goHome} onSecondary={goHome} />
                 )}
                 {brand.showCategories !== false && (
-                  <Categories categories={SEED_CATEGORIES} active={category} onChange={setCategory} />
+                  <Categories
+                    categories={brand.categories ?? SEED_CATEGORIES}
+                    active={category}
+                    onChange={setCategory}
+                  />
                 )}
                 {brand.showCatalog !== false && (
                   <Catalog products={SEED_PRODUCTS} category={category} onAddToCart={() => {}} brand={brand} />

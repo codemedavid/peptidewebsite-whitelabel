@@ -22,6 +22,11 @@ export function AdminCategoriesManager({
   // as an inert blank box).
   const [focusId, setFocusId] = useState<string | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  // Drag-to-reorder state. The order here IS the order of the chips on the public
+  // storefront, so the handle has to actually move rows. dragId holds the row
+  // being dragged; dragOverId is the row currently hovered (for the drop outline).
+  const dragId = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!focusId) return;
@@ -44,9 +49,25 @@ export function AdminCategoriesManager({
     else setSelected(new Set(cats.map((c) => c.id)));
   };
 
+  // How many products would be orphaned (kept their category id but lose their
+  // own chip) if these categories were deleted — surfaced in the confirm so the
+  // owner knows the storefront impact before deleting.
+  const orphanNote = (n: number) =>
+    n > 0
+      ? ` ${n} product${n === 1 ? "" : "s"} will keep their category and show only under “All Products” until reassigned.`
+      : "";
+
   const deleteSelected = () => {
     if (!selected.size) return;
-    if (!confirm(`Delete ${selected.size} categor${selected.size === 1 ? "y" : "ies"}? Products in them will keep their category id.`)) return;
+    const orphans = cats
+      .filter((c) => selected.has(c.id))
+      .reduce((n, c) => n + count(c.id), 0);
+    if (
+      !confirm(
+        `Delete ${selected.size} categor${selected.size === 1 ? "y" : "ies"}?${orphanNote(orphans)}`,
+      )
+    )
+      return;
     commit(cats.filter((c) => !selected.has(c.id)));
     setSelected(new Set());
   };
@@ -64,9 +85,27 @@ export function AdminCategoriesManager({
   };
 
   const addCat = () => {
-    const id = `cat${Date.now()}`;
+    // Suffix a random token so two adds in the same millisecond (or a rapid
+    // double-click) can't collide — a duplicate id would be silently dropped by
+    // the server's normalizeCategories, making the freshly-added row vanish.
+    const id = `cat${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     commit([...cats, { id, label: "New Category" }]);
     setFocusId(id);
+  };
+
+  // Move the dragged row to the dropped-on row's position and persist. The
+  // resulting order is exactly what the public storefront renders its category
+  // chips in, so reordering here re-orders the live site.
+  const reorder = (targetId: string) => {
+    const from = cats.findIndex((c) => c.id === dragId.current);
+    const to = cats.findIndex((c) => c.id === targetId);
+    dragId.current = null;
+    setDragOverId(null);
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...cats];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    commit(next);
   };
 
   // Edit the name locally while the owner types — no DB write per keystroke.
@@ -85,12 +124,7 @@ export function AdminCategoriesManager({
   };
 
   const removeCat = (id: string) => {
-    if (
-      !confirm(
-        "Delete this category? Products in it will keep their category id.",
-      )
-    )
-      return;
+    if (!confirm(`Delete this category?${orphanNote(count(id))}`)) return;
     commit(cats.filter((c) => c.id !== id));
   };
 
@@ -169,19 +203,44 @@ export function AdminCategoriesManager({
 
         <div className="admin-cats-mgr">
           {cats.map((c) => (
-            <div key={c.id} className="admin-cat-row">
+            <div
+              key={c.id}
+              className={`admin-cat-row${dragOverId === c.id ? " is-drop-target" : ""}`}
+              onDragOver={(e) => {
+                if (!dragId.current) return;
+                e.preventDefault();
+                setDragOverId((prev) => (prev === c.id ? prev : c.id));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                reorder(c.id);
+              }}
+            >
               <input
                 type="checkbox"
+                aria-label={`Select ${c.label || c.id}`}
                 checked={selected.has(c.id)}
                 onChange={() => toggleCat(c.id)}
-                style={{ marginRight: 4 }}
               />
-              <span className="admin-cat-row__handle" aria-label="Drag">
+              <span
+                className="admin-cat-row__handle"
+                title="Drag to reorder"
+                aria-label="Drag to reorder"
+                draggable
+                onDragStart={() => {
+                  dragId.current = c.id;
+                }}
+                onDragEnd={() => {
+                  dragId.current = null;
+                  setDragOverId(null);
+                }}
+              >
                 <svg
                   width="16"
                   height="16"
                   viewBox="0 0 24 24"
                   fill="currentColor"
+                  aria-hidden="true"
                 >
                   <circle cx="9" cy="6" r="1.5" />
                   <circle cx="9" cy="12" r="1.5" />
