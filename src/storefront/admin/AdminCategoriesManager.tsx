@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Brand, Category } from "../types";
 import { useStore } from "../store";
 
@@ -17,6 +17,21 @@ export function AdminCategoriesManager({
     categories.filter((c) => c.id !== "all"),
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The just-added category whose name input should grab focus so the owner can
+  // type its name immediately (otherwise the prefilled "New Category" row reads
+  // as an inert blank box).
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+
+  useEffect(() => {
+    if (!focusId) return;
+    const el = inputRefs.current.get(focusId);
+    if (el) {
+      el.focus();
+      el.select();
+    }
+    setFocusId(null);
+  }, [focusId, cats]);
 
   const toggleCat = (id: string) => {
     const next = new Set(selected);
@@ -36,18 +51,38 @@ export function AdminCategoriesManager({
     setSelected(new Set());
   };
 
+  // Persist the full set to the DB (always re-stamping the synthetic "all" tab).
+  // setCategories writes through to branding.config, so this is a server round-
+  // trip — call it only on meaningful commits (add / delete / blur), never on
+  // every keystroke.
+  const persist = (next: Category[]) =>
+    setCategories([{ id: "all", label: "All Products" }, ...next]);
+
   const commit = (next: Category[]) => {
     setCats(next);
-    setCategories([{ id: "all", label: "All Products" }, ...next]);
+    persist(next);
   };
 
   const addCat = () => {
     const id = `cat${Date.now()}`;
     commit([...cats, { id, label: "New Category" }]);
+    setFocusId(id);
   };
 
-  const updateCat = (id: string, patch: Partial<Category>) =>
-    commit(cats.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  // Edit the name locally while the owner types — no DB write per keystroke.
+  const editLabel = (id: string, label: string) =>
+    setCats((prev) => prev.map((c) => (c.id === id ? { ...c, label } : c)));
+
+  // On blur, default a blank name (a category with no label renders as an
+  // unidentifiable blank row, and the server would fall its label back to the
+  // raw id) and persist the whole set once.
+  const commitLabel = (id: string) => {
+    const next = cats.map((c) =>
+      c.id === id && !c.label.trim() ? { ...c, label: "New Category" } : c,
+    );
+    setCats(next);
+    persist(next);
+  };
 
   const removeCat = (id: string) => {
     if (
@@ -158,8 +193,14 @@ export function AdminCategoriesManager({
               </span>
               <div className="admin-cat-row__name">
                 <input
+                  ref={(el) => {
+                    if (el) inputRefs.current.set(c.id, el);
+                    else inputRefs.current.delete(c.id);
+                  }}
                   value={c.label}
-                  onChange={(e) => updateCat(c.id, { label: e.target.value })}
+                  placeholder="Category name"
+                  onChange={(e) => editLabel(c.id, e.target.value)}
+                  onBlur={() => commitLabel(c.id)}
                 />
               </div>
               <span className="admin-cat-row__count">{count(c.id)} products</span>
