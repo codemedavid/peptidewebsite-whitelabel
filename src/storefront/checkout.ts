@@ -53,13 +53,60 @@ export function cartLines(cart: Product[]): CartLine[] {
   return [...byId.values()];
 }
 
-/** Price after an active discount, if any. */
-export function unitPrice(p: Product): number {
+// ── Reseller (wholesale) pricing ──────────────────────────────────────────────
+// Peppies Intl sells most peptides at a wholesale unit price once a customer
+// buys in bulk. The threshold is PER PRODUCT (a single line must reach the
+// minimum on its own — a mixed cart of singles doesn't qualify). The tier is
+// taken from the seller's listed price: prefer the Complete Set price (the
+// configuration the storefront ships), falling back to Vials Only when that's
+// the only tier offered. Products with no `reseller` data (e.g. Lemon Bottle)
+// always stay at retail. This is data-driven, so it's a no-op for any tenant
+// whose products carry no reseller pricing.
+
+/** Bulk wholesale pricing applies once a single line reaches this quantity. */
+export const RESELLER_MIN_QTY = 10;
+
+/**
+ * The wholesale unit price for a product, or null if it offers none. Prefers the
+ * Complete Set price (what the store ships), else Vials Only.
+ */
+export function resellerUnitPrice(p: Product): number | null {
+  const r = p.reseller;
+  if (!r) return null;
+  const price = r.completeSet || r.vialsOnly || 0;
+  return price > 0 ? price : null;
+}
+
+/** The wholesale tier label that applies (for display), or null if none. */
+export function resellerTierLabel(p: Product): "Complete set" | "Vials only" | null {
+  const r = p.reseller;
+  if (!r) return null;
+  if (r.completeSet) return "Complete set";
+  if (r.vialsOnly) return "Vials only";
+  return null;
+}
+
+/** Whether the wholesale price is in effect for a line of `qty` units. */
+export function isResellerQty(p: Product, qty: number): boolean {
+  return qty >= RESELLER_MIN_QTY && resellerUnitPrice(p) != null;
+}
+
+/**
+ * Per-unit price for a line of `qty` units. At RESELLER_MIN_QTY+ the product's
+ * wholesale price applies (bulk pricing takes precedence over a promo discount);
+ * otherwise the active discount price, else the retail price. Defaults to qty 1
+ * so existing single-unit callers keep their retail/discount behavior.
+ */
+export function unitPrice(p: Product, qty = 1): number {
+  if (qty >= RESELLER_MIN_QTY) {
+    const wholesale = resellerUnitPrice(p);
+    if (wholesale != null) return wholesale;
+  }
   return p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
 }
 
 export function cartTotal(lines: CartLine[]): number {
-  return lines.reduce((sum, l) => sum + unitPrice(l.product) * l.qty, 0);
+  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty) * l.qty, 0);
 }
 
 /** The channels that are enabled AND have a destination set. */
@@ -87,8 +134,13 @@ export function buildOrderMessage(
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
     .map((l) => {
-      const line = unitPrice(l.product) * l.qty;
-      return `• ${l.product.name} ×${l.qty} — ${money(line, l.product.currency || currency)}`;
+      const cur = l.product.currency || currency;
+      const up = unitPrice(l.product, l.qty);
+      const line = up * l.qty;
+      const tag = isResellerQty(l.product, l.qty)
+        ? ` (reseller — ${resellerTierLabel(l.product)?.toLowerCase()} @ ${money(up, cur)}/ea)`
+        : "";
+      return `• ${l.product.name} ×${l.qty} — ${money(line, cur)}${tag}`;
     })
     .join("\n");
   const total = money(cartTotal(lines), currency);

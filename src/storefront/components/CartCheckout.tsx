@@ -23,6 +23,10 @@ import {
   channelUrl,
   CHANNEL_LABELS,
   EMPTY_CUSTOMER,
+  isResellerQty,
+  RESELLER_MIN_QTY,
+  resellerTierLabel,
+  resellerUnitPrice,
   unitPrice,
   type CheckoutCustomer,
 } from "../checkout";
@@ -194,7 +198,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       courier: "",
       trackingNumber: "",
       shippingNote: "",
-      items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product) })),
+      items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product, l.qty) })),
       paymentProof: proof || null,
     };
 
@@ -296,14 +300,39 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             <p className="sf-cart__empty">Your cart is empty.</p>
           ) : step === "cart" ? (
             <ul className="sf-cart__lines">
-              {lines.map((l) => (
+              {lines.map((l) => {
+                const cur = l.product.currency || currency;
+                const reseller = isResellerQty(l.product, l.qty);
+                const up = unitPrice(l.product, l.qty);
+                // How many more units of THIS product unlock the wholesale price.
+                const toReseller =
+                  !reseller && resellerUnitPrice(l.product) != null
+                    ? RESELLER_MIN_QTY - l.qty
+                    : 0;
+                return (
                 <li key={l.product.id} className="sf-cart__line">
                   <div className="sf-cart__line-info">
                     <span className="sf-cart__line-name">{l.product.name}</span>
                     <span className="sf-cart__line-price">
-                      {l.product.currency || currency}
-                      {unitPrice(l.product).toLocaleString()}
+                      {reseller && (
+                        <span className="sf-cart__line-retail">
+                          {cur}
+                          {l.product.price.toLocaleString()}
+                        </span>
+                      )}
+                      {cur}
+                      {up.toLocaleString()}
+                      {reseller && (
+                        <span className="sf-cart__line-reseller">
+                          Reseller · {resellerTierLabel(l.product)}
+                        </span>
+                      )}
                     </span>
+                    {toReseller > 0 && (
+                      <span className="sf-cart__line-nudge">
+                        Add {toReseller} more for the reseller price
+                      </span>
+                    )}
                   </div>
                   <div className="sf-cart__qty">
                     <button aria-label={`Remove one ${l.product.name}`} onClick={() => decrementCart(l.product.id)}>−</button>
@@ -314,7 +343,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     Remove
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : step === "details" ? (
             <form className="sf-cart__form" onSubmit={(e) => e.preventDefault()}>

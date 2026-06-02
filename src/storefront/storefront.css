@@ -289,7 +289,16 @@
 }
 .sf-root .sf-cart__line-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sf-root .sf-cart__line-name { font-weight: 600; }
-.sf-root .sf-cart__line-price { color: var(--brand-text-muted); font-size: 13px; }
+.sf-root .sf-cart__line-price { color: var(--brand-text-muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+/* Retail price struck through when the wholesale (reseller) price is in effect. */
+.sf-root .sf-cart__line-retail { text-decoration: line-through; opacity: 0.6; font-size: 12px; }
+.sf-root .sf-cart__line-reseller {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--brand-accent); border: 1px solid var(--brand-accent);
+  border-radius: 999px; padding: 1px 7px; white-space: nowrap;
+}
+/* "Add N more for the reseller price" hint under a sub-threshold line. */
+.sf-root .sf-cart__line-nudge { color: var(--brand-text-muted); font-size: 11px; font-style: italic; }
 .sf-root .sf-cart__qty { display: flex; align-items: center; gap: 8px; }
 .sf-root .sf-cart__qty button {
   width: 28px; height: 28px; border-radius: 8px;
@@ -1054,6 +1063,13 @@
   letter-spacing: 0.04em;
   font-size: 10px;
   opacity: 0.8;
+}
+/* Live confirmation on the card once the chosen qty unlocks the wholesale price. */
+.sf-root .product-card__reseller-active {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-accent);
 }
 .sf-root .product-card__cta { flex: 1; padding: 12px 18px; }
 

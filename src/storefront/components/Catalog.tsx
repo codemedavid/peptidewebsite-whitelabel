@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { RESELLER_MIN_QTY, resellerTierLabel, resellerUnitPrice } from "../checkout";
 import type { Brand, Product } from "../types";
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
   const [qty, setQty] = useState(1);
+  // Wholesale price the cart will charge once this product hits the bulk
+  // threshold; the card reflects it live as the buyer steps the quantity up.
+  const wholesale = resellerUnitPrice(product);
+  const resellerActive = wholesale != null && qty >= RESELLER_MIN_QTY;
   return (
     <article className="product-card card">
       {product.featured && (
@@ -51,6 +56,12 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
                 <span className="product-card__reseller-row">
                   Complete set: {product.currency}
                   {product.reseller.completeSet.toLocaleString()}
+                </span>
+              ) : null}
+              {resellerActive ? (
+                <span className="product-card__reseller-active">
+                  ✓ Reseller price applied · {product.currency}
+                  {wholesale.toLocaleString()}/ea ({resellerTierLabel(product)})
                 </span>
               ) : null}
             </div>
