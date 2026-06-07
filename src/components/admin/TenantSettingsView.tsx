@@ -58,6 +58,8 @@ type Props = {
   initialCheckoutNote: string;
   /** Link-preview / SEO description; blank falls back to a generic vertical line. */
   initialMetaDescription: string;
+  /** Whether checkout requires a proof-of-payment upload. */
+  initialRequireProofOfPayment: boolean;
   /** Storefront-admin password override; blank means the default ("admin"). */
   initialAdminPassword: string;
   lastSaved?: string;
@@ -82,6 +84,7 @@ export function TenantSettingsView({
   initialCheckoutTitle,
   initialCheckoutNote,
   initialMetaDescription,
+  initialRequireProofOfPayment,
   initialAdminPassword,
   lastSaved,
   domains,
@@ -94,6 +97,7 @@ export function TenantSettingsView({
 
   /* ---------- channels + checkout copy ---------- */
   const [channels, setChannels] = useState<ContactChannel[]>(initialChannels);
+  const [requireProof, setRequireProof] = useState(initialRequireProofOfPayment);
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
@@ -109,6 +113,7 @@ export function TenantSettingsView({
     scheme: format.scheme,
     digits: format.digits,
     channels: JSON.stringify(initialChannels),
+    requireProof: initialRequireProofOfPayment,
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
     metaDescription: initialMetaDescription,
@@ -129,7 +134,9 @@ export function TenantSettingsView({
     separator !== baseline.current.separator ||
     scheme !== baseline.current.scheme ||
     digits !== baseline.current.digits;
-  const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
+  const channelsDirty =
+    JSON.stringify(channels) !== baseline.current.channels ||
+    requireProof !== baseline.current.requireProof;
   const copyDirty =
     title !== baseline.current.title ||
     note !== baseline.current.note ||
@@ -181,10 +188,18 @@ export function TenantSettingsView({
       checkoutTitle: title,
       checkoutNote: note,
       metaDescription,
+      requireProofOfPayment: requireProof,
     });
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, channels: JSON.stringify(channels), title, note, metaDescription };
+      baseline.current = {
+        ...baseline.current,
+        channels: JSON.stringify(channels),
+        requireProof,
+        title,
+        note,
+        metaDescription,
+      };
       setSaved((s) => ({ ...s, channels: true, copy: true }));
       return true;
     }
@@ -222,6 +237,7 @@ export function TenantSettingsView({
     setScheme(b.scheme);
     setDigits(b.digits);
     setChannels(JSON.parse(b.channels));
+    setRequireProof(b.requireProof);
     setTitle(b.title);
     setNote(b.note);
     setMetaDescription(b.metaDescription);
@@ -542,6 +558,36 @@ export function TenantSettingsView({
                   );
                 })}
               </div>
+
+              <div className="set-row" style={{ marginTop: 6 }}>
+                <div>
+                  <div className="set-row-label">Require proof of payment</div>
+                  <div className="set-row-help">
+                    When on, customers must upload a payment screenshot to complete checkout.
+                    Turn off to make the proof upload optional.
+                  </div>
+                </div>
+                <div className="set-row-control" style={{ alignItems: "flex-start" }}>
+                  <span
+                    className={"switch" + (requireProof ? " on" : "")}
+                    role="switch"
+                    aria-checked={requireProof}
+                    aria-label="Require proof of payment at checkout"
+                    tabIndex={0}
+                    onClick={() => {
+                      setRequireProof((v) => !v);
+                      setSaved((s) => ({ ...s, channels: false }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setRequireProof((v) => !v);
+                        setSaved((s) => ({ ...s, channels: false }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -559,6 +605,7 @@ export function TenantSettingsView({
                   disabled={!channelsDirty || saving !== null}
                   onClick={() => {
                     setChannels(JSON.parse(baseline.current.channels));
+                    setRequireProof(baseline.current.requireProof);
                     setErrors((e) => ({ ...e, channels: undefined }));
                   }}
                 >

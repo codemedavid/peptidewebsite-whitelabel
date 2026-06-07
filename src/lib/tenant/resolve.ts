@@ -3,11 +3,12 @@ import { prisma } from "@/lib/db/prisma";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
 
-// Subdomain labels that are NOT tenant slugs. `www` is the marketing site (set up
-// a www→apex redirect in Vercel); `admin` is the Super Admin host handled by
-// middleware. Without this guard `www.<root>` would resolve to a phantom tenant
-// with slug "www" and dead-end at /unknown-tenant.
-const RESERVED_SUBDOMAINS = new Set(["www", "admin"]);
+// Subdomain labels that are NOT tenant slugs. `www` is the apex marketing site
+// (www→apex 301 in middleware); `admin` and `app` are the Super Admin hosts
+// (handled by middleware). Without this guard `app.<root>` would resolve to a
+// phantom tenant with slug "app" and dead-end at /unknown-tenant — and a sign-up
+// could never claim these labels (the provisioner blocklists them too).
+const RESERVED_SUBDOMAINS = new Set(["www", "admin", "app"]);
 
 export type ResolvedTenant = { id: string; slug: string; status: string };
 

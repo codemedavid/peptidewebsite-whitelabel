@@ -152,6 +152,11 @@ CREATE POLICY anon_read ON media_assets
 -- NOT covered, on purpose:
 --   plans, features, plan_features  — global catalog, app reads all (no RLS).
 --   platform_users                  — platform operators; privileged path only.
+--   onboarding_submissions          — PLATFORM-LEVEL self-serve sign-ups. Written
+--       by an UNAUTHENTICATED public action (no app.tenant_id GUC set) and read
+--       only by the Super Admin. Do NOT add it to §1: a tenant-isolation policy
+--       would reject the public insert (WITH CHECK, no GUC) AND hide rows from the
+--       operator (reads run outside withTenant) — i.e. it would break onboarding.
 -- If a future tenant-owned table is added, add it to the array in §1 (or give
 -- it a bespoke policy here) AND grant app_user/anon in prisma/roles.sql.
 -- ============================================================================

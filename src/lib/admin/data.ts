@@ -246,6 +246,8 @@ export type TenantContactChannels = {
   checkoutTitle: string;
   checkoutNote: string;
   metaDescription: string;
+  /** Whether checkout requires a proof-of-payment upload (default true). */
+  requireProofOfPayment: boolean;
 };
 
 /** Tenant name + its storefront order-contact channels for the settings editor.
@@ -265,6 +267,8 @@ export async function getTenantContactChannels(
       typeof config.checkoutNote === "string" ? config.checkoutNote : BRAND.checkoutNote ?? "",
     metaDescription:
       typeof config.metaDescription === "string" ? config.metaDescription : "",
+    // Absent → required (historical default); only an explicit false opts out.
+    requireProofOfPayment: config.requireProofOfPayment !== false,
   });
 
   if (isDemoMode()) {

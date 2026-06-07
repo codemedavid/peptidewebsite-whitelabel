@@ -80,8 +80,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // The store collects payment up-front only when it has methods configured;
   // otherwise checkout hands off to a channel straight from the details step.
   const requiresPayment = payMethods.length > 0;
+  // The super admin can turn off the mandatory proof-of-payment upload per
+  // tenant (brand.requireProofOfPayment). Absent → required (historical default).
+  const requiresProof = brand.requireProofOfPayment !== false;
   const selectedMethod = payMethods.find((m) => m.id === methodId);
-  const paymentValid = !requiresPayment || (!!selectedMethod && !!proof);
+  const paymentValid =
+    !requiresPayment || (!!selectedMethod && (!requiresProof || !!proof));
 
   // Reset to the cart step whenever the drawer is (re)opened. A fresh open is a
   // new logical order, so clear the idempotency key and the in-flight lock.
@@ -316,12 +320,18 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     <span className="sf-cart__line-price">
                       {reseller && (
                         <span className="sf-cart__line-retail">
-                          {cur}
-                          {l.product.price.toLocaleString()}
+                          <span className="sf-sr-only">Retail price </span>
+                          <s>
+                            {cur}
+                            {l.product.price.toLocaleString()}
+                          </s>
                         </span>
                       )}
-                      {cur}
-                      {up.toLocaleString()}
+                      <span>
+                        {reseller && <span className="sf-sr-only">reseller price </span>}
+                        {cur}
+                        {up.toLocaleString()}
+                      </span>
                       {reseller && (
                         <span className="sf-cart__line-reseller">
                           Reseller · {resellerTierLabel(l.product)}
@@ -414,11 +424,16 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
               <div className="sf-cart__proof">
                 <span className="sf-cart__proof-label">
-                  Proof of payment<em aria-hidden> *</em>
+                  Proof of payment
+                  {requiresProof ? (
+                    <em aria-hidden> *</em>
+                  ) : (
+                    <span className="sf-cart__proof-optional"> (optional)</span>
+                  )}
                 </span>
                 <div
                   className={`sf-cart__proof-drop ${drag ? "is-dragover" : ""} ${
-                    paymentTouched && !proof ? "is-invalid" : ""
+                    requiresProof && paymentTouched && !proof ? "is-invalid" : ""
                   }`}
                   onClick={() => proofRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setDrag(true); }}

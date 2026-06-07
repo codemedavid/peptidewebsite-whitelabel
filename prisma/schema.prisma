@@ -54,6 +54,9 @@ model Tenant {
   coupons  Coupon[]
   media    MediaAsset[]
 
+  // Self-serve onboarding submissions that provisioned (or will provision) this tenant.
+  onboardingSubmissions OnboardingSubmission[]
+
   @@index([planId])
   @@map("tenants")
 }
@@ -490,4 +493,67 @@ model MediaAsset {
 
   @@index([tenantId])
   @@map("media_assets")
+}
+
+// ──────────────────────────── Self-serve onboarding ────────────────────────────
+// One row per public sign-up from jonina.store/get-started. Captures all 7
+// onboarding steps and the proof of payment, then auto-provisions a Tenant
+// (status "pending_setup") whose id is linked back here. The Super Admin works
+// the submission through setupStatus until the store is published.
+//
+// PLATFORM-LEVEL — deliberately RLS-excluded (see prisma/rls.sql): written by an
+// unauthenticated public action (no tenant GUC) and read only by the operator.
+model OnboardingSubmission {
+  id String @id @default(cuid())
+
+  // Step 1 — business information
+  businessName  String
+  businessType  String  @default("")
+  description   String?
+  contactPerson String?
+  email         String
+  whatsapp      String?
+  facebook      String?
+
+  // Step 2 — branding & design
+  themeStyle       String? // minimal | luxury | ecommerce | dark | custom
+  themeId          String  @default("clinical-white")
+  primaryColor     String?
+  secondaryColor   String?
+  logoUrl          String?
+  bannerUrls       Json    @default("[]")
+  inspirationUrls  Json    @default("[]")
+  inspirationNotes String?
+
+  // Step 3 — products: [{ name, price, description, category, imageUrl }]
+  products Json @default("[]")
+
+  // Step 4 — order destination
+  orderDestination      String? // whatsapp | messenger | telegram | email
+  orderDestinationValue String?
+
+  // Step 5 — payment methods: [{ name, account, number, qrUrl, instructions }]
+  paymentMethods Json @default("[]")
+
+  // Step 6 — package (DB plan key: starter | pro | enterprise)
+  packageKey String @default("starter")
+
+  // Step 7 — checkout
+  paymentProofUrl String?
+  termsAccepted   Boolean @default(false)
+
+  // ── Automation / operator workflow ──
+  slug        String // generated subdomain label
+  tenantId    String? // linked tenant once provisioned
+  tenant      Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  // payment_received | tenant_created | customizing | revision | completed
+  setupStatus String  @default("payment_received")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([setupStatus])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("onboarding_submissions")
 }

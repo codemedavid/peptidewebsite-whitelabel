@@ -46,17 +46,27 @@ export async function middleware(req: NextRequest) {
   // Platform admin app physically lives under /admin (it can't own the root
   // path "/" — the tenant storefront does, on tenant subdomains). We serve it at
   // the BARE root of the admin host by rewriting "/x" → "/admin/x" internally,
-  // so the browser URL stays clean (localhost:3100/tenants, not /admin/tenants).
-  //   - admin.<root>          → the production admin host
+  // so the browser URL stays clean (app.jonina.store/tenants, not /admin/tenants).
+  //   - app.<root>            → the production admin host (e.g. app.jonina.store)
+  //   - admin.<root>          → legacy admin host (kept for back-compat)
   //   - localhost             → the dev convenience host (no tenant subdomain)
   //   - NEXT_PUBLIC_ADMIN_HOST → explicit override for a bare deployment host
-  //   - *.vercel.app          → Vercel URLs can't host an `admin.` subdomain, so
+  //   - *.vercel.app          → Vercel URLs can't host an `app.` subdomain, so
   //                             serve the admin at their root out of the box
   const isAdmin =
+    host === `app.${ROOT}` ||
     host === `admin.${ROOT}` ||
     host === "localhost" ||
     (ADMIN_HOST !== undefined && host === ADMIN_HOST) ||
     host.endsWith(".vercel.app");
+
+  // The marketing/sales site lives at the BARE apex (jonina.store). The apex
+  // can't own "/" directly (route groups can't disambiguate it from the tenant
+  // storefront's "/"), so the site physically lives under /marketing and we
+  // rewrite the apex's bare paths into it — mirroring the /admin trick above.
+  // Gated on `!isAdmin` so `localhost` / `app.<root>` / `*.vercel.app` (all admin
+  // hosts) are never mistaken for the apex.
+  const isApex = !isAdmin && host === ROOT;
   const rebuild = () => {
     if (isAdmin) {
       const path = url.pathname;
@@ -69,6 +79,19 @@ export async function middleware(req: NextRequest) {
         request: { headers: requestHeaders },
       });
     }
+    if (isApex) {
+      const path = url.pathname;
+      // API routes (e.g. /api/onboarding/upload) and already-/marketing deep
+      // links pass through untouched; everything else maps "/x" → "/marketing/x"
+      // so "/" → "/marketing" and "/get-started" → "/marketing/get-started".
+      if (path === "/marketing" || path.startsWith("/marketing/") || path.startsWith("/api")) {
+        return NextResponse.next({ request: { headers: requestHeaders } });
+      }
+      return NextResponse.rewrite(
+        new URL(`/marketing${path === "/" ? "" : path}${url.search}`, req.url),
+        { request: { headers: requestHeaders } },
+      );
+    }
     // Tenant hosts: /admin is the password-only tenant login. The /admin URL
     // slot is already taken by the platform Super Admin under (platform), so we
     // rewrite to (tenant)/tenant-admin internally while keeping the public URL.
@@ -77,8 +100,8 @@ export async function middleware(req: NextRequest) {
         request: { headers: requestHeaders },
       });
     }
-    // Marketing site (apex / www) and tenant hosts pass through; the tenant
-    // (storefront / dashboard) routes live under the (tenant) group at root.
+    // Tenant hosts pass through; the tenant (storefront / dashboard) routes live
+    // under the (tenant) group at root.
     return NextResponse.next({ request: { headers: requestHeaders } });
   };
 

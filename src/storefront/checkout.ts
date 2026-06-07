@@ -86,23 +86,37 @@ export function resellerTierLabel(p: Product): "Complete set" | "Vials only" | n
   return null;
 }
 
-/** Whether the wholesale price is in effect for a line of `qty` units. */
+/** The non-bulk effective unit price: an active promo discount, else retail. */
+function basePrice(p: Product): number {
+  return p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
+}
+
+/**
+ * Whether the wholesale price is actually in effect for a line of `qty` units —
+ * i.e. the quantity qualifies AND the wholesale price is genuinely cheaper than
+ * the current (retail/discount) price. Drives the "Reseller" badge + struck
+ * price, so they only ever appear on a real saving.
+ */
 export function isResellerQty(p: Product, qty: number): boolean {
-  return qty >= RESELLER_MIN_QTY && resellerUnitPrice(p) != null;
+  if (qty < RESELLER_MIN_QTY) return false;
+  const wholesale = resellerUnitPrice(p);
+  return wholesale != null && wholesale < basePrice(p);
 }
 
 /**
  * Per-unit price for a line of `qty` units. At RESELLER_MIN_QTY+ the product's
- * wholesale price applies (bulk pricing takes precedence over a promo discount);
- * otherwise the active discount price, else the retail price. Defaults to qty 1
- * so existing single-unit callers keep their retail/discount behavior.
+ * wholesale price applies — but ONLY when it's cheaper than the current price, so
+ * buying in bulk can never raise the per-unit cost (a reseller leg mis-entered
+ * above retail/discount is ignored). Otherwise the active discount price, else
+ * retail. Defaults to qty 1 so existing single-unit callers are unchanged.
  */
 export function unitPrice(p: Product, qty = 1): number {
+  const base = basePrice(p);
   if (qty >= RESELLER_MIN_QTY) {
     const wholesale = resellerUnitPrice(p);
-    if (wholesale != null) return wholesale;
+    if (wholesale != null && wholesale < base) return wholesale;
   }
-  return p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
+  return base;
 }
 
 export function cartTotal(lines: CartLine[]): number {

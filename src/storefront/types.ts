@@ -298,6 +298,12 @@ export type Brand = {
   // until the store owner saves at least once → storefront falls back to seeds.
   paymentMethods?: PaymentMethod[];
 
+  // Whether the customer must upload a proof-of-payment screenshot to complete
+  // checkout when payment methods are configured. Toggled per-tenant by the
+  // super admin and persisted in branding.config. Absent → treated as required
+  // (the historical default); set to false to make the proof upload optional.
+  requireProofOfPayment?: boolean;
+
   // Protocol guide entries. Edited in the storefront #admin and persisted
   // server-side in branding.config (same mechanism as paymentMethods) so the
   // owner's edits show on every device/customer rather than only the editing

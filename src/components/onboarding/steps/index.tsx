@@ -1,0 +1,442 @@
+"use client";
+
+import type { ReactNode } from "react";
+import {
+  Minus,
+  Gem,
+  ShoppingBag,
+  Moon,
+  Wand2,
+  MessageCircle,
+  MessagesSquare,
+  Send,
+  Mail,
+  Plus,
+  Trash2,
+  Check,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  type Draft,
+  emptyProduct,
+  THEME_STYLE_OPTIONS,
+  ORDER_DESTINATION_OPTIONS,
+  PAYMENT_PRESETS,
+} from "../useOnboardingForm";
+import { SingleUpload, MultiUpload } from "../uploads";
+import { PACKAGES, PACKAGE_PAYMENT, packageLabel } from "@/marketing/config";
+
+export type StepProps = {
+  draft: Draft;
+  update: (patch: Partial<Draft>) => void;
+  errors: Record<string, string>;
+};
+
+const ICONS: Record<string, LucideIcon> = {
+  Minus,
+  Gem,
+  ShoppingBag,
+  Moon,
+  Wand2,
+  MessageCircle,
+  MessagesSquare,
+  Send,
+  Mail,
+};
+
+/* ---------- shared field helpers ---------- */
+function Field({
+  label,
+  htmlFor,
+  required,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  required?: boolean;
+  hint?: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mk-field">
+      <label className="mk-label" htmlFor={htmlFor}>
+        {label} {required && <span className="req">*</span>}
+      </label>
+      {children}
+      {hint && !error && <p className="mk-hint">{hint}</p>}
+      {error && <p className="mk-error">{error}</p>}
+    </div>
+  );
+}
+
+function Text({
+  id,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  error,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  error?: boolean;
+}) {
+  return (
+    <input
+      id={id}
+      type={type}
+      className={`mk-input${error ? " mk-input-error" : ""}`}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+/* ============================================================ Step 1 */
+export function BusinessStep({ draft, update, errors }: StepProps) {
+  return (
+    <div>
+      <Field label="Business name" htmlFor="biz-name" required error={errors.businessName}>
+        <Text id="biz-name" value={draft.businessName} error={!!errors.businessName}
+          placeholder="e.g. Glow Manila" onChange={(v) => update({ businessName: v })} />
+      </Field>
+      <div className="mk-field-row">
+        <Field label="Business type" htmlFor="biz-type" hint="e.g. Skincare, Peptides, Reseller">
+          <Text id="biz-type" value={draft.businessType} placeholder="Skincare & beauty"
+            onChange={(v) => update({ businessType: v })} />
+        </Field>
+        <Field label="Contact person" htmlFor="biz-contact">
+          <Text id="biz-contact" value={draft.contactPerson} placeholder="Your name"
+            onChange={(v) => update({ contactPerson: v })} />
+        </Field>
+      </div>
+      <Field label="Business description" htmlFor="biz-desc" hint="One or two lines we can use on your homepage.">
+        <textarea id="biz-desc" className="mk-textarea" value={draft.description}
+          placeholder="What you sell and what makes you special."
+          onChange={(e) => update({ description: e.target.value })} />
+      </Field>
+      <div className="mk-field-row">
+        <Field label="Email address" htmlFor="biz-email" required error={errors.email}>
+          <Text id="biz-email" type="email" value={draft.email} error={!!errors.email}
+            placeholder="you@business.com" onChange={(v) => update({ email: v })} />
+        </Field>
+        <Field label="WhatsApp number" htmlFor="biz-wa" hint="International format, digits only.">
+          <Text id="biz-wa" value={draft.whatsapp} placeholder="639171234567"
+            onChange={(v) => update({ whatsapp: v })} />
+        </Field>
+      </div>
+      <Field label="Facebook / Messenger link" htmlFor="biz-fb">
+        <Text id="biz-fb" value={draft.facebook} placeholder="https://facebook.com/yourpage"
+          onChange={(v) => update({ facebook: v })} />
+      </Field>
+    </div>
+  );
+}
+
+/* ============================================================ Step 2 */
+export function BrandingStep({ draft, update }: StepProps) {
+  return (
+    <div>
+      <Field label="Preferred theme style">
+        <div className="mk-choices">
+          {THEME_STYLE_OPTIONS.map((o) => {
+            const Icon = ICONS[o.icon] ?? Wand2;
+            const selected = draft.themeStyle === o.id;
+            return (
+              <button key={o.id} type="button" className="mk-choice" data-selected={selected}
+                onClick={() => update({ themeStyle: o.id, themeId: o.themeId })}>
+                <span className="mk-choice-ic"><Icon size={20} /></span>
+                <span>
+                  <b>{o.label}</b>
+                  <small>{o.desc}</small>
+                </span>
+                {selected && <Check className="mk-choice-check" size={20} />}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <div className="mk-field-row">
+        <Field label="Primary color">
+          <div className="mk-swatch-row">
+            <input type="color" className="mk-swatch" aria-label="Primary color"
+              value={draft.primaryColor} onChange={(e) => update({ primaryColor: e.target.value })} />
+            <input className="mk-input mk-color-text" value={draft.primaryColor}
+              onChange={(e) => update({ primaryColor: e.target.value })} />
+          </div>
+        </Field>
+        <Field label="Secondary color">
+          <div className="mk-swatch-row">
+            <input type="color" className="mk-swatch" aria-label="Secondary color"
+              value={draft.secondaryColor} onChange={(e) => update({ secondaryColor: e.target.value })} />
+            <input className="mk-input mk-color-text" value={draft.secondaryColor}
+              onChange={(e) => update({ secondaryColor: e.target.value })} />
+          </div>
+        </Field>
+      </div>
+
+      <Field label="Logo" hint="Square works best. Optional — we can design one with you.">
+        <SingleUpload value={draft.logoUrl} kind="logo" label="Upload logo"
+          onChange={(url) => update({ logoUrl: url })} />
+      </Field>
+      <Field label="Banner images" hint="Hero / promo images for your homepage.">
+        <MultiUpload value={draft.bannerUrls} kind="banner" max={4}
+          onChange={(urls) => update({ bannerUrls: urls })} />
+      </Field>
+      <Field label="Inspiration images" hint="Screenshots of websites or styles you love.">
+        <MultiUpload value={draft.inspirationUrls} kind="inspiration" max={6}
+          onChange={(urls) => update({ inspirationUrls: urls })} />
+      </Field>
+      <Field label="Website inspirations or pegs" htmlFor="insp-notes">
+        <textarea id="insp-notes" className="mk-textarea" value={draft.inspirationNotes}
+          placeholder="Paste links or describe the look and feel you want."
+          onChange={(e) => update({ inspirationNotes: e.target.value })} />
+      </Field>
+    </div>
+  );
+}
+
+/* ============================================================ Step 3 */
+export function ProductsStep({ draft, update, errors }: StepProps) {
+  const set = (i: number, patch: Partial<Draft["products"][number]>) =>
+    update({ products: draft.products.map((p, j) => (j === i ? { ...p, ...patch } : p)) });
+  const remove = (i: number) => update({ products: draft.products.filter((_, j) => j !== i) });
+
+  return (
+    <div>
+      {draft.products.map((p, i) => (
+        <div className="mk-repeat" key={i}>
+          <div className="mk-repeat-head">
+            <b>Product {i + 1}</b>
+            {draft.products.length > 1 && (
+              <button type="button" className="mk-icon-btn" onClick={() => remove(i)}>
+                <Trash2 size={15} /> Remove
+              </button>
+            )}
+          </div>
+          <div className="mk-field-row">
+            <Field label="Product name" htmlFor={`p-name-${i}`}>
+              <Text id={`p-name-${i}`} value={p.name} placeholder="e.g. Vitamin C Serum"
+                onChange={(v) => set(i, { name: v })} />
+            </Field>
+            <Field label="Price (₱)" htmlFor={`p-price-${i}`} error={errors[`product-${i}`]}>
+              <input id={`p-price-${i}`} type="number" min={0} step="0.01"
+                className={`mk-input${errors[`product-${i}`] ? " mk-input-error" : ""}`}
+                value={p.price} placeholder="0.00" onChange={(e) => set(i, { price: e.target.value })} />
+            </Field>
+          </div>
+          <div className="mk-field-row">
+            <Field label="Category" htmlFor={`p-cat-${i}`}>
+              <Text id={`p-cat-${i}`} value={p.category} placeholder="e.g. Skincare"
+                onChange={(v) => set(i, { category: v })} />
+            </Field>
+            <Field label="Product image">
+              <SingleUpload value={p.imageUrl} kind="product" label="Upload photo"
+                onChange={(url) => set(i, { imageUrl: url })} />
+            </Field>
+          </div>
+          <Field label="Description" htmlFor={`p-desc-${i}`}>
+            <textarea id={`p-desc-${i}`} className="mk-textarea" value={p.description}
+              placeholder="Short product description." onChange={(e) => set(i, { description: e.target.value })} />
+          </Field>
+        </div>
+      ))}
+      <button type="button" className="mk-btn mk-btn-soft"
+        onClick={() => update({ products: [...draft.products, emptyProduct()] })}>
+        <Plus size={16} /> Add Another Product
+      </button>
+      <p className="mk-hint" style={{ marginTop: 12 }}>
+        No products yet? You can skip this and add them later from your dashboard.
+      </p>
+    </div>
+  );
+}
+
+/* ============================================================ Step 4 */
+export function OrdersStep({ draft, update, errors }: StepProps) {
+  const active = ORDER_DESTINATION_OPTIONS.find((o) => o.id === draft.orderDestination)!;
+  const waPreview =
+    draft.orderDestination === "whatsapp" && draft.orderDestinationValue.replace(/\D/g, "");
+  return (
+    <div>
+      <Field label="Where should customer orders go?">
+        <div className="mk-choices">
+          {ORDER_DESTINATION_OPTIONS.map((o) => {
+            const Icon = ICONS[o.icon] ?? MessageCircle;
+            const selected = draft.orderDestination === o.id;
+            return (
+              <button key={o.id} type="button" className="mk-choice" data-selected={selected}
+                onClick={() => update({ orderDestination: o.id })}>
+                <span className="mk-choice-ic"><Icon size={20} /></span>
+                <span>
+                  <b>{o.label}</b>
+                  <small>{o.desc}</small>
+                </span>
+                {selected && <Check className="mk-choice-check" size={20} />}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+      <Field label={`${active.label} ${active.id === "email" ? "address" : "destination"}`}
+        htmlFor="order-dest" required hint={active.hint} error={errors.orderDestinationValue}>
+        <Text id="order-dest" value={draft.orderDestinationValue} error={!!errors.orderDestinationValue}
+          placeholder={active.placeholder} onChange={(v) => update({ orderDestinationValue: v })} />
+      </Field>
+      {waPreview && (
+        <p className="mk-hint">
+          Your WhatsApp order link: <code>https://wa.me/{waPreview}</code>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================ Step 5 */
+export function PaymentsStep({ draft, update }: StepProps) {
+  const byName = new Map(draft.paymentMethods.map((m) => [m.name, m]));
+  const toggle = (name: string) => {
+    if (byName.has(name)) update({ paymentMethods: draft.paymentMethods.filter((m) => m.name !== name) });
+    else update({ paymentMethods: [...draft.paymentMethods, { name, account: "", number: "", qrUrl: "", instructions: "" }] });
+  };
+  const patch = (name: string, p: Partial<Draft["paymentMethods"][number]>) =>
+    update({ paymentMethods: draft.paymentMethods.map((m) => (m.name === name ? { ...m, ...p } : m)) });
+
+  return (
+    <div>
+      <p className="mk-step-sub" style={{ marginTop: -10 }}>
+        Pick the methods your customers can pay with. Add account details and a QR code for each.
+      </p>
+      <div className="mk-choices">
+        {PAYMENT_PRESETS.map((name) => {
+          const on = byName.has(name);
+          const m = byName.get(name);
+          return (
+            <div key={name} className="mk-choice" data-selected={on} style={{ display: "block", cursor: "default" }}>
+              <label className="mk-check" style={{ cursor: "pointer" }}>
+                <input type="checkbox" checked={on} onChange={() => toggle(name)} />
+                <b style={{ color: "var(--ink-900)" }}>{name}</b>
+              </label>
+              {on && m && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="mk-field-row">
+                    <Field label="Account name" htmlFor={`pm-acc-${name}`}>
+                      <Text id={`pm-acc-${name}`} value={m.account} placeholder="Account holder"
+                        onChange={(v) => patch(name, { account: v })} />
+                    </Field>
+                    <Field label="Account number" htmlFor={`pm-num-${name}`}>
+                      <Text id={`pm-num-${name}`} value={m.number} placeholder="0917 000 0000"
+                        onChange={(v) => patch(name, { number: v })} />
+                    </Field>
+                  </div>
+                  <Field label="Payment instructions" htmlFor={`pm-ins-${name}`}>
+                    <textarea id={`pm-ins-${name}`} className="mk-textarea" value={m.instructions}
+                      placeholder="e.g. Send payment and screenshot the receipt."
+                      onChange={(e) => patch(name, { instructions: e.target.value })} />
+                  </Field>
+                  <Field label="QR code" hint="Optional — upload your payment QR.">
+                    <SingleUpload value={m.qrUrl} kind="payment-qr" label="Upload QR"
+                      onChange={(url) => patch(name, { qrUrl: url })} />
+                  </Field>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ Step 6 */
+export function PackageStep({ draft, update }: StepProps) {
+  return (
+    <div className="mk-choices">
+      {PACKAGES.map((p) => {
+        const selected = draft.packageKey === p.key;
+        return (
+          <button key={p.key} type="button" className="mk-choice" data-selected={selected}
+            style={{ alignItems: "flex-start" }} onClick={() => update({ packageKey: p.key })}>
+            <span style={{ flex: 1 }}>
+              <b style={{ fontSize: 16 }}>
+                {p.name} {p.tag && <span className="mk-chip" style={{ marginLeft: 8, padding: "3px 10px", fontSize: 11 }}>{p.tag}</span>}
+              </b>
+              <small style={{ display: "block", margin: "4px 0 8px" }}>{p.blurb}</small>
+              <span style={{ fontFamily: "var(--font-head)", fontSize: 22, color: "var(--rose-700)", fontWeight: 700 }}>
+                {p.priceLabel}
+              </span>
+            </span>
+            {selected && <Check className="mk-choice-check" size={22} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ============================================================ Step 7 */
+export function CheckoutStep({ draft, update, errors }: StepProps) {
+  const namedProducts = draft.products.filter((p) => p.name.trim()).length;
+  return (
+    <div>
+      <div className="mk-paybox">
+        <h4>Pay for your {packageLabel(draft.packageKey)} package</h4>
+        <p className="mk-hint" style={{ marginTop: 2 }}>{PACKAGE_PAYMENT.instructions}</p>
+        <div style={{ marginTop: 12 }}>
+          {PACKAGE_PAYMENT.methods.map((m) => (
+            <div className="mk-payrow" key={m.method}>
+              <span>
+                <b>{m.method}</b>
+                {m.note && <small style={{ display: "block", color: "var(--ink-500)" }}>{m.note}</small>}
+              </span>
+              <span style={{ textAlign: "right" }}>
+                {m.account}
+                <br />
+                <b>{m.number}</b>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Field label="Proof of payment" required error={errors.paymentProofUrl}
+        hint="Upload a screenshot of your payment receipt.">
+        <SingleUpload value={draft.paymentProofUrl} kind="proof" label="Upload proof of payment"
+          aspect="3 / 4" onChange={(url) => update({ paymentProofUrl: url })} />
+      </Field>
+
+      <div className="mk-card" style={{ background: "var(--rose-50)", marginBottom: 18 }}>
+        <h3 className="mk-h3" style={{ fontSize: "1.1rem", marginBottom: 12 }}>Your store at a glance</h3>
+        <div className="mk-review-grid">
+          <div className="mk-review-item"><span>Business</span><b>{draft.businessName || "—"}</b></div>
+          <div className="mk-review-item"><span>Package</span><b>{packageLabel(draft.packageKey)}</b></div>
+          <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
+          <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>
+          <div className="mk-review-item"><span>Payment methods</span><b>{draft.paymentMethods.length || "—"}</b></div>
+        </div>
+      </div>
+
+      <label className="mk-check" style={{ marginTop: 4 }}>
+        <input type="checkbox" checked={draft.termsAccepted}
+          onChange={(e) => update({ termsAccepted: e.target.checked })} />
+        <span>
+          I understand the timeline, revisions, and onboarding process, and I agree to the terms
+          and conditions.
+        </span>
+      </label>
+      {errors.termsAccepted && <p className="mk-error">{errors.termsAccepted}</p>}
+
+      {/* Honeypot — hidden from real users; bots fill it and get rejected. */}
+      <input type="text" tabIndex={-1} autoComplete="off" className="mk-sr" aria-hidden="true"
+        value={draft.website} onChange={(e) => update({ website: e.target.value })} />
+    </div>
+  );
+}

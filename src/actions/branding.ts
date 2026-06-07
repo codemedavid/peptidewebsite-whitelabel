@@ -201,6 +201,8 @@ export type ContactChannelsInput = {
   checkoutTitle: string;
   checkoutNote: string;
   metaDescription: string;
+  /** Whether checkout requires a proof-of-payment upload (super-admin toggle). */
+  requireProofOfPayment: boolean;
 };
 
 export type SaveResult = { ok: true } | { error: string };
@@ -221,13 +223,20 @@ export async function saveContactChannelsAction(
   const checkoutTitle = (input.checkoutTitle ?? "").trim();
   const checkoutNote = (input.checkoutNote ?? "").trim();
   const metaDescription = (input.metaDescription ?? "").trim().slice(0, META_DESCRIPTION_MAX);
+  const requireProofOfPayment = input.requireProofOfPayment !== false;
 
   // A channel marked enabled but with no destination can't be used — reject so
   // the storefront never shows a dead button.
   const broken = contactChannels.find((c) => c.enabled && !c.destination);
   if (broken) return { error: `Add a destination for ${broken.type}, or turn it off.` };
 
-  const contactFields = { contactChannels, checkoutTitle, checkoutNote, metaDescription };
+  const contactFields = {
+    contactChannels,
+    checkoutTitle,
+    checkoutNote,
+    metaDescription,
+    requireProofOfPayment,
+  };
 
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;

@@ -293,6 +293,53 @@ export function nextDemoOrderNumber(slug: string): string {
   return formatOrderNumber(format, Math.floor(Math.random() * 10 ** format.digits));
 }
 
+// ── Onboarding submissions (demo persistence) ──
+// File-backed analogue of the OnboardingSubmission table, so the public sign-up
+// flow + the admin onboarding dashboard work without a DB. Keyed by submission id.
+const ONBOARDING_FILE = path.join(DATA_DIR, "onboarding.json");
+
+export type DemoOnboardingSubmission = {
+  id: string;
+  slug: string;
+  tenantId: string | null;
+  setupStatus: string;
+  createdAt: string;
+  data: Record<string, unknown>; // the full onboarding payload
+};
+
+function readOnboarding(): DemoOnboardingSubmission[] {
+  try {
+    return JSON.parse(fs.readFileSync(ONBOARDING_FILE, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function writeOnboarding(all: DemoOnboardingSubmission[]): void {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(ONBOARDING_FILE, JSON.stringify(all, null, 2));
+}
+
+/** All demo submissions, newest first. */
+export function listDemoOnboarding(): DemoOnboardingSubmission[] {
+  return readOnboarding().slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function getDemoOnboarding(id: string): DemoOnboardingSubmission | null {
+  return readOnboarding().find((s) => s.id === id) ?? null;
+}
+
+export function addDemoOnboarding(sub: DemoOnboardingSubmission): void {
+  writeOnboarding([sub, ...readOnboarding().filter((s) => s.id !== sub.id)]);
+}
+
+export function updateDemoOnboarding(
+  id: string,
+  patch: Partial<Pick<DemoOnboardingSubmission, "setupStatus" | "tenantId">>,
+): void {
+  writeOnboarding(readOnboarding().map((s) => (s.id === id ? { ...s, ...patch } : s)));
+}
+
 function readCreated(): DemoTenant[] {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));

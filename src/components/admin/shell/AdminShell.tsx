@@ -12,6 +12,7 @@ type NavItem = { id: string; label: string; href: string; icon: string; group: s
 const NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/", icon: "Home", group: "Platform" },
   { id: "tenants", label: "Tenants", href: "/tenants", icon: "Buildings", group: "Platform" },
+  { id: "onboarding", label: "Onboarding", href: "/onboarding", icon: "Sparkles", group: "Platform" },
   { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "Platform" },
   { id: "plans", label: "Plans & Billing", href: "/plans", icon: "Card", group: "Platform" },
   { id: "analytics", label: "Analytics", href: "/analytics", icon: "Chart", group: "Insights" },
@@ -31,6 +32,7 @@ export function useAdminUI(): AdminUI {
 function activeId(pathname: string): string {
   if (pathname === "/") return "dashboard";
   if (pathname.startsWith("/tenants")) return "tenants";
+  if (pathname.startsWith("/onboarding")) return "onboarding";
   const match = NAV.find((n) => n.href !== "/" && pathname.startsWith(n.href));
   return match?.id ?? "dashboard";
 }
@@ -98,6 +100,8 @@ export function AdminShell({
   if (pathname.startsWith("/tenants/") && pathname !== "/tenants") {
     const slug = pathname.split("/")[2];
     crumbs.push("Tenants", tenantNameBySlug?.[slug] ?? slug);
+  } else if (pathname.startsWith("/onboarding/") && pathname !== "/onboarding") {
+    crumbs.push("Onboarding", "Detail");
   } else if (id === "dashboard") {
     crumbs.push("Dashboard");
   } else {

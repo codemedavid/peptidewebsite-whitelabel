@@ -34,7 +34,12 @@ const tirz30 = product({ id: "t30", name: "Tirzepatide 30 mg", price: 2450, rese
 const nad = product({ id: "nad", name: "NAD+ 500 mg", price: 1700, reseller: { vialsOnly: 1300 } });
 const ghk = product({ id: "ghk", name: "GHK-Cu 100 mg", price: 1500, reseller: { vialsOnly: 1150 } });
 const lemon = product({ id: "lemon", name: "Lemon Bottle 10 ml", price: 850 }); // excluded — no reseller
+// Promo cheaper than the reseller leg: bulk must NOT raise the price.
 const promo = product({ id: "promo", name: "Promo item", price: 1700, discountEnabled: true, discountPrice: 999, reseller: { vialsOnly: 1300 } });
+// Promo dearer than the reseller leg: bulk should win (and is a real saving).
+const promoHi = product({ id: "promoHi", name: "Promo dearer", price: 1700, discountEnabled: true, discountPrice: 1500, reseller: { vialsOnly: 1300 } });
+// Reseller leg mis-entered ABOVE retail (the Lemon-Bottle class of error): ignore it.
+const badRes = product({ id: "bad", name: "Bad reseller", price: 850, reseller: { vialsOnly: 8200 } });
 
 console.log("── unit price: threshold is per-product, kicks in at 10 ──");
 eq("Tirz15 qty 1", unitPrice(tirz15, 1), 1800);
@@ -46,9 +51,15 @@ eq("GHK qty 10 → Vials Only", unitPrice(ghk, 10), 1150);
 eq("Lemon qty 10 → retail (excluded)", unitPrice(lemon, 10), 850);
 eq("default qty (no arg) → retail", unitPrice(tirz15), 1800);
 
-console.log("\n── discount vs reseller precedence ──");
+console.log("\n── bulk pricing only ever LOWERS the price ──");
 eq("Promo qty 1 → discount", unitPrice(promo, 1), 999);
-eq("Promo qty 10 → reseller wins", unitPrice(promo, 10), 1300);
+eq("Promo qty 10 → keep cheaper discount (not 1300)", unitPrice(promo, 10), 999);
+eq("Promo qty 10 → reseller NOT active (no fake saving)", isResellerQty(promo, 10), false);
+eq("PromoHi qty 9 → discount", unitPrice(promoHi, 9), 1500);
+eq("PromoHi qty 10 → reseller wins (cheaper)", unitPrice(promoHi, 10), 1300);
+eq("PromoHi qty 10 → reseller active", isResellerQty(promoHi, 10), true);
+eq("Bad reseller qty 10 → stays retail (8200 ignored)", unitPrice(badRes, 10), 850);
+eq("Bad reseller qty 10 → NOT active", isResellerQty(badRes, 10), false);
 
 console.log("\n── tier labels ──");
 eq("Tirz tier", resellerTierLabel(tirz15), "Complete set");

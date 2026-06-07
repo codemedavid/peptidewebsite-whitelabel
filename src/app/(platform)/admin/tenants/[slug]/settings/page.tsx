@@ -37,6 +37,7 @@ export default async function TenantSettingsPage({
       initialCheckoutTitle={contact.checkoutTitle}
       initialCheckoutNote={contact.checkoutNote}
       initialMetaDescription={contact.metaDescription}
+      initialRequireProofOfPayment={contact.requireProofOfPayment}
       initialAdminPassword={adminPassword ?? ""}
       domains={<DomainManager slug={slug} initialDomains={domains} />}
     />

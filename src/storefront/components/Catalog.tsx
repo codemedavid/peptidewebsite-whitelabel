@@ -10,6 +10,10 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
   // threshold; the card reflects it live as the buyer steps the quantity up.
   const wholesale = resellerUnitPrice(product);
   const resellerActive = wholesale != null && qty >= RESELLER_MIN_QTY;
+  // Which tier the online cart actually applies (Complete Set when offered, else
+  // Vials Only). The other tier, if listed, is "by request" — arranged in chat —
+  // so the card never implies a price the storefront can't charge.
+  const appliedTier = resellerTierLabel(product);
   return (
     <article className="product-card card">
       {product.featured && (
@@ -50,20 +54,25 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
                 <span className="product-card__reseller-row">
                   Vials only: {product.currency}
                   {product.reseller.vialsOnly.toLocaleString()}
+                  <span className={`product-card__reseller-tag${appliedTier === "Vials only" ? " is-applied" : ""}`}>
+                    {appliedTier === "Vials only" ? "at 10+ online" : "by request"}
+                  </span>
                 </span>
               ) : null}
               {product.reseller.completeSet ? (
                 <span className="product-card__reseller-row">
                   Complete set: {product.currency}
                   {product.reseller.completeSet.toLocaleString()}
+                  <span className="product-card__reseller-tag is-applied">at 10+ online</span>
                 </span>
               ) : null}
-              {resellerActive ? (
-                <span className="product-card__reseller-active">
-                  ✓ Reseller price applied · {product.currency}
-                  {wholesale.toLocaleString()}/ea ({resellerTierLabel(product)})
-                </span>
-              ) : null}
+              {/* Always present so its aria-live region announces the unlock the
+                  moment qty crosses the threshold; empty (and hidden) until then. */}
+              <span className="product-card__reseller-active" aria-live="polite">
+                {resellerActive
+                  ? `✓ Reseller price applied · ${product.currency}${wholesale.toLocaleString()}/ea (${appliedTier})`
+                  : ""}
+              </span>
             </div>
           ) : null}
         </div>

@@ -94,6 +94,28 @@ export async function uploadTenantMedia(opts: {
 }
 
 /**
+ * Pre-tenant upload for the public self-serve onboarding wizard. There is no
+ * tenant yet (the store is provisioned only after the form is submitted), so
+ * this lands files in a shared `/onboarding` folder instead of a tenant folder —
+ * `uploadTenantMedia` can't be reused because `tenantMediaFolder` requires an
+ * existing tenant slug and throws otherwise. The returned URL is later copied
+ * verbatim into the tenant's Branding/Products at provision time.
+ */
+export async function uploadOnboardingMedia(opts: {
+  file: Buffer | string;
+  fileName: string;
+  tags?: string[];
+}) {
+  return getImageKit().upload({
+    file: opts.file,
+    fileName: opts.fileName,
+    folder: "/onboarding",
+    useUniqueFileName: true,
+    tags: opts.tags ?? ["onboarding"],
+  });
+}
+
+/**
  * List a tenant's media, confined to its folder. Uses the private-key media
  * API (server-only), so callers can never reach beyond their own `path`.
  */
