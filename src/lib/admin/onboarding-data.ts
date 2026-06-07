@@ -8,83 +8,34 @@ import {
   getDemoOnboarding,
   type DemoOnboardingSubmission,
 } from "@/lib/demo/fixtures";
+import {
+  ONBOARDING_STATUS_LABELS,
+  type OnboardingProductView,
+  type OnboardingPaymentView,
+  type OnboardingSummary,
+  type OnboardingDetailView,
+} from "@/lib/admin/onboarding-types";
 
 /* ============================================================
    Self-serve onboarding submissions — read models for the
    Super Admin "Onboarding" dashboard.
+
+   The shared constants + view types live in the client-safe
+   `onboarding-types` module (so the client components can import
+   them too); re-exported here for existing server-side imports.
    ============================================================ */
 
-// The operator's setup workflow (per the product spec). Shared by the UI + actions.
-export const ONBOARDING_STATUSES = [
-  "payment_received",
-  "tenant_created",
-  "customizing",
-  "revision",
-  "completed",
-] as const;
-export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number];
-
-export const ONBOARDING_STATUS_LABELS: Record<string, string> = {
-  payment_received: "Payment Received",
-  tenant_created: "Tenant Created",
-  customizing: "Customizing",
-  revision: "Revision Phase",
-  completed: "Completed",
-};
-
-export type OnboardingProductView = {
-  name: string;
-  price: number;
-  description?: string;
-  category?: string;
-  imageUrl?: string;
-};
-export type OnboardingPaymentView = {
-  name: string;
-  account?: string;
-  number?: string;
-  qrUrl?: string;
-  instructions?: string;
-};
-
-export type OnboardingSummary = {
-  id: string;
-  businessName: string;
-  email: string;
-  contactPerson: string;
-  slug: string;
-  url: string;
-  packageKey: string;
-  packageLabel: string;
-  setupStatus: string;
-  setupStatusLabel: string;
-  tenantId: string | null;
-  tenantStatus: string | null; // pending_setup | active | suspended | …
-  published: boolean;
-  productCount: number;
-  paymentProofUrl: string | null;
-  createdAt: string; // ISO
-};
-
-export type OnboardingDetailView = OnboardingSummary & {
-  businessType: string;
-  description: string;
-  whatsapp: string;
-  facebook: string;
-  themeStyle: string | null;
-  themeId: string;
-  primaryColor: string | null;
-  secondaryColor: string | null;
-  logoUrl: string | null;
-  bannerUrls: string[];
-  inspirationUrls: string[];
-  inspirationNotes: string;
-  products: OnboardingProductView[];
-  orderDestination: string | null;
-  orderDestinationValue: string | null;
-  paymentMethods: OnboardingPaymentView[];
-  termsAccepted: boolean;
-};
+export {
+  ONBOARDING_STATUSES,
+  ONBOARDING_STATUS_LABELS,
+} from "@/lib/admin/onboarding-types";
+export type {
+  OnboardingStatus,
+  OnboardingProductView,
+  OnboardingPaymentView,
+  OnboardingSummary,
+  OnboardingDetailView,
+} from "@/lib/admin/onboarding-types";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
 

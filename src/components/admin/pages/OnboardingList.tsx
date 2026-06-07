@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
-import type { OnboardingSummary } from "@/lib/admin/onboarding-data";
-import { ONBOARDING_STATUS_LABELS } from "@/lib/admin/onboarding-data";
+import type { OnboardingSummary } from "@/lib/admin/onboarding-types";
+import { ONBOARDING_STATUS_LABELS } from "@/lib/admin/onboarding-types";
 
 /* ── helpers ── */
 

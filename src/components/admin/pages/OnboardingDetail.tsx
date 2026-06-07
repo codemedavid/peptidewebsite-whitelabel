@@ -9,14 +9,14 @@ import { formatPesos } from "@/lib/admin/plans";
 import {
   ONBOARDING_STATUSES,
   ONBOARDING_STATUS_LABELS,
-} from "@/lib/admin/onboarding-data";
+} from "@/lib/admin/onboarding-types";
 import {
   updateOnboardingStatusAction,
   publishTenantAction,
   unpublishTenantAction,
   setStorePasswordAction,
 } from "@/actions/admin-onboarding";
-import type { OnboardingDetailView } from "@/lib/admin/onboarding-data";
+import type { OnboardingDetailView } from "@/lib/admin/onboarding-types";
 
 /* ── date helper ── */
 function humanDate(iso: string): string {
