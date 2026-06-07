@@ -12,7 +12,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction } from "@/actions/onboarding";
-import { saveContactChannelsAction, saveAdminPasswordAction } from "@/actions/branding";
+import {
+  saveContactChannelsAction,
+  saveAdminPasswordAction,
+  saveRequirePaymentProofAction,
+} from "@/actions/branding";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import {
   formatOrderNumber,
@@ -70,6 +74,7 @@ type Props = {
 const SECTIONS = [
   { id: "orders", label: "Order numbers" },
   { id: "channels", label: "Checkout channels" },
+  { id: "proof", label: "Payment proof" },
   { id: "copy", label: "Checkout copy" },
   { id: "admin", label: "Admin access" },
 ] as const;
@@ -124,6 +129,7 @@ export function TenantSettingsView({
   const [saved, setSaved] = useState<Record<SectionId, boolean>>({
     orders: false,
     channels: false,
+    proof: false,
     copy: false,
     admin: false,
   });
@@ -134,15 +140,14 @@ export function TenantSettingsView({
     separator !== baseline.current.separator ||
     scheme !== baseline.current.scheme ||
     digits !== baseline.current.digits;
-  const channelsDirty =
-    JSON.stringify(channels) !== baseline.current.channels ||
-    requireProof !== baseline.current.requireProof;
+  const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
+  const proofDirty = requireProof !== baseline.current.requireProof;
   const copyDirty =
     title !== baseline.current.title ||
     note !== baseline.current.note ||
     metaDescription !== baseline.current.metaDescription;
   const adminDirty = adminPassword !== baseline.current.adminPassword;
-  const anyDirty = ordersDirty || channelsDirty || copyDirty || adminDirty;
+  const anyDirty = ordersDirty || channelsDirty || proofDirty || copyDirty || adminDirty;
 
   /* ---------- order-number validation + preview ---------- */
   const prefixValid = PREFIX_RE.test(prefix);
@@ -188,22 +193,28 @@ export function TenantSettingsView({
       checkoutTitle: title,
       checkoutNote: note,
       metaDescription,
-      requireProofOfPayment: requireProof,
     });
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = {
-        ...baseline.current,
-        channels: JSON.stringify(channels),
-        requireProof,
-        title,
-        note,
-        metaDescription,
-      };
+      baseline.current = { ...baseline.current, channels: JSON.stringify(channels), title, note, metaDescription };
       setSaved((s) => ({ ...s, channels: true, copy: true }));
       return true;
     }
     setErrors((e) => ({ ...e, [section]: res.error }));
+    return false;
+  }
+
+  async function saveProof(): Promise<boolean> {
+    setSaving("proof");
+    setErrors((e) => ({ ...e, proof: undefined }));
+    const res = await saveRequirePaymentProofAction(slug, requireProof);
+    setSaving(null);
+    if ("ok" in res) {
+      baseline.current = { ...baseline.current, requireProof };
+      setSaved((s) => ({ ...s, proof: true }));
+      return true;
+    }
+    setErrors((e) => ({ ...e, proof: res.error }));
     return false;
   }
 
@@ -226,6 +237,7 @@ export function TenantSettingsView({
     if (ordersDirty && prefixValid) await saveOrders();
     // Channels + copy share one action, so a single call flushes both.
     if ((channelsDirty || copyDirty) && incompleteChannels.length === 0) await saveChannelsAndCopy("channels");
+    if (proofDirty) await saveProof();
     if (adminDirty) await saveAdminPassword();
     setSaving(null);
   }
@@ -249,6 +261,7 @@ export function TenantSettingsView({
   const refs: Record<SectionId, React.RefObject<HTMLElement | null>> = {
     orders: useRef<HTMLElement>(null),
     channels: useRef<HTMLElement>(null),
+    proof: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
     admin: useRef<HTMLElement>(null),
   };
@@ -273,6 +286,7 @@ export function TenantSettingsView({
   const counts: Record<SectionId, string> = {
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
+    proof: requireProof ? "On" : "Off",
     copy: "3",
     admin: adminPassword.trim() ? "Custom" : "Default",
   };
@@ -558,36 +572,6 @@ export function TenantSettingsView({
                   );
                 })}
               </div>
-
-              <div className="set-row" style={{ marginTop: 6 }}>
-                <div>
-                  <div className="set-row-label">Require proof of payment</div>
-                  <div className="set-row-help">
-                    When on, customers must upload a payment screenshot to complete checkout.
-                    Turn off to make the proof upload optional.
-                  </div>
-                </div>
-                <div className="set-row-control" style={{ alignItems: "flex-start" }}>
-                  <span
-                    className={"switch" + (requireProof ? " on" : "")}
-                    role="switch"
-                    aria-checked={requireProof}
-                    aria-label="Require proof of payment at checkout"
-                    tabIndex={0}
-                    onClick={() => {
-                      setRequireProof((v) => !v);
-                      setSaved((s) => ({ ...s, channels: false }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setRequireProof((v) => !v);
-                        setSaved((s) => ({ ...s, channels: false }));
-                      }
-                    }}
-                  />
-                </div>
-              </div>
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -605,7 +589,6 @@ export function TenantSettingsView({
                   disabled={!channelsDirty || saving !== null}
                   onClick={() => {
                     setChannels(JSON.parse(baseline.current.channels));
-                    setRequireProof(baseline.current.requireProof);
                     setErrors((e) => ({ ...e, channels: undefined }));
                   }}
                 >
@@ -622,6 +605,90 @@ export function TenantSettingsView({
                     </>
                   ) : (
                     "Save channels"
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* ---------- payment proof ---------- */}
+          <section className="set-card" ref={refs.proof} data-section="proof">
+            <div className="set-card-head">
+              <div>
+                <span className="set-eyebrow">Checkout</span>
+                <h2>Payment proof</h2>
+                <p className="set-desc">
+                  Whether customers must upload a proof-of-payment screenshot to complete checkout
+                  when payment methods are configured.
+                </p>
+              </div>
+              <span className={"badge " + (requireProof ? "badge-success" : "badge-neutral")}>
+                {requireProof ? "Required" : "Optional"}
+              </span>
+            </div>
+            <div className="set-card-body">
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Require proof of payment</div>
+                  <div className="set-row-help">
+                    When on, the proof upload is mandatory at checkout. Turn off to make it optional —
+                    customers can place an order without attaching a screenshot.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (requireProof ? " on" : "")}
+                    role="switch"
+                    aria-checked={requireProof}
+                    aria-label="Require proof of payment at checkout"
+                    tabIndex={0}
+                    onClick={() => {
+                      setRequireProof((v) => !v);
+                      setSaved((s) => ({ ...s, proof: false }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setRequireProof((v) => !v);
+                        setSaved((s) => ({ ...s, proof: false }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="set-foot">
+              <span className="hint">
+                <Ic.AlertCircle />
+                Takes effect immediately on the storefront checkout.
+              </span>
+              <div className="set-foot-actions">
+                {errors.proof && (
+                  <span role="alert" className="set-err" style={{ alignSelf: "center" }}>
+                    {errors.proof}
+                  </span>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!proofDirty || saving !== null}
+                  onClick={() => {
+                    setRequireProof(baseline.current.requireProof);
+                    setErrors((e) => ({ ...e, proof: undefined }));
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  className="btn btn-accent btn-sm"
+                  onClick={saveProof}
+                  disabled={!proofDirty || saving !== null}
+                >
+                  {saving === "proof" ? "Saving…" : saved.proof && !proofDirty ? (
+                    <>
+                      <Ic.Check /> Saved
+                    </>
+                  ) : (
+                    "Save"
                   )}
                 </button>
               </div>

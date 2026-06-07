@@ -201,8 +201,6 @@ export type ContactChannelsInput = {
   checkoutTitle: string;
   checkoutNote: string;
   metaDescription: string;
-  /** Whether checkout requires a proof-of-payment upload (super-admin toggle). */
-  requireProofOfPayment: boolean;
 };
 
 export type SaveResult = { ok: true } | { error: string };
@@ -223,20 +221,13 @@ export async function saveContactChannelsAction(
   const checkoutTitle = (input.checkoutTitle ?? "").trim();
   const checkoutNote = (input.checkoutNote ?? "").trim();
   const metaDescription = (input.metaDescription ?? "").trim().slice(0, META_DESCRIPTION_MAX);
-  const requireProofOfPayment = input.requireProofOfPayment !== false;
 
   // A channel marked enabled but with no destination can't be used — reject so
   // the storefront never shows a dead button.
   const broken = contactChannels.find((c) => c.enabled && !c.destination);
   if (broken) return { error: `Add a destination for ${broken.type}, or turn it off.` };
 
-  const contactFields = {
-    contactChannels,
-    checkoutTitle,
-    checkoutNote,
-    metaDescription,
-    requireProofOfPayment,
-  };
+  const contactFields = { contactChannels, checkoutTitle, checkoutNote, metaDescription };
 
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
@@ -257,6 +248,51 @@ export async function saveContactChannelsAction(
 
   const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
   const config = { ...current, ...contactFields } as Prisma.InputJsonValue;
+
+  await prisma.branding.upsert({
+    where: { tenantId: tenant.id },
+    update: { config },
+    create: { tenantId: tenant.id, config },
+  });
+
+  revalidatePath("/admin");
+  revalidateTenant(tenant.id, slug);
+  return { ok: true };
+}
+
+/**
+ * Toggle whether the tenant's storefront checkout requires a proof-of-payment
+ * upload. Stored in the shared `branding.config` blob as `requireProofOfPayment`
+ * (read-modify-write, so it never clobbers the rest of the storefront config).
+ * Absent/true → required (historical default); false → the upload is optional.
+ */
+export async function saveRequirePaymentProofAction(
+  slug: string,
+  require: boolean,
+): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+
+  const requireProofOfPayment = require !== false;
+
+  if (isDemoMode()) {
+    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    saveDemoBranding(slug, { config: { ...current, requireProofOfPayment } });
+    revalidatePath("/admin");
+    revalidateTenant(slug, slug);
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
+  if (!tenant) return { error: "Tenant not found." };
+
+  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const config = { ...current, requireProofOfPayment } as Prisma.InputJsonValue;
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },
