@@ -1,20 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { resellerMinQty, resellerTierLabel, resellerUnitPrice } from "../checkout";
 import type { Brand, Product } from "../types";
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
   const [qty, setQty] = useState(1);
-  // Wholesale price the cart will charge once this product hits the bulk
-  // threshold; the card reflects it live as the buyer steps the quantity up.
-  const wholesale = resellerUnitPrice(product);
-  const minQty = resellerMinQty(product);
-  const resellerActive = wholesale != null && qty >= minQty;
-  // Which tier the online cart actually applies (Complete Set when offered, else
-  // Vials Only). The other tier, if listed, is "by request" — arranged in chat —
-  // so the card never implies a price the storefront can't charge.
-  const appliedTier = resellerTierLabel(product);
+  // Wholesale / reseller prices are deliberately NOT shown on the public catalog
+  // — they live only on the gated reseller page (#merchant). The cart still
+  // auto-applies the bulk price at the per-product minimum (see checkout.ts), so
+  // resellers get wholesale at checkout without it being advertised here.
   return (
     <article className="product-card card">
       {product.featured && (
@@ -48,34 +42,6 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
         <div className="product-card__price font-display">
           {product.currency}
           {product.price.toLocaleString()}
-          {product.reseller && (product.reseller.vialsOnly || product.reseller.completeSet) ? (
-            <div className="product-card__reseller">
-              <span className="product-card__reseller-label">Reseller · min {minQty} orders</span>
-              {product.reseller.vialsOnly ? (
-                <span className="product-card__reseller-row">
-                  Vials only: {product.currency}
-                  {product.reseller.vialsOnly.toLocaleString()}
-                  <span className={`product-card__reseller-tag${appliedTier === "Vials only" ? " is-applied" : ""}`}>
-                    {appliedTier === "Vials only" ? `at ${minQty}+ online` : "by request"}
-                  </span>
-                </span>
-              ) : null}
-              {product.reseller.completeSet ? (
-                <span className="product-card__reseller-row">
-                  Complete set: {product.currency}
-                  {product.reseller.completeSet.toLocaleString()}
-                  <span className="product-card__reseller-tag is-applied">at {minQty}+ online</span>
-                </span>
-              ) : null}
-              {/* Always present so its aria-live region announces the unlock the
-                  moment qty crosses the threshold; empty (and hidden) until then. */}
-              <span className="product-card__reseller-active" aria-live="polite">
-                {resellerActive
-                  ? `✓ Reseller price applied · ${product.currency}${wholesale.toLocaleString()}/ea (${appliedTier})`
-                  : ""}
-              </span>
-            </div>
-          ) : null}
         </div>
         <div className="product-card__buy">
           <div className="sf-qty product-card__qty">
