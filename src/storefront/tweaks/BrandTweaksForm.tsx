@@ -176,7 +176,7 @@ function HeroCopyCard({
         <AccordionChevron />
       </button>
       {open && (
-        <div className="twk-acc-body" id={bodyId}>
+        <div className="twk-acc-body" id={bodyId} role="region" aria-label={`${name} text style`}>
           {children}
         </div>
       )}
