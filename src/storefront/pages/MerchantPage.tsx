@@ -25,6 +25,50 @@ import { AdminAddProduct } from "../admin/AdminAddProduct";
 // Per-tenant key so unlocking one store doesn't unlock another in the same browser.
 const UNLOCK_KEY = "sf_merchant_unlocked";
 
+// Wholesale order control for a reseller row: a quantity stepper floored at the
+// product's minimum (so a line can never be added below the wholesale threshold)
+// plus an Add-to-Cart button. The cart applies the wholesale unit price at this
+// quantity automatically (see checkout.ts unitPrice/isResellerQty).
+function OrderCell({
+  product,
+  onAdd,
+}: {
+  product: Product;
+  onAdd: (qty: number) => void;
+}) {
+  const min = resellerMinQty(product);
+  const [qty, setQty] = useState(min);
+  const [added, setAdded] = useState(false);
+
+  const add = () => {
+    onAdd(Math.max(min, qty));
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1500);
+  };
+
+  return (
+    <div className="merchant-order">
+      <div className="sf-qty merchant-order__qty">
+        <button
+          type="button"
+          aria-label={`Remove one ${product.name}`}
+          onClick={() => setQty((q) => Math.max(min, q - 1))}
+          disabled={qty <= min}
+        >
+          −
+        </button>
+        <span aria-live="polite">{qty}</span>
+        <button type="button" aria-label={`Add one ${product.name}`} onClick={() => setQty((q) => q + 1)}>
+          +
+        </button>
+      </div>
+      <button type="button" className="btn btn-primary merchant-order__add" onClick={add}>
+        {added ? "Added ✓" : "Add to cart"}
+      </button>
+    </div>
+  );
+}
+
 function Gate({
   brand,
   onUnlock,
@@ -99,7 +143,7 @@ export function MerchantPage({
 }) {
   // Read the catalog from the shared store so the owner's inline edits (which go
   // through AdminAddProduct → setProducts) re-render this list immediately.
-  const { products, categories } = useStore();
+  const { products, categories, addToCart } = useStore();
   const [unlocked, setUnlocked] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminChecked, setAdminChecked] = useState(false);
@@ -137,7 +181,7 @@ export function MerchantPage({
 
   const currency = brand.currency || products[0]?.currency || "₱";
   const money = (n?: number | null) => (n && n > 0 ? `${currency}${n.toLocaleString()}` : "—");
-  const colSpan = isAdmin ? 7 : 6;
+  const colSpan = 7;
 
   // Inline full-product editor (owner only). Reuses the admin product form; on
   // save it updates the shared store, so closing it drops us back to a fresh row.
@@ -185,8 +229,10 @@ export function MerchantPage({
 
         <div className="merchant-note">
           <strong>Wholesale terms:</strong> the minimum order to unlock the wholesale price is set per
-          product (default {RESELLER_MIN_QTY} units) — see the “Min order” column. The complete-set tier
-          is what we ship online at the minimum; the vials-only tier is arranged by request.
+          product (default {RESELLER_MIN_QTY} units) — see the “Min order” column. Add a product from the
+          “Order” column (it starts at the minimum) and the wholesale price applies automatically in your
+          cart. The complete-set tier is what we ship online at the minimum; the vials-only tier is
+          arranged by request.
         </div>
 
         {rows.length > 0 ? (
@@ -200,7 +246,11 @@ export function MerchantPage({
                   <th className="merchant-table__num">Retail</th>
                   <th className="merchant-table__num">Vials only</th>
                   <th className="merchant-table__num">Complete set</th>
-                  {isAdmin && <th className="merchant-table__num">Actions</th>}
+                  {isAdmin ? (
+                    <th className="merchant-table__num">Actions</th>
+                  ) : (
+                    <th className="merchant-table__num">Order</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -231,7 +281,7 @@ export function MerchantPage({
                           <span className="merchant-table__tag">at {minQty}+ online</span>
                         ) : null}
                       </td>
-                      {isAdmin && (
+                      {isAdmin ? (
                         <td className="merchant-table__num">
                           <button className="merchant-edit-btn" onClick={() => setEditing(p)}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -241,6 +291,10 @@ export function MerchantPage({
                             </svg>
                             Edit
                           </button>
+                        </td>
+                      ) : (
+                        <td className="merchant-table__num">
+                          <OrderCell product={p} onAdd={(qty) => addToCart(p, qty)} />
                         </td>
                       )}
                     </tr>
