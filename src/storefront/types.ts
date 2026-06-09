@@ -178,6 +178,11 @@ export type Brand = {
   background: string;
   surface: string;
   text: string;
+  // Header bar colors — optional overrides for the sticky site header. Unset =
+  // inherit the existing behavior (background from `surface`, text from `main`/
+  // `text` per element), so existing tenants are unaffected. Both are hex.
+  headerBg?: string;
+  headerText?: string;
   headingFont: string;
   bodyFont: string;
 
@@ -196,6 +201,10 @@ export type Brand = {
   showPageCOA: boolean;
   showPageProtocols: boolean;
   showPageReviews: boolean;
+  // Reseller / merchant wholesale price list (#merchant). Default OFF — only
+  // tenants that sell wholesale enable it from the store admin. Gated behind an
+  // access code so the wholesale list isn't shown to regular shoppers.
+  showPageMerchant?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;
@@ -281,6 +290,19 @@ export type Brand = {
 
   reviewsTitle: string;
   reviewsBackLabel: string;
+
+  // Merchant / reseller portal copy (the gated wholesale price list at #merchant).
+  merchantTitle?: string;
+  merchantEyebrow?: string;
+  merchantSub?: string;
+  merchantBackLabel?: string;
+  merchantGateTitle?: string;
+  merchantGateSub?: string;
+  // The reseller access code that unlocks #merchant. Set in the store admin and
+  // persisted in branding.config. Validated SERVER-SIDE (verifyResellerCodeAction)
+  // and stripped from the client brand so the code itself never ships to the
+  // browser. Blank → the merchant page stays locked even if showPageMerchant is on.
+  resellerAccessCode?: string;
 
   // Checkout / order contact. Customers complete an order by messaging the
   // store through one of the enabled channels (no in-app payment). Configured

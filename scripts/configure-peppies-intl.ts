@@ -40,6 +40,10 @@ const PAYMENT_METHODS = [
 ];
 
 const CURRENCY = "₱";
+// Reseller / merchant portal: enable the gated #merchant wholesale price list and
+// set the access code resellers enter to unlock it. Validated server-side; never
+// shipped to the browser. Change RESELLER_CODE to rotate access.
+const RESELLER_CODE = "PEPPIES10";
 const CHECKOUT_NOTE =
   "₱150 shipping nationwide 🇵🇭 · Ships from Cebu · COD available 💜 · PH price list effective March 21, 2026. Send us your order and we'll confirm availability, total and shipping.";
 
@@ -59,6 +63,8 @@ async function main() {
     paymentMethods: PAYMENT_METHODS,
     currency: CURRENCY,
     checkoutNote: CHECKOUT_NOTE,
+    showPageMerchant: true,
+    resellerAccessCode: RESELLER_CODE,
   };
   // Remove the dead key written by an earlier version (shippingNote isn't a
   // Brand field, so nothing rendered it).
@@ -74,6 +80,7 @@ async function main() {
   console.log("  • paymentMethods: Cash on Delivery (COD) — active");
   console.log(`  • currency: ${CURRENCY}`);
   console.log(`  • checkoutNote: ${CHECKOUT_NOTE}`);
+  console.log(`  • reseller portal: ENABLED at /#merchant · access code "${RESELLER_CODE}"`);
   console.log("  • removed stale shippingNote key (if present)");
   console.log("Done.");
 }

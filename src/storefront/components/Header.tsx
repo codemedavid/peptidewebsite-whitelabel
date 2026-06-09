@@ -18,6 +18,11 @@ export function Header({
   const [mobileOpen, setMobileOpen] = useState(false);
   // Drop nav links that point at a toggled-off page.
   const nav = (brand.nav || []).filter((item) => !isLinkHidden(brand, item.href));
+  // Surface the gated reseller page automatically when enabled (and not already
+  // linked) so resellers can reach the wholesale list from the nav.
+  if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {
+    nav.push({ label: "Resellers", href: "#merchant" });
+  }
 
   // Lock background scroll + close on Escape while the drawer is open.
   useEffect(() => {

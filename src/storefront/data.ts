@@ -47,6 +47,7 @@ export const BRAND: Brand = {
   showPageCOA: true,
   showPageProtocols: true,
   showPageReviews: true,
+  showPageMerchant: false,
 
   headerShowBrand: true,
   headerShowCart: true,
@@ -171,6 +172,13 @@ export const BRAND: Brand = {
 
   reviewsTitle: "Customer Reviews",
   reviewsBackLabel: "Back",
+
+  merchantEyebrow: "Wholesale",
+  merchantTitle: "Reseller Price List",
+  merchantSub: "Wholesale pricing for verified resellers. Minimum 10 units per item.",
+  merchantBackLabel: "Back",
+  merchantGateTitle: "Reseller Access",
+  merchantGateSub: "Enter your reseller code to view wholesale pricing.",
 
   checkoutTitle: "Complete your order",
   checkoutNote:

@@ -37,10 +37,11 @@ const FAQPage = dynamic(() => import("./pages/FAQPage").then((m) => m.FAQPage), 
 const COAPage = dynamic(() => import("./pages/COAPage").then((m) => m.COAPage), { ssr: false, loading: PageSpinner });
 const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => m.ProtocolsPage), { ssr: false, loading: PageSpinner });
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: PageSpinner });
+const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: PageSpinner });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "reviews", "catalog", "admin"];
+const ROUTES = ["track", "faq", "coa", "protocols", "reviews", "merchant", "catalog", "admin"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -164,6 +165,7 @@ function Shell() {
       {activePage === "coa" && <COAPage brand={brand} onBack={goHome} />}
       {activePage === "protocols" && <ProtocolsPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
+      {activePage === "merchant" && <MerchantPage brand={brand} products={products} onBack={goHome} />}
 
       {(activePage === "home" || activePage === "catalog") && (
         <>

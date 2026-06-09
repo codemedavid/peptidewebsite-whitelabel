@@ -8,6 +8,8 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   coa: (b) => b.showPageCOA !== false,
   protocols: (b) => b.showPageProtocols !== false,
   reviews: (b) => b.showPageReviews !== false,
+  // Default OFF — the wholesale page only exists for tenants that opt in.
+  merchant: (b) => b.showPageMerchant === true,
 };
 
 // Each store-admin sub-view that exists to manage a storefront page. When the

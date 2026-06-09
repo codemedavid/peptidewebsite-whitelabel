@@ -47,6 +47,14 @@ export function Footer({ brand }: { brand: Brand }) {
       links: (col.links || []).filter((l) => !isLinkHidden(brand, l.href)),
     }))
     .filter((col) => col.links.length > 0);
+  // Surface the gated reseller page automatically when enabled (and not already
+  // linked) as its own footer column, mirroring the nav link.
+  if (
+    brand.showPageMerchant === true &&
+    !cols.some((col) => col.links.some((l) => l.href === "#merchant"))
+  ) {
+    cols.push({ title: "Wholesale", links: [{ label: "Reseller pricing", href: "#merchant" }] });
+  }
   const socials = (brand.footerSocials || []).filter((s) => s.show !== false);
   const hasBrandSide =
     brand.footerShowBrand !== false ||

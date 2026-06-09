@@ -401,7 +401,7 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  background: color-mix(in srgb, var(--brand-surface) 92%, transparent);
+  background: color-mix(in srgb, var(--brand-header, var(--brand-surface)) 92%, transparent);
   backdrop-filter: saturate(160%) blur(12px);
   -webkit-backdrop-filter: saturate(160%) blur(12px);
   border-bottom: 1px solid var(--brand-border);
@@ -433,7 +433,7 @@
   font-family: var(--brand-heading-font);
   font-weight: 600;
   font-size: 20px;
-  color: var(--brand-main);
+  color: var(--brand-header-text, var(--brand-main));
   letter-spacing: -0.01em;
 }
 .sf-root .site-header__nav {
@@ -445,7 +445,7 @@
 .sf-root .site-header__navlink {
   font-size: 15px;
   font-weight: 500;
-  color: var(--brand-text);
+  color: var(--brand-header-text, var(--brand-text));
   position: relative;
   padding: 6px 0;
   transition: color .15s;
@@ -468,7 +468,7 @@
   position: relative;
   width: 44px; height: 44px;
   border-radius: 50%;
-  color: var(--brand-main);
+  color: var(--brand-header-text, var(--brand-main));
   display: flex; align-items: center; justify-content: center;
   transition: background .15s;
 }
@@ -499,7 +499,7 @@
 .sf-root .site-header__burger:hover { background: var(--brand-surface-2); }
 .sf-root .site-header__burger span {
   width: 22px; height: 2px;
-  background: var(--brand-main);
+  background: var(--brand-header-text, var(--brand-main));
   border-radius: 2px;
   transition: transform .2s ease, opacity .2s ease;
 }
@@ -3967,5 +3967,133 @@
   border-top-color: var(--brand-main, #6c63ff);
   border-radius: 50%;
   animation: sf-spin 0.7s linear infinite;
+}
+
+/* ---- Merchant / reseller portal ---- */
+.sf-root .merchant-gate {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.sf-root .merchant-gate__card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md, 0 10px 40px rgba(0,0,0,0.06));
+  padding: clamp(28px, 4vw, 40px);
+  text-align: center;
+}
+.sf-root .merchant-gate__icon {
+  width: 54px; height: 54px;
+  margin: 0 auto 18px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--brand-surface-2);
+  color: var(--brand-main);
+}
+.sf-root .merchant-gate__icon svg { width: 26px; height: 26px; }
+.sf-root .merchant-gate__title {
+  font-family: var(--brand-heading-font);
+  font-size: 26px;
+  color: var(--brand-main);
+  margin: 0 0 6px;
+}
+.sf-root .merchant-gate__sub {
+  font-size: 14px;
+  color: var(--brand-text-muted);
+  margin: 0 0 22px;
+  line-height: 1.55;
+}
+.sf-root .merchant-gate__input {
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-md);
+  background: var(--brand-surface);
+  color: var(--brand-text);
+  outline: none;
+}
+.sf-root .merchant-gate__input:focus {
+  border-color: var(--brand-main);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-main) 18%, transparent);
+}
+.sf-root .merchant-gate__input.is-error {
+  border-color: #c0392b;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #c0392b 18%, transparent);
+}
+.sf-root .merchant-gate__error {
+  min-height: 18px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+  color: #c0392b;
+}
+.sf-root .merchant-gate__submit { width: 100%; height: 52px; margin-top: 6px; }
+
+.sf-root .merchant-note {
+  background: var(--brand-surface-2);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--brand-text);
+  line-height: 1.55;
+  margin: 8px 0 28px;
+}
+.sf-root .merchant-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  background: var(--brand-surface);
+}
+.sf-root .merchant-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+.sf-root .merchant-table th,
+.sf-root .merchant-table td {
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--brand-border);
+  font-size: 15px;
+  vertical-align: middle;
+}
+.sf-root .merchant-table thead th {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+  background: var(--brand-surface-2);
+}
+.sf-root .merchant-table tbody tr:last-child td { border-bottom: none; }
+.sf-root .merchant-table__num { text-align: right; white-space: nowrap; }
+.sf-root .merchant-table__product { display: flex; flex-direction: column; gap: 2px; }
+.sf-root .merchant-table__name { font-weight: 600; color: var(--brand-text); }
+.sf-root .merchant-table__purity { font-size: 12px; color: var(--brand-text-muted); }
+.sf-root .merchant-table__cat { color: var(--brand-text-muted); font-size: 14px; }
+.sf-root .merchant-table__retail { color: var(--brand-text-muted); text-decoration: line-through; }
+.sf-root .merchant-table__tag {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brand-main);
+}
+.sf-root .merchant-table__tag.is-muted { color: var(--brand-text-muted); }
+.sf-root .merchant-empty {
+  text-align: center;
+  padding: 60px 20px;
+  border: 1px dashed var(--brand-border);
+  border-radius: var(--radius-lg);
 }
 

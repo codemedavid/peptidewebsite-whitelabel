@@ -36,6 +36,9 @@ function brandVars(b: Brand): React.CSSProperties {
     "--brand-background": b.background,
     "--brand-surface": b.surface,
     "--brand-text": b.text,
+    // Only emit header overrides when set, so the CSS var() fallbacks apply.
+    ...(b.headerBg ? { "--brand-header": b.headerBg } : {}),
+    ...(b.headerText ? { "--brand-header-text": b.headerText } : {}),
     "--brand-heading-font": `"${b.headingFont}", Georgia, serif`,
     "--brand-body-font": `"${b.bodyFont}", system-ui, sans-serif`,
   } as React.CSSProperties;

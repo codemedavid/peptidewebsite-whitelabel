@@ -124,6 +124,12 @@ function applyBrandStyle(b: Brand) {
   r.setProperty("--brand-background", b.background);
   r.setProperty("--brand-surface", b.surface);
   r.setProperty("--brand-text", b.text);
+  // Optional header overrides — remove (not set "") when unset so the CSS
+  // var() fallbacks kick in and a previous tenant's value can't linger.
+  if (b.headerBg) r.setProperty("--brand-header", b.headerBg);
+  else r.removeProperty("--brand-header");
+  if (b.headerText) r.setProperty("--brand-header-text", b.headerText);
+  else r.removeProperty("--brand-header-text");
   r.setProperty("--brand-heading-font", `"${b.headingFont}", Georgia, serif`);
   r.setProperty("--brand-body-font", `"${b.bodyFont}", system-ui, sans-serif`);
 }

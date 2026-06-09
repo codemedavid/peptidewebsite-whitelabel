@@ -41,6 +41,10 @@ export default async function HomePage() {
     ),
   };
 
+  // The reseller access code is validated server-side (verifyResellerCodeAction);
+  // never ship it to the browser, even though the rest of `config` is public.
+  delete (brand as Record<string, unknown>).resellerAccessCode;
+
   // Products are the source of truth in the DB. Load the tenant's catalog
   // server-side (demo: file-backed store, seeded from the builtin fixtures) and
   // hand it to the storefront — both the public catalog and the #admin manager

@@ -171,6 +171,82 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
   return { ok: true };
 }
 
+// ── Reseller / merchant portal ────────────────────────────────────────────────
+
+export type ResellerSettings = { enabled: boolean; code: string };
+
+/**
+ * The reseller portal settings for the current tenant (store-admin only — it
+ * returns the access code, so it must never be exposed to the public). Reads the
+ * `showPageMerchant` toggle and `resellerAccessCode` from branding.config.
+ */
+export async function getResellerSettingsAction(): Promise<ResellerSettings | { error: string }> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const config = await readConfig(tenantId);
+  return {
+    enabled: config.showPageMerchant === true,
+    code: typeof config.resellerAccessCode === "string" ? config.resellerAccessCode : "",
+  };
+}
+
+/**
+ * Persist the reseller portal settings (enable toggle + access code) into the
+ * shared `branding.config` blob (read-modify-write, mirroring the other save*
+ * actions so it never clobbers the rest of the Brand config). The storefront
+ * reads `showPageMerchant` server-side to decide whether #merchant is reachable;
+ * the code is validated server-side by verifyResellerCodeAction.
+ */
+export async function saveResellerSettingsAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const o = (input ?? {}) as Record<string, unknown>;
+  const enabled = o.enabled === true;
+  const code = String(o.code ?? "").slice(0, 120).trim();
+  if (enabled && !code) return { error: "Set an access code before enabling the reseller page." };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, showPageMerchant: enabled, resellerAccessCode: code };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Verify a reseller access code (server-side) for the current tenant. Public —
+ * no admin session — so the wholesale price list can be unlocked by resellers.
+ * Returns ok only when the portal is enabled AND the (case-insensitive) code
+ * matches the one configured in branding.config. The code is compared on the
+ * server and never shipped to the client.
+ */
+export async function verifyResellerCodeAction(code: string): Promise<ActionResult> {
+  const tenantId = await getTenantIdOrNull();
+  if (!tenantId) return { error: "Could not resolve this store." };
+
+  const config = await readConfig(tenantId);
+  if (config.showPageMerchant !== true) return { error: "Reseller access isn't available." };
+
+  const expected = typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
+  if (!expected) return { error: "Reseller access isn't available." };
+
+  if ((code ?? "").trim().toLowerCase() !== expected.toLowerCase()) {
+    return { error: "Incorrect access code." };
+  }
+  return { ok: true };
+}
+
 /** Coerce untrusted client input into clean Protocol rows. */
 function normalizeProtocols(input: unknown): Protocol[] {
   if (!Array.isArray(input)) return [];

@@ -341,6 +341,34 @@ export function BrandingEditor({
                     </label>
                   ))}
                 </div>
+
+                {/* Header colors — storefront-only overrides for the sticky site
+                    header. Stored on the Brand config (not the role palette), so
+                    leaving them unset keeps the current behavior (header derives
+                    its background from Surface and its text from Main/Text). */}
+                <div className="mt-4 border-t border-border pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Header</h3>
+                  <div className="mt-2 space-y-2">
+                    <HeaderColorField
+                      label="Header background"
+                      help="Background of the sticky site header. Defaults to Surface."
+                      value={cfg.headerBg}
+                      fallback={storefrontBrand.surface}
+                      onChange={(v) => setTweak("headerBg", v)}
+                      onReset={() => setTweak("headerBg", undefined)}
+                      resetLabel="Reset to Surface"
+                    />
+                    <HeaderColorField
+                      label="Header text"
+                      help="Logo text, nav links, cart & menu icons. Defaults to Main."
+                      value={cfg.headerText}
+                      fallback={storefrontBrand.main}
+                      onChange={(v) => setTweak("headerText", v)}
+                      onReset={() => setTweak("headerText", undefined)}
+                      resetLabel="Reset to brand colors"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -533,7 +561,7 @@ export function BrandingEditor({
               style={previewVars}
               className="overflow-hidden rounded-[var(--radius)] border border-border bg-background text-foreground"
             >
-              <StorefrontPreview name={name} logoUrl={logoUrl} />
+              <StorefrontPreview name={name} logoUrl={logoUrl} headerBg={cfg.headerBg} headerText={cfg.headerText} />
             </div>
           ) : tab === "hero" ? (
             <div className="space-y-2">
@@ -591,10 +619,14 @@ function StorefrontPreview({
   name,
   logoUrl,
   hero,
+  headerBg,
+  headerText,
 }: {
   name: string;
   logoUrl: string | null;
   hero?: Partial<Brand>;
+  headerBg?: string;
+  headerText?: string;
 }) {
   const initial = name.trim()[0]?.toUpperCase() ?? "B";
   // Reflect the editable hero fields so "Generate hero" / "Cycle layout
@@ -914,8 +946,12 @@ function StorefrontPreview({
   }
   return (
     <div style={{ fontFamily: "var(--font-body)" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
+      {/* Header — reflects the optional header color overrides; unset falls back
+          to the brand surface/brand colors via the shadcn tokens. */}
+      <div
+        className="flex items-center justify-between border-b border-border px-5 py-3"
+        style={headerBg ? { background: headerBg } : undefined}
+      >
         <span className="flex items-center gap-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -928,13 +964,16 @@ function StorefrontPreview({
               {initial}
             </span>
           )}
-          <span className="font-semibold text-brand" style={{ fontFamily: "var(--font-heading)" }}>
+          <span
+            className="font-semibold text-brand"
+            style={{ fontFamily: "var(--font-heading)", color: headerText }}
+          >
             {name}
           </span>
         </span>
         <span className="flex items-center gap-4 text-sm">
-          <span className="text-accent">Catalog</span>
-          <span className="text-muted-foreground">Research</span>
+          <span style={headerText ? { color: headerText } : undefined} className={headerText ? "" : "text-accent"}>Catalog</span>
+          <span style={headerText ? { color: headerText } : undefined} className={headerText ? "" : "text-muted-foreground"}>Research</span>
           <button
             className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
             style={{ background: PRIMARY_GRADIENT, color: "hsl(var(--primary-foreground))" }}
@@ -1153,6 +1192,55 @@ function AssetUpload({
         />
         {busy && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * An optional header color control. When `value` is unset it shows the inherited
+ * `fallback` color in the swatch and a hint that it's inheriting; picking a color
+ * sets the override, and the reset link clears it back to the brand default.
+ */
+function HeaderColorField({
+  label,
+  help,
+  value,
+  fallback,
+  onChange,
+  onReset,
+  resetLabel,
+}: {
+  label: string;
+  help: string;
+  value?: string;
+  fallback: string;
+  onChange: (hex: string) => void;
+  onReset: () => void;
+  resetLabel: string;
+}) {
+  return (
+    <div>
+      <label className="flex items-center gap-3">
+        <input
+          type="color"
+          value={value ?? fallback}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-10 shrink-0 cursor-pointer rounded border border-border bg-transparent"
+        />
+        <span className="flex-1">
+          <span className="block text-sm font-medium">{label}</span>
+          <span className="block text-xs text-muted-foreground">{help}</span>
+        </span>
+      </label>
+      <div className="ml-[52px] mt-1">
+        {value ? (
+          <button type="button" onClick={onReset} className="text-xs text-primary underline">
+            {resetLabel}
+          </button>
+        ) : (
+          <span className="text-xs text-muted-foreground">Inheriting brand default</span>
+        )}
       </div>
     </div>
   );

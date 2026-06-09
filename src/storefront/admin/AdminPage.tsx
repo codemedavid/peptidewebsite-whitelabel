@@ -17,6 +17,7 @@ import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
+import { AdminResellerSettings } from "./AdminResellerSettings";
 import { isAdminViewVisible } from "../visibility";
 
 type View =
@@ -33,7 +34,8 @@ type View =
   | "pay"
   | "faq"
   | "proto"
-  | "reviews";
+  | "reviews"
+  | "reseller";
 
 export function AdminPage({
   brand,
@@ -123,6 +125,18 @@ export function AdminPage({
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "reseller") {
+    return (
+      <AdminResellerSettings
+        brand={brand}
+        onBack={() => setView("dashboard")}
+        onEdit={(p) => {
+          setEditingProduct(p);
+          setView("add-product");
+        }}
+      />
+    );
+  }
 
   const stats = [
     { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
@@ -145,6 +159,7 @@ export function AdminPage({
     { id: "faq", label: "FAQ", hint: "Manage content", icon: "help", tint: "green" },
     { id: "proto", label: "Protocols", hint: "Peptide guides", icon: "shield", tint: "pink" },
     { id: "reviews", label: "Reviews", hint: "Manage testimonials", icon: "star", tint: "pink" },
+    { id: "reseller", label: "Reseller Portal", hint: "Wholesale page & prices", icon: "tag", tint: "purple" },
   ].filter((q) => isAdminViewVisible(brand, q.id));
 
   const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
@@ -237,6 +252,7 @@ export function AdminPage({
                     if (q.id === "faq") return setView("faq");
                     if (q.id === "proto") return setView("proto");
                     if (q.id === "reviews") return setView("reviews");
+                    if (q.id === "reseller") return setView("reseller");
                     toast(`"${q.label}" — wire to your backend`);
                   }}
                 >
