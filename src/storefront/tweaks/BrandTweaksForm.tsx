@@ -10,7 +10,7 @@
 // `setTweak` writes to local state that the "Save branding" button persists to
 // the database. `goPage`/`goHome` differ per host (in-app hash vs. open tab).
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Brand } from "../types";
 import {
   FONT_OPTIONS,
@@ -37,101 +37,212 @@ import { DESIGN_FONTS_HREF } from "./designFonts";
 
 const INHERIT = "Inherit";
 
-// Per-field text-style controls for one hero copy element. Collapsed by default
-// to keep the panel scannable; writes a HeroFieldStyle patch up to setTweak.
-function HeroFieldStyle_({
+const TRANSFORM_LABELS: Record<NonNullable<HeroFieldStyle["transform"]>, string> = {
+  uppercase: "Uppercase",
+  lowercase: "Lowercase",
+  capitalize: "Capitalize",
+  none: "Normal case",
+};
+
+// A compact, scannable one-liner of just the attributes a hero copy element
+// actually overrides — e.g. "Inter • 48px • Bold • Italic". Returns "" when
+// nothing is set, so the card can show a neutral "Theme default" placeholder
+// instead of a row of "Inherit"s.
+function summarizeFieldStyle(style: HeroFieldStyle): string {
+  const parts: string[] = [];
+  if (style.font) parts.push(style.font);
+  if (style.size) parts.push(`${style.size}px`);
+  if (style.weight) parts.push(WEIGHT_LABELS[style.weight]);
+  if (style.italic !== undefined) parts.push(style.italic ? "Italic" : "Not italic");
+  if (style.transform) parts.push(TRANSFORM_LABELS[style.transform]);
+  if (style.letterSpacing !== undefined) {
+    const key = Object.keys(LETTER_SPACINGS).find((k) => LETTER_SPACINGS[k] === style.letterSpacing);
+    parts.push(key ? `${key} tracking` : `${style.letterSpacing}em`);
+  }
+  return parts.join(" • ");
+}
+
+// The six text-style selectors for one hero copy element. Each control maps the
+// stored override (or its undefined "inherit" state) to a friendly option and
+// writes a minimal HeroFieldStyle patch back up via onChange.
+function HeroFieldControls({
   style,
   onChange,
 }: {
   style: HeroFieldStyle;
   onChange: (patch: Partial<HeroFieldStyle>) => void;
 }) {
-  const [open, setOpen] = useState(true);
-  const active = Object.values(style).some((v) => v !== undefined);
-
   const weightLabel = (w?: FontWeight) => (w ? WEIGHT_LABELS[w] : INHERIT);
   const spacingLabel = (em?: number) =>
     em === undefined ? INHERIT : (Object.keys(LETTER_SPACINGS).find((k) => LETTER_SPACINGS[k] === em) ?? INHERIT);
 
   return (
-    <div style={{ margin: "-4px 0 2px" }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          appearance: "none",
-          border: 0,
-          background: "transparent",
-          cursor: "pointer",
-          padding: "2px 0",
-          font: "inherit",
-          fontSize: 10.5,
-          fontWeight: 600,
-          letterSpacing: ".03em",
-          color: active ? "rgba(41,38,27,.72)" : "rgba(41,38,27,.45)",
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-        }}
-      >
-        <span style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .12s", fontSize: 8 }}>▶</span>
-        Text style{active ? " •" : ""}
+    <>
+      <TweakSelect
+        label="Font"
+        value={style.font ?? INHERIT}
+        options={[INHERIT, ...FONT_OPTIONS]}
+        onChange={(v) => onChange({ font: v === INHERIT ? undefined : v })}
+      />
+      <TweakSelect
+        label="Size"
+        value={style.size ? String(style.size) : INHERIT}
+        options={[INHERIT, ...HERO_FIELD_SIZES.map((s) => `${s}px`)]}
+        onChange={(v) => onChange({ size: v === INHERIT ? undefined : parseInt(v, 10) })}
+      />
+      <TweakSelect
+        label="Weight"
+        value={weightLabel(style.weight)}
+        options={[INHERIT, ...FONT_WEIGHTS.map((w) => WEIGHT_LABELS[w])]}
+        onChange={(v) =>
+          onChange({ weight: v === INHERIT ? undefined : FONT_WEIGHTS.find((w) => WEIGHT_LABELS[w] === v) })
+        }
+      />
+      <TweakSelect
+        label="Italic"
+        value={style.italic === undefined ? INHERIT : style.italic ? "Italic" : "Not italic"}
+        options={[INHERIT, "Italic", "Not italic"]}
+        onChange={(v) => onChange({ italic: v === INHERIT ? undefined : v === "Italic" })}
+      />
+      <TweakSelect
+        label="Transform"
+        value={
+          style.transform === undefined
+            ? INHERIT
+            : { uppercase: "UPPERCASE", lowercase: "lowercase", capitalize: "Capitalize", none: "None" }[style.transform]
+        }
+        options={[INHERIT, "UPPERCASE", "lowercase", "Capitalize", "None"]}
+        onChange={(v) =>
+          onChange({
+            transform:
+              v === INHERIT
+                ? undefined
+                : (({ UPPERCASE: "uppercase", lowercase: "lowercase", Capitalize: "capitalize", None: "none" } as const)[
+                    v as "UPPERCASE" | "lowercase" | "Capitalize" | "None"
+                  ]),
+          })
+        }
+      />
+      <TweakSelect
+        label="Letter spacing"
+        value={spacingLabel(style.letterSpacing)}
+        options={[INHERIT, ...Object.keys(LETTER_SPACINGS)]}
+        onChange={(v) => onChange({ letterSpacing: v === INHERIT ? undefined : LETTER_SPACINGS[v] })}
+      />
+    </>
+  );
+}
+
+function AccordionChevron() {
+  return (
+    <svg className="twk-acc-chev" width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M3 4.75 6 7.75l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// One hero copy element rendered as a collapsible card. The header is a single
+// click target showing the element name + a compact type summary; expanding it
+// reveals the copy text and the full text-style controls. The parent accordion
+// owns which card is open, so only one body is mounted at a time.
+function HeroCopyCard({
+  name,
+  summary,
+  custom,
+  open,
+  onToggle,
+  bodyId,
+  children,
+}: {
+  name: string;
+  summary: string;
+  custom: boolean;
+  open: boolean;
+  onToggle: () => void;
+  bodyId: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="twk-acc-item" data-open={open ? "1" : "0"} data-custom={custom ? "1" : "0"}>
+      <button type="button" className="twk-acc-hd" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>
+        <span className="twk-acc-dot" aria-hidden />
+        <span className="twk-acc-meta">
+          <span className="twk-acc-name">{name}</span>
+          <span className="twk-acc-sum">{summary || "Theme default"}</span>
+        </span>
+        <AccordionChevron />
       </button>
       {open && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 6 }}>
-          <TweakSelect
-            label="Font"
-            value={style.font ?? INHERIT}
-            options={[INHERIT, ...FONT_OPTIONS]}
-            onChange={(v) => onChange({ font: v === INHERIT ? undefined : v })}
-          />
-          <TweakSelect
-            label="Size"
-            value={style.size ? String(style.size) : INHERIT}
-            options={[INHERIT, ...HERO_FIELD_SIZES.map((s) => `${s}px`)]}
-            onChange={(v) => onChange({ size: v === INHERIT ? undefined : parseInt(v, 10) })}
-          />
-          <TweakSelect
-            label="Weight"
-            value={weightLabel(style.weight)}
-            options={[INHERIT, ...FONT_WEIGHTS.map((w) => WEIGHT_LABELS[w])]}
-            onChange={(v) =>
-              onChange({ weight: v === INHERIT ? undefined : FONT_WEIGHTS.find((w) => WEIGHT_LABELS[w] === v) })
-            }
-          />
-          <TweakSelect
-            label="Italic"
-            value={style.italic === undefined ? INHERIT : style.italic ? "Italic" : "Not italic"}
-            options={[INHERIT, "Italic", "Not italic"]}
-            onChange={(v) => onChange({ italic: v === INHERIT ? undefined : v === "Italic" })}
-          />
-          <TweakSelect
-            label="Transform"
-            value={
-              style.transform === undefined
-                ? INHERIT
-                : { uppercase: "UPPERCASE", lowercase: "lowercase", capitalize: "Capitalize", none: "None" }[style.transform]
-            }
-            options={[INHERIT, "UPPERCASE", "lowercase", "Capitalize", "None"]}
-            onChange={(v) =>
-              onChange({
-                transform:
-                  v === INHERIT
-                    ? undefined
-                    : (({ UPPERCASE: "uppercase", lowercase: "lowercase", Capitalize: "capitalize", None: "none" } as const)[
-                        v as "UPPERCASE" | "lowercase" | "Capitalize" | "None"
-                      ]),
-              })
-            }
-          />
-          <TweakSelect
-            label="Letter spacing"
-            value={spacingLabel(style.letterSpacing)}
-            options={[INHERIT, ...Object.keys(LETTER_SPACINGS)]}
-            onChange={(v) => onChange({ letterSpacing: v === INHERIT ? undefined : LETTER_SPACINGS[v] })}
-          />
+        <div className="twk-acc-body" id={bodyId} role="region" aria-label={`${name} text style`}>
+          {children}
         </div>
       )}
+    </div>
+  );
+}
+
+// The hero copy elements, in display order. `contentKey` binds the card's copy
+// input to its Brand field; `field` binds the type controls to heroFieldStyles.
+const HERO_COPY_CARDS: {
+  field: HeroTextField;
+  name: string;
+  contentKey: keyof Brand;
+  placeholder?: string;
+}[] = [
+  { field: "chip", name: "Chip label", contentKey: "heroChipLabel", placeholder: "defaults to brand name" },
+  { field: "line1", name: "Line 1", contentKey: "heroLine1" },
+  { field: "line2", name: "Line 2 (italic)", contentKey: "heroLine2" },
+  { field: "sub", name: "Subhead", contentKey: "heroSub" },
+  { field: "cta1", name: "Primary CTA", contentKey: "heroCta1" },
+  { field: "cta2", name: "Secondary CTA", contentKey: "heroCta2" },
+];
+
+// Accordion of hero copy cards. Replaces the old always-expanded stack of
+// per-field controls: every element is visible at a glance as a summary card,
+// and only the clicked card expands (single-open) to reveal its full controls.
+function HeroCopyAccordion({
+  brand,
+  setTweak,
+  fieldStyle,
+  setFieldStyle,
+  clearFieldStyle,
+}: {
+  brand: Brand;
+  setTweak: SetTweak;
+  fieldStyle: (field: HeroTextField) => HeroFieldStyle;
+  setFieldStyle: (field: HeroTextField, patch: Partial<HeroFieldStyle>) => void;
+  clearFieldStyle: (field: HeroTextField) => void;
+}) {
+  const [openField, setOpenField] = useState<HeroTextField | null>(null);
+
+  return (
+    <div className="twk-acc">
+      {HERO_COPY_CARDS.map(({ field, name, contentKey, placeholder }) => {
+        const style = fieldStyle(field);
+        const custom = Object.keys(style).length > 0;
+        return (
+          <HeroCopyCard
+            key={field}
+            name={name}
+            summary={summarizeFieldStyle(style)}
+            custom={custom}
+            open={openField === field}
+            onToggle={() => setOpenField((cur) => (cur === field ? null : field))}
+            bodyId={`twk-copy-${field}`}
+          >
+            <TweakText
+              label="Text"
+              value={(brand[contentKey] as string | undefined) ?? ""}
+              placeholder={placeholder}
+              onChange={(v) => setTweak(contentKey, v)}
+            />
+            <HeroFieldControls style={style} onChange={(patch) => setFieldStyle(field, patch)} />
+            <button type="button" className="twk-acc-reset" disabled={!custom} onClick={() => clearFieldStyle(field)}>
+              Reset to theme default
+            </button>
+          </HeroCopyCard>
+        );
+      })}
     </div>
   );
 }
@@ -238,6 +349,14 @@ export function BrandTweaksForm({
   };
   const fieldStyle = (field: HeroTextField): HeroFieldStyle => t.heroFieldStyles?.[field] ?? {};
 
+  // Drop every override for one field so it falls back to the theme defaults,
+  // pruning the key entirely to keep the stored object minimal.
+  const clearFieldStyle = (field: HeroTextField) => {
+    const all = { ...(t.heroFieldStyles ?? {}) };
+    delete all[field];
+    setTweak("heroFieldStyles", all);
+  };
+
   return (
     <>
       {/* Load all selectable fonts only while the picker is open. */}
@@ -325,18 +444,13 @@ export function BrandTweaksForm({
       <TweakToggle label="Show secondary CTA" value={t.heroShowCta2 !== false} onChange={(v) => setTweak("heroShowCta2", v)} />
 
       <TweakSection label="Hero copy" />
-      <TweakText label="Chip label" value={t.heroChipLabel} placeholder="defaults to brand name" onChange={(v) => setTweak("heroChipLabel", v)} />
-      <HeroFieldStyle_ style={fieldStyle("chip")} onChange={(p) => setFieldStyle("chip", p)} />
-      <TweakText label="Line 1" value={t.heroLine1} onChange={(v) => setTweak("heroLine1", v)} />
-      <HeroFieldStyle_ style={fieldStyle("line1")} onChange={(p) => setFieldStyle("line1", p)} />
-      <TweakText label="Line 2 (italic)" value={t.heroLine2} onChange={(v) => setTweak("heroLine2", v)} />
-      <HeroFieldStyle_ style={fieldStyle("line2")} onChange={(p) => setFieldStyle("line2", p)} />
-      <TweakText label="Subhead" value={t.heroSub} onChange={(v) => setTweak("heroSub", v)} />
-      <HeroFieldStyle_ style={fieldStyle("sub")} onChange={(p) => setFieldStyle("sub", p)} />
-      <TweakText label="Primary CTA" value={t.heroCta1} onChange={(v) => setTweak("heroCta1", v)} />
-      <HeroFieldStyle_ style={fieldStyle("cta1")} onChange={(p) => setFieldStyle("cta1", p)} />
-      <TweakText label="Secondary CTA" value={t.heroCta2} onChange={(v) => setTweak("heroCta2", v)} />
-      <HeroFieldStyle_ style={fieldStyle("cta2")} onChange={(p) => setFieldStyle("cta2", p)} />
+      <HeroCopyAccordion
+        brand={t}
+        setTweak={setTweak}
+        fieldStyle={fieldStyle}
+        setFieldStyle={setFieldStyle}
+        clearFieldStyle={clearFieldStyle}
+      />
 
       <TweakSection label="Catalog" />
       <TweakText label="Eyebrow" value={t.catalogEyebrow} onChange={(v) => setTweak("catalogEyebrow", v)} />

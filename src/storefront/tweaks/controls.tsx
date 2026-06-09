@@ -80,6 +80,42 @@ const __TWEAKS_STYLE = `
     background:linear-gradient(135deg,var(--brand-button,#E94B7D),var(--brand-button-2,#F687A8));
     box-shadow:0 8px 24px -8px rgba(0,0,0,.4);display:inline-flex;align-items:center;gap:8px}
   .twk-launch:hover{filter:brightness(1.05)}
+
+  /* ── Typography accordion: one collapsible card per hero copy element. ──
+     Collapsed cards show a name + a compact summary of the type overrides so
+     the whole set is scannable at a glance; only the open card expands its
+     controls. The active card is lifted with an accent border + glow. */
+  .twk-acc{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+  .twk-acc-item{position:relative;border:.5px solid rgba(0,0,0,.1);border-radius:10px;
+    background:rgba(255,255,255,.4);overflow:hidden;
+    transition:border-color .15s,background .15s,box-shadow .15s}
+  .twk-acc-item:hover{background:rgba(255,255,255,.62)}
+  .twk-acc-item[data-open="1"]{
+    border-color:color-mix(in srgb,var(--brand-accent,#E94B7D) 55%,transparent);
+    background:rgba(255,255,255,.85);
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset,
+      0 10px 24px -16px color-mix(in srgb,var(--brand-accent,#E94B7D) 90%,transparent)}
+  .twk-acc-hd{appearance:none;border:0;background:transparent;width:100%;cursor:pointer;
+    display:flex;align-items:center;gap:9px;padding:8px 10px;text-align:left;font:inherit;color:inherit}
+  .twk-acc-item[data-open="1"] .twk-acc-hd{padding-bottom:7px}
+  .twk-acc-hd:focus-visible{outline:2px solid var(--brand-accent,#E94B7D);outline-offset:-2px;border-radius:10px}
+  .twk-acc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:transparent;
+    border:1px solid rgba(41,38,27,.28);transition:background .15s,border-color .15s}
+  .twk-acc-item[data-custom="1"] .twk-acc-dot{background:var(--brand-accent,#E94B7D);border-color:transparent}
+  .twk-acc-meta{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .twk-acc-name{font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(41,38,27,.9);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-acc-sum{font-size:10px;color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-acc-chev{flex-shrink:0;color:rgba(41,38,27,.4);transition:transform .18s,color .15s}
+  .twk-acc-item[data-open="1"] .twk-acc-chev{transform:rotate(180deg);color:rgba(41,38,27,.72)}
+  .twk-acc-body{display:flex;flex-direction:column;gap:8px;padding:6px 10px 11px;
+    border-top:.5px solid rgba(0,0,0,.06)}
+  .twk-acc-reset{align-self:flex-start;appearance:none;border:0;background:transparent;cursor:pointer;
+    font:inherit;font-size:10px;font-weight:500;color:rgba(41,38,27,.5);padding:1px 0;margin-top:1px;
+    text-decoration:underline;text-underline-offset:2px}
+  .twk-acc-reset:hover{color:var(--brand-accent,#E94B7D)}
+  .twk-acc-reset:disabled{opacity:.4;cursor:default;text-decoration:none}
 `;
 
 /** The Tweaks stylesheet — render once near the launcher so it's present
