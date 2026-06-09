@@ -165,7 +165,7 @@ function Shell() {
       {activePage === "coa" && <COAPage brand={brand} onBack={goHome} />}
       {activePage === "protocols" && <ProtocolsPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
-      {activePage === "merchant" && <MerchantPage brand={brand} products={products} onBack={goHome} />}
+      {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
 
       {(activePage === "home" || activePage === "catalog") && (
         <>

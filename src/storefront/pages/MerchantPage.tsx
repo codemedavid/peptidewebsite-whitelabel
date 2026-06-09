@@ -5,12 +5,22 @@
 // ships to the browser), then see the wholesale price list: every product with a
 // reseller tier, alongside its retail price. Toggled on per-tenant from the store
 // admin → Reseller Portal. Hidden entirely when showPageMerchant is off.
+//
+// When the viewer holds a store-admin session, the page unlocks without a code
+// and each row becomes editable — the owner can open the full product editor
+// inline to manage prices/details right from this list. Resellers (code-only)
+// always see the read-only table.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
+import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
-import { verifyResellerCodeAction } from "@/actions/storefront-admin";
+import {
+  hasStorefrontAdminSessionAction,
+  verifyResellerCodeAction,
+} from "@/actions/storefront-admin";
+import { AdminAddProduct } from "../admin/AdminAddProduct";
 
 // Per-tenant key so unlocking one store doesn't unlock another in the same browser.
 const UNLOCK_KEY = "sf_merchant_unlocked";
@@ -82,14 +92,18 @@ function Gate({
 
 export function MerchantPage({
   brand,
-  products,
   onBack,
 }: {
   brand: Brand;
-  products: Product[];
   onBack: () => void;
 }) {
+  // Read the catalog from the shared store so the owner's inline edits (which go
+  // through AdminAddProduct → setProducts) re-render this list immediately.
+  const { products, categories } = useStore();
   const [unlocked, setUnlocked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminChecked, setAdminChecked] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
 
   useEffect(() => {
     try {
@@ -97,22 +111,59 @@ export function MerchantPage({
     } catch {
       /* ignore */
     }
+    // The store owner gets in without a code and with editing enabled.
+    void hasStorefrontAdminSessionAction()
+      .then((ok) => {
+        if (ok) {
+          setIsAdmin(true);
+          setUnlocked(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAdminChecked(true));
   }, []);
 
-  // Only products that actually carry a reseller tier, and that the owner hasn't
-  // hidden from the storefront.
-  const rows = useMemo(
-    () =>
-      products
-        .filter((p) => p.available !== false)
-        .filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet)),
-    [products],
-  );
+  const catLabel = (id: string) => (categories || []).find((c) => c.id === id)?.label || id;
+
+  // Resellers see only products that actually carry a wholesale tier (and aren't
+  // hidden). The owner sees every product so they can add/adjust prices on any of
+  // them right here.
+  const rows = useMemo(() => {
+    if (isAdmin) return products;
+    return products
+      .filter((p) => p.available !== false)
+      .filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet));
+  }, [products, isAdmin]);
 
   const currency = brand.currency || products[0]?.currency || "₱";
   const money = (n?: number | null) => (n && n > 0 ? `${currency}${n.toLocaleString()}` : "—");
+  const colSpan = isAdmin ? 7 : 6;
 
-  if (!unlocked) return <Gate brand={brand} onUnlock={() => setUnlocked(true)} />;
+  // Inline full-product editor (owner only). Reuses the admin product form; on
+  // save it updates the shared store, so closing it drops us back to a fresh row.
+  if (editing) {
+    return (
+      <AdminAddProduct
+        brand={brand}
+        initial={editing}
+        onCancel={() => setEditing(null)}
+        onSaved={() => setEditing(null)}
+      />
+    );
+  }
+
+  // Hold the gate until the admin check resolves, so the owner doesn't see it
+  // flash before auto-unlocking.
+  if (!unlocked) {
+    if (!adminChecked) {
+      return (
+        <div className="sf-page-spinner">
+          <div className="sf-page-spinner__ring" />
+        </div>
+      );
+    }
+    return <Gate brand={brand} onUnlock={() => setUnlocked(true)} />;
+  }
 
   return (
     <section className="page" id="merchant">
@@ -123,6 +174,14 @@ export function MerchantPage({
           <h1 className="page__title">{brand.merchantTitle || "Reseller Price List"}</h1>
           {brand.merchantSub && <p className="page__sub">{brand.merchantSub}</p>}
         </div>
+
+        {isAdmin && (
+          <div className="merchant-adminbar">
+            <span className="merchant-adminbar__badge">Admin</span>
+            Editing is on — click <strong>Edit</strong> on any product to manage its prices and details.
+            Resellers only see the read-only list.
+          </div>
+        )}
 
         <div className="merchant-note">
           <strong>Wholesale terms:</strong> the minimum order to unlock the wholesale price is set per
@@ -141,20 +200,22 @@ export function MerchantPage({
                   <th className="merchant-table__num">Retail</th>
                   <th className="merchant-table__num">Vials only</th>
                   <th className="merchant-table__num">Complete set</th>
+                  {isAdmin && <th className="merchant-table__num">Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((p) => {
                   const applied = resellerTierLabel(p);
                   const minQty = resellerMinQty(p);
+                  const hasReseller = !!(p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet));
                   return (
                     <tr key={p.id}>
                       <td className="merchant-table__product">
                         <span className="merchant-table__name">{p.name}</span>
                         {p.purity && <span className="merchant-table__purity">{p.purity} purity</span>}
                       </td>
-                      <td className="merchant-table__cat">{p.category}</td>
-                      <td className="merchant-table__num">{minQty}+</td>
+                      <td className="merchant-table__cat">{catLabel(p.category)}</td>
+                      <td className="merchant-table__num">{hasReseller ? `${minQty}+` : "—"}</td>
                       <td className="merchant-table__num merchant-table__retail">{money(p.price)}</td>
                       <td className="merchant-table__num">
                         {money(p.reseller?.vialsOnly)}
@@ -170,9 +231,28 @@ export function MerchantPage({
                           <span className="merchant-table__tag">at {minQty}+ online</span>
                         ) : null}
                       </td>
+                      {isAdmin && (
+                        <td className="merchant-table__num">
+                          <button className="merchant-edit-btn" onClick={() => setEditing(p)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+                            </svg>
+                            Edit
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={colSpan} style={{ textAlign: "center", padding: 48, color: "var(--brand-text-muted)" }}>
+                      No products yet.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
