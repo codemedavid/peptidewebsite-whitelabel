@@ -4047,95 +4047,11 @@
   line-height: 1.55;
   margin: 8px 0 28px;
 }
-.sf-root .merchant-table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--brand-border);
-  border-radius: var(--radius-lg);
-  background: var(--brand-surface);
-}
-.sf-root .merchant-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 640px;
-}
-.sf-root .merchant-table th,
-.sf-root .merchant-table td {
-  padding: 14px 18px;
-  text-align: left;
-  border-bottom: 1px solid var(--brand-border);
-  font-size: 15px;
-  vertical-align: middle;
-}
-.sf-root .merchant-table thead th {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--brand-text-muted);
-  background: var(--brand-surface-2);
-}
-.sf-root .merchant-table tbody tr:last-child td { border-bottom: none; }
-.sf-root .merchant-table__num { text-align: right; white-space: nowrap; }
-.sf-root .merchant-table__product { display: flex; flex-direction: column; gap: 2px; }
-.sf-root .merchant-table__name { font-weight: 600; color: var(--brand-text); }
-.sf-root .merchant-table__purity { font-size: 12px; color: var(--brand-text-muted); }
-.sf-root .merchant-table__cat { color: var(--brand-text-muted); font-size: 14px; }
-.sf-root .merchant-table__retail { color: var(--brand-text-muted); text-decoration: line-through; }
-.sf-root .merchant-table__tag {
-  display: block;
-  margin-top: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--brand-main);
-}
-.sf-root .merchant-table__tag.is-muted { color: var(--brand-text-muted); }
 .sf-root .merchant-empty {
   text-align: center;
   padding: 60px 20px;
   border: 1px dashed var(--brand-border);
   border-radius: var(--radius-lg);
-}
-.sf-root .merchant-adminbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: color-mix(in srgb, var(--brand-main) 8%, var(--brand-surface));
-  border: 1px solid color-mix(in srgb, var(--brand-main) 30%, transparent);
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  margin: 0 0 16px;
-  font-size: 14px;
-  color: var(--brand-text);
-}
-.sf-root .merchant-adminbar__badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #fff;
-  background: var(--brand-main);
-  border-radius: var(--radius-pill);
-  padding: 3px 10px;
-}
-.sf-root .merchant-edit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--brand-main);
-  background: var(--brand-surface);
-  border: 1px solid color-mix(in srgb, var(--brand-main) 40%, transparent);
-  border-radius: var(--radius-pill);
-  transition: background 0.15s, color 0.15s;
-}
-.sf-root .merchant-edit-btn:hover {
-  background: var(--brand-main);
-  color: #fff;
 }
 .sf-root .merchant-order {
   display: flex;
@@ -4227,5 +4143,4 @@
 .sf-root .merchant-card__foot { gap: 12px; }
 .sf-root .merchant-card__foot .merchant-order { justify-content: stretch; }
 .sf-root .merchant-card__foot .merchant-order__add { flex: 1; }
-.sf-root .merchant-card__edit { width: 100%; justify-content: center; }
 

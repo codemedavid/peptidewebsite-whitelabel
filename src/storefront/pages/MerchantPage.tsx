@@ -3,29 +3,26 @@
 // The gated reseller / merchant portal (#merchant). Resellers unlock it with the
 // access code the store owner configured (validated server-side — the code never
 // ships to the browser), then see the wholesale price list: every product with a
-// reseller tier, alongside its retail price. Toggled on per-tenant from the store
-// admin → Reseller Portal. Hidden entirely when showPageMerchant is off.
+// reseller tier, alongside its retail price, and order it straight from the card.
+// Toggled on per-tenant from the store admin → Reseller Portal. Hidden entirely
+// when showPageMerchant is off.
 //
-// When the viewer holds a store-admin session, the page unlocks without a code
-// and each row becomes editable — the owner can open the full product editor
-// inline to manage prices/details right from this list. Resellers (code-only)
-// always see the read-only table.
+// This is the storefront (customer-facing) side only: it never edits anything.
+// Reseller prices/details are managed from the store admin → Manage Products,
+// which opens the same product editor (AdminAddProduct) with its Reseller /
+// Wholesale Pricing section.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
-import {
-  hasStorefrontAdminSessionAction,
-  verifyResellerCodeAction,
-} from "@/actions/storefront-admin";
-import { AdminAddProduct } from "../admin/AdminAddProduct";
+import { verifyResellerCodeAction } from "@/actions/storefront-admin";
 
 // Per-tenant key so unlocking one store doesn't unlock another in the same browser.
 const UNLOCK_KEY = "sf_merchant_unlocked";
 
-// Wholesale order control for a reseller row: a quantity stepper floored at the
+// Wholesale order control for a reseller card: a quantity stepper floored at the
 // product's minimum (so a line can never be added below the wholesale threshold)
 // plus an Add-to-Cart button. The cart applies the wholesale unit price at this
 // quantity automatically (see checkout.ts unitPrice/isResellerQty).
@@ -70,21 +67,18 @@ function OrderCell({
 }
 
 // One wholesale product rendered as a card (mirrors the public catalog card, but
-// surfaces the reseller tiers instead of the single retail price). Owners get an
-// Edit button in the footer; resellers get the qty + add-to-cart control.
+// surfaces the reseller tiers instead of the single retail price). The footer is
+// always the qty + add-to-cart control — this is a checkout surface, not an
+// editor.
 function MerchantCard({
   product,
   categoryLabel,
   money,
-  isAdmin,
-  onEdit,
   onAdd,
 }: {
   product: Product;
   categoryLabel: string;
   money: (n?: number | null) => string;
-  isAdmin: boolean;
-  onEdit: () => void;
   onAdd: (qty: number) => void;
 }) {
   const applied = resellerTierLabel(product);
@@ -145,18 +139,7 @@ function MerchantCard({
       <hr className="hairline" />
 
       <div className="product-card__foot merchant-card__foot">
-        {isAdmin ? (
-          <button className="merchant-edit-btn merchant-card__edit" onClick={onEdit}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
-            </svg>
-            Edit prices &amp; details
-          </button>
-        ) : (
-          <OrderCell product={product} onAdd={onAdd} />
-        )}
+        <OrderCell product={product} onAdd={onAdd} />
       </div>
     </article>
   );
@@ -234,13 +217,10 @@ export function MerchantPage({
   brand: Brand;
   onBack: () => void;
 }) {
-  // Read the catalog from the shared store so the owner's inline edits (which go
-  // through AdminAddProduct → setProducts) re-render this list immediately.
+  // Read the catalog from the shared store so price changes made in the admin
+  // (which go through AdminAddProduct → setProducts) re-render this list.
   const { products, categories, addToCart } = useStore();
   const [unlocked, setUnlocked] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminChecked, setAdminChecked] = useState(false);
-  const [editing, setEditing] = useState<Product | null>(null);
 
   useEffect(() => {
     try {
@@ -248,56 +228,24 @@ export function MerchantPage({
     } catch {
       /* ignore */
     }
-    // The store owner gets in without a code and with editing enabled.
-    void hasStorefrontAdminSessionAction()
-      .then((ok) => {
-        if (ok) {
-          setIsAdmin(true);
-          setUnlocked(true);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setAdminChecked(true));
   }, []);
 
   const catLabel = (id: string) => (categories || []).find((c) => c.id === id)?.label || id;
 
-  // Resellers see only products that actually carry a wholesale tier (and aren't
-  // hidden). The owner sees every product so they can add/adjust prices on any of
-  // them right here.
-  const rows = useMemo(() => {
-    if (isAdmin) return products;
-    return products
-      .filter((p) => p.available !== false)
-      .filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet));
-  }, [products, isAdmin]);
+  // The reseller list shows only products that actually carry a wholesale tier
+  // (and aren't hidden).
+  const rows = useMemo(
+    () =>
+      products
+        .filter((p) => p.available !== false)
+        .filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet)),
+    [products],
+  );
 
   const currency = brand.currency || products[0]?.currency || "₱";
   const money = (n?: number | null) => (n && n > 0 ? `${currency}${n.toLocaleString()}` : "—");
 
-  // Inline full-product editor (owner only). Reuses the admin product form; on
-  // save it updates the shared store, so closing it drops us back to a fresh row.
-  if (editing) {
-    return (
-      <AdminAddProduct
-        brand={brand}
-        initial={editing}
-        onCancel={() => setEditing(null)}
-        onSaved={() => setEditing(null)}
-      />
-    );
-  }
-
-  // Hold the gate until the admin check resolves, so the owner doesn't see it
-  // flash before auto-unlocking.
   if (!unlocked) {
-    if (!adminChecked) {
-      return (
-        <div className="sf-page-spinner">
-          <div className="sf-page-spinner__ring" />
-        </div>
-      );
-    }
     return <Gate brand={brand} onUnlock={() => setUnlocked(true)} />;
   }
 
@@ -311,20 +259,12 @@ export function MerchantPage({
           {brand.merchantSub && <p className="page__sub">{brand.merchantSub}</p>}
         </div>
 
-        {isAdmin && (
-          <div className="merchant-adminbar">
-            <span className="merchant-adminbar__badge">Admin</span>
-            Editing is on — click <strong>Edit</strong> on any product to manage its prices and details.
-            Resellers only see the read-only list.
-          </div>
-        )}
-
         <div className="merchant-note">
           <strong>Wholesale terms:</strong> the minimum order to unlock the wholesale price is set per
-          product (default {RESELLER_MIN_QTY} units) — see the “Min order” column. Add a product from the
-          “Order” column (it starts at the minimum) and the wholesale price applies automatically in your
-          cart. The complete-set tier is what we ship online at the minimum; the vials-only tier is
-          arranged by request.
+          product (default {RESELLER_MIN_QTY} units) — shown as the “Min” badge on each card. The quantity
+          starts at that minimum, so the wholesale price applies automatically in your cart. The
+          complete-set tier is what we ship online at the minimum; the vials-only tier is arranged by
+          request.
         </div>
 
         {rows.length > 0 ? (
@@ -335,8 +275,6 @@ export function MerchantPage({
                 product={p}
                 categoryLabel={catLabel(p.category)}
                 money={money}
-                isAdmin={isAdmin}
-                onEdit={() => setEditing(p)}
                 onAdd={(qty) => addToCart(p, qty)}
               />
             ))}
