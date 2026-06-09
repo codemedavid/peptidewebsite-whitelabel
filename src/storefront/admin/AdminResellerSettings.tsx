@@ -14,6 +14,7 @@ import {
   getResellerSettingsAction,
   saveResellerSettingsAction,
 } from "@/actions/storefront-admin";
+import { resellerMinQty } from "../checkout";
 
 export function AdminResellerSettings({
   brand,
@@ -146,6 +147,7 @@ export function AdminResellerSettings({
                 <tr>
                   <th>Product</th>
                   <th>Category</th>
+                  <th>Min order</th>
                   <th>Retail</th>
                   <th>Vials only</th>
                   <th>Complete set</th>
@@ -167,6 +169,7 @@ export function AdminResellerSettings({
                         </button>
                       </td>
                       <td data-label="Category"><span style={{ fontSize: 14 }}>{catLabel(p.category)}</span></td>
+                      <td className="admin-cell-price" data-label="Min order">{hasReseller ? `${resellerMinQty(p)}+` : "—"}</td>
                       <td className="admin-cell-price" data-label="Retail">{money(p.price)}</td>
                       <td className="admin-cell-price" data-label="Vials only">{money(p.reseller?.vialsOnly)}</td>
                       <td className="admin-cell-price" data-label="Complete set">{money(p.reseller?.completeSet)}</td>
@@ -188,7 +191,7 @@ export function AdminResellerSettings({
                 })}
                 {products.length === 0 && (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: "center", padding: 60, color: "var(--brand-text-muted)" }}>
+                    <td colSpan={7} style={{ textAlign: "center", padding: 60, color: "var(--brand-text-muted)" }}>
                       No products yet. Add products first, then set their reseller prices.
                     </td>
                   </tr>

@@ -47,8 +47,9 @@ export type ProductMetadata = {
   /** Preserved so the product detail page's COA link keeps working. */
   coaUrl?: string;
   /** Wholesale / reseller pricing tier (min. order applies). Only present when at
-   *  least one leg is set — see `cleanReseller` so an empty `{}` never persists. */
-  reseller?: { vialsOnly?: number; completeSet?: number };
+   *  least one price leg is set — see `cleanReseller` so an empty `{}` never
+   *  persists. `minQty` is the per-product wholesale threshold. */
+  reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -166,15 +167,19 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
  * (which keeps empty objects) never persists a bare `{}` or a stale leg.
  */
 function cleanReseller(
-  r: { vialsOnly?: number; completeSet?: number } | undefined,
-): { vialsOnly?: number; completeSet?: number } | undefined {
+  r: { vialsOnly?: number; completeSet?: number; minQty?: number } | undefined,
+): { vialsOnly?: number; completeSet?: number; minQty?: number } | undefined {
   if (!r) return undefined;
   const vialsOnly = Number(r.vialsOnly) || 0;
   const completeSet = Number(r.completeSet) || 0;
+  const minQty = Math.max(0, Math.round(Number(r.minQty) || 0));
   if (!vialsOnly && !completeSet) return undefined;
   return {
     ...(vialsOnly ? { vialsOnly } : {}),
     ...(completeSet ? { completeSet } : {}),
+    // Only persist a minimum the owner actually set (>0); else the storefront
+    // falls back to the global RESELLER_MIN_QTY default.
+    ...(minQty > 0 ? { minQty } : {}),
   };
 }
 

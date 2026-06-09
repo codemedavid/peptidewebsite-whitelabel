@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
+import { RESELLER_MIN_QTY } from "../checkout";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -143,6 +144,7 @@ export function AdminAddProduct({
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   const [resellerVials, setResellerVials] = useState<number | string>(initial?.reseller?.vialsOnly ?? 0);
   const [resellerSet, setResellerSet]     = useState<number | string>(initial?.reseller?.completeSet ?? 0);
+  const [resellerMin, setResellerMin]     = useState<number | string>(initial?.reseller?.minQty ?? RESELLER_MIN_QTY);
   const [image, setImage]           = useState<string>(initial?.image || "");
   const [imageDrag, setImageDrag]   = useState<boolean>(false);
   const [uploading, setUploading]   = useState<boolean>(false);
@@ -212,6 +214,7 @@ export function AdminAddProduct({
       reseller: {
         vialsOnly: Number(resellerVials) || 0,
         completeSet: Number(resellerSet) || 0,
+        minQty: Number(resellerMin) || 0,
       },
       image: image || null,
     };
@@ -440,10 +443,12 @@ export function AdminAddProduct({
 
         {/* ---------- Reseller Pricing ---------- */}
         <div className="admin-form__card">
-          <h2 className="admin-form__section">🤝 Reseller Pricing (min. 10 orders)</h2>
+          <h2 className="admin-form__section">🤝 Reseller / Wholesale Pricing</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Wholesale prices shown on the storefront card alongside the retail price.
-            Leave a field at 0 to hide that tier.
+            Wholesale prices shown on the storefront card alongside the retail price, and
+            applied in the cart once a single product reaches the minimum order below.
+            Leave a price at 0 to hide that tier; leave the minimum blank to use the
+            default of {RESELLER_MIN_QTY}.
           </div>
 
           <div className="admin-form__row">
@@ -454,6 +459,13 @@ export function AdminAddProduct({
             <div className="admin-field">
               <label className="admin-field__label">Complete set ({currency})</label>
               <NumberField value={resellerSet} onChange={setResellerSet} min={0} />
+            </div>
+          </div>
+
+          <div className="admin-form__row admin-form__row--single" style={{ marginTop: 4 }}>
+            <div className="admin-field">
+              <label className="admin-field__label">Minimum order for wholesale (units)</label>
+              <NumberField value={resellerMin} onChange={setResellerMin} min={1} />
             </div>
           </div>
         </div>

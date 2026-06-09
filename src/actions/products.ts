@@ -82,7 +82,10 @@ function normalizeProductInput(input: unknown): Product {
       const r = (o.reseller ?? {}) as Record<string, unknown>;
       const vialsOnly = Math.max(0, num(r.vialsOnly));
       const completeSet = Math.max(0, num(r.completeSet));
-      return vialsOnly > 0 || completeSet > 0 ? { vialsOnly, completeSet } : undefined;
+      const minQty = Math.max(0, Math.round(num(r.minQty)));
+      return vialsOnly > 0 || completeSet > 0
+        ? { vialsOnly, completeSet, ...(minQty > 0 ? { minQty } : {}) }
+        : undefined;
     })(),
   };
 }

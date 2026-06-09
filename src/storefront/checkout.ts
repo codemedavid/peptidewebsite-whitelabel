@@ -63,8 +63,17 @@ export function cartLines(cart: Product[]): CartLine[] {
 // always stay at retail. This is data-driven, so it's a no-op for any tenant
 // whose products carry no reseller pricing.
 
-/** Bulk wholesale pricing applies once a single line reaches this quantity. */
+/** Default bulk threshold when a product doesn't set its own `reseller.minQty`. */
 export const RESELLER_MIN_QTY = 10;
+
+/**
+ * The minimum units that unlock the wholesale price for this product — the
+ * owner's per-product `reseller.minQty` when set (>0), else the global default.
+ */
+export function resellerMinQty(p: Product): number {
+  const m = p.reseller?.minQty;
+  return typeof m === "number" && m > 0 ? m : RESELLER_MIN_QTY;
+}
 
 /**
  * The wholesale unit price for a product, or null if it offers none. Prefers the
@@ -98,7 +107,7 @@ function basePrice(p: Product): number {
  * price, so they only ever appear on a real saving.
  */
 export function isResellerQty(p: Product, qty: number): boolean {
-  if (qty < RESELLER_MIN_QTY) return false;
+  if (qty < resellerMinQty(p)) return false;
   const wholesale = resellerUnitPrice(p);
   return wholesale != null && wholesale < basePrice(p);
 }
@@ -112,7 +121,7 @@ export function isResellerQty(p: Product, qty: number): boolean {
  */
 export function unitPrice(p: Product, qty = 1): number {
   const base = basePrice(p);
-  if (qty >= RESELLER_MIN_QTY) {
+  if (qty >= resellerMinQty(p)) {
     const wholesale = resellerUnitPrice(p);
     if (wholesale != null && wholesale < base) return wholesale;
   }

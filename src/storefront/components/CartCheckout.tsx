@@ -24,7 +24,7 @@ import {
   CHANNEL_LABELS,
   EMPTY_CUSTOMER,
   isResellerQty,
-  RESELLER_MIN_QTY,
+  resellerMinQty,
   resellerTierLabel,
   resellerUnitPrice,
   unitPrice,
@@ -311,7 +311,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 // How many more units of THIS product unlock the wholesale price.
                 const toReseller =
                   !reseller && resellerUnitPrice(l.product) != null
-                    ? RESELLER_MIN_QTY - l.qty
+                    ? resellerMinQty(l.product) - l.qty
                     : 0;
                 return (
                 <li key={l.product.id} className="sf-cart__line">

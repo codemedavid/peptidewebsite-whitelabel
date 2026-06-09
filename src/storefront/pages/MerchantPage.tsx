@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 import { BackLink } from "../components/BackLink";
-import { RESELLER_MIN_QTY, resellerTierLabel } from "../checkout";
+import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
 import { verifyResellerCodeAction } from "@/actions/storefront-admin";
 
 // Per-tenant key so unlocking one store doesn't unlock another in the same browser.
@@ -125,8 +125,9 @@ export function MerchantPage({
         </div>
 
         <div className="merchant-note">
-          <strong>Wholesale terms:</strong> minimum {RESELLER_MIN_QTY} units per item. The complete-set
-          tier is what we ship online at {RESELLER_MIN_QTY}+; the vials-only tier is arranged by request.
+          <strong>Wholesale terms:</strong> the minimum order to unlock the wholesale price is set per
+          product (default {RESELLER_MIN_QTY} units) — see the “Min order” column. The complete-set tier
+          is what we ship online at the minimum; the vials-only tier is arranged by request.
         </div>
 
         {rows.length > 0 ? (
@@ -136,6 +137,7 @@ export function MerchantPage({
                 <tr>
                   <th>Product</th>
                   <th>Category</th>
+                  <th className="merchant-table__num">Min order</th>
                   <th className="merchant-table__num">Retail</th>
                   <th className="merchant-table__num">Vials only</th>
                   <th className="merchant-table__num">Complete set</th>
@@ -144,6 +146,7 @@ export function MerchantPage({
               <tbody>
                 {rows.map((p) => {
                   const applied = resellerTierLabel(p);
+                  const minQty = resellerMinQty(p);
                   return (
                     <tr key={p.id}>
                       <td className="merchant-table__product">
@@ -151,11 +154,12 @@ export function MerchantPage({
                         {p.purity && <span className="merchant-table__purity">{p.purity} purity</span>}
                       </td>
                       <td className="merchant-table__cat">{p.category}</td>
+                      <td className="merchant-table__num">{minQty}+</td>
                       <td className="merchant-table__num merchant-table__retail">{money(p.price)}</td>
                       <td className="merchant-table__num">
                         {money(p.reseller?.vialsOnly)}
                         {applied === "Vials only" && p.reseller?.vialsOnly ? (
-                          <span className="merchant-table__tag">at {RESELLER_MIN_QTY}+ online</span>
+                          <span className="merchant-table__tag">at {minQty}+ online</span>
                         ) : p.reseller?.vialsOnly ? (
                           <span className="merchant-table__tag is-muted">by request</span>
                         ) : null}
@@ -163,7 +167,7 @@ export function MerchantPage({
                       <td className="merchant-table__num">
                         {money(p.reseller?.completeSet)}
                         {p.reseller?.completeSet ? (
-                          <span className="merchant-table__tag">at {RESELLER_MIN_QTY}+ online</span>
+                          <span className="merchant-table__tag">at {minQty}+ online</span>
                         ) : null}
                       </td>
                     </tr>

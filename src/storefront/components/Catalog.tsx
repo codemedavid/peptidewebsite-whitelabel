@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RESELLER_MIN_QTY, resellerTierLabel, resellerUnitPrice } from "../checkout";
+import { resellerMinQty, resellerTierLabel, resellerUnitPrice } from "../checkout";
 import type { Brand, Product } from "../types";
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
@@ -9,7 +9,8 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
   // Wholesale price the cart will charge once this product hits the bulk
   // threshold; the card reflects it live as the buyer steps the quantity up.
   const wholesale = resellerUnitPrice(product);
-  const resellerActive = wholesale != null && qty >= RESELLER_MIN_QTY;
+  const minQty = resellerMinQty(product);
+  const resellerActive = wholesale != null && qty >= minQty;
   // Which tier the online cart actually applies (Complete Set when offered, else
   // Vials Only). The other tier, if listed, is "by request" — arranged in chat —
   // so the card never implies a price the storefront can't charge.
@@ -49,13 +50,13 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
           {product.price.toLocaleString()}
           {product.reseller && (product.reseller.vialsOnly || product.reseller.completeSet) ? (
             <div className="product-card__reseller">
-              <span className="product-card__reseller-label">Reseller · min 10 orders</span>
+              <span className="product-card__reseller-label">Reseller · min {minQty} orders</span>
               {product.reseller.vialsOnly ? (
                 <span className="product-card__reseller-row">
                   Vials only: {product.currency}
                   {product.reseller.vialsOnly.toLocaleString()}
                   <span className={`product-card__reseller-tag${appliedTier === "Vials only" ? " is-applied" : ""}`}>
-                    {appliedTier === "Vials only" ? "at 10+ online" : "by request"}
+                    {appliedTier === "Vials only" ? `at ${minQty}+ online` : "by request"}
                   </span>
                 </span>
               ) : null}
@@ -63,7 +64,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
                 <span className="product-card__reseller-row">
                   Complete set: {product.currency}
                   {product.reseller.completeSet.toLocaleString()}
-                  <span className="product-card__reseller-tag is-applied">at 10+ online</span>
+                  <span className="product-card__reseller-tag is-applied">at {minQty}+ online</span>
                 </span>
               ) : null}
               {/* Always present so its aria-live region announces the unlock the

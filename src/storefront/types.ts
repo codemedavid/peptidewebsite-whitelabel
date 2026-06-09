@@ -24,9 +24,11 @@ export type Product = {
   storage?: string;
   sequence?: string;
   sizes?: string;
-  /** Wholesale / reseller pricing tier (min. order applies). Both legs optional —
-   *  "vials only" = peptide + bac water; "complete set" = with syringes/swabs. */
-  reseller?: { vialsOnly?: number; completeSet?: number };
+  /** Wholesale / reseller pricing tier. Both price legs optional — "vials only" =
+   *  peptide + bac water; "complete set" = with syringes/swabs. `minQty` is the
+   *  per-product minimum order that unlocks the wholesale price; unset falls back
+   *  to the global RESELLER_MIN_QTY default. */
+  reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
 };
 
 export type Category = { id: string; label: string };
