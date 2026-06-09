@@ -41,6 +41,9 @@ function brandVars(b: Brand): React.CSSProperties {
     ...(b.headerText ? { "--brand-header-text": b.headerText } : {}),
     "--brand-heading-font": `"${b.headingFont}", Georgia, serif`,
     "--brand-body-font": `"${b.bodyFont}", system-ui, sans-serif`,
+    // Only emit a button-font override when set, so the CSS default
+    // (--brand-button-font: var(--brand-body-font)) applies otherwise.
+    ...(b.buttonFont ? { "--brand-button-font": `"${b.buttonFont}", system-ui, sans-serif` } : {}),
   } as React.CSSProperties;
 }
 

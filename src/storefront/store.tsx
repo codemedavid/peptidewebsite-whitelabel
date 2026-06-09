@@ -132,6 +132,11 @@ function applyBrandStyle(b: Brand) {
   else r.removeProperty("--brand-header-text");
   r.setProperty("--brand-heading-font", `"${b.headingFont}", Georgia, serif`);
   r.setProperty("--brand-body-font", `"${b.bodyFont}", system-ui, sans-serif`);
+  // Button font is optional — remove (not set "") when unset so the CSS default
+  // (--brand-button-font: var(--brand-body-font)) applies and a previous
+  // tenant's value can't linger.
+  if (b.buttonFont) r.setProperty("--brand-button-font", `"${b.buttonFont}", system-ui, sans-serif`);
+  else r.removeProperty("--brand-button-font");
 }
 
 export function StoreProvider({

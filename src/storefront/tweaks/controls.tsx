@@ -8,6 +8,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef as useReactRef,
   useRef,
   useState,
@@ -15,6 +16,8 @@ import {
   type ReactNode,
 } from "react";
 import { uploadStorefrontImageAction } from "@/actions/media";
+import { FONT_PRESETS, FONT_PRESETS_BY_ID, type FontPreset } from "@/lib/theme/fontPresets";
+import { fontFamilyValue } from "@/lib/theme/tokens";
 
 // How LogoUpload sends a file. Defaults to the storefront-admin path; the
 // platform branding editor passes its own (slug-scoped, operator-authorized)
@@ -80,6 +83,84 @@ const __TWEAKS_STYLE = `
     background:linear-gradient(135deg,var(--brand-button,#E94B7D),var(--brand-button-2,#F687A8));
     box-shadow:0 8px 24px -8px rgba(0,0,0,.4);display:inline-flex;align-items:center;gap:8px}
   .twk-launch:hover{filter:brightness(1.05)}
+
+  /* ── Typography accordion: one collapsible card per hero copy element. ──
+     Collapsed cards show a name + a compact summary of the type overrides so
+     the whole set is scannable at a glance; only the open card expands its
+     controls. The active card is lifted with an accent border + glow. */
+  .twk-acc{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+  .twk-acc-item{position:relative;border:.5px solid rgba(0,0,0,.1);border-radius:10px;
+    background:rgba(255,255,255,.4);overflow:hidden;
+    transition:border-color .15s,background .15s,box-shadow .15s}
+  .twk-acc-item:hover{background:rgba(255,255,255,.62)}
+  .twk-acc-item[data-open="1"]{
+    border-color:color-mix(in srgb,var(--brand-accent,#E94B7D) 55%,transparent);
+    background:rgba(255,255,255,.85);
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset,
+      0 10px 24px -16px color-mix(in srgb,var(--brand-accent,#E94B7D) 90%,transparent)}
+  .twk-acc-hd{appearance:none;border:0;background:transparent;width:100%;cursor:pointer;
+    display:flex;align-items:center;gap:9px;padding:8px 10px;text-align:left;font:inherit;color:inherit}
+  .twk-acc-item[data-open="1"] .twk-acc-hd{padding-bottom:7px}
+  /* Inset box-shadow (not outline) so the focus ring isn't clipped by the
+     card's overflow:hidden. */
+  .twk-acc-hd:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--brand-accent,#E94B7D);border-radius:10px}
+  .twk-acc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:transparent;
+    border:1px solid rgba(41,38,27,.28);transition:background .15s,border-color .15s}
+  .twk-acc-item[data-custom="1"] .twk-acc-dot{background:var(--brand-accent,#E94B7D);border-color:transparent}
+  .twk-acc-meta{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .twk-acc-name{font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(41,38,27,.9);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-acc-sum{font-size:10px;color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-acc-chev{flex-shrink:0;color:rgba(41,38,27,.4);transition:transform .18s,color .15s}
+  .twk-acc-item[data-open="1"] .twk-acc-chev{transform:rotate(180deg);color:rgba(41,38,27,.72)}
+  .twk-acc-body{display:flex;flex-direction:column;gap:8px;padding:6px 10px 11px;
+    border-top:.5px solid rgba(0,0,0,.06)}
+  .twk-acc-reset{align-self:flex-start;appearance:none;border:0;background:transparent;cursor:pointer;
+    font:inherit;font-size:10px;font-weight:500;color:rgba(41,38,27,.5);padding:1px 0;margin-top:1px;
+    text-decoration:underline;text-underline-offset:2px}
+  .twk-acc-reset:hover{color:var(--brand-accent,#E94B7D)}
+  .twk-acc-reset:disabled{opacity:.45;color:rgba(41,38,27,.3);cursor:default;text-decoration:none}
+
+  /* ── Global Font Style picker ──────────────────────────────────────────────
+     A select-like trigger that expands an inline list of typography presets,
+     each previewed in its OWN fonts: the name in the preset's heading face, a
+     sample line in the body face, and a CTA chip in the button face. Inline
+     (not a floating popover) so it never clips inside the scrollable panel. */
+  .twk-fp{display:flex;flex-direction:column;gap:6px}
+  .twk-fp-trigger{appearance:none;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:8px;
+    text-align:left;padding:7px 9px;border:.5px solid rgba(0,0,0,.1);border-radius:9px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;cursor:pointer;
+    transition:border-color .15s,background .15s}
+  .twk-fp-trigger:hover{background:rgba(255,255,255,.82)}
+  .twk-fp-trigger[data-open="1"]{border-color:color-mix(in srgb,var(--brand-accent,#E94B7D) 55%,transparent);
+    background:rgba(255,255,255,.92)}
+  .twk-fp-trigger:focus-visible{outline:2px solid var(--brand-accent,#E94B7D);outline-offset:1px}
+  .twk-fp-tmain{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .twk-fp-tname{font-size:13px;font-weight:600;letter-spacing:.01em;color:rgba(41,38,27,.92);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-fp-tsub{font-size:10px;color:rgba(41,38,27,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-fp-chev{flex-shrink:0;color:rgba(41,38,27,.4);transition:transform .18s}
+  .twk-fp-trigger[data-open="1"] .twk-fp-chev{transform:rotate(180deg);color:rgba(41,38,27,.7)}
+  .twk-fp-list{display:flex;flex-direction:column;gap:5px;padding:5px;margin-top:1px;
+    border:.5px solid rgba(0,0,0,.08);border-radius:10px;background:rgba(255,255,255,.5)}
+  .twk-fp-opt{appearance:none;border:.5px solid transparent;border-radius:8px;background:rgba(255,255,255,.55);
+    cursor:pointer;display:flex;flex-direction:column;gap:3px;padding:8px 9px;text-align:left;font:inherit;color:inherit;
+    transition:border-color .12s,background .12s,box-shadow .12s}
+  .twk-fp-opt:hover{background:#fff;border-color:rgba(0,0,0,.1)}
+  .twk-fp-opt:focus-visible{outline:2px solid var(--brand-accent,#E94B7D);outline-offset:-1px}
+  .twk-fp-opt[data-selected="1"]{border-color:color-mix(in srgb,var(--brand-accent,#E94B7D) 55%,transparent);
+    background:#fff;box-shadow:0 6px 16px -12px color-mix(in srgb,var(--brand-accent,#E94B7D) 90%,transparent)}
+  .twk-fp-otop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .twk-fp-oname{font-size:15px;font-weight:600;line-height:1.1;color:rgba(41,38,27,.95);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-fp-ocheck{flex-shrink:0;color:var(--brand-accent,#E94B7D)}
+  .twk-fp-odesc{font-size:10px;color:rgba(41,38,27,.5)}
+  .twk-fp-oprev{display:flex;align-items:center;gap:8px;margin-top:2px}
+  .twk-fp-obody{font-size:12px;color:rgba(41,38,27,.72);line-height:1.2;flex:1;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .twk-fp-ochip{flex-shrink:0;font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;color:#fff;
+    background:linear-gradient(135deg,var(--brand-button,#E94B7D),var(--brand-button-2,#F687A8));white-space:nowrap}
 `;
 
 /** The Tweaks stylesheet — render once near the launcher so it's present
@@ -256,6 +337,123 @@ export function TweakSelect({
           </option>
         ))}
       </select>
+    </TweakRow>
+  );
+}
+
+function FontPickerChevron() {
+  return (
+    <svg className="twk-fp-chev" width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M3 4.75 6 7.75l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FontPickerCheck() {
+  return (
+    <svg className="twk-fp-ocheck" width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M2.5 7.5 5.5 10.5l6-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Global Font Style picker ────────────────────────────────────────────────
+// A one-click typography preset picker. The trigger reads like a select; opening
+// it reveals the presets, each previewed in its OWN fonts (name → heading face,
+// sample line → body face, CTA chip → button face) so the tenant can see the
+// pairing before applying it. Selecting one calls onChange with the full preset;
+// the caller writes heading/body/button onto the brand so every section updates.
+// `value` is the id of the matching preset, or null when the current trio is a
+// custom mix (shown as "Custom"). Inline-expanding (not a floating menu) so it
+// never clips inside the scrollable tweaks panel.
+export function FontStylePicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (preset: FontPreset) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value ? FONT_PRESETS_BY_ID[value] : null;
+  const listId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // It's a disclosure (button → expandable region of preset buttons), not an
+  // interactive listbox widget: each option is a real, tab-focusable button, so
+  // we keep the ARIA to aria-expanded/aria-controls + aria-current rather than
+  // promising listbox roving-focus semantics we don't implement. Escape closes
+  // and returns focus to the trigger.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape" && open) {
+      e.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+
+  return (
+    <TweakRow label="Font style">
+      <div className="twk-fp" onKeyDown={onKeyDown}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="twk-fp-trigger"
+          data-open={open ? "1" : "0"}
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className="twk-fp-tmain">
+            <span
+              className="twk-fp-tname"
+              style={current ? { fontFamily: fontFamilyValue(current.heading) } : undefined}
+            >
+              {current ? current.name : "Custom"}
+            </span>
+            <span className="twk-fp-tsub">
+              {current ? current.description : "Mixed fonts — pick a style to unify"}
+            </span>
+          </span>
+          <FontPickerChevron />
+        </button>
+        {open && (
+          <div className="twk-fp-list" id={listId} role="group" aria-label="Font style presets">
+            {FONT_PRESETS.map((p) => {
+              const selected = p.id === value;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-current={selected ? "true" : undefined}
+                  className="twk-fp-opt"
+                  data-selected={selected ? "1" : "0"}
+                  onClick={() => {
+                    onChange(p);
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  <span className="twk-fp-otop">
+                    <span className="twk-fp-oname" style={{ fontFamily: fontFamilyValue(p.heading) }}>
+                      {p.name}
+                    </span>
+                    {selected && <FontPickerCheck />}
+                  </span>
+                  <span className="twk-fp-odesc">{p.description}</span>
+                  <span className="twk-fp-oprev">
+                    <span className="twk-fp-obody" style={{ fontFamily: fontFamilyValue(p.body) }}>
+                      Ag — quick brown fox
+                    </span>
+                    <span className="twk-fp-ochip" style={{ fontFamily: fontFamilyValue(p.button) }}>
+                      Shop Now
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </TweakRow>
   );
 }

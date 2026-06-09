@@ -24,6 +24,10 @@
   /* Fonts */
   --brand-heading-font: "Playfair Display", "DM Serif Display", Georgia, serif;
   --brand-body-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Button label font. Defaults to the body font so an unset buttonFont keeps
+     the historical look; a Global Font Style preset / Button-font picker sets
+     --brand-button-font to override every .btn across the storefront. */
+  --brand-button-font: var(--brand-body-font);
 
   /* Scale */
   --radius-sm: 10px;
@@ -95,6 +99,7 @@
   gap: 10px;
   padding: 14px 28px;
   border-radius: var(--radius-pill);
+  font-family: var(--brand-button-font);
   font-weight: 600;
   font-size: 15px;
   line-height: 1;
@@ -2082,7 +2087,10 @@
   margin-top: 8px;
   min-height: 16px;
 }
-.sf-root .admin-login__submit { width: 100%; margin-top: 16px; height: 50px; }
+/* The admin password gate is the only admin control built on .btn; keep it in
+   the neutral admin/body font rather than the tenant's (possibly decorative)
+   brand button font, matching the rest of the admin UI (.admin-btn). */
+.sf-root .admin-login__submit { width: 100%; margin-top: 16px; height: 50px; font-family: var(--brand-body-font); }
 .sf-root .admin-login__hint {
   margin-top: 22px;
   font-size: 11px;

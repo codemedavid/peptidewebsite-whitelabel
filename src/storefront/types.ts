@@ -187,6 +187,10 @@ export type Brand = {
   headerText?: string;
   headingFont: string;
   bodyFont: string;
+  // CTA / button label font. Optional — unset means buttons follow the body
+  // font (the storefront.css default), so existing tenants are unaffected. Set
+  // explicitly by a Global Font Style preset or the "Button font" picker.
+  buttonFont?: string;
 
   adminPassword: string;
   adminLoginTitle: string;

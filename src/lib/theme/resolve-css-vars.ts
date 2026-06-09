@@ -58,6 +58,12 @@ function asRecord(v: unknown): Record<string, unknown> {
  * The storefront `Brand` palette fields the theme can drive. These map 1:1 to
  * the role colors (plus `button2`, the gradient end, which we flatten to the
  * button color) and the heading/body fonts.
+ *
+ * Note: there is intentionally no `buttonFont` here — THEME_PRESETS don't define
+ * a button font, so it isn't theme-derived. It lives only on the storefront
+ * Brand config (`config.buttonFont`) and falls back to the body font when unset
+ * (see the --brand-button-font default in storefront.css). The storefront page
+ * spreads `config` after this palette, so a configured button font is preserved.
  */
 export type StorefrontPalette = {
   main: string;

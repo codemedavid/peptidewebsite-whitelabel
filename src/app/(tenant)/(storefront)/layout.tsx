@@ -52,6 +52,7 @@ export default async function StorefrontLayout({
   const heroConfig = (branding?.config ?? {}) as {
     heroTitleFont?: string;
     heroBodyFont?: string;
+    buttonFont?: string;
     heroFieldStyles?: Record<string, { font?: string }>;
   };
   // Per-field hero text styling can each pick a distinct font — load them too,
@@ -62,6 +63,9 @@ export default async function StorefrontLayout({
     fonts.body ?? "Inter",
     heroConfig.heroTitleFont,
     heroConfig.heroBodyFont,
+    // Button font lives on the storefront Brand config (not the structured
+    // fonts JSON); load it so CTAs render in the chosen face, not a fallback.
+    heroConfig.buttonFont,
     ...fieldFonts,
   );
 

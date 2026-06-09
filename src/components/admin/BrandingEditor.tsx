@@ -115,6 +115,12 @@ export function BrandingEditor({
         ? keyOrEdits
         : ({ [keyOrEdits]: val } as Partial<Brand>);
     setCfg((c) => ({ ...c, ...edits }));
+    // Mirror heading/body changes made in the embedded Storefront form (incl.
+    // the Global Font Style preset picker) back onto the top-level font state,
+    // which drives the structured `fonts` JSON + the shared-chrome --font-*
+    // vars — so the two never drift out of sync on save.
+    if (typeof edits.headingFont === "string") setHeadingFont(edits.headingFont);
+    if (typeof edits.bodyFont === "string") setBodyFont(edits.bodyFont);
     setSaved(false);
   };
 
@@ -187,6 +193,9 @@ export function BrandingEditor({
   // the storefront Brand config so the live storefront home matches the chosen
   // theme. `button2` (gradient end) flattens to the button color. The Storefront
   // tab stays editable — operators can still override these afterward.
+  // `buttonFont` is intentionally NOT touched here: themes don't define one, and
+  // this runs on every color tweak too, so resetting it would wipe a Global Font
+  // Style choice. It persists across theme/color edits (unset → follows body).
   function syncStorefrontPalette(
     nextHexes: Record<RoleKey, string>,
     heading: string,
@@ -243,7 +252,7 @@ export function BrandingEditor({
     <div>
       {/* load the chosen fonts for the live preview — incl. distinct hero fonts */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="stylesheet" href={googleFontsUrl(headingFont, bodyFont, heroTitleFont, heroBodyFont)} />
+      <link rel="stylesheet" href={googleFontsUrl(headingFont, bodyFont, storefrontBrand.buttonFont, heroTitleFont, heroBodyFont)} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
