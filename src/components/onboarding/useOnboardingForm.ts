@@ -104,7 +104,7 @@ export const STEPS = [
 
 export const THEME_STYLE_OPTIONS = [
   { id: "minimal", label: "Minimal", desc: "Clean, lots of whitespace, modern.", themeId: "clinical-white", icon: "Minus" },
-  { id: "luxury", label: "Luxury / Clean", desc: "Elegant and premium, serif accents.", themeId: "clinical-white", icon: "Gem" },
+  { id: "luxury", label: "Luxury / Clean", desc: "Elegant and premium, serif accents.", themeId: "champagne-gold", icon: "Gem" },
   { id: "ecommerce", label: "Modern E-commerce", desc: "Bright, conversion-focused catalog.", themeId: "clinical-white", icon: "ShoppingBag" },
   { id: "dark", label: "Dark Mode", desc: "Sleek dark surfaces, high contrast.", themeId: "midnight-lab", icon: "Moon" },
   { id: "custom", label: "Custom", desc: "Start neutral — we'll tailor it to your pegs.", themeId: "clinical-white", icon: "Wand2" },

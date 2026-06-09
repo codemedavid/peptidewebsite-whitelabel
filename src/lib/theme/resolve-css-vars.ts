@@ -25,6 +25,14 @@ export function resolveCssVars(branding: BrandingLike): React.CSSProperties {
   // --brand defaults to the preset's primary unless the tenant sets `main`.
   vars["--brand"] = preset.colors.primary;
 
+  // Optional brand gradient stops (themes that ship one). Components can use
+  // `linear-gradient(var(--brand-gradient-angle), hsl(var(--brand-gradient-from)),
+  // hsl(var(--brand-gradient-to)))`; absent themes simply leave these unset.
+  if (preset.gradient) {
+    vars["--brand-gradient-from"] = preset.gradient.from;
+    vars["--brand-gradient-to"] = preset.gradient.to;
+  }
+
   const fonts = { ...preset.fonts, ...(asRecord(branding?.fonts) as { heading?: string; body?: string }) };
   vars["--radius"] = branding?.radius ?? preset.radius;
   vars["--font-heading"] = fonts.heading ?? preset.fonts.heading;

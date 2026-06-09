@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { CreateTenantState } from "@/actions/demo";
 import { createTenantAction } from "@/actions/onboarding";
-import { THEME_PRESETS } from "@/lib/theme/presets";
+import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -156,24 +156,12 @@ export default function NewTenantPage() {
           <span id="theme-label" className="block text-sm font-medium">
             Theme
           </span>
-          <div className="mt-2 grid grid-cols-3 gap-3" role="group" aria-labelledby="theme-label">
-            {Object.values(THEME_PRESETS).map((t) => (
-              <button
-                type="button"
-                key={t.id}
-                onClick={() => setThemeId(t.id)}
-                aria-pressed={themeId === t.id}
-                className={`rounded-[var(--radius)] border p-3 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                  themeId === t.id ? "border-primary ring-2 ring-primary" : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="mb-2 flex gap-1" aria-hidden>
-                  <span className="h-4 w-4 rounded-full" style={{ background: `hsl(${t.colors.primary})` }} />
-                  <span className="h-4 w-4 rounded-full border border-border" style={{ background: `hsl(${t.colors.background})` }} />
-                </div>
-                {t.name}
-              </button>
-            ))}
+          <div
+            className="mt-2 max-h-[420px] overflow-y-auto rounded-[var(--radius)] border border-border p-3"
+            role="group"
+            aria-labelledby="theme-label"
+          >
+            <ThemePresetPicker value={themeId} onChange={setThemeId} columns={3} />
           </div>
           <input type="hidden" name="themeId" value={themeId} />
         </div>

@@ -352,3 +352,4 @@ export async function saveAdminPasswordAction(
   revalidateTenant(tenant.id, slug);
   return { ok: true };
 }
+

@@ -7,6 +7,8 @@ import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -40,6 +42,17 @@ export default async function HomePage() {
       tenant.name,
     ),
   };
+
+  // The reseller portal is a platform-operator entitlement, toggled per tenant in
+  // admin → Features (FEATURES.STORE_RESELLER_PORTAL). It only goes live once the
+  // store owner ALSO sets an access code, so the effective #merchant visibility is
+  // (entitled AND a code exists). Deriving it here means nav/footer/visibility all
+  // gate on the operator's toggle with no dead gate — and it overrides whatever
+  // stale `showPageMerchant` may sit in config.
+  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+  const resellerCode =
+    typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
+  brand.showPageMerchant = resellerEntitled && resellerCode !== "";
 
   // The reseller access code is validated server-side (verifyResellerCodeAction);
   // never ship it to the browser, even though the rest of `config` is public.

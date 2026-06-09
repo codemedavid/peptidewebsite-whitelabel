@@ -1,8 +1,10 @@
 "use client";
 
 // Store-admin view for the reseller / merchant portal. Two jobs:
-//   1. Enable the gated #merchant page and set the reseller access code
-//      (persisted in branding.config via saveResellerSettingsAction).
+//   1. Set the reseller access code (persisted in branding.config via
+//      saveResellerSettingsAction). Whether the portal is AVAILABLE at all is a
+//      platform entitlement the operator toggles in admin → Features; the owner
+//      only sees that status here and supplies the code that takes it live.
 //   2. Give the owner a reseller-focused overview of every product's wholesale
 //      tiers, with a one-click jump to the product editor (where the per-product
 //      vials-only / complete-set prices are actually set).
@@ -26,7 +28,7 @@ export function AdminResellerSettings({
   onEdit: (p: Product) => void;
 }) {
   const { products, categories, toast } = useStore();
-  const [enabled, setEnabled] = useState(false);
+  const [available, setAvailable] = useState(false);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,7 +41,7 @@ export function AdminResellerSettings({
       .then((res) => {
         if (!alive) return;
         if (!("error" in res)) {
-          setEnabled(res.enabled);
+          setAvailable(res.available);
           setCode(res.code);
         }
       })
@@ -53,7 +55,7 @@ export function AdminResellerSettings({
     if (saving) return;
     setSaving(true);
     try {
-      const res = await saveResellerSettingsAction({ enabled, code: code.trim() });
+      const res = await saveResellerSettingsAction({ code: code.trim() });
       if ("error" in res) {
         toast(res.error);
         return;
@@ -100,10 +102,25 @@ export function AdminResellerSettings({
         <div className="admin-form__card">
           <h2 className="admin-form__section">🔐 Wholesale Page Access</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Turn on the gated reseller price list at <code>#merchant</code>. Resellers unlock it with the
-            access code below — regular shoppers never see it. Share the link
-            <code> /#merchant</code> + the code with your resellers.
+            The gated reseller price list at <code>#merchant</code> goes live once you set an access code
+            below — regular shoppers never see it. Share the link <code>/#merchant</code> + the code with
+            your resellers.
           </div>
+
+          {loading ? null : !available ? (
+            <div className="admin-field__hint" style={{ color: "#c0392b", marginBottom: 14 }}>
+              Your plan doesn’t include the reseller portal yet — contact your provider to enable it. You
+              can still set a code below so it’s ready the moment they do.
+            </div>
+          ) : code.trim() ? (
+            <div className="admin-field__hint" style={{ color: "#1e7e34", marginBottom: 14 }}>
+              ✅ Live — resellers can unlock <code>#merchant</code> with the code below.
+            </div>
+          ) : (
+            <div className="admin-field__hint" style={{ marginBottom: 14 }}>
+              Set an access code to take your reseller page live.
+            </div>
+          )}
 
           <div className="admin-form__row">
             <div className="admin-field">
@@ -116,22 +133,7 @@ export function AdminResellerSettings({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCode(e.target.value)}
               />
             </div>
-            <div className="admin-form__inline-row" style={{ alignSelf: "end", paddingBottom: 12 }}>
-              <label className="admin-check">
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEnabled(e.target.checked)}
-                />
-                <span>✅ Show reseller page</span>
-              </label>
-            </div>
           </div>
-          {enabled && !code.trim() && (
-            <div className="admin-field__hint" style={{ color: "#c0392b" }}>
-              Set an access code before saving — the page stays locked without one.
-            </div>
-          )}
         </div>
 
         <div className="admin-form__card">

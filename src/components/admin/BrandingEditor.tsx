@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, ExternalLink } from "lucide-react";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
+import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
 import {
   ROLE_KEYS,
   ROLE_META,
@@ -301,23 +302,18 @@ export function BrandingEditor({
               from Hero and Storefront too, so the operator can snap back to a
               preset without first switching to the Brand tab. */}
           <div>
-            <h2 className="text-sm font-semibold">Theme preset</h2>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {Object.values(THEME_PRESETS).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => pickPreset(t.id)}
-                  aria-pressed={themeId === t.id}
-                  className={`rounded-[var(--radius)] border p-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${themeId === t.id ? "border-primary ring-2 ring-primary" : "border-border hover:bg-muted"}`}
-                >
-                  <div className="mb-1 flex gap-1" aria-hidden>
-                    <span className="h-4 w-4 rounded-full" style={{ background: `hsl(${t.colors.primary})` }} />
-                    <span className="h-4 w-4 rounded-full border border-border" style={{ background: `hsl(${t.colors.background})` }} />
-                  </div>
-                  {t.name}
-                </button>
-              ))}
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-sm font-semibold">Theme preset</h2>
+              <span className="text-xs text-muted-foreground">
+                {Object.keys(THEME_PRESETS).length} themes
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Pick a preset to re-skin the whole storefront — colors, fonts &amp; radius. You can
+              fine-tune any color below afterward.
+            </p>
+            <div className="mt-3">
+              <ThemePresetPicker value={themeId} onChange={pickPreset} columns={2} />
             </div>
           </div>
 

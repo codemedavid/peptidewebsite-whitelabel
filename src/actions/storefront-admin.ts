@@ -10,6 +10,8 @@ import {
   clearStorefrontAdminCookie,
   requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
 import type { Category, PaymentMethod, Protocol } from "@/storefront/types";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -173,42 +175,49 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
 
 // ── Reseller / merchant portal ────────────────────────────────────────────────
 
-export type ResellerSettings = { enabled: boolean; code: string };
+// Whether the reseller portal is available is a PLATFORM entitlement
+// (FEATURES.STORE_RESELLER_PORTAL), toggled per tenant by the operator in
+// admin → Features. The store owner only controls the access code (+ per-product
+// wholesale prices). The storefront shows #merchant when entitled AND a code is
+// set (see (storefront)/page.tsx); the code is validated server-side here.
+export type ResellerSettings = {
+  /** Operator entitlement — the store owner can't change this, only see it. */
+  available: boolean;
+  code: string;
+};
 
 /**
  * The reseller portal settings for the current tenant (store-admin only — it
  * returns the access code, so it must never be exposed to the public). Reads the
- * `showPageMerchant` toggle and `resellerAccessCode` from branding.config.
+ * `resellerAccessCode` from branding.config plus the platform entitlement so the
+ * owner can see whether their provider has enabled the feature.
  */
 export async function getResellerSettingsAction(): Promise<ResellerSettings | { error: string }> {
   const tenantId = await requireStorefrontAdmin();
   if (!tenantId) return { error: "Not signed in to the store admin." };
   const config = await readConfig(tenantId);
   return {
-    enabled: config.showPageMerchant === true,
+    available: await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
     code: typeof config.resellerAccessCode === "string" ? config.resellerAccessCode : "",
   };
 }
 
 /**
- * Persist the reseller portal settings (enable toggle + access code) into the
- * shared `branding.config` blob (read-modify-write, mirroring the other save*
- * actions so it never clobbers the rest of the Brand config). The storefront
- * reads `showPageMerchant` server-side to decide whether #merchant is reachable;
- * the code is validated server-side by verifyResellerCodeAction.
+ * Persist the reseller access code into the shared `branding.config` blob
+ * (read-modify-write, mirroring the other save* actions so it never clobbers the
+ * rest of the Brand config). The on/off is the operator's entitlement, not stored
+ * here; the storefront goes live once this code is set AND the tenant is entitled.
  */
 export async function saveResellerSettingsAction(input: unknown): Promise<ActionResult> {
   const tenantId = await requireStorefrontAdmin();
   if (!tenantId) return { error: "Not signed in to the store admin." };
 
   const o = (input ?? {}) as Record<string, unknown>;
-  const enabled = o.enabled === true;
   const code = String(o.code ?? "").slice(0, 120).trim();
-  if (enabled && !code) return { error: "Set an access code before enabling the reseller page." };
 
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
-  const config = { ...current, showPageMerchant: enabled, resellerAccessCode: code };
+  const config = { ...current, resellerAccessCode: code };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
@@ -227,17 +236,19 @@ export async function saveResellerSettingsAction(input: unknown): Promise<Action
 /**
  * Verify a reseller access code (server-side) for the current tenant. Public —
  * no admin session — so the wholesale price list can be unlocked by resellers.
- * Returns ok only when the portal is enabled AND the (case-insensitive) code
- * matches the one configured in branding.config. The code is compared on the
- * server and never shipped to the client.
+ * Returns ok only when the tenant is ENTITLED to the reseller portal (operator
+ * toggle) AND the (case-insensitive) code matches the one in branding.config. The
+ * code is compared on the server and never shipped to the client.
  */
 export async function verifyResellerCodeAction(code: string): Promise<ActionResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Could not resolve this store." };
 
-  const config = await readConfig(tenantId);
-  if (config.showPageMerchant !== true) return { error: "Reseller access isn't available." };
+  if (!(await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL))) {
+    return { error: "Reseller access isn't available." };
+  }
 
+  const config = await readConfig(tenantId);
   const expected = typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
   if (!expected) return { error: "Reseller access isn't available." };
 

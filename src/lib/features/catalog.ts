@@ -36,6 +36,7 @@ export const FEATURES = {
   STORE_FLOATING_CART: "storefront.floating_cart",
   STORE_ORDER_TRACKING: "storefront.order_tracking",
   STORE_MULTI_CURRENCY: "storefront.multi_currency",
+  STORE_RESELLER_PORTAL: "storefront.reseller",
   // Transactional notifications
   NOTIFY_EMAIL: "notify.email",
   NOTIFY_TELEGRAM: "notify.telegram",
@@ -54,6 +55,10 @@ const STARTER: FeatureKey[] = [
   FEATURES.STORE_CATEGORIES,
   FEATURES.STORE_COMMUNITY_LINK,
   FEATURES.STORE_CALCULATOR,
+  // Available on every plan; the operator toggles it per tenant. The storefront
+  // only surfaces the gated #merchant page once the store owner also sets an
+  // access code, so being in the plan ceiling (default-on) exposes nothing.
+  FEATURES.STORE_RESELLER_PORTAL,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -143,6 +148,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_FLOATING_CART]: { label: "Floating cart", description: "Persistent floating cart widget.", group: "Ecommerce" },
   [FEATURES.STORE_ORDER_TRACKING]: { label: "Order tracking", description: "Public order-status / tracking lookup page.", group: "Ecommerce" },
   [FEATURES.STORE_MULTI_CURRENCY]: { label: "Multi-currency", description: "Display and charge in multiple currencies.", group: "Ecommerce" },
+  [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
 
   [FEATURES.NOTIFY_EMAIL]: { label: "Email notifications", description: "Transactional order emails to customers.", group: "Notifications" },
   [FEATURES.NOTIFY_TELEGRAM]: { label: "Telegram notifications", description: "Order alerts pushed to a Telegram channel.", group: "Notifications" },

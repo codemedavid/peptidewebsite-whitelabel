@@ -19,7 +19,8 @@
     "db:roles": "prisma db execute --file prisma/roles.sql --schema prisma/schema.prisma",
     "db:rls": "prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma",
     "db:rls:check": "tsx prisma/rls-check.ts",
-    "test:isolation": "tsx scripts/test-isolation.ts"
+    "test:isolation": "tsx scripts/test-isolation.ts",
+    "test:themes": "tsx scripts/check-theme-contrast.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
