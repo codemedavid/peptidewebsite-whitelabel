@@ -3969,6 +3969,193 @@
   display: flex; justify-content: flex-end; gap: 8px;
 }
 
+/* =========================================================
+   ADMIN — Sales Analytics
+   ========================================================= */
+.sf-root .admin-analytics__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.sf-root .admin-analytics__note {
+  font-size: 12.5px;
+  color: var(--brand-text-muted);
+}
+
+/* Segmented date-range picker */
+.sf-root .admin-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-pill);
+}
+.sf-root .admin-seg__btn {
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-muted);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.sf-root .admin-seg__btn:hover { color: var(--brand-text); }
+.sf-root .admin-seg__btn.is-active {
+  background: var(--brand-text);
+  color: #fff;
+}
+
+/* KPI card extras (delta badge + sub-line + money-sized value) */
+.sf-root .admin-stat__value--compact { font-size: 32px; }
+.sf-root .admin-stat__sub {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--brand-text-muted);
+}
+.sf-root .admin-stat__delta {
+  position: absolute;
+  top: 16px; right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+}
+.sf-root .admin-stat__delta--up { background: color-mix(in srgb, #22B07D 18%, transparent); color: #1F8A5B; }
+.sf-root .admin-stat__delta--down { background: color-mix(in srgb, #F23E5C 14%, transparent); color: #C82846; }
+.sf-root .admin-stat__delta--flat { background: var(--brand-surface-2); color: var(--brand-text-muted); }
+
+.sf-root .admin-analytics__card { margin-bottom: 18px; }
+.sf-root .admin-analytics__row { margin-bottom: 18px; }
+.sf-root .admin-card__caption {
+  font-size: 12.5px;
+  color: var(--brand-text-muted);
+  margin: -14px 0 20px 17px;
+}
+.sf-root .admin-analytics__empty {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--brand-text-muted);
+}
+
+/* Revenue bar chart (plain divs — no chart dependency) */
+.sf-root .admin-chart { display: flex; gap: 10px; }
+.sf-root .admin-chart__ylabels {
+  width: 52px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 11px;
+  color: var(--brand-text-muted);
+  transform: translateY(-5px);
+}
+.sf-root .admin-chart__plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 240px;
+  border-bottom: 1px solid var(--brand-border);
+}
+.sf-root .admin-chart__gridline {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--brand-border) 60%, transparent);
+}
+.sf-root .admin-chart__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 100%;
+}
+.sf-root .admin-chart__col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.sf-root .admin-chart__bar {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, var(--brand-accent), color-mix(in srgb, var(--brand-accent) 45%, var(--brand-surface)));
+  transition: opacity .15s;
+}
+.sf-root .admin-chart__col:hover .admin-chart__bar { opacity: 0.7; }
+.sf-root .admin-chart__xrow {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 0 62px;
+}
+.sf-root .admin-chart__xlabel {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--brand-text-muted);
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .sf-root .admin-chart__plot { height: 180px; }
+  .sf-root .admin-chart__bars { gap: 3px; }
+  .sf-root .admin-chart__xrow { gap: 3px; }
+}
+
+/* Ranked breakdown lists (top products / payment methods / locations) */
+.sf-root .admin-bars { display: flex; flex-direction: column; gap: 16px; }
+.sf-root .admin-bar-row__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sf-root .admin-bar-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-text);
+}
+.sf-root .admin-bar-row__val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--brand-text);
+  white-space: nowrap;
+}
+.sf-root .admin-bar-row__meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+.sf-root .admin-bar-row__track {
+  margin-top: 6px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--brand-surface-2);
+  overflow: hidden;
+}
+.sf-root .admin-bar-row__fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
 /* ---------- NAV PROGRESS BAR + PAGE SPINNER ---------- */
 @keyframes sf-nav-bar {
   0%   { width: 0%; opacity: 1; }

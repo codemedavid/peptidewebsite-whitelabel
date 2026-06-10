@@ -157,6 +157,9 @@ CREATE POLICY anon_read ON media_assets
 --       only by the Super Admin. Do NOT add it to §1: a tenant-isolation policy
 --       would reject the public insert (WITH CHECK, no GUC) AND hide rows from the
 --       operator (reads run outside withTenant) — i.e. it would break onboarding.
+--   platform_settings               — PLATFORM-LEVEL key/value config (e.g. the
+--       get-started checkout payment details). Written only by the Super Admin
+--       and read by public marketing pages outside withTenant; no tenantId.
 -- If a future tenant-owned table is added, add it to the array in §1 (or give
 -- it a bespoke policy here) AND grant app_user/anon in prisma/roles.sql.
 -- ============================================================================

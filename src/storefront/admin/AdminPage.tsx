@@ -18,6 +18,7 @@ import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
 import { AdminResellerSettings } from "./AdminResellerSettings";
+import { AdminAnalytics } from "./AdminAnalytics";
 import { isAdminViewVisible } from "../visibility";
 
 type View =
@@ -35,7 +36,8 @@ type View =
   | "faq"
   | "proto"
   | "reviews"
-  | "reseller";
+  | "reseller"
+  | "analytics";
 
 export function AdminPage({
   brand,
@@ -117,6 +119,7 @@ export function AdminPage({
       />
     );
   }
+  if (activeView === "analytics") return <AdminAnalytics brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "shipping") return <AdminShippingLocations brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "inv") return <AdminInventory brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
@@ -150,6 +153,7 @@ export function AdminPage({
     { id: "manage", label: "Manage Products", hint: "Edit existing items", icon: "box", tint: "green" },
     { id: "cats", label: "Categories", hint: "Organize items", icon: "folder", tint: "orange" },
     { id: "orders", label: "Orders", hint: "View transactions", icon: "cart", tint: "yellow" },
+    { id: "analytics", label: "Sales Analytics", hint: "Revenue & insights", icon: "trend", tint: "cyan" },
     { id: "inv", label: "Inventory", hint: "Track stock", icon: "inbox", tint: "orange" },
     { id: "ship", label: "Shipping", hint: "Manage rates", icon: "pin", tint: "cyan" },
     { id: "couriers", label: "Couriers", hint: "Manage couriers", icon: "truck", tint: "mint" },
@@ -244,6 +248,7 @@ export function AdminPage({
                     if (q.id === "manage") return setView("products");
                     if (q.id === "cats") return setView("categories");
                     if (q.id === "orders") return setView("orders");
+                    if (q.id === "analytics") return setView("analytics");
                     if (q.id === "inv") return setView("inv");
                     if (q.id === "ship") return setView("shipping");
                     if (q.id === "lab") return setView("lab");

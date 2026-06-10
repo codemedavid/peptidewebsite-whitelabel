@@ -24,12 +24,19 @@ import {
   PAYMENT_PRESETS,
 } from "../useOnboardingForm";
 import { SingleUpload, MultiUpload } from "../uploads";
-import { PACKAGES, PACKAGE_PAYMENT, packageLabel } from "@/marketing/config";
+import { PACKAGES, packageLabel } from "@/marketing/config";
+import {
+  visiblePackagePaymentMethods,
+  type PackagePaymentConfig,
+} from "@/lib/platform/package-payment";
 
 export type StepProps = {
   draft: Draft;
   update: (patch: Partial<Draft>) => void;
   errors: Record<string, string>;
+  // Operator-managed receiving accounts for the checkout step (Super Admin →
+  // Checkout Payments). Only CheckoutStep reads it.
+  packagePayment: PackagePaymentConfig;
 };
 
 const ICONS: Record<string, LucideIcon> = {
@@ -379,22 +386,23 @@ export function PackageStep({ draft, update }: StepProps) {
 }
 
 /* ============================================================ Step 7 */
-export function CheckoutStep({ draft, update, errors }: StepProps) {
+export function CheckoutStep({ draft, update, errors, packagePayment }: StepProps) {
   const namedProducts = draft.products.filter((p) => p.name.trim()).length;
+  const payMethods = visiblePackagePaymentMethods(packagePayment);
   return (
     <div>
       <div className="mk-paybox">
         <h4>Pay for your {packageLabel(draft.packageKey)} package</h4>
-        <p className="mk-hint" style={{ marginTop: 2 }}>{PACKAGE_PAYMENT.instructions}</p>
+        <p className="mk-hint" style={{ marginTop: 2 }}>{packagePayment.instructions}</p>
         <div style={{ marginTop: 12 }}>
-          {PACKAGE_PAYMENT.methods.map((m) => (
-            <div className="mk-payrow" key={m.method}>
+          {payMethods.map((m) => (
+            <div className="mk-payrow" key={m.id}>
               <span>
                 <b>{m.method}</b>
                 {m.note && <small style={{ display: "block", color: "var(--ink-500)" }}>{m.note}</small>}
-                {m.qr && (
+                {m.qrUrl && (
                   <img
-                    src={m.qr}
+                    src={m.qrUrl}
                     alt={`${m.method} payment QR code`}
                     style={{ display: "block", width: 160, height: 160, objectFit: "contain", marginTop: 10, borderRadius: 8, background: "#fff" }}
                   />

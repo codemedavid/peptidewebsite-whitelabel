@@ -557,3 +557,18 @@ model OnboardingSubmission {
   @@index([createdAt])
   @@map("onboarding_submissions")
 }
+
+// ──────────────────────────── Platform settings ────────────────────────────
+// Key/value store for operator-managed platform-wide configuration (e.g. the
+// "package_payment" receiving details shown on the public /get-started checkout).
+//
+// PLATFORM-LEVEL — deliberately RLS-excluded (see prisma/rls.sql): no tenantId;
+// written only by the Super Admin and read by the public marketing pages
+// (server-side, privileged connection, outside withTenant).
+model PlatformSetting {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("platform_settings")
+}

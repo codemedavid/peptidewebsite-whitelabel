@@ -13,6 +13,7 @@ const NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/", icon: "Home", group: "Platform" },
   { id: "tenants", label: "Tenants", href: "/tenants", icon: "Buildings", group: "Platform" },
   { id: "onboarding", label: "Onboarding", href: "/onboarding", icon: "Sparkles", group: "Platform" },
+  { id: "payments", label: "Checkout Payments", href: "/payments", icon: "DollarSign", group: "Platform" },
   { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "Platform" },
   { id: "plans", label: "Plans & Billing", href: "/plans", icon: "Card", group: "Platform" },
   { id: "analytics", label: "Analytics", href: "/analytics", icon: "Chart", group: "Insights" },

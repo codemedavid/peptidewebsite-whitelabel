@@ -103,6 +103,7 @@ const FEATURES_FILE = path.join(DATA_DIR, "features.json");
 const ORDER_FORMAT_FILE = path.join(DATA_DIR, "order-format.json");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
 const ORDERS_FILE = path.join(DATA_DIR, "storefront-orders.json");
+const PLATFORM_SETTINGS_FILE = path.join(DATA_DIR, "platform-settings.json");
 
 export type DemoBranding = {
   themeId?: string;
@@ -133,6 +134,29 @@ export function saveDemoBranding(slug: string, branding: DemoBranding): void {
   all[slug] = { ...all[slug], ...branding };
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(BRANDING_FILE, JSON.stringify(all, null, 2));
+}
+
+// ── Platform settings (demo persistence) ──
+// File-backed analogue of the platform_settings table: operator-managed
+// platform-wide key/value config (e.g. the get-started checkout payment details).
+
+function readPlatformSettings(): Record<string, unknown> {
+  try {
+    return JSON.parse(fs.readFileSync(PLATFORM_SETTINGS_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function getDemoPlatformSetting(key: string): unknown {
+  return readPlatformSettings()[key] ?? null;
+}
+
+export function saveDemoPlatformSetting(key: string, value: unknown): void {
+  const all = readPlatformSettings();
+  all[key] = value;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(PLATFORM_SETTINGS_FILE, JSON.stringify(all, null, 2));
 }
 
 // ── Storefront products (demo persistence) ──
