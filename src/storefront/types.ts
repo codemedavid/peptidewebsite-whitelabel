@@ -34,7 +34,9 @@ export type Product = {
 
 export type Category = { id: string; label: string };
 
-export type OrderItem = { name: string; qty: number; price: number };
+/** `productId` links the line back to the catalog so confirming the order can
+ *  deduct stock; absent on legacy orders, which fall back to a name match. */
+export type OrderItem = { name: string; qty: number; price: number; productId?: string };
 
 export type OrderStatus =
   | "new"
@@ -225,6 +227,10 @@ export type Brand = {
   // Store-admin Sales Analytics view. Default ON for every package; the super
   // admin can switch it off per tenant from the branding editor.
   showAdminAnalytics?: boolean;
+  // Store-admin Card Studio view. Derived server-side: the platform entitlement
+  // (FEATURES.STORE_CARD_STUDIO, admin → Features) AND the branding-editor
+  // toggle must both be on. Default ON for every package.
+  showAdminCardStudio?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;

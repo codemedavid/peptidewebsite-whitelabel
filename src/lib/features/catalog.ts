@@ -37,6 +37,7 @@ export const FEATURES = {
   STORE_ORDER_TRACKING: "storefront.order_tracking",
   STORE_MULTI_CURRENCY: "storefront.multi_currency",
   STORE_RESELLER_PORTAL: "storefront.reseller",
+  STORE_CARD_STUDIO: "storefront.card_studio",
   // Transactional notifications
   NOTIFY_EMAIL: "notify.email",
   NOTIFY_TELEGRAM: "notify.telegram",
@@ -59,6 +60,9 @@ const STARTER: FeatureKey[] = [
   // only surfaces the gated #merchant page once the store owner also sets an
   // access code, so being in the plan ceiling (default-on) exposes nothing.
   FEATURES.STORE_RESELLER_PORTAL,
+  // Available on every plan; the operator toggles the store-admin Card Studio
+  // per tenant from admin → Features (default-on, like the reseller portal).
+  FEATURES.STORE_CARD_STUDIO,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -138,6 +142,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_SEARCH]: { label: "Product search", description: "Catalog search box.", group: "Catalog" },
   [FEATURES.STORE_CATEGORIES]: { label: "Categories", description: "Browse products by category.", group: "Catalog" },
   [FEATURES.STORE_CALCULATOR]: { label: "Dosage calculator", description: "Reconstitution / dosage calculator tool.", group: "Catalog" },
+  [FEATURES.STORE_CARD_STUDIO]: { label: "Card Studio", description: "Product card design studio in the store admin (presets, templates, per-card styling).", group: "Catalog" },
 
   [FEATURES.ECOM_CART]: { label: "Shopping cart", description: "Add-to-cart and cart page.", group: "Ecommerce" },
   [FEATURES.ECOM_CHECKOUT]: { label: "Checkout", description: "Order placement and payment.", group: "Ecommerce" },

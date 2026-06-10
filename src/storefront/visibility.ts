@@ -23,6 +23,9 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Not tied to a storefront page — a direct super-admin switch. On for every
   // package by default; flips off per tenant from the branding editor.
   analytics: (b) => b.showAdminAnalytics !== false,
+  // Card Studio ("design" view). Server-derived: platform Features toggle AND
+  // the branding-editor switch. Default ON.
+  design: (b) => b.showAdminCardStudio !== false,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

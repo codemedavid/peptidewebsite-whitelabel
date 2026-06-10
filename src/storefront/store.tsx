@@ -318,10 +318,32 @@ export function StoreProvider({
     w.REVIEWS = reviews;
   });
 
-  const addToCart = useCallback((product: Product, qty: number = 1) => {
-    const n = Math.max(1, Math.floor(qty));
-    setCart((c) => [...c, ...Array.from({ length: n }, () => product)]);
+  const toast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMsg(""), 1600);
   }, []);
+
+  // Adding is capped at the product's stock (counting what's already in the
+  // cart) — the server re-validates at checkout, this just keeps the UI honest.
+  const addToCart = useCallback(
+    (product: Product, qty: number = 1) => {
+      const n = Math.max(1, Math.floor(qty));
+      const stock = Math.max(0, product.stock || 0);
+      const inCart = cart.filter((p) => p.id === product.id).length;
+      const room = Math.max(0, stock - inCart);
+      if (room < n) {
+        toast(
+          stock <= 0
+            ? `${product.name} is out of stock.`
+            : `Only ${stock} of ${product.name} in stock.`,
+        );
+      }
+      if (room <= 0) return;
+      setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => product)]);
+    },
+    [cart, toast],
+  );
 
   const decrementCart = useCallback((productId: string) => {
     setCart((c) => {
@@ -338,12 +360,6 @@ export function StoreProvider({
   }, []);
 
   const clearCart = useCallback(() => setCart([]), []);
-
-  const toast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastMsg(""), 1600);
-  }, []);
 
   // Payment methods persist to the DB (not localStorage) so every device sees
   // the owner's configured set. The server action gates on the storefront-admin

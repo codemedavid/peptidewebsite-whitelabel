@@ -208,7 +208,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       courier: "",
       trackingNumber: "",
       shippingNote: "",
-      items: lines.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product, l.qty) })),
+      items: lines.map((l) => ({
+        productId: l.product.id,
+        name: l.product.name,
+        qty: l.qty,
+        price: unitPrice(l.product, l.qty),
+      })),
       paymentProof: proof || null,
     };
 

@@ -35,6 +35,7 @@ export type DemoProduct = {
   images: string[];
   status: string;
   active: boolean;
+  stock?: number;
   metadata: { purity?: string; coaUrl?: string };
 };
 
@@ -52,7 +53,9 @@ export type DemoTenant = {
 };
 
 function p(slug: string, name: string, priceCents: number, purity: string, description: string): DemoProduct {
-  return { id: slug, slug, name, description, priceCents, currency: "USD", images: [], status: "active", active: true, metadata: { purity } };
+  // Seed stock so checkout's inventory guard doesn't render demo stores
+  // unorderable — owners adjust real counts in the admin Inventory tab.
+  return { id: slug, slug, name, description, priceCents, currency: "USD", images: [], status: "active", active: true, stock: 25, metadata: { purity } };
 }
 
 /** Built-in seed tenants — three brands, one codebase. */

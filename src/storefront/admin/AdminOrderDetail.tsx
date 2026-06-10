@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Brand, Order } from "../types";
+import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
 
 function formatPHP(n: number): string {
@@ -63,11 +64,30 @@ export function AdminOrderDetail({
   const fee = o.adminFee?.amount || 0;
   const total = sub + ship + fee;
 
+  const { setProducts } = useStore();
+
   // Persist a patch to the DB (store admin gated). Optimistically apply locally,
   // roll back + surface the error if the write fails.
   const persist = async (patch: Partial<Order>) => {
     const prev = o;
     const next: Order = { ...o, ...patch };
+    // The server moves inventory on status changes — confirmed deducts,
+    // cancelled restocks, each only when the journey replay says the items
+    // aren't / are currently deducted. Mirror the same rule here so the
+    // Inventory tab updates without a refresh.
+    let deducted = false;
+    for (const e of prev.statusHistory ?? []) {
+      if (e.status === "confirmed") deducted = true;
+      else if (e.status === "cancelled") deducted = false;
+    }
+    const move =
+      patch.status === prev.status
+        ? null
+        : patch.status === "confirmed" && !deducted
+          ? -1
+          : patch.status === "cancelled" && deducted
+            ? 1
+            : null;
     setO(next);
     setSaving(true);
     const res = await updateStorefrontOrderAction(o.id, patch);
@@ -78,6 +98,16 @@ export function AdminOrderDetail({
       return false;
     }
     setO(res.order);
+    if (move) {
+      setProducts((ps) =>
+        ps.map((p) => {
+          const qty = (prev.items || [])
+            .filter((it) => (it.productId ? it.productId === p.id : it.name === p.name))
+            .reduce((s, it) => s + (it.qty || 1), 0);
+          return qty > 0 ? { ...p, stock: Math.max(0, (p.stock || 0) + move * qty) } : p;
+        }),
+      );
+    }
     return true;
   };
 

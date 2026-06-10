@@ -22,20 +22,25 @@ import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { withTenant } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   isDemoMode,
   getDemoBranding,
+  getDemoProducts,
+  getDemoStoreProducts,
+  saveDemoStoreProducts,
   getDemoStoreOrders,
   addDemoStoreOrder,
   saveDemoStoreOrders,
   nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
+import { dbProductToStorefront, type DbProductRow as DbProductRowMap } from "@/lib/storefront/product-mapping";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
   ADMIN_FEE_LABEL_MAX,
 } from "@/lib/storefront/admin-fee";
-import type { Order, OrderItem, OrderStatusEvent } from "@/storefront/types";
+import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -85,7 +90,83 @@ function normalizeItems(input: unknown): OrderItem[] {
       name: str(x.name, 300),
       qty: Math.max(1, Math.round(num(x.qty)) || 1),
       price: Math.max(0, num(x.price)),
+      ...(x.productId ? { productId: str(x.productId, 64) } : {}),
     };
+  });
+}
+
+// ── Inventory sync on status change ──────────────────────────────────────────
+//
+// Entering `confirmed` deducts the order's items from stock; entering
+// `cancelled` puts them back — but ONLY if they are currently deducted.
+// Whether they are deducted is derived by replaying the status journey, so a
+// confirmed → cancelled → confirmed bounce deducts, restocks, then deducts
+// again — never twice in a row. Legacy orders confirmed before this feature
+// shipped have no `confirmed` event in their journey (or no journey at all),
+// so replaying yields "not deducted" and cancelling them never invents stock.
+
+type InventoryMove = "deduct" | "restock" | null;
+
+/** Replay the journey to learn whether the order's items are deducted now. */
+function stockCurrentlyDeducted(history: OrderStatusEvent[]): boolean {
+  let deducted = false;
+  for (const e of history) {
+    if (e.status === "confirmed") deducted = true;
+    else if (e.status === "cancelled") deducted = false;
+  }
+  return deducted;
+}
+
+/** Which stock movement (if any) this status change triggers. */
+function inventoryMove(
+  currentStatus: string,
+  history: OrderStatusEvent[],
+  newStatus: Order["status"] | undefined,
+): InventoryMove {
+  if (!newStatus || newStatus === currentStatus) return null;
+  const deducted = stockCurrentlyDeducted(history);
+  if (newStatus === "confirmed" && !deducted) return "deduct";
+  if (newStatus === "cancelled" && deducted) return "restock";
+  return null;
+}
+
+/** The first line in the cart that asks for more than the product has in
+ *  stock, as a customer-facing error — or null when the whole cart fits.
+ *  Lines match by productId (stamped at checkout) or exact name; lines that
+ *  match no product aren't stock-checked. */
+function stockViolation(
+  products: Array<{ id: string; name: string; stock?: number | null }>,
+  items: OrderItem[],
+): string | null {
+  for (const it of items) {
+    const prod = products.find((x) =>
+      it.productId ? x.id === it.productId : x.name === it.name,
+    );
+    if (!prod) continue;
+    const stock = Math.max(0, prod.stock ?? 0);
+    if (it.qty > stock) {
+      return stock === 0
+        ? `"${prod.name}" is out of stock.`
+        : `Only ${stock} of "${prod.name}" left in stock — you have ${it.qty} in your cart.`;
+    }
+  }
+  return null;
+}
+
+/** Apply an order's line items to a product list (− on deduct, + on restock),
+ *  clamping at zero. Lines match by productId when present, by exact name for
+ *  legacy orders. */
+function adjustProductStock(
+  products: Product[],
+  items: OrderItem[],
+  move: Exclude<InventoryMove, null>,
+): Product[] {
+  const dir = move === "deduct" ? -1 : 1;
+  return products.map((p) => {
+    const qty = items
+      .filter((it) => (it.productId ? it.productId === p.id : it.name === p.name))
+      .reduce((s, it) => s + (it.qty || 0), 0);
+    return qty > 0 ? { ...p, stock: Math.max(0, (p.stock || 0) + dir * qty) } : p;
   });
 }
 
@@ -310,6 +391,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // mint a second number / duplicate the order.
     const existing = getDemoStoreOrders(slug).find((o) => o.id === id);
     if (existing) return { ok: true, order: existing };
+    // Inventory guard: never store an order the stock can't cover. (After the
+    // idempotent-retry check, so a committed order is still acknowledged.)
+    const demoProducts =
+      getDemoStoreProducts(slug) ??
+      getDemoProducts(slug).map((dp) =>
+        dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
+      );
+    const demoViolation = stockViolation(demoProducts, p.items);
+    if (demoViolation) return { error: demoViolation };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
     // branding config at placement (any client-supplied value is discarded) and
     // snapshotted on the order so a later config change never rewrites it.
@@ -329,6 +419,18 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
     p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
+
+    // Inventory guard: reject the order outright when any line asks for more
+    // than the product has in stock, so the admin never has to confirm an
+    // order the inventory can't cover.
+    const catalog = await withTenant(tenantId, (db) =>
+      db.product.findMany({
+        where: { status: { not: "archived" } },
+        select: { id: true, name: true, stock: true },
+      }),
+    );
+    const violation = stockViolation(catalog, p.items);
+    if (violation) return { error: violation };
 
     const row = await createStorefrontOrder(tenantId, p);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
@@ -538,19 +640,31 @@ export async function updateStorefrontOrderAction(
     };
     const updated = list.map((x, j) => (j === i ? next : x));
     saveDemoStoreOrders(slug, updated);
+    // Confirmed → deduct the line items from the demo product set;
+    // cancelled after a deduction → put them back.
+    const move = inventoryMove(list[i].status, history, newStatus);
+    if (move) {
+      const products =
+        getDemoStoreProducts(slug) ??
+        getDemoProducts(slug).map((dp) =>
+          dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
+        );
+      saveDemoStoreProducts(slug, adjustProductStock(products, next.items, move));
+      revalidateTenant(slug, slug);
+    }
     return { ok: true, order: next };
   }
 
   try {
-    const row = await withTenant(tenantId, async (db) => {
+    const result = await withTenant(tenantId, async (db) => {
       // Read the current row first so we can append to the journey only when the
       // status actually changes (and never lose earlier events).
       const current = await db.storefrontOrder.findFirst({ where: { id: orderId } });
       if (!current) return null;
+      const history = normalizeStatusHistory(current.statusHistory);
       const next: Prisma.StorefrontOrderUpdateInput = { ...data };
       const newStatus = data.status as Order["status"] | undefined;
       if (newStatus && newStatus !== current.status) {
-        const history = normalizeStatusHistory(current.statusHistory);
         next.statusHistory = [
           ...history,
           { status: newStatus, at: new Date().toISOString() },
@@ -558,10 +672,33 @@ export async function updateStorefrontOrderAction(
       }
       // updateMany is tenant-scoped by the extension; the bare-id update isn't.
       await db.storefrontOrder.updateMany({ where: { id: orderId }, data: next });
-      return db.storefrontOrder.findFirst({ where: { id: orderId } });
+
+      // Confirmed → deduct each line item from the tenant's inventory;
+      // cancelled after a deduction → put it back. Lines match by productId
+      // (stamped at checkout) or by exact name for legacy orders; quantities
+      // clamp at zero so stock never goes negative.
+      const move = inventoryMove(current.status, history, newStatus);
+      if (move) {
+        const dir = move === "deduct" ? -1 : 1;
+        for (const it of normalizeItems(current.items)) {
+          const prod = await db.product.findFirst({
+            where: it.productId ? { id: it.productId } : { name: it.name },
+            select: { id: true, stock: true },
+          });
+          if (prod) {
+            await db.product.updateMany({
+              where: { id: prod.id },
+              data: { stock: Math.max(0, (prod.stock ?? 0) + dir * it.qty) },
+            });
+          }
+        }
+      }
+      return { row: await db.storefrontOrder.findFirst({ where: { id: orderId } }), moved: !!move };
     });
-    if (!row) return { error: "Order not found." };
-    return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
+    if (!result?.row) return { error: "Order not found." };
+    // Stock changed → refresh the cached storefront so the catalog shows it.
+    if (result.moved) revalidateTenant(tenantId, await getTenantSlug());
+    return { ok: true, order: dbOrderToStorefront(result.row as DbOrderRow) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't update the order." };
   }

@@ -49,6 +49,7 @@ export const BRAND: Brand = {
   showPageReviews: true,
   showPageMerchant: false,
   showAdminAnalytics: true,
+  showAdminCardStudio: true,
 
   headerShowBrand: true,
   headerShowCart: true,

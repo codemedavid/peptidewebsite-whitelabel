@@ -25,14 +25,23 @@ export function ProductCard({
 }) {
   const [qty, setQty] = useState(1);
   const cd = design ? cardDesignAttrs(design) : null;
+  // Stock-aware buying: the stepper can't exceed what's left, and a product
+  // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
+  // server enforce the same cap — this is the first, visible line of defense.
+  const stock = Math.max(0, product.stock || 0);
+  const outOfStock = stock <= 0;
   // Wholesale / reseller prices are deliberately NOT shown on the public catalog
   // — they live only on the gated reseller page (#merchant). The cart still
   // auto-applies the bulk price at the per-product minimum (see checkout.ts), so
   // resellers get wholesale at checkout without it being advertised here.
   return (
     <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
-      {product.featured && (
-        <span className="product-card__badge badge badge-solid">Featured</span>
+      {outOfStock ? (
+        <span className="product-card__badge badge badge-soft">Out of stock</span>
+      ) : (
+        product.featured && (
+          <span className="product-card__badge badge badge-solid">Featured</span>
+        )
       )}
 
       <div className="product-card__media">
@@ -93,13 +102,15 @@ export function ProductCard({
             <button
               type="button"
               aria-label={`Add one ${product.name}`}
-              onClick={() => setQty((q) => q + 1)}
+              onClick={() => setQty((q) => Math.min(stock || 1, q + 1))}
+              disabled={outOfStock || qty >= stock}
             >
               +
             </button>
           </div>
           <button
             className="btn btn-primary product-card__cta"
+            disabled={outOfStock}
             onClick={() => {
               onAdd(qty);
               setQty(1);
@@ -110,7 +121,7 @@ export function ProductCard({
               <circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
             </svg>
-            Add to Cart
+            {outOfStock ? "Out of Stock" : "Add to Cart"}
           </button>
         </div>
       </div>

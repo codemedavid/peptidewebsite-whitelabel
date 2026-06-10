@@ -375,6 +375,9 @@ export function AdminCardStudio({
       category: real?.category ?? "all",
       featured: true,
       image: real?.image ?? SAMPLE_IMAGE,
+      // Always in stock — the preview must show the buyable card, never the
+      // disabled "Out of Stock" state a 0-stock catalog pick would trigger.
+      stock: 99,
     };
   }, [products]);
 
