@@ -40,8 +40,13 @@ function SocialIcon({ name }: { name: string }) {
 }
 
 export function Footer({ brand }: { brand: Brand }) {
-  // Strip links to toggled-off pages, then drop any column left with no links.
+  // When the legal row is toggled off, also hide the "Legal" links column
+  // (Privacy / Terms / Disclaimer) so one switch governs everything legal.
+  const legalHidden = brand.footerShowLegal === false;
+  // Strip links to toggled-off pages, drop the Legal column when legal is off,
+  // then drop any column left with no links.
   const cols = (brand.footerColumns || [])
+    .filter((col) => !(legalHidden && (col.title || "").trim().toLowerCase() === "legal"))
     .map((col) => ({
       ...col,
       links: (col.links || []).filter((l) => !isLinkHidden(brand, l.href)),
