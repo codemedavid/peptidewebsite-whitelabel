@@ -224,8 +224,9 @@ export type Brand = {
   // tenants that sell wholesale enable it from the store admin. Gated behind an
   // access code so the wholesale list isn't shown to regular shoppers.
   showPageMerchant?: boolean;
-  // Store-admin Sales Analytics view. Default ON for every package; the super
-  // admin can switch it off per tenant from the branding editor.
+  // Store-admin Sales Analytics view. Derived server-side: the platform
+  // entitlement (FEATURES.STORE_SALES_ANALYTICS, admin → Features) AND the
+  // branding-editor toggle must both be on. Default ON for every package.
   showAdminAnalytics?: boolean;
   // Store-admin Card Studio view. Derived server-side: the platform entitlement
   // (FEATURES.STORE_CARD_STUDIO, admin → Features) AND the branding-editor

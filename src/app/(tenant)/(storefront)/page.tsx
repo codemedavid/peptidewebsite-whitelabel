@@ -58,11 +58,13 @@ export default async function HomePage() {
   // never ship it to the browser, even though the rest of `config` is public.
   delete (brand as Record<string, unknown>).resellerAccessCode;
 
-  // Card Studio is gated the same way: the platform entitlement (admin →
-  // Features, FEATURES.STORE_CARD_STUDIO) AND the branding-editor toggle must
-  // both be on for the store-admin "design" view to appear.
+  // Card Studio and Sales Analytics are gated the same way: the platform
+  // entitlement (admin → Features) AND the branding-editor toggle must both be
+  // on for the store-admin view to appear.
   const cardStudioEntitled = await hasFeature(tenantId, FEATURES.STORE_CARD_STUDIO);
   brand.showAdminCardStudio = cardStudioEntitled && config.showAdminCardStudio !== false;
+  const salesAnalyticsEntitled = await hasFeature(tenantId, FEATURES.STORE_SALES_ANALYTICS);
+  brand.showAdminAnalytics = salesAnalyticsEntitled && config.showAdminAnalytics !== false;
 
   // Products are the source of truth in the DB. Load the tenant's catalog
   // server-side (demo: file-backed store, seeded from the builtin fixtures) and

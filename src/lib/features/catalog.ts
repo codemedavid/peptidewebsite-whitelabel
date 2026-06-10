@@ -38,6 +38,7 @@ export const FEATURES = {
   STORE_MULTI_CURRENCY: "storefront.multi_currency",
   STORE_RESELLER_PORTAL: "storefront.reseller",
   STORE_CARD_STUDIO: "storefront.card_studio",
+  STORE_SALES_ANALYTICS: "storefront.sales_analytics",
   // Transactional notifications
   NOTIFY_EMAIL: "notify.email",
   NOTIFY_TELEGRAM: "notify.telegram",
@@ -60,9 +61,10 @@ const STARTER: FeatureKey[] = [
   // only surfaces the gated #merchant page once the store owner also sets an
   // access code, so being in the plan ceiling (default-on) exposes nothing.
   FEATURES.STORE_RESELLER_PORTAL,
-  // Available on every plan; the operator toggles the store-admin Card Studio
+  // Available on every plan; the operator toggles these store-admin views
   // per tenant from admin → Features (default-on, like the reseller portal).
   FEATURES.STORE_CARD_STUDIO,
+  FEATURES.STORE_SALES_ANALYTICS,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -154,6 +156,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_ORDER_TRACKING]: { label: "Order tracking", description: "Public order-status / tracking lookup page.", group: "Ecommerce" },
   [FEATURES.STORE_MULTI_CURRENCY]: { label: "Multi-currency", description: "Display and charge in multiple currencies.", group: "Ecommerce" },
   [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
+  [FEATURES.STORE_SALES_ANALYTICS]: { label: "Sales Analytics", description: "Sales Analytics view in the store admin (revenue & insights).", group: "Ecommerce" },
 
   [FEATURES.NOTIFY_EMAIL]: { label: "Email notifications", description: "Transactional order emails to customers.", group: "Notifications" },
   [FEATURES.NOTIFY_TELEGRAM]: { label: "Telegram notifications", description: "Order alerts pushed to a Telegram channel.", group: "Notifications" },
