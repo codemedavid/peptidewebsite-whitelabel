@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ExternalLink } from "lucide-react";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
 import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
@@ -34,6 +34,8 @@ import type { Brand } from "@/storefront/types";
 import { BrandTweaksForm } from "@/storefront/tweaks/BrandTweaksForm";
 import { TweaksStyle } from "@/storefront/tweaks/controls";
 import { StorefrontLivePreview } from "@/components/admin/StorefrontLivePreview";
+import { CardDesignPicker, cardDesignLabel } from "@/components/admin/CardDesignPicker";
+import { CARD_PRESETS } from "@/storefront/cardDesign";
 import { saveBrandingAction } from "@/actions/onboarding";
 import {
   uploadBrandingAssetAction,
@@ -307,24 +309,41 @@ export function BrandingEditor({
       <div className="mt-6 grid gap-8 lg:grid-cols-[320px_1fr]">
         {/* ── Controls ── */}
         <div className="space-y-6">
-          {/* Theme preset is the shared base for every tab — keep it reachable
-              from Hero and Storefront too, so the operator can snap back to a
-              preset without first switching to the Brand tab. */}
-          <div>
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 className="text-sm font-semibold">Theme preset</h2>
-              <span className="text-xs text-muted-foreground">
-                {Object.keys(THEME_PRESETS).length} themes
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+          {/* Theme preset + Card Studio are the shared base for every tab —
+              keep them reachable from Hero and Storefront too. Both collapse
+              (closed by default) so the controls column stays compact; the
+              header summary always shows the current selection. */}
+          <CollapsibleSection
+            title="Theme preset"
+            summary={THEME_PRESETS[themeId]?.name ?? themeId}
+            badge={`${Object.keys(THEME_PRESETS).length} themes`}
+          >
+            <p className="text-xs text-muted-foreground">
               Pick a preset to re-skin the whole storefront — colors, fonts &amp; radius. You can
               fine-tune any color below afterward.
             </p>
             <div className="mt-3">
               <ThemePresetPicker value={themeId} onChange={pickPreset} columns={2} />
             </div>
-          </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Card Studio"
+            summary={cardDesignLabel(storefrontBrand.cardDesign)}
+            badge={`${CARD_PRESETS.length} styles`}
+          >
+            <p className="text-xs text-muted-foreground">
+              Product card style for the tenant&apos;s catalog. Each preview renders the real
+              storefront card with this brand&apos;s colors &amp; fonts.
+            </p>
+            <div className="mt-3">
+              <CardDesignPicker
+                brand={storefrontBrand}
+                value={storefrontBrand.cardDesign}
+                onChange={(d) => setTweak("cardDesign", d)}
+              />
+            </div>
+          </CollapsibleSection>
 
           {tab === "brand" ? (
             <>
@@ -1083,6 +1102,50 @@ function StorefrontPreview({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A collapsible controls section (closed by default) — keeps the big pickers
+ * (themes, card designs) out of the way until the operator opens them. The
+ * header always shows the current selection so closed ≠ hidden information.
+ */
+function CollapsibleSection({
+  title,
+  summary,
+  badge,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary: string;
+  badge?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="rounded-[var(--radius)] border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold">{title}</span>
+          <span className="block truncate text-xs text-muted-foreground">{summary}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {badge && <span className="text-xs text-muted-foreground">{badge}</span>}
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+            aria-hidden
+          />
+        </span>
+      </button>
+      {open && <div className="border-t border-border p-3">{children}</div>}
+    </section>
   );
 }
 

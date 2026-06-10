@@ -26,7 +26,8 @@ import { isPageVisible } from "@/storefront/visibility";
 
 // Mirror store.tsx's applyBrandStyle, but scoped to the preview's .sf-root so
 // edits re-theme the preview live without touching the admin's own tokens.
-function brandVars(b: Brand): React.CSSProperties {
+// Exported for other in-admin storefront previews (e.g. the Card Studio picker).
+export function brandVars(b: Brand): React.CSSProperties {
   return {
     "--brand-main": b.main,
     "--brand-accent": b.accent,
