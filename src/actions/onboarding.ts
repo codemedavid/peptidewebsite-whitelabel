@@ -198,25 +198,30 @@ export async function saveFeatures(
   const features = await prisma.feature.findMany({ where: { key: { in: keys } }, select: { id: true, key: true } });
   const idByKey = new Map(features.map((f) => [f.key, f.id]));
 
-  await prisma.$transaction(async (tx) => {
-    for (const [key, on] of Object.entries(map)) {
-      const featureId = idByKey.get(key);
-      if (!featureId) continue; // feature not seeded — nothing to override
-      const where = { tenantId_featureId: { tenantId: tenant.id, featureId } };
-      const inPlan = planKeys.has(key);
-      if (on === inPlan) {
-        // desired state already matches the plan default → no override needed
-        await tx.tenantFeatureOverride.deleteMany({ where: { tenantId: tenant.id, featureId } });
-      } else {
-        // diverges from plan → record an explicit grant (on) / revoke (off)
-        await tx.tenantFeatureOverride.upsert({
-          where,
-          update: { enabled: on, expiresAt: null },
-          create: { tenantId: tenant.id, featureId, enabled: on },
-        });
-      }
-    }
-  });
+  // Partition once, then run a single batched transaction: one deleteMany for
+  // everything matching its plan default plus one upsert per divergence. The
+  // previous per-key interactive transaction issued ~30 sequential round trips
+  // and tripped Prisma's 5s transaction timeout on remote databases.
+  const matchesPlan: string[] = [];
+  const diverges: { featureId: string; enabled: boolean }[] = [];
+  for (const [key, on] of Object.entries(map)) {
+    const featureId = idByKey.get(key);
+    if (!featureId) continue; // feature not seeded — nothing to override
+    if (on === planKeys.has(key)) matchesPlan.push(featureId);
+    else diverges.push({ featureId, enabled: on });
+  }
+  await prisma.$transaction([
+    prisma.tenantFeatureOverride.deleteMany({
+      where: { tenantId: tenant.id, featureId: { in: matchesPlan } },
+    }),
+    ...diverges.map(({ featureId, enabled }) =>
+      prisma.tenantFeatureOverride.upsert({
+        where: { tenantId_featureId: { tenantId: tenant.id, featureId } },
+        update: { enabled, expiresAt: null },
+        create: { tenantId: tenant.id, featureId, enabled },
+      }),
+    ),
+  ]);
 
   revalidatePath("/admin");
   revalidatePath(`/admin/tenants/${slug}`);

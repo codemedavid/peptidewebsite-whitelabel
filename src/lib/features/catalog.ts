@@ -61,10 +61,6 @@ const STARTER: FeatureKey[] = [
   // only surfaces the gated #merchant page once the store owner also sets an
   // access code, so being in the plan ceiling (default-on) exposes nothing.
   FEATURES.STORE_RESELLER_PORTAL,
-  // Available on every plan; the operator toggles these store-admin views
-  // per tenant from admin → Features (default-on, like the reseller portal).
-  FEATURES.STORE_CARD_STUDIO,
-  FEATURES.STORE_SALES_ANALYTICS,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -101,6 +97,17 @@ export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
 };
 
 export const ALL_FEATURES = Object.values(FEATURES);
+
+/**
+ * Features outside every plan's default set (so OFF for all tenants until the
+ * platform operator grants them) that are still toggleable per tenant from
+ * admin → Features on any plan — they never show "Locked · upgrade plan".
+ * Grants persist as TenantFeatureOverride rows (DB) / features.json (demo).
+ */
+export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
+  FEATURES.STORE_CARD_STUDIO,
+  FEATURES.STORE_SALES_ANALYTICS,
+]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
 const PLAN_ALIASES: Record<string, string> = {

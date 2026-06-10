@@ -38,6 +38,7 @@ export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     const by = new Map<FeatureGroup, FeatureItem[]>();
@@ -49,16 +50,25 @@ export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
   function toggle(key: string) {
     setState((s) => ({ ...s, [key]: !s[key] }));
     setSaved(false);
+    setError(null);
   }
 
   async function onSave() {
     setSaving(true);
-    // Persist explicit booleans only for plan-permitted features.
-    const map: Record<string, boolean> = {};
-    for (const i of items) if (!i.lockedByPlan) map[i.key] = state[i.key];
-    const res = await saveFeaturesAction(slug, map);
-    setSaving(false);
-    if ("ok" in res) setSaved(true);
+    setError(null);
+    try {
+      // Persist explicit booleans only for plan-permitted features.
+      const map: Record<string, boolean> = {};
+      for (const i of items) if (!i.lockedByPlan) map[i.key] = state[i.key];
+      const res = await saveFeaturesAction(slug, map);
+      if ("ok" in res) setSaved(true);
+      else setError(res.error);
+    } catch {
+      // A thrown server action must never leave the button stuck on "Saving…".
+      setError("Save failed — please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -96,6 +106,11 @@ export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
         <span role="status" className="sr-only">
           Feature settings saved.
         </span>
+      )}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {error}
+        </p>
       )}
 
       <div className="mt-8 space-y-8">

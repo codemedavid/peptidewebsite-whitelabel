@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode, getDemoContext, listDemoTenants } from "@/lib/demo/fixtures";
 import { getEntitlements } from "@/lib/features/entitlements";
-import { ALL_FEATURES, FEATURE_META, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
+import { ALL_FEATURES, FEATURE_META, OPERATOR_GRANTABLE, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 import { planMeta } from "@/lib/admin/plans";
 import { FeaturesEditor, type FeatureItem } from "@/components/admin/FeaturesEditor";
 
@@ -38,7 +38,9 @@ export default async function TenantFeaturesPage({ params }: { params: Promise<{
     label: FEATURE_META[key].label,
     description: FEATURE_META[key].description,
     group: FEATURE_META[key].group,
-    lockedByPlan: !ceiling.has(key),
+    // Operator-grantable features sit outside every plan (default OFF) but are
+    // never plan-locked — the operator can switch them on for any tenant.
+    lockedByPlan: !ceiling.has(key) && !OPERATOR_GRANTABLE.has(key),
     enabled: enabled.has(key),
   }));
 

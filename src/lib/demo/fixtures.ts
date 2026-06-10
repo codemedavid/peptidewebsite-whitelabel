@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Order, Product } from "@/storefront/types";
 import { slugify } from "@/lib/storefront/product-mapping";
-import { planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
+import { OPERATOR_GRANTABLE, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 import type { HeroTypography } from "@/lib/theme/tokens";
 import {
   defaultOrderNumberFormat,
@@ -254,7 +254,9 @@ export function saveDemoFeatures(slug: string, map: DemoFeatureMap): void {
 
 /**
  * Resolved entitlements in demo mode: plan ceiling minus any feature the saved
- * override map turns off. Features outside the plan stay locked off.
+ * override map turns off. Features outside the plan stay locked off — except
+ * OPERATOR_GRANTABLE ones, which the operator can grant with an explicit
+ * `true` override (default OFF for every tenant).
  */
 export function getDemoEntitlements(idOrSlug: string): Set<FeatureKey> {
   const t = getDemoTenant(idOrSlug);
@@ -262,6 +264,7 @@ export function getDemoEntitlements(idOrSlug: string): Set<FeatureKey> {
   const overrides = getDemoFeatures(t.slug);
   const set = new Set<FeatureKey>();
   for (const key of ceiling) if (overrides[key] !== false) set.add(key);
+  for (const key of OPERATOR_GRANTABLE) if (overrides[key] === true) set.add(key);
   return set;
 }
 
