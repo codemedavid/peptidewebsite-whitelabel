@@ -22,7 +22,7 @@ export const SITE = {
     chip: "Business automation, done-for-you",
     line1: "Stop Being The Customer Support",
     line2: "Of Your Own Peptide Business",
-    sub: "Si Jonina ang sasagot sa paulit-ulit na tanong, magpapakita ng products at COAs, at kokolekta ng orders — 24/7. Para ikaw, focus sa paglago ng negosyo, hindi sa kaka-reply.",
+    sub: "Ang automation system ang sasagot sa paulit-ulit na tanong, magpapakita ng products at COAs, at mangongolekta ng orders — automated, 24/7. Para ikaw, focus sa paglago ng negosyo, hindi sa kaka-reply.",
     primaryCta: "Get Started",
     secondaryCta: "View Demo Stores",
   },

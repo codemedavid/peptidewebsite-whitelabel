@@ -10,7 +10,7 @@ export function DemoWebsites() {
           <span className="mk-eyebrow">See it in action</span>
           <h2 className="mk-h2">Demo websites</h2>
           <p className="mk-lead">
-            Real storefronts built on Jonina. Open one to explore the catalog, checkout, and
+            Real storefronts built on the platform. Open one to explore the catalog, checkout, and
             tracking — exactly what your customers will see.
           </p>
         </div>

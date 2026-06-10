@@ -9,7 +9,7 @@ export function SystemIntro() {
     <section className="mk-section" id="system">
       <div className="mk-container">
         <div className="mk-section-head mk-center">
-          <span className="mk-eyebrow">Meet Jonina</span>
+          <span className="mk-eyebrow">The business system</span>
           <h2 className="mk-h2">
             Hindi lang ito website. <span className="mk-gradient-text">System ito.</span>
           </h2>
