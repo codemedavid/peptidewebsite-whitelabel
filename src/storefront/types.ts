@@ -2,6 +2,7 @@
 // Ported from the Claude Design handoff bundle (window.PRODUCTS, CATEGORIES, …).
 
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
+import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
   id: string;
@@ -350,6 +351,15 @@ export type Brand = {
   // editing browser. Absent until the owner saves once → storefront falls back
   // to the seed categories.
   categories?: Category[];
+
+  // Product card design chosen in the store admin's Card Studio. Persisted in
+  // branding.config (same mechanism as paymentMethods). Absent → the catalog
+  // renders the classic card exactly as before, so existing tenants are
+  // unaffected until the owner applies a design.
+  cardDesign?: CardDesign;
+  // Reusable card designs the owner saved from the Card Studio ("Save as
+  // Template"). Persisted in branding.config alongside cardDesign.
+  cardTemplates?: CardTemplate[];
 
   /** Order-number format configured by the super admin (prefix, separator, scheme, digits).
    *  Used by the storefront store to generate order numbers at checkout time. */

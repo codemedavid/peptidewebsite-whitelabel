@@ -2,15 +2,35 @@
 
 import { useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
+import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
+/**
+ * The storefront product card. Also rendered by the admin Card Studio for its
+ * live previews (with a sample `rating`), so the gallery shows exactly what
+ * ships. `design` comes from brand.cardDesign — absent, the card renders the
+ * classic markup with no [data-cd] attributes and is visually unchanged.
+ */
+export function ProductCard({
+  product,
+  onAdd,
+  design,
+  rating,
+}: {
+  product: Product;
+  onAdd: (qty: number) => void;
+  design?: CardDesign;
+  /** Sample rating shown by Card Studio previews. The public catalog passes
+   *  nothing — products carry no rating data, so none is invented. */
+  rating?: { value: number; count: number };
+}) {
   const [qty, setQty] = useState(1);
+  const cd = design ? cardDesignAttrs(design) : null;
   // Wholesale / reseller prices are deliberately NOT shown on the public catalog
   // — they live only on the gated reseller page (#merchant). The cart still
   // auto-applies the bulk price at the per-product minimum (see checkout.ts), so
   // resellers get wholesale at checkout without it being advertised here.
   return (
-    <article className="product-card card">
+    <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
       {product.featured && (
         <span className="product-card__badge badge badge-solid">Featured</span>
       )}
@@ -30,6 +50,22 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (qty: number
 
       <div className="product-card__body">
         <h3 className="product-card__name font-display">{product.name}</h3>
+        {rating && (
+          <div
+            className="product-card__rating"
+            aria-label={`Rated ${rating.value} out of 5 from ${rating.count} reviews`}
+          >
+            <span
+              className="product-card__stars"
+              style={{ "--rate": rating.value / 5 } as React.CSSProperties}
+              aria-hidden
+            >
+              ★★★★★
+            </span>
+            <span className="product-card__rating-value">{rating.value.toFixed(1)}</span>
+            <span className="product-card__rating-count">({rating.count})</span>
+          </div>
+        )}
         <p className="product-card__desc">{product.description}</p>
         {product.purity && (
           <span className="badge badge-soft">{product.purity} Purity</span>
@@ -167,9 +203,14 @@ export function Catalog({
           </div>
         )}
 
-        <div className="catalog__grid">
+        <div className="catalog__grid" data-cd-grid={brand.cardDesign?.layout || undefined}>
           {filtered.map((p) => (
-            <ProductCard key={p.id} product={p} onAdd={(qty) => onAddToCart(p, qty)} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              design={brand.cardDesign}
+              onAdd={(qty) => onAddToCart(p, qty)}
+            />
           ))}
           {filtered.length === 0 && (
             <div className="catalog__empty">

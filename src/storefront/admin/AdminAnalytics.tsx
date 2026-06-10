@@ -177,16 +177,29 @@ export function AdminAnalytics({
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadFailed, setLoadFailed] = useState<boolean>(false);
   const [range, setRange] = useState<RangeId>("30d");
 
   void brand;
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const res = await listStorefrontOrdersAction();
-    if ("ok" in res) setOrders(res.orders);
-    else alert(res.error);
-    setLoading(false);
+    setLoadFailed(false);
+    try {
+      const res = await listStorefrontOrdersAction();
+      if ("ok" in res) setOrders(res.orders);
+      else {
+        setLoadFailed(true);
+        alert(res.error);
+      }
+    } catch {
+      // Server actions reject on transport failure; without this the view
+      // would stay on "Loading…" forever with the Refresh button disabled.
+      setLoadFailed(true);
+      alert("Couldn't load analytics — check your connection and press Refresh.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -199,6 +212,7 @@ export function AdminAnalytics({
     // ---- chart buckets (also define the current window) ----
     const buckets: Bucket[] = [];
     let capped = false;
+    let kpiStart: Date | null = null;
     if (range === "7d" || range === "30d") {
       const days = range === "7d" ? 7 : 30;
       for (let i = days - 1; i >= 0; i--) {
@@ -252,13 +266,16 @@ export function AdminAnalytics({
         });
       }
       if (range === "all" && buckets.length > MAX_MONTH_BUCKETS) {
+        kpiStart = buckets[0].start; // KPIs keep full history; only the chart is capped
         buckets.splice(0, buckets.length - MAX_MONTH_BUCKETS);
         capped = true;
       }
     }
 
-    const start = buckets[0].start;
-    const end = buckets[buckets.length - 1].end;
+    const start = kpiStart ?? buckets[0].start;
+    // 13 weekly buckets tile 91 days; clamp the 90d KPI window to exactly 90
+    // so it matches the prior window's length and never includes tomorrow.
+    const end = range === "90d" ? addDays(today, 1) : buckets[buckets.length - 1].end;
 
     // Previous window of equal length, immediately before the current one.
     let prevStart: Date | null = null;
@@ -266,14 +283,29 @@ export function AdminAnalytics({
     else if (range === "30d") prevStart = addDays(start, -30);
     else if (range === "90d") prevStart = addDays(start, -90);
     else if (range === "12m") prevStart = addMonths(start, -12);
+    // The 12m window only has data through today, so compare year-over-year
+    // to date — 12 complete prior months would bias every delta downward.
+    const prevEnd =
+      range === "12m"
+        ? new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1)
+        : start;
+
+    // The order date is client-supplied at checkout, so a clock-skewed or
+    // crafted future date must count as "now" rather than silently vanish
+    // from every range.
+    const clampDate = (o: Order): Date | null => {
+      const d = new Date(o.date);
+      if (isNaN(d.getTime())) return null;
+      return d >= end ? new Date(end.getTime() - 1) : d;
+    };
 
     const inWindow: Order[] = [];
     const prevSales: Order[] = [];
     for (const o of orders) {
-      const d = new Date(o.date);
-      if (isNaN(d.getTime())) continue;
+      const d = clampDate(o);
+      if (!d) continue;
       if (d >= start && d < end) inWindow.push(o);
-      else if (prevStart && o.status !== "cancelled" && d >= prevStart && d < start)
+      else if (prevStart && o.status !== "cancelled" && d >= prevStart && d < prevEnd)
         prevSales.push(o);
     }
     const sales = inWindow.filter((o) => o.status !== "cancelled");
@@ -314,12 +346,14 @@ export function AdminAnalytics({
       placeAgg.set(place, pl);
 
       // chart fill — buckets are contiguous and sorted, so a linear scan is fine
-      const d = new Date(o.date);
-      for (const b of buckets) {
-        if (d >= b.start && d < b.end) {
-          b.revenue += t;
-          b.orders += 1;
-          break;
+      const d = clampDate(o);
+      if (d) {
+        for (const b of buckets) {
+          if (d >= b.start && d < b.end) {
+            b.revenue += t;
+            b.orders += 1;
+            break;
+          }
         }
       }
     }
@@ -470,7 +504,9 @@ export function AdminAnalytics({
           </div>
         ) : orders.length === 0 ? (
           <div className="admin-empty-set" style={{ padding: "60px 20px" }}>
-            No orders yet — analytics will appear once your store takes its first order.
+            {loadFailed
+              ? "Couldn't load orders — press Refresh to try again."
+              : "No orders yet — analytics will appear once your store takes its first order."}
           </div>
         ) : (
           <>
@@ -479,7 +515,9 @@ export function AdminAnalytics({
                 <div key={s.label} className="admin-stat">
                   <DeltaPill delta={s.delta} prevLabel={rangeMeta.prevLabel} />
                   <div className="admin-stat__label">{s.label}</div>
-                  <div className="admin-stat__value admin-stat__value--compact">{s.value}</div>
+                  <div className="admin-stat__value admin-stat__value--compact" title={s.value}>
+                    {s.value}
+                  </div>
                   <div className="admin-stat__sub">{s.sub}</div>
                 </div>
               ))}

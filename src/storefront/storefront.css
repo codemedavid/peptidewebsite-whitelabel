@@ -3985,7 +3985,9 @@
   color: var(--brand-text-muted);
 }
 
-/* Segmented date-range picker */
+/* Segmented date-range picker. The five options are wider than a phone
+   viewport; max-width clamps the flex item's content-based minimum so the
+   extra options scroll inside the pill instead of overflowing the page. */
 .sf-root .admin-seg {
   display: inline-flex;
   gap: 2px;
@@ -3993,6 +3995,9 @@
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);
   border-radius: var(--radius-pill);
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .sf-root .admin-seg__btn {
   padding: 8px 16px;
@@ -4012,8 +4017,15 @@
   color: #fff;
 }
 
-/* KPI card extras (delta badge + sub-line + money-sized value) */
-.sf-root .admin-stat__value--compact { font-size: 32px; }
+/* KPI card extras (delta badge + sub-line + money-sized value). The value
+   is one unbreakable token inside an overflow-hidden card, so truncation
+   must show an ellipsis rather than silently dropping trailing digits. */
+.sf-root .admin-stat__value--compact {
+  font-size: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sf-root .admin-stat__sub {
   position: relative;
   z-index: 1;
@@ -4036,6 +4048,10 @@
 .sf-root .admin-stat__delta--up { background: color-mix(in srgb, #22B07D 18%, transparent); color: #1F8A5B; }
 .sf-root .admin-stat__delta--down { background: color-mix(in srgb, #F23E5C 14%, transparent); color: #C82846; }
 .sf-root .admin-stat__delta--flat { background: var(--brand-surface-2); color: var(--brand-text-muted); }
+/* The absolutely-positioned pill shares its line with the label; reserve the
+   line end so long labels wrap under it instead of colliding at the grid's
+   220px minimum card width. */
+.sf-root .admin-stat__delta + .admin-stat__label { padding-right: 76px; }
 
 .sf-root .admin-analytics__card { margin-bottom: 18px; }
 .sf-root .admin-analytics__row { margin-bottom: 18px; }

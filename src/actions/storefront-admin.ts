@@ -13,6 +13,7 @@ import {
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Category, PaymentMethod, Protocol } from "@/storefront/types";
+import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
 export type ActionResult = { ok: true } | { error: string };
 
@@ -255,6 +256,134 @@ export async function verifyResellerCodeAction(code: string): Promise<ActionResu
   if ((code ?? "").trim().toLowerCase() !== expected.toLowerCase()) {
     return { error: "Incorrect access code." };
   }
+  return { ok: true };
+}
+
+// ── Card Studio (product card design) ────────────────────────────────────────
+
+const CD_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+/** A hex color or "" (inherit the theme); anything else collapses to "". */
+function cdColor(v: unknown): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  return CD_HEX.test(s) ? s : "";
+}
+
+/** One of the allowed enum values, else the default. */
+function cdEnum<T extends string>(v: unknown, allowed: readonly T[], dflt: T): T {
+  return allowed.includes(v as T) ? (v as T) : dflt;
+}
+
+function cdNum(v: unknown, min: number, max: number, dflt: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : dflt;
+}
+
+/** Coerce an untrusted client payload into a clean CardDesign. */
+function normalizeCardDesign(input: unknown): CardDesign {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const d = DEFAULT_CARD_DESIGN;
+  return {
+    preset: String(o.preset ?? "custom").slice(0, 64),
+    layout: cdEnum(o.layout, ["vertical", "horizontal", "overlay"] as const, d.layout),
+    surface: cdEnum(o.surface, ["flat", "glass", "neumorphic", "gradient"] as const, d.surface),
+    borderEnabled: o.borderEnabled !== false,
+    borderColor: cdColor(o.borderColor),
+    borderWidth: cdNum(o.borderWidth, 1, 8, d.borderWidth),
+    borderStyle: cdEnum(o.borderStyle, ["solid", "dashed", "dotted"] as const, d.borderStyle),
+    radius: cdNum(o.radius, 0, 40, d.radius),
+    background: cdColor(o.background),
+    background2: cdColor(o.background2),
+    textColor: cdColor(o.textColor),
+    shadow: cdEnum(o.shadow, ["none", "sm", "md", "lg", "glow"] as const, d.shadow),
+    hover: cdEnum(o.hover, ["none", "lift", "grow", "glow", "frame", "tilt"] as const, d.hover),
+    titleFont: cdEnum(o.titleFont, ["display", "body"] as const, d.titleFont),
+    titleWeight: (Math.round(cdNum(o.titleWeight, 400, 800, d.titleWeight) / 100) * 100) as CardDesign["titleWeight"],
+    titleSize: cdEnum(o.titleSize, ["sm", "md", "lg"] as const, d.titleSize),
+    titleCase: cdEnum(o.titleCase, ["none", "uppercase"] as const, d.titleCase),
+    showDesc: o.showDesc !== false,
+    buttonStyle: cdEnum(o.buttonStyle, ["gradient", "solid", "outline", "soft", "contrast"] as const, d.buttonStyle),
+    buttonColor: cdColor(o.buttonColor),
+    buttonShape: cdEnum(o.buttonShape, ["pill", "rounded", "square"] as const, d.buttonShape),
+    badgeStyle: cdEnum(o.badgeStyle, ["solid", "soft", "outline", "mono", "hidden"] as const, d.badgeStyle),
+    imageRatio: cdEnum(o.imageRatio, ["square", "landscape", "portrait", "wide"] as const, d.imageRatio),
+    mediaInset: o.mediaInset === true,
+    spacing: cdEnum(o.spacing, ["compact", "cozy", "roomy"] as const, d.spacing),
+  };
+}
+
+/**
+ * Persist the storefront's product card design into the shared `branding.config`
+ * blob (read-modify-write, mirroring savePaymentMethodsAction so it never
+ * clobbers the rest of the storefront Brand config). Pass null to reset the
+ * tenant to the classic card (the key is removed, not stored as null, so the
+ * storefront's "absent → classic" fallback applies).
+ */
+export async function saveCardDesignAction(design: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config: Record<string, unknown> = { ...current };
+  if (design === null || design === undefined) {
+    delete config.cardDesign;
+  } else {
+    config.cardDesign = normalizeCardDesign(design);
+  }
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/** Coerce untrusted client input into clean CardTemplate rows. */
+function normalizeCardTemplates(input: unknown): CardTemplate[] {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 30).map((t, i) => {
+    const o = (t ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? `ct${i + 1}`).slice(0, 64),
+      name: String(o.name ?? "").slice(0, 80).trim() || `Template ${i + 1}`,
+      design: normalizeCardDesign(o.design),
+    };
+  });
+}
+
+/**
+ * Persist the owner's saved card design templates ("Save as Template" in the
+ * Card Studio) into branding.config — same read-modify-write pattern as
+ * saveCardDesignAction so templates and the applied design can't clobber each
+ * other or the rest of the Brand config.
+ */
+export async function saveCardTemplatesAction(templates: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, cardTemplates: normalizeCardTemplates(templates) };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
   return { ok: true };
 }
 

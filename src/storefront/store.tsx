@@ -30,7 +30,14 @@ import {
   SEED_REVIEWS,
   SEED_SHIPPING_LOCATIONS,
 } from "./data";
-import { saveCategoriesAction, savePaymentMethodsAction, saveProtocolsAction } from "@/actions/storefront-admin";
+import {
+  saveCardDesignAction,
+  saveCardTemplatesAction,
+  saveCategoriesAction,
+  savePaymentMethodsAction,
+  saveProtocolsAction,
+} from "@/actions/storefront-admin";
+import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
   Brand,
   Category,
@@ -51,6 +58,14 @@ export type Store = {
   brand: Brand;
   /** Live branding editor write path — setTweak('key', value) or setTweak({ … }). */
   setTweak: (keyOrEdits: keyof Brand | Partial<Brand>, val?: unknown) => void;
+
+  /** Apply a product card design (Card Studio). Updates the live brand
+   *  immediately and persists to branding.config debounced — sliders fire on
+   *  every tick, so each keystroke must not become a server round-trip.
+   *  `undefined` resets the tenant to the classic card. */
+  setCardDesign: (design: CardDesign | undefined) => void;
+  /** Persist the owner's saved card templates (Save as Template). */
+  setCardTemplates: (next: Updater<CardTemplate[]>) => void;
 
   products: Product[];
   setProducts: (next: Updater<Product[]>) => void;
@@ -381,6 +396,49 @@ export function StoreProvider({
     [toast, protocols],
   );
 
+  // Card design (Card Studio) persists to the DB (branding.config). The brand
+  // state updates instantly so the storefront + studio previews re-render live;
+  // the server save is debounced because the studio's sliders/color pickers
+  // fire on every input tick. Failures surface via toast, like the rest.
+  const cardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setCardDesign = useCallback(
+    (design: CardDesign | undefined) => {
+      setBrandState((prev) => ({ ...prev, cardDesign: design }));
+      if (cardSaveTimer.current) clearTimeout(cardSaveTimer.current);
+      cardSaveTimer.current = setTimeout(() => {
+        saveCardDesignAction(design ?? null)
+          .then((r) => {
+            if (r && "error" in r) toast(`Couldn't save card design: ${r.error}`);
+          })
+          .catch(() => {
+            toast("Couldn't save card design — please sign in again and retry.");
+          });
+      }, 600);
+    },
+    [toast],
+  );
+
+  // Card templates persist immediately (saves are rare — an explicit
+  // "Save as Template" or a delete). As with setPaymentMethods, the updater is
+  // resolved OUTSIDE setState so the save fires exactly once under StrictMode.
+  const setCardTemplates = useCallback(
+    (next: Updater<CardTemplate[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: CardTemplate[]) => CardTemplate[])(brand.cardTemplates ?? [])
+          : next;
+      setBrandState((prev) => ({ ...prev, cardTemplates: value }));
+      saveCardTemplatesAction(value)
+        .then((r) => {
+          if (r && "error" in r) toast(`Couldn't save template: ${r.error}`);
+        })
+        .catch(() => {
+          toast("Couldn't save template — please sign in again and retry.");
+        });
+    },
+    [toast, brand.cardTemplates],
+  );
+
   // Categories persist to the DB (branding.config), not localStorage, so every
   // device/customer sees the owner's configured tabs and the product form's
   // dropdown stays in sync. Mirrors setProtocols: gated on the storefront-admin
@@ -407,6 +465,7 @@ export function StoreProvider({
 
   const value: Store = {
     brand, setTweak,
+    setCardDesign, setCardTemplates,
     products, setProducts,
     categories, setCategories,
     orders, setOrders,

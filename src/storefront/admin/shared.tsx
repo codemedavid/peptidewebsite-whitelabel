@@ -137,6 +137,15 @@ export function AdminIcon({ name }: { name: string }) {
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
       );
+    case "palette":
+      return (
+        <svg {...props}>
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.7-.77 1.7-1.7 0-.44-.17-.84-.45-1.14-.27-.3-.44-.7-.44-1.13 0-.93.77-1.7 1.7-1.7H16.5c3 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z" />
+          <circle cx="7.5" cy="11.5" r="1" />
+          <circle cx="11" cy="7.5" r="1" />
+          <circle cx="15.5" cy="8.5" r="1" />
+        </svg>
+      );
     default:
       return (
         <svg {...props}>
