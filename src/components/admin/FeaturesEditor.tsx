@@ -1,19 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, ExternalLink, Lock } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  Check,
+  ExternalLink,
+  Globe,
+  Layers,
+  Lock,
+  Package,
+  Plug,
+  ShoppingCart,
+  Zap,
+} from "lucide-react";
 import {
   FEATURE_GROUPS,
   type FeatureGroup,
   type FeatureKey,
 } from "@/lib/features/catalog";
-import { Button } from "@/components/ui/button";
 import { saveFeaturesAction } from "@/actions/onboarding";
 
 // `*.lvh.me` resolves in every browser (incl. Safari); `*.localhost` doesn't.
 // ROOT carries its own dev port, e.g. "lvh.me:3100".
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
+
+const GROUP_ICONS: Record<FeatureGroup, React.ReactNode> = {
+  Site: <Globe size={16} aria-hidden />,
+  Catalog: <Package size={16} aria-hidden />,
+  Ecommerce: <ShoppingCart size={16} aria-hidden />,
+  Notifications: <Bell size={16} aria-hidden />,
+  "Growth & Automation": <Zap size={16} aria-hidden />,
+  Integrations: <Plug size={16} aria-hidden />,
+};
 
 export type FeatureItem = {
   key: FeatureKey;
@@ -21,6 +41,7 @@ export type FeatureItem = {
   description: string;
   group: FeatureGroup;
   lockedByPlan: boolean; // not in the tenant's plan ceiling
+  requiredPlanLabel: string | null; // lowest plan that unlocks a locked feature
   enabled: boolean; // currently resolved on/off
 };
 
@@ -31,14 +52,86 @@ type Props = {
   items: FeatureItem[];
 };
 
+type SaveStatus = "saved" | "saving" | "error";
+type Filter = "all" | "on" | "off";
+
+function Toggle({
+  on,
+  small,
+  disabled,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  small?: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className={`ftr-tgl${small ? " sm" : ""}${on ? " on" : ""}`}
+    />
+  );
+}
+
 export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
   // Toggle state for plan-permitted features only; locked ones are never on.
   const [state, setState] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(items.map((i) => [i.key, i.enabled])),
   );
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<SaveStatus>("saved");
+  const [filter, setFilter] = useState<Filter>("all");
+
+  // Autosave: every toggle schedules a debounced full-map save; the generation
+  // counter keeps a slow stale response from overwriting a newer one's status.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generation = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  async function persist() {
+    const gen = ++generation.current;
+    setStatus("saving");
+    try {
+      // Persist explicit booleans only for plan-permitted features.
+      const map: Record<string, boolean> = {};
+      for (const i of items) if (!i.lockedByPlan) map[i.key] = stateRef.current[i.key];
+      const res = await saveFeaturesAction(slug, map);
+      if (gen !== generation.current) return; // a newer save is in flight
+      setStatus("ok" in res ? "saved" : "error");
+    } catch {
+      if (gen === generation.current) setStatus("error");
+    }
+  }
+
+  function scheduleSave() {
+    setStatus("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(persist, 700);
+  }
+
+  function toggle(key: string) {
+    setState((s) => ({ ...s, [key]: !s[key] }));
+    scheduleSave();
+  }
+
+  function setGroup(list: FeatureItem[], value: boolean) {
+    setState((s) => {
+      const next = { ...s };
+      for (const i of list) if (!i.lockedByPlan) next[i.key] = value;
+      return next;
+    });
+    scheduleSave();
+  }
 
   const grouped = useMemo(() => {
     const by = new Map<FeatureGroup, FeatureItem[]>();
@@ -47,116 +140,153 @@ export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
     return FEATURE_GROUPS.map((g) => [g, by.get(g)!] as const).filter(([, list]) => list.length > 0);
   }, [items]);
 
-  function toggle(key: string) {
-    setState((s) => ({ ...s, [key]: !s[key] }));
-    setSaved(false);
-    setError(null);
-  }
+  const unlocked = items.filter((i) => !i.lockedByPlan);
+  const onCount = unlocked.filter((i) => state[i.key]).length;
+  const lockedCount = items.length - unlocked.length;
+  const pct = unlocked.length ? Math.round((onCount / unlocked.length) * 100) : 0;
 
-  async function onSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      // Persist explicit booleans only for plan-permitted features.
-      const map: Record<string, boolean> = {};
-      for (const i of items) if (!i.lockedByPlan) map[i.key] = state[i.key];
-      const res = await saveFeaturesAction(slug, map);
-      if ("ok" in res) setSaved(true);
-      else setError(res.error);
-    } catch {
-      // A thrown server action must never leave the button stuck on "Saving…".
-      setError("Save failed — please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const matches = (i: FeatureItem) => {
+    if (filter === "all") return true;
+    const on = !i.lockedByPlan && state[i.key];
+    return filter === "on" ? on : !on;
+  };
 
   return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="page-inner ftr">
+      <Link href={`/tenants/${slug}`} className="ftr-back">
+        <ArrowLeft size={15} aria-hidden /> Back to tenant
+      </Link>
+
+      <div className="ftr-phead">
         <div>
-          <Link
-            href={`/tenants/${slug}`}
-            className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden /> Back to tenant
-          </Link>
-          <h1 className="mt-2 font-heading text-2xl font-bold">Features · {name}</h1>
-          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Plan: <span className="font-medium text-foreground">{planLabel}</span> — defines which features are
-            available. Toggle on/off within that ceiling; locked features need a plan upgrade.
+          <h1 className="ftr-title">
+            <span>Features · {name}</span>
+            <span className="ftr-plan-chip">
+              <Layers size={12} aria-hidden />
+              {planLabel} plan
+            </span>
+          </h1>
+          <p className="ftr-sub">
+            Defines which storefront features are available to this tenant. Toggle within the plan&rsquo;s
+            ceiling — locked features need a plan upgrade.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <a
-            href={`http://${slug}.${ROOT}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-sm text-sm text-accent underline underline-offset-2"
-          >
-            View storefront
-            <ExternalLink className="h-3.5 w-3.5" aria-label="opens in a new tab" />
+        <div className="ftr-phead-right">
+          {status === "saving" && (
+            <span className="ftr-save-pill saving" role="status">
+              <span className="ftr-dot" aria-hidden /> Saving…
+            </span>
+          )}
+          {status === "saved" && (
+            <span className="ftr-save-pill" role="status">
+              <Check size={14} aria-hidden /> All changes saved
+            </span>
+          )}
+          {status === "error" && (
+            <button type="button" className="ftr-save-pill error" role="alert" onClick={persist}>
+              Save failed — retry
+            </button>
+          )}
+          <a href={`http://${slug}.${ROOT}`} target="_blank" rel="noreferrer" className="ftr-vstore">
+            View storefront <ExternalLink size={14} aria-label="opens in a new tab" />
           </a>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : saved ? (<><Check className="h-4 w-4" aria-hidden /> Saved</>) : "Save features"}
-          </Button>
         </div>
       </div>
-      {saved && (
-        <span role="status" className="sr-only">
-          Feature settings saved.
-        </span>
-      )}
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
 
-      <div className="mt-8 space-y-8">
-        {grouped.map(([group, list]) => (
-          <section key={group}>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{group}</h2>
-            <div className="mt-3 divide-y divide-border overflow-hidden rounded-[var(--radius)] border border-border">
-              {list.map((item) => {
-                const on = !item.lockedByPlan && state[item.key];
-                return (
-                  <div key={item.key} className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        {item.label}
-                        {item.lockedByPlan && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-normal text-secondary-foreground">
-                            <Lock className="h-3 w-3" aria-hidden /> Locked · upgrade plan
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{item.description}</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      aria-label={`Toggle ${item.label}`}
-                      disabled={item.lockedByPlan}
-                      onClick={() => toggle(item.key)}
-                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                        on ? "bg-primary" : "bg-muted"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform ${
-                          on ? "translate-x-[22px]" : "translate-x-0.5"
-                        }`}
-                      />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+      <div className="ftr-summary">
+        <div className="ftr-sum-stat">
+          <span className="ftr-sum-num">
+            {onCount}
+            <small> / {unlocked.length}</small>
+          </span>
+          <span className="ftr-sum-lbl">Features on</span>
+        </div>
+        <div className="ftr-sum-div" />
+        <div className="ftr-sum-stat">
+          <span className="ftr-sum-num">{lockedCount}</span>
+          <span className="ftr-sum-lbl">Plan-locked</span>
+        </div>
+        <div className="ftr-sum-div" />
+        <div className="ftr-sum-bar-wrap">
+          <div className="ftr-sum-bar-top">
+            <span>Across {grouped.length} groups</span>
+            <span>{pct}% enabled</span>
+          </div>
+          <div className="ftr-sum-bar">
+            <i style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <div className="ftr-seg" role="group" aria-label="Filter features">
+          {(["all", "on", "off"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={filter === f ? "on" : undefined}
+              aria-pressed={filter === f}
+              onClick={() => setFilter(f)}
+            >
+              {f === "all" ? "All" : f === "on" ? "On" : "Off"}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {grouped.map(([group, list]) => {
+        const groupUnlocked = list.filter((i) => !i.lockedByPlan);
+        const groupOn = groupUnlocked.filter((i) => state[i.key]).length;
+        const allOn = groupUnlocked.length > 0 && groupOn === groupUnlocked.length;
+        const visible = list.filter(matches);
+        if (visible.length === 0) return null;
+        return (
+          <section key={group} className="ftr-gcard">
+            <header className="ftr-ghead">
+              <span className="ftr-gicon">{GROUP_ICONS[group]}</span>
+              <h2 className="ftr-gtitle">{group}</h2>
+              <span className="ftr-count-pill">
+                <span className="ftr-mini" aria-hidden>
+                  <i style={{ width: groupUnlocked.length ? `${(groupOn / groupUnlocked.length) * 100}%` : 0 }} />
+                </span>
+                {groupOn} of {groupUnlocked.length} on
+              </span>
+              {groupUnlocked.length > 0 && (
+                <span className="ftr-enable-all">
+                  Enable all
+                  <Toggle
+                    small
+                    on={allOn}
+                    label={`Enable all in ${group}`}
+                    onChange={() => setGroup(list, !allOn)}
+                  />
+                </span>
+              )}
+            </header>
+            {visible.map((item) => {
+              const on = !item.lockedByPlan && state[item.key];
+              return (
+                <div key={item.key} className={`ftr-row${item.lockedByPlan ? " locked" : ""}`}>
+                  <div className="ftr-fmain">
+                    <div className="ftr-fname">{item.label}</div>
+                    <div className="ftr-fdesc">{item.description}</div>
+                  </div>
+                  {item.lockedByPlan ? (
+                    <>
+                      <span className="ftr-lock-chip">
+                        <Lock size={12} aria-hidden />
+                        {item.requiredPlanLabel ?? "Upgrade"}
+                      </span>
+                      <Link href={`/tenants/${slug}`} className="ftr-upg">
+                        Upgrade
+                      </Link>
+                    </>
+                  ) : (
+                    <Toggle on={on} label={`Toggle ${item.label}`} onChange={() => toggle(item.key)} />
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        );
+      })}
     </div>
   );
 }
