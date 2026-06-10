@@ -17,17 +17,90 @@ export function storeUrl(slug: string): string {
 export const SITE = {
   brand: "Jonina",
   brandSuffix: ".store",
-  tagline: "Websites that sell, ready fast.",
+  tagline: "Mas kaunting oras sa chat, mas maraming oras sa paglago.",
   hero: {
-    chip: "Website creation, done-for-you",
-    line1: "Get Your Business Website",
-    line2: "Ready Fast",
-    sub: "Professional websites for peptide sellers, beauty businesses, resellers, online shops, and small businesses — built, branded, and ready to take orders.",
+    chip: "Business automation, done-for-you",
+    line1: "Stop Being The Customer Support",
+    line2: "Of Your Own Peptide Business",
+    sub: "Si Jonina ang sasagot sa paulit-ulit na tanong, magpapakita ng products at COAs, at kokolekta ng orders — 24/7. Para ikaw, focus sa paglago ng negosyo, hindi sa kaka-reply.",
     primaryCta: "Get Started",
-    secondaryCta: "View Demo Websites",
+    secondaryCta: "View Demo Stores",
   },
   contactEmail: "hello@jonina.store",
 };
+
+// ──────────────────────────── Hero bullets ────────────────────────────
+// Outcome-first benefit bullets under the hero sub. Taglish, entrepreneur voice.
+export const HERO_BULLETS = [
+  "Hindi mo na sasagutin ang “magkano po?” nang 40 beses sa isang araw",
+  "Products, presyo, at COAs — nakikita ng customers nang mag-isa",
+  "Orders dumarating nang kumpleto at organized, hindi nakakalat sa DMs",
+  "Tumatakbo ang business kahit tulog ka o nasa byahe",
+] as const;
+
+// ──────────────────────────── The problem (pain cards) ────────────────────────────
+export type Pain = { q: string; body: string };
+
+export const PAINS: Pain[] = [
+  { q: "“Magkano po?”", body: "Pang-30 na today. Copy-paste ka na naman ng parehong sagot." },
+  { q: "“Pa-send po ng product info”", body: "Hahanapin mo pa sa gallery, ise-send mong isa-isa. Ulit. Ulit. Ulit." },
+  { q: "“May COA po ba?”", body: "Meron naman — pero nasa files mo, at ikaw ang maghahanap tuwing may magtatanong." },
+  { q: "“Paano po umorder?”", body: "Ipapaliwanag mo ulit ang steps, sa pang-sampung tao ngayong araw." },
+  { q: "“Sent na po payment”", body: "Ikaw pa rin ang magve-verify — isa-isa, screenshot by screenshot." },
+  { q: "“Saan na po order ko?”", body: "Bubuksan mo pa ang courier app para sa pang-limang follow-up today." },
+];
+
+export const PAIN_CLOSER =
+  "Hindi ka tamad. Sobrang busy ka lang sa mga bagay na pwede namang i-automate.";
+
+// ──────────────────────────── The hidden cost ────────────────────────────
+export const COST_STATS = [
+  { value: "3 oras", label: "kada araw na nauubos sa kakasagot ng parehong tanong" },
+  { value: "90 oras", label: "kada buwan na napupunta sa chat, hindi sa negosyo" },
+  { value: "2+ linggo", label: "ng full-time na trabaho — nawawala buwan-buwan" },
+] as const;
+
+export const COST_CARDS: Feature[] = [
+  { icon: "UserX", title: "Missed opportunities", body: "May seryosong buyer na nag-message kahapon. Hindi mo nasagot agad — sa iba na siya bumili." },
+  { icon: "TrendingDown", title: "Slower growth", body: "Walang oras mag-restock, mag-promote, o mag-isip ng bago. Ubos ang araw mo sa inbox." },
+  { icon: "Flame", title: "Burnout", body: "Kahit Sunday, naka-standby ka. Yung “off” mo, may kasamang kaba na baka may nag-message." },
+  { icon: "BellRing", title: "Distractions", body: "Bawat ding ng notification, naputol ang ginagawa mo. Hirap tuloy mag-focus sa malalaking bagay." },
+];
+
+// ──────────────────────────── The real problem ────────────────────────────
+export const REAL_PROBLEM = {
+  line1: "The problem isn’t your product.",
+  line2: "The problem is that you are the system.",
+  beats: [
+    { lead: "Pag online ka,", rest: "may benta." },
+    { lead: "Pag busy ka,", rest: "bumabagal ang lahat." },
+    { lead: "Pag wala ka,", rest: "naghihintay ang customers." },
+  ],
+  closer:
+    "Hindi mo kailangan ng mas mahabang working hours. Kailangan mo ng system na hindi umaasa sa’yo para gumana.",
+} as const;
+
+// ──────────────────────────── Future vision (customer flow) ────────────────────────────
+export const VISION_STEPS = [
+  { n: "01", title: "Dumating ang customer", body: "Nakita niya ang branded store mo — mukhang legit, mukhang professional." },
+  { n: "02", title: "Nag-browse siya ng products", body: "Kumpleto: photos, presyo, descriptions, COAs. Halos wala nang itatanong." },
+  { n: "03", title: "Nabasa niya paano umorder", body: "Malinaw ang steps at payment instructions. Hindi ka niya kailangang kulitin." },
+  { n: "04", title: "Naka-order na siya", body: "Pumili, nagbayad, nag-upload ng proof — lahat sa store, hindi sa DMs." },
+  { n: "05", title: "Ikaw, na-notify ka lang", body: "Bukas mo ang dashboard, kumpleto na ang detalye. Confirm na lang. Tapos." },
+] as const;
+
+export const VISION_CLOSER =
+  "Walang paulit-ulit na tanong. Walang nakakalat na screenshots. Isang organized na system — habang ginagawa mo ang mas mahalagang trabaho.";
+
+// ──────────────────────────── Introduce Jonina (system intro) ────────────────────────────
+export const SYSTEM_CARDS: Feature[] = [
+  { icon: "Globe", title: "Hindi lang website", body: "Ang website ang mukha. Ang system ang gumagawa ng trabaho — sumasagot, nag-oorganize, kumukuha ng orders." },
+  { icon: "Layers", title: "Hindi lang software", body: "Done-for-you ang setup, branding, at products. Hindi DIY na tool na ikaw pa ang mag-aaral." },
+  { icon: "Workflow", title: "Hindi lang storefront", body: "Catalog, FAQs, COAs, ordering, payment proof, tracking — buong operasyon, hindi isang page lang." },
+];
+
+export const SYSTEM_CLOSER =
+  "Hindi lang ito website. System ito para mas organized ang business mo — at para hindi na ikaw ang customer support nito.";
 
 // ──────────────────────────── Features ────────────────────────────
 export type Feature = { icon: string; title: string; body: string };

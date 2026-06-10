@@ -27,11 +27,11 @@ export function Features() {
     <section className="mk-section" id="features">
       <div className="mk-container">
         <div className="mk-section-head mk-center">
-          <span className="mk-eyebrow">Everything included</span>
-          <h2 className="mk-h2">A complete store, not just a pretty page</h2>
+          <span className="mk-eyebrow">Ano’ng nasa loob</span>
+          <h2 className="mk-h2">Everything You Need To Run A More Organized Business</h2>
           <p className="mk-lead">
-            Every Jonina website ships with the tools you need to look professional and start
-            selling from day one.
+            Lahat ng nasa system mo, may iisang trabaho: bawasan ang manual work at gawing mas
+            organized ang operasyon mo araw-araw.
           </p>
         </div>
         <div className="mk-grid mk-grid-4">

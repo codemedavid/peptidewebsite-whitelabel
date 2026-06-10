@@ -448,6 +448,151 @@
 .mk-cta-band .mk-btn-primary { background: #fff; color: var(--rose-700); box-shadow: 0 16px 40px rgba(0,0,0,0.18); }
 .mk-cta-band .mk-btn-primary:hover { background: #fff; }
 
+/* ---------- automation positioning sections ---------- */
+/* hero benefit bullets */
+.mk-hero-bullets {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.mk-hero-bullets li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 15px;
+  color: var(--ink-700);
+}
+.mk-hero-bullets svg { color: var(--rose-500); flex-shrink: 0; margin-top: 3px; }
+
+/* pain cards (the problem) */
+.mk-pain-q {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.12rem;
+  color: var(--rose-700);
+  margin: 0 0 7px;
+}
+.mk-pain p:not(.mk-pain-q) { margin: 0; color: var(--ink-500); font-size: 14.5px; }
+.mk-pain-closer {
+  margin: 38px auto 0;
+  max-width: 640px;
+  text-align: center;
+  font-size: clamp(1.05rem, 1.8vw, 1.28rem);
+  font-weight: 600;
+  color: var(--ink-900);
+  line-height: 1.55;
+}
+
+/* hidden-cost stat band */
+.mk-stat-band {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-bottom: 40px;
+}
+.mk-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 30px 22px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+.mk-stat b {
+  display: block;
+  font-family: var(--font-head);
+  font-size: clamp(2rem, 4vw, 2.7rem);
+  color: var(--rose-700);
+  line-height: 1.05;
+}
+.mk-stat small { display: block; margin-top: 8px; color: var(--ink-500); font-size: 13.5px; line-height: 1.5; }
+@media (max-width: 620px) { .mk-stat-band { grid-template-columns: 1fr; } }
+
+/* dark emphasis band (the real problem) */
+.mk-band-dark {
+  background: linear-gradient(150deg, #4a1226 0%, var(--rose-900) 55%, #5e1830 100%);
+  border-radius: 28px;
+  padding: clamp(44px, 6vw, 80px) clamp(24px, 5vw, 70px);
+  text-align: center;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+.mk-band-dark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 15% 15%, rgba(233, 75, 125, 0.28), transparent 50%);
+}
+.mk-band-dark > * { position: relative; z-index: 1; }
+.mk-band-dark .mk-h2 { color: #fff; }
+.mk-band-eyebrow { color: var(--rose-400); }
+.mk-band-accent {
+  background: linear-gradient(135deg, #f687a8, #fbd0de);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.mk-band-beats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(18px, 4vw, 48px);
+  flex-wrap: wrap;
+  margin: 34px 0 0;
+}
+.mk-band-beats p { margin: 0; font-size: 16.5px; color: rgba(255, 255, 255, 0.85); }
+.mk-band-beats b { display: block; font-family: var(--font-head); font-size: 1.2rem; color: #fff; margin-bottom: 2px; }
+.mk-band-closer {
+  margin: 34px auto 0;
+  max-width: 560px;
+  font-size: clamp(1.02rem, 1.6vw, 1.18rem);
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.6;
+}
+
+/* future-vision flow (numbered customer journey) */
+.mk-flow { max-width: 700px; margin: 0 auto; }
+.mk-flow-step {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  padding-bottom: 30px;
+}
+.mk-flow-step:last-child { padding-bottom: 0; }
+.mk-flow-step::before {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 52px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--rose-200);
+}
+.mk-flow-step:last-child::before { display: none; }
+.mk-flow-num {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 15px;
+  background: var(--grad-chip);
+  color: var(--rose-700);
+  border: 1px solid var(--rose-200);
+}
+.mk-flow-step > div b { display: block; font-size: 1.05rem; color: var(--ink-900); margin: 11px 0 4px; }
+.mk-flow-step > div p { margin: 0; color: var(--ink-500); font-size: 14.5px; line-height: 1.6; }
+
 /* ---------- footer ---------- */
 .mk-footer {
   background: #fff;

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { SITE } from "@/marketing/config";
+import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { HERO_BULLETS, SITE } from "@/marketing/config";
 
 export function Hero() {
   return (
@@ -14,6 +14,13 @@ export function Hero() {
             {SITE.hero.line1} <span className="mk-gradient-text">{SITE.hero.line2}</span>
           </h1>
           <p className="mk-lead">{SITE.hero.sub}</p>
+          <ul className="mk-hero-bullets">
+            {HERO_BULLETS.map((b) => (
+              <li key={b}>
+                <CheckCircle2 size={18} /> {b}
+              </li>
+            ))}
+          </ul>
           <div className="mk-hero-cta">
             <Link href="/get-started" className="mk-btn mk-btn-primary mk-btn-lg">
               {SITE.hero.primaryCta} <ArrowRight size={18} />
@@ -24,16 +31,16 @@ export function Hero() {
           </div>
           <div className="mk-hero-proof">
             <div>
+              <b>3+ oras</b>
+              <small>Nababawi mo kada araw</small>
+            </div>
+            <div>
+              <b>24/7</b>
+              <small>Sumasagot kahit tulog ka</small>
+            </div>
+            <div>
               <b>2–5 days</b>
-              <small>Average launch time</small>
-            </div>
-            <div>
-              <b>100%</b>
-              <small>Mobile-ready &amp; branded</small>
-            </div>
-            <div>
-              <b>0%</b>
-              <small>Payment gateway fees</small>
+              <small>Done-for-you setup</small>
             </div>
           </div>
         </div>

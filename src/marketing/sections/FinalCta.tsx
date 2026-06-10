@@ -6,13 +6,17 @@ export function FinalCta() {
     <section className="mk-section mk-section--tight">
       <div className="mk-container">
         <div className="mk-cta-band">
-          <h2 className="mk-h2">Ready To Launch Your Website?</h2>
+          <h2 className="mk-h2">
+            Mas kaunting oras sa chat.
+            <br />
+            Mas maraming oras sa paglago.
+          </h2>
           <p>
-            Tell us about your business and we&apos;ll build a branded, order-ready store for you.
-            It only takes a few minutes to get started.
+            Sagutin ang ilang simpleng tanong tungkol sa business mo, at kami na ang bahala sa
+            setup. Sa loob ng ilang araw, may system ka nang sumasagot para sa&apos;yo.
           </p>
           <Link href="/get-started" className="mk-btn mk-btn-primary mk-btn-lg">
-            Start Your Website <ArrowRight size={18} />
+            Get Started <ArrowRight size={18} />
           </Link>
         </div>
       </div>
