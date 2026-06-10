@@ -20,6 +20,9 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   lab: (b) => b.showPageCOA !== false,
   proto: (b) => b.showPageProtocols !== false,
   reviews: (b) => b.showPageReviews !== false,
+  // Not tied to a storefront page — a direct super-admin switch. On for every
+  // package by default; flips off per tenant from the branding editor.
+  analytics: (b) => b.showAdminAnalytics !== false,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import {
   getTenantOrderFormat,
   getTenantContactChannels,
+  getTenantAdminFee,
   getTenantAdminPassword,
   listTenantDomains,
 } from "@/lib/admin/data";
@@ -19,13 +20,14 @@ export default async function TenantSettingsPage({
 }) {
   const { slug } = await params;
 
-  const [tenant, contact, adminPassword, domains] = await Promise.all([
+  const [tenant, contact, adminFee, adminPassword, domains] = await Promise.all([
     getTenantOrderFormat(slug),
     getTenantContactChannels(slug),
+    getTenantAdminFee(slug),
     getTenantAdminPassword(slug),
     listTenantDomains(slug),
   ]);
-  if (!tenant || !contact) notFound();
+  if (!tenant || !contact || !adminFee) notFound();
 
   return (
     <TenantSettingsView
@@ -38,6 +40,7 @@ export default async function TenantSettingsPage({
       initialCheckoutNote={contact.checkoutNote}
       initialMetaDescription={contact.metaDescription}
       initialRequireProofOfPayment={contact.requireProofOfPayment}
+      initialAdminFee={adminFee}
       initialAdminPassword={adminPassword ?? ""}
       domains={<DomainManager slug={slug} initialDomains={domains} />}
     />

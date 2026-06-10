@@ -395,6 +395,7 @@ export function BrandTweaksForm({
       <TweakButton label="Open: Reviews" onClick={() => goPage("reviews")} secondary />
 
       <TweakSection label="Admin Dashboard" />
+      <TweakToggle label="Sales Analytics view" value={t.showAdminAnalytics !== false} onChange={(v) => setTweak("showAdminAnalytics", v)} />
       <TweakText label="Admin password" value={t.adminPassword} placeholder="default: admin" onChange={(v) => setTweak("adminPassword", v.trim())} />
       <TweakText label="Login title" value={t.adminLoginTitle} onChange={(v) => setTweak("adminLoginTitle", v)} />
       <TweakText label="Login subtitle" value={t.adminLoginSub} placeholder={`defaults to: Enter the admin password for ${t.name || "this tenant"}`} onChange={(v) => setTweak("adminLoginSub", v)} />

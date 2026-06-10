@@ -5,8 +5,28 @@ type BrandingLike = {
   themeId?: string | null;
   colors?: unknown; // Json: partial role map { main, accent, button, buttonText, background, surface, text }
   fonts?: unknown; // Json: { heading?, body? }
+  config?: unknown; // Json: full storefront Brand blob (may carry headingFont/bodyFont)
   radius?: string | null;
 } | null;
+
+/**
+ * Effective heading/body fonts for a tenant: preset < structured fonts JSON <
+ * Brand config. The storefront home renders `config.headingFont/bodyFont`
+ * (page.tsx spreads config last), so every other consumer must resolve fonts
+ * with the same precedence — otherwise a drifted `fonts` JSON makes sub-page
+ * chrome (and the font <link> loader) disagree with the home page.
+ */
+function resolveFonts(
+  branding: BrandingLike,
+  preset: { fonts: { heading: string; body: string } },
+): { heading: string; body: string } {
+  const fonts = asRecord(branding?.fonts) as { heading?: string; body?: string };
+  const config = asRecord(branding?.config) as { headingFont?: string; bodyFont?: string };
+  return {
+    heading: config.headingFont || fonts.heading || preset.fonts.heading,
+    body: config.bodyFont || fonts.body || preset.fonts.body,
+  };
+}
 
 /**
  * Resolve a tenant's Branding into inline CSS custom properties.
@@ -33,10 +53,10 @@ export function resolveCssVars(branding: BrandingLike): React.CSSProperties {
     vars["--brand-gradient-to"] = preset.gradient.to;
   }
 
-  const fonts = { ...preset.fonts, ...(asRecord(branding?.fonts) as { heading?: string; body?: string }) };
+  const fonts = resolveFonts(branding, preset);
   vars["--radius"] = branding?.radius ?? preset.radius;
-  vars["--font-heading"] = fonts.heading ?? preset.fonts.heading;
-  vars["--font-body"] = fonts.body ?? preset.fonts.body;
+  vars["--font-heading"] = fonts.heading;
+  vars["--font-body"] = fonts.body;
 
   // Apply role overrides onto the shadcn tokens they drive.
   const roles = asRecord(branding?.colors) as Partial<Record<RoleKey, string>>;

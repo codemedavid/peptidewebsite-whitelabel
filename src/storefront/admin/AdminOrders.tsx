@@ -10,7 +10,8 @@ import {
 function totalOf(o: Order): number {
   return (
     (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) +
-    (o.shipping?.fee || 0)
+    (o.shipping?.fee || 0) +
+    (o.adminFee?.amount || 0)
   );
 }
 
@@ -391,6 +392,7 @@ export function AdminOrders({
                 </div>
                 <div className="admin-order-card__col-sub">
                   + {formatPHP(o.shipping?.fee || 0)} shipping
+                  {(o.adminFee?.amount ?? 0) > 0 && <> · + {formatPHP(o.adminFee!.amount)} fee</>}
                 </div>
               </div>
               <div>

@@ -24,7 +24,7 @@ import {
   PAYMENT_PRESETS,
 } from "../useOnboardingForm";
 import { SingleUpload, MultiUpload } from "../uploads";
-import { PACKAGES, packageLabel } from "@/marketing/config";
+import { packageLabel, type Package } from "@/marketing/config";
 import {
   visiblePackagePaymentMethods,
   type PackagePaymentConfig,
@@ -37,6 +37,9 @@ export type StepProps = {
   // Operator-managed receiving accounts for the checkout step (Super Admin →
   // Checkout Payments). Only CheckoutStep reads it.
   packagePayment: PackagePaymentConfig;
+  // Operator-edited plan pricing/features (Super Admin → Plans & Billing).
+  // Only PackageStep reads it.
+  packages: Package[];
 };
 
 const ICONS: Record<string, LucideIcon> = {
@@ -360,10 +363,10 @@ export function PaymentsStep({ draft, update }: StepProps) {
 }
 
 /* ============================================================ Step 6 */
-export function PackageStep({ draft, update }: StepProps) {
+export function PackageStep({ draft, update, packages }: StepProps) {
   return (
     <div className="mk-choices">
-      {PACKAGES.map((p) => {
+      {packages.map((p) => {
         const selected = draft.packageKey === p.key;
         return (
           <button key={p.key} type="button" className="mk-choice" data-selected={selected}

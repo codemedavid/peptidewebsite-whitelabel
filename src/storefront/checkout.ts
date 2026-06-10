@@ -146,13 +146,16 @@ function money(amount: number, currency: string): string {
   return `${currency}${amount.toLocaleString()}`;
 }
 
-/** Build the order summary message sent to / pasted into the chat. */
+/** Build the order summary message sent to / pasted into the chat. Pass the
+ *  STORED order's `adminFee` (the server-stamped snapshot) so the chat total
+ *  always matches what was persisted, never a mid-session config change. */
 export function buildOrderMessage(
   brand: Brand,
   lines: CartLine[],
   customer: CheckoutCustomer,
   payment?: CheckoutPayment,
   orderNumber?: string,
+  adminFee?: { label: string; amount: number } | null,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -166,7 +169,16 @@ export function buildOrderMessage(
       return `• ${l.product.name} ×${l.qty} — ${money(line, cur)}${tag}`;
     })
     .join("\n");
-  const total = money(cartTotal(lines), currency);
+  const subtotal = cartTotal(lines);
+  // With a fee, break the math down so the customer sees why the total is
+  // higher than the items; without one, keep the historical single Total line.
+  const totalLines = adminFee
+    ? [
+        `Subtotal: ${money(subtotal, currency)}`,
+        `${adminFee.label}: ${money(adminFee.amount, currency)}`,
+        `Total: ${money(subtotal + adminFee.amount, currency)}`,
+      ]
+    : [`Total: ${money(subtotal, currency)}`];
 
   const ship = [
     customer.address,
@@ -196,7 +208,7 @@ export function buildOrderMessage(
     "Items:",
     items,
     "",
-    `Total: ${total}`,
+    ...totalLines,
     "",
     "Customer:",
     `Name: ${customer.name}`,

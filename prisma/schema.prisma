@@ -280,6 +280,10 @@ model StorefrontOrder {
   customer Json @default("{}") // { name, email, phone, contactMethod }
   shipping Json @default("{}") // { address, barangay, city, province, postal, country, region, fee }
   items    Json @default("[]") // [{ name, qty, price }]
+  // Admin/service fee charged on this order — { label, amount }, snapshotted
+  // server-side at placement from branding.config.adminFee so changing the
+  // tenant's fee never rewrites existing orders. NULL = no fee was charged.
+  adminFee Json?
   // Append-only fulfillment journey: one entry per status transition, oldest
   // first, e.g. [{ status: "new", at }, { status: "confirmed", at }, …]. Drives
   // the storefront Track page's timeline. Seeded with the "new" event at create.

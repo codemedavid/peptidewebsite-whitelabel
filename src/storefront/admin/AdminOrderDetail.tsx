@@ -60,7 +60,8 @@ export function AdminOrderDetail({
     0,
   );
   const ship = o.shipping?.fee || 0;
-  const total = sub + ship;
+  const fee = o.adminFee?.amount || 0;
+  const total = sub + ship + fee;
 
   // Persist a patch to the DB (store admin gated). Optimistically apply locally,
   // roll back + surface the error if the write fails.
@@ -355,6 +356,12 @@ export function AdminOrderDetail({
               <span>Shipping Fee:</span>
               <span>{formatPHP(ship)}</span>
             </div>
+            {fee > 0 && (
+              <div className="admin-detail__totals-row">
+                <span>{o.adminFee?.label || "Admin fee"}:</span>
+                <span>{formatPHP(fee)}</span>
+              </div>
+            )}
             <div className="admin-detail__totals-row admin-detail__totals-row--final">
               <span>Total:</span>
               <span>{formatPHP(total)}</span>

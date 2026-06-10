@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Ic } from "./primitives";
 import { CreateTenantDrawer } from "./CreateTenantDrawer";
 import { signOutAction } from "@/actions/auth";
+import type { EditablePlanCard } from "@/lib/platform/plan-config";
 
 type NavItem = { id: string; label: string; href: string; icon: string; group: string; badge?: string };
 
@@ -43,11 +44,13 @@ export function AdminShell({
   operatorEmail,
   tenantCount,
   tenantNameBySlug,
+  planCards,
 }: {
   children: React.ReactNode;
   operatorEmail?: string | null;
   tenantCount?: number;
   tenantNameBySlug?: Record<string, string>;
+  planCards?: EditablePlanCard[];
 }) {
   const pathname = usePathname() || "/";
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -235,7 +238,7 @@ export function AdminShell({
           </div>
         </div>
 
-        <CreateTenantDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onToast={showToast} />
+        <CreateTenantDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onToast={showToast} planCards={planCards} />
 
         {toast && (
           <div className="sa-toast">

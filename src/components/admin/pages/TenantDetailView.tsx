@@ -99,7 +99,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           {[
             { label: "Lifetime revenue", v: `$${(tenant.revenueCents / 100 / 1000).toFixed(1)}k`, sub: "all orders" },
             { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `$${aov} AOV` : "—" },
-            { label: "MRR", v: tenant.status === "trial" ? "Trial" : formatPesos(pm.priceCents), sub: `${pm.label} plan` },
+            { label: "MRR", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.planPriceCents), sub: `${pm.label} plan` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
             <div key={i} style={{ padding: "14px 24px", borderRight: i < 3 ? "1px solid var(--border-soft)" : "none" }}>
@@ -613,7 +613,7 @@ function OrdersPanel({ tenant }: { tenant: TenantDetail }) {
 /* ---------- BILLING ---------- */
 function BillingPanel({ tenant }: { tenant: TenantDetail }) {
   const pm = planMeta(tenant.planKey);
-  const priceCents = pm.priceCents;
+  const priceCents = tenant.planPriceCents;
   const now = new Date();
   const invoices = Array.from({ length: 6 }).map((_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 10);

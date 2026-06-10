@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
 import type { Order } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
+import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import {
   activeChannels,
   activePaymentMethods,
@@ -72,10 +73,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const proofRef = useRef<HTMLInputElement>(null);
 
   const lines = useMemo(() => cartLines(cart), [cart]);
-  const total = useMemo(() => cartTotal(lines), [lines]);
+  const subtotal = useMemo(() => cartTotal(lines), [lines]);
   const channels = useMemo(() => activeChannels(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
   const currency = brand.currency || lines[0]?.product.currency || "";
+  // Per-tenant admin fee (super admin toggle, branding.config.adminFee) — a flat
+  // charge on top of the items. Displayed here for transparency; the AUTHORITATIVE
+  // value is re-stamped server-side at placement from the same config.
+  const adminFee = useMemo(() => activeAdminFee(brand.adminFee), [brand]);
+  const total = subtotal + (adminFee?.amount ?? 0);
 
   // The store collects payment up-front only when it has methods configured;
   // otherwise checkout hands off to a channel straight from the details step.
@@ -249,6 +255,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       customer,
       requiresPayment ? { methodName: selectedMethod?.name ?? "", hasProof: !!proof } : undefined,
       orderNum,
+      // The fee the server actually charged (snapshotted on the stored order),
+      // so the chat total can never drift from the persisted one.
+      order.adminFee ?? null,
     );
 
     // Navigate the pre-opened window to the channel, then copy the summary as a
@@ -485,12 +494,32 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
         {lines.length > 0 && (
           <footer className="sf-cart__foot">
-            <div className="sf-cart__total">
-              <span>Total</span>
-              <strong>
-                {currency}
-                {total.toLocaleString()}
-              </strong>
+            <div className="sf-cart__totals">
+              {adminFee && (
+                <>
+                  <div className="sf-cart__total sf-cart__total--sub">
+                    <span>Subtotal</span>
+                    <span>
+                      {currency}
+                      {subtotal.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="sf-cart__total sf-cart__total--sub">
+                    <span>{adminFee.label}</span>
+                    <span>
+                      {currency}
+                      {adminFee.amount.toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="sf-cart__total">
+                <span>Total</span>
+                <strong>
+                  {currency}
+                  {total.toLocaleString()}
+                </strong>
+              </div>
             </div>
 
             {step === "cart" ? (

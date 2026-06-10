@@ -14,10 +14,17 @@ import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction } from "@/actions/onboarding";
 import {
   saveContactChannelsAction,
+  saveAdminFeeAction,
   saveAdminPasswordAction,
   saveRequirePaymentProofAction,
 } from "@/actions/branding";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
+import {
+  ADMIN_FEE_AMOUNT_MAX,
+  ADMIN_FEE_LABEL_DEFAULT,
+  ADMIN_FEE_LABEL_MAX,
+  type AdminFeeConfig,
+} from "@/lib/storefront/admin-fee";
 import {
   formatOrderNumber,
   normalizeOrderNumberFormat,
@@ -64,6 +71,8 @@ type Props = {
   initialMetaDescription: string;
   /** Whether checkout requires a proof-of-payment upload. */
   initialRequireProofOfPayment: boolean;
+  /** Checkout admin-fee config + the store's currency symbol for display. */
+  initialAdminFee: AdminFeeConfig & { currency: string };
   /** Storefront-admin password override; blank means the default ("admin"). */
   initialAdminPassword: string;
   lastSaved?: string;
@@ -75,6 +84,7 @@ const SECTIONS = [
   { id: "orders", label: "Order numbers" },
   { id: "channels", label: "Checkout channels" },
   { id: "proof", label: "Payment proof" },
+  { id: "fee", label: "Admin fee" },
   { id: "copy", label: "Checkout copy" },
   { id: "admin", label: "Admin access" },
 ] as const;
@@ -90,6 +100,7 @@ export function TenantSettingsView({
   initialCheckoutNote,
   initialMetaDescription,
   initialRequireProofOfPayment,
+  initialAdminFee,
   initialAdminPassword,
   lastSaved,
   domains,
@@ -107,6 +118,16 @@ export function TenantSettingsView({
   const [note, setNote] = useState(initialCheckoutNote);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
 
+  /* ---------- admin fee ---------- */
+  const [feeEnabled, setFeeEnabled] = useState(initialAdminFee.enabled);
+  const [feeLabel, setFeeLabel] = useState(initialAdminFee.label);
+  // Kept as the raw input string so partial entries ("12.") don't fight the
+  // field; parsed/validated on save.
+  const [feeAmount, setFeeAmount] = useState(
+    initialAdminFee.amount > 0 ? String(initialAdminFee.amount) : "",
+  );
+  const currency = initialAdminFee.currency;
+
   /* ---------- storefront-admin password ---------- */
   const [adminPassword, setAdminPassword] = useState(initialAdminPassword);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
@@ -122,6 +143,9 @@ export function TenantSettingsView({
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
     metaDescription: initialMetaDescription,
+    feeEnabled: initialAdminFee.enabled,
+    feeLabel: initialAdminFee.label,
+    feeAmount: initialAdminFee.amount > 0 ? String(initialAdminFee.amount) : "",
     adminPassword: initialAdminPassword,
   });
 
@@ -130,6 +154,7 @@ export function TenantSettingsView({
     orders: false,
     channels: false,
     proof: false,
+    fee: false,
     copy: false,
     admin: false,
   });
@@ -146,8 +171,21 @@ export function TenantSettingsView({
     title !== baseline.current.title ||
     note !== baseline.current.note ||
     metaDescription !== baseline.current.metaDescription;
+  const feeDirty =
+    feeEnabled !== baseline.current.feeEnabled ||
+    feeLabel !== baseline.current.feeLabel ||
+    feeAmount !== baseline.current.feeAmount;
   const adminDirty = adminPassword !== baseline.current.adminPassword;
-  const anyDirty = ordersDirty || channelsDirty || proofDirty || copyDirty || adminDirty;
+  const anyDirty =
+    ordersDirty || channelsDirty || proofDirty || feeDirty || copyDirty || adminDirty;
+
+  /* ---------- admin-fee validation + preview ---------- */
+  const feeAmountNum = Number(feeAmount);
+  const feeAmountValid =
+    Number.isFinite(feeAmountNum) && feeAmountNum > 0 && feeAmountNum <= ADMIN_FEE_AMOUNT_MAX;
+  // An off fee needs no amount; an on fee must charge something real.
+  const feeValid = !feeEnabled || feeAmountValid;
+  const feePreviewLabel = feeLabel.trim() || ADMIN_FEE_LABEL_DEFAULT;
 
   /* ---------- order-number validation + preview ---------- */
   const prefixValid = PREFIX_RE.test(prefix);
@@ -218,6 +256,24 @@ export function TenantSettingsView({
     return false;
   }
 
+  async function saveFee(): Promise<boolean> {
+    setSaving("fee");
+    setErrors((e) => ({ ...e, fee: undefined }));
+    const res = await saveAdminFeeAction(slug, {
+      enabled: feeEnabled,
+      label: feeLabel,
+      amount: Number(feeAmount) || 0,
+    });
+    setSaving(null);
+    if ("ok" in res) {
+      baseline.current = { ...baseline.current, feeEnabled, feeLabel, feeAmount };
+      setSaved((s) => ({ ...s, fee: true }));
+      return true;
+    }
+    setErrors((e) => ({ ...e, fee: res.error }));
+    return false;
+  }
+
   async function saveAdminPassword(): Promise<boolean> {
     setSaving("admin");
     setErrors((e) => ({ ...e, admin: undefined }));
@@ -238,6 +294,7 @@ export function TenantSettingsView({
     // Channels + copy share one action, so a single call flushes both.
     if ((channelsDirty || copyDirty) && incompleteChannels.length === 0) await saveChannelsAndCopy("channels");
     if (proofDirty) await saveProof();
+    if (feeDirty && feeValid) await saveFee();
     if (adminDirty) await saveAdminPassword();
     setSaving(null);
   }
@@ -253,6 +310,9 @@ export function TenantSettingsView({
     setTitle(b.title);
     setNote(b.note);
     setMetaDescription(b.metaDescription);
+    setFeeEnabled(b.feeEnabled);
+    setFeeLabel(b.feeLabel);
+    setFeeAmount(b.feeAmount);
     setAdminPassword(b.adminPassword);
     setErrors({});
   }
@@ -262,6 +322,7 @@ export function TenantSettingsView({
     orders: useRef<HTMLElement>(null),
     channels: useRef<HTMLElement>(null),
     proof: useRef<HTMLElement>(null),
+    fee: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
     admin: useRef<HTMLElement>(null),
   };
@@ -287,6 +348,7 @@ export function TenantSettingsView({
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
     proof: requireProof ? "On" : "Off",
+    fee: feeEnabled ? "On" : "Off",
     copy: "3",
     admin: adminPassword.trim() ? "Custom" : "Default",
   };
@@ -695,6 +757,162 @@ export function TenantSettingsView({
             </div>
           </section>
 
+          {/* ---------- admin fee ---------- */}
+          <section className="set-card" ref={refs.fee} data-section="fee">
+            <div className="set-card-head">
+              <div>
+                <span className="set-eyebrow">Checkout</span>
+                <h2>Admin fee</h2>
+                <p className="set-desc">
+                  A flat charge added on top of the order total at checkout — e.g. a processing or
+                  service fee. Customers see it as its own line in the totals; it&apos;s included in
+                  the order&apos;s total everywhere (checkout, tracking, store admin, analytics).
+                </p>
+              </div>
+              <span className={"badge " + (feeEnabled ? "badge-success" : "badge-neutral")}>
+                {feeEnabled ? "Charged" : "Off"}
+              </span>
+            </div>
+            <div className="set-card-body">
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Charge an admin fee</div>
+                  <div className="set-row-help">
+                    When on, the fee below is added once to every new order. Existing orders are
+                    never changed.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (feeEnabled ? " on" : "")}
+                    role="switch"
+                    aria-checked={feeEnabled}
+                    aria-label="Charge an admin fee at checkout"
+                    tabIndex={0}
+                    onClick={() => {
+                      setFeeEnabled((v) => !v);
+                      setSaved((s) => ({ ...s, fee: false }));
+                      setErrors((e) => ({ ...e, fee: undefined }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setFeeEnabled((v) => !v);
+                        setSaved((s) => ({ ...s, fee: false }));
+                        setErrors((er) => ({ ...er, fee: undefined }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              {feeEnabled && (
+                <>
+                  <div className="set-row">
+                    <div>
+                      <div className="set-row-label">What the fee is for</div>
+                      <div className="set-row-help">
+                        The line label customers see in the totals, e.g. &ldquo;Processing fee&rdquo; or
+                        &ldquo;Service charge&rdquo;.
+                      </div>
+                    </div>
+                    <div className="set-row-control">
+                      <input
+                        className="input"
+                        value={feeLabel}
+                        maxLength={ADMIN_FEE_LABEL_MAX}
+                        placeholder={ADMIN_FEE_LABEL_DEFAULT}
+                        onChange={(e) => {
+                          setFeeLabel(e.target.value);
+                          setSaved((s) => ({ ...s, fee: false }));
+                        }}
+                      />
+                      <div className="set-counter">
+                        {feeLabel.length}/{ADMIN_FEE_LABEL_MAX}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="set-row">
+                    <div>
+                      <div className="set-row-label">How much</div>
+                      <div className="set-row-help">
+                        A flat amount in the store&apos;s currency, added once per order.
+                      </div>
+                    </div>
+                    <div className="set-row-control">
+                      <label className="set-field">
+                        <span className="set-sublabel">Amount ({currency})</span>
+                        <input
+                          className="input mono"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={feeAmount}
+                          placeholder="0.00"
+                          aria-invalid={!feeAmountValid}
+                          onChange={(e) => {
+                            setFeeAmount(e.target.value);
+                            setSaved((s) => ({ ...s, fee: false }));
+                            setErrors((er) => ({ ...er, fee: undefined }));
+                          }}
+                        />
+                      </label>
+                      {!feeAmountValid && (
+                        <div className="set-err">
+                          Enter an amount above zero{feeAmountNum > ADMIN_FEE_AMOUNT_MAX ? ` (max ${ADMIN_FEE_AMOUNT_MAX.toLocaleString()})` : ""}, or turn the fee off.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="set-foot">
+              <span className="hint">
+                <Ic.AlertCircle />
+                {feeEnabled && feeAmountValid ? (
+                  <>
+                    Checkout will show &ldquo;{feePreviewLabel}: {currency}
+                    {feeAmountNum.toLocaleString()}&rdquo; above the total.
+                  </>
+                ) : (
+                  <>No fee is charged at checkout.</>
+                )}
+              </span>
+              <div className="set-foot-actions">
+                {errors.fee && (
+                  <span role="alert" className="set-err" style={{ alignSelf: "center" }}>
+                    {errors.fee}
+                  </span>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!feeDirty || saving !== null}
+                  onClick={() => {
+                    setFeeEnabled(baseline.current.feeEnabled);
+                    setFeeLabel(baseline.current.feeLabel);
+                    setFeeAmount(baseline.current.feeAmount);
+                    setErrors((e) => ({ ...e, fee: undefined }));
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  className="btn btn-accent btn-sm"
+                  onClick={saveFee}
+                  disabled={!feeValid || !feeDirty || saving !== null}
+                >
+                  {saving === "fee" ? "Saving…" : saved.fee && !feeDirty ? (
+                    <>
+                      <Ic.Check /> Saved
+                    </>
+                  ) : (
+                    "Save fee"
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* ---------- checkout copy ---------- */}
           <section className="set-card" ref={refs.copy} data-section="copy">
             <div className="set-card-head">
@@ -923,7 +1141,12 @@ export function TenantSettingsView({
         <button
           className="btn btn-sm btn-accent"
           onClick={saveAll}
-          disabled={saving !== null || (ordersDirty && !prefixValid) || incompleteChannels.length > 0}
+          disabled={
+            saving !== null ||
+            (ordersDirty && !prefixValid) ||
+            incompleteChannels.length > 0 ||
+            (feeDirty && !feeValid)
+          }
         >
           {saving === "all" ? "Saving…" : "Save all changes"}
         </button>

@@ -1,0 +1,323 @@
+"use client";
+
+// Super Admin editor for plan pricing + feature bullets, rendered on the
+// Plans & Billing page. Edits are local until "Save changes"; saving persists
+// via savePlanConfigAction (demo file / platform_settings row) and flows to the
+// marketing pricing section, the get-started wizard, the create-tenant drawer,
+// and the MRR/ARR math. Plan names stay fixed — they're identity keys.
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Ic } from "@/components/admin/shell/primitives";
+import { useAdminUI } from "@/components/admin/shell/AdminShell";
+import { savePlanConfigAction } from "@/actions/admin-plan-config";
+import { defaultPlanConfig, type PlanConfig } from "@/lib/platform/plan-config";
+import { formatPesos, formatPesosCompact } from "@/lib/admin/plans";
+import type { PlanRow } from "@/lib/admin/data";
+
+const money = formatPesosCompact;
+const MAX_FEATS = 12;
+
+let nextId = 0;
+type FeatRow = { id: number; text: string };
+type PlanDraft = {
+  key: string;
+  name: string;
+  priceText: string; // pesos, free-form while typing
+  blurb: string;
+  tag: string;
+  feats: FeatRow[];
+};
+
+function toDrafts(config: PlanConfig): PlanDraft[] {
+  return config.plans.map((p) => ({
+    key: p.key,
+    name: p.name,
+    priceText: String(p.priceCents / 100),
+    blurb: p.blurb,
+    tag: p.tag,
+    feats: p.feats.map((text) => ({ id: ++nextId, text })),
+  }));
+}
+
+function draftPriceCents(d: PlanDraft): number {
+  const pesos = Number(d.priceText);
+  return Number.isFinite(pesos) ? Math.round(pesos * 100) : 0;
+}
+
+export function PlansManager({
+  initial,
+  rows,
+  mrrCents,
+  arrCents,
+  activeCount,
+}: {
+  initial: PlanConfig;
+  rows: PlanRow[];
+  mrrCents: number;
+  arrCents: number;
+  activeCount: number;
+}) {
+  const router = useRouter();
+  const { showToast } = useAdminUI();
+  const [pending, startTransition] = useTransition();
+  const [plans, setPlans] = useState<PlanDraft[]>(() => toDrafts(initial));
+  const [dirty, setDirty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const totalTenants = rows.reduce((s, r) => s + r.count, 0);
+
+  function patchPlan(key: string, patch: Partial<PlanDraft>) {
+    setPlans((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+    setDirty(true);
+  }
+
+  function patchFeat(key: string, id: number, text: string) {
+    setPlans((ps) =>
+      ps.map((p) =>
+        p.key === key ? { ...p, feats: p.feats.map((f) => (f.id === id ? { ...f, text } : f)) } : p,
+      ),
+    );
+    setDirty(true);
+  }
+
+  function moveFeat(key: string, id: number, dir: -1 | 1) {
+    setPlans((ps) =>
+      ps.map((p) => {
+        if (p.key !== key) return p;
+        const i = p.feats.findIndex((f) => f.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= p.feats.length) return p;
+        const feats = [...p.feats];
+        [feats[i], feats[j]] = [feats[j], feats[i]];
+        return { ...p, feats };
+      }),
+    );
+    setDirty(true);
+  }
+
+  function removeFeat(key: string, id: number) {
+    setPlans((ps) => ps.map((p) => (p.key === key ? { ...p, feats: p.feats.filter((f) => f.id !== id) } : p)));
+    setDirty(true);
+  }
+
+  function addFeat(key: string) {
+    setPlans((ps) =>
+      ps.map((p) =>
+        p.key === key && p.feats.length < MAX_FEATS
+          ? { ...p, feats: [...p.feats, { id: ++nextId, text: "" }] }
+          : p,
+      ),
+    );
+    setDirty(true);
+  }
+
+  function reset() {
+    setPlans(toDrafts(defaultPlanConfig()));
+    setDirty(true);
+    setError(null);
+  }
+
+  function save() {
+    setError(null);
+    for (const p of plans) {
+      if (draftPriceCents(p) <= 0) {
+        const msg = `${p.name} needs a monthly price above ₱0.`;
+        setError(msg);
+        showToast(msg);
+        return;
+      }
+      if (!p.feats.some((f) => f.text.trim())) {
+        const msg = `${p.name} needs at least one feature bullet.`;
+        setError(msg);
+        showToast(msg);
+        return;
+      }
+    }
+    startTransition(async () => {
+      const res = await savePlanConfigAction({
+        plans: plans.map((p) => ({
+          key: p.key,
+          name: p.name,
+          priceCents: draftPriceCents(p),
+          blurb: p.blurb,
+          tag: p.tag,
+          feats: p.feats.map((f) => f.text.trim()).filter(Boolean),
+        })),
+      });
+      if ("error" in res) {
+        setError(res.error);
+        showToast(res.error);
+      } else {
+        setDirty(false);
+        showToast("Plan pricing saved.");
+        router.refresh(); // re-pull MRR/ARR + distribution with the new prices
+      }
+    });
+  }
+
+  const kpis = [
+    { label: "MRR", value: money(mrrCents), icon: Ic.DollarSign },
+    { label: "ARR", value: money(arrCents), icon: Ic.TrendUp },
+    { label: "Active subscriptions", value: activeCount.toLocaleString(), icon: Ic.Card },
+  ];
+
+  return (
+    <div className="page-inner">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Plans &amp; Billing</h1>
+          <p className="page-sub">
+            Subscription mix and recurring revenue across {totalTenants} tenants. Prices and
+            features here drive the marketing pricing, the get-started wizard, and new-tenant billing.
+          </p>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          {dirty && <span className="badge badge-warn">Unsaved changes</span>}
+          <button className="btn" onClick={reset} disabled={pending}>
+            Reset to defaults
+          </button>
+          <button className="btn btn-accent" onClick={save} disabled={pending || !dirty}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
+          <div className="card-body" style={{ padding: 14, fontSize: 13, color: "var(--danger)" }}>
+            <Ic.AlertCircle style={{ width: 14, height: 14, verticalAlign: "-2px", marginRight: 6 }} />
+            {error}
+          </div>
+        </div>
+      )}
+
+      <div className="grid-3 mb-4">
+        {kpis.map((k) => (
+          <div key={k.label} className="kpi">
+            <div className="kpi-label">
+              <k.icon /> {k.label}
+            </div>
+            <div className="kpi-value">{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }} className="grid-3">
+        {plans.map((p) => {
+          const row = rows.find((r) => r.key === p.key);
+          const share = totalTenants && row ? Math.round((row.count / totalTenants) * 100) : 0;
+          const cents = draftPriceCents(p);
+          return (
+            <div key={p.key} className="card">
+              <div className="card-body">
+                <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+                  <div className="plan-name" style={{ fontSize: 15 }}>
+                    {p.name}
+                  </div>
+                  <input
+                    className="input"
+                    style={{ width: 130, fontSize: 12 }}
+                    value={p.tag}
+                    maxLength={40}
+                    placeholder="Badge — e.g. Popular"
+                    onChange={(e) => patchPlan(p.key, { tag: e.target.value })}
+                  />
+                </div>
+                <div className="plan-price" style={{ fontSize: 24 }}>
+                  {cents > 0 ? formatPesos(cents) : "₱—"}
+                  <small>/mo</small>
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <label className="field-label">Monthly price (₱)</label>
+                  <input
+                    className="input"
+                    style={{ width: "100%", marginTop: 4 }}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={p.priceText}
+                    onChange={(e) => patchPlan(p.key, { priceText: e.target.value })}
+                  />
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label className="field-label">Description</label>
+                  <textarea
+                    className="input"
+                    rows={2}
+                    style={{ width: "100%", marginTop: 4, resize: "vertical", lineHeight: 1.4 }}
+                    value={p.blurb}
+                    maxLength={300}
+                    onChange={(e) => patchPlan(p.key, { blurb: e.target.value })}
+                  />
+                </div>
+
+                <div className="divider" />
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                  <span className="muted" style={{ fontSize: 12.5 }}>
+                    {row?.count ?? 0} tenants · {money(row?.mrrCents ?? 0)} MRR
+                  </span>
+                  <span className="tnum muted" style={{ fontSize: 12.5 }}>
+                    {share}%
+                  </span>
+                </div>
+                <div className="bar mb-3">
+                  <span style={{ width: share + "%" }} />
+                </div>
+
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                  <label className="field-label">Features</label>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => addFeat(p.key)}
+                    disabled={p.feats.length >= MAX_FEATS}
+                  >
+                    <Ic.Plus /> Add
+                  </button>
+                </div>
+                <div className="col" style={{ gap: 6 }}>
+                  {p.feats.map((f, i) => (
+                    <div key={f.id} className="row" style={{ gap: 6 }}>
+                      <input
+                        className="input"
+                        style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}
+                        value={f.text}
+                        maxLength={160}
+                        placeholder="Feature bullet"
+                        onChange={(e) => patchFeat(p.key, f.id, e.target.value)}
+                      />
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => moveFeat(p.key, f.id, -1)}
+                        disabled={i === 0}
+                        aria-label="Move feature up"
+                      >
+                        <Ic.ArrowUp />
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => moveFeat(p.key, f.id, 1)}
+                        disabled={i === p.feats.length - 1}
+                        aria-label="Move feature down"
+                      >
+                        <Ic.ArrowDown />
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => removeFeat(p.key, f.id)}
+                        aria-label="Remove feature"
+                      >
+                        <Ic.Trash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

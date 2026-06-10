@@ -1,0 +1,70 @@
+// Operator-editable plan pricing + feature lists. Edited in the Super Admin
+// (/admin/plans) and persisted as the "plan_config" PlatformSetting row (or
+// .demo-data/platform-settings.json in demo mode). The hardcoded PLAN_CARDS in
+// lib/admin/plans.ts are the fallback/default; plan keys and display names stay
+// fixed (they're identity — planMeta labels, feature-catalog ranks, DB Plan rows).
+//
+// Client-safe: no fs/prisma imports — types and pure helpers only.
+
+import { PLAN_CARDS, planMeta } from "@/lib/admin/plans";
+
+export const PLAN_CONFIG_KEY = "plan_config";
+
+export type EditablePlanCard = {
+  key: string; // canonical plan key (starter | pro | enterprise) — fixed
+  name: string; // display label — fixed, mirrors planMeta
+  priceCents: number; // monthly price in PHP centavos
+  blurb: string; // short pitch under the price
+  tag: string; // card badge, e.g. "Popular" ("" = none)
+  feats: string[]; // feature bullets shown on the card
+};
+
+export type PlanConfig = { plans: EditablePlanCard[] };
+
+/** The hardcoded PLAN_CARDS, lifted into the editable shape. */
+export function defaultPlanConfig(): PlanConfig {
+  return {
+    plans: PLAN_CARDS.map((p) => ({
+      key: p.key,
+      name: p.name,
+      priceCents: p.priceCents,
+      blurb: p.blurb,
+      tag: "tag" in p ? ((p as { tag?: string }).tag ?? "") : "",
+      feats: [...p.feats],
+    })),
+  };
+}
+
+const MAX_FEATS = 12;
+const MAX_PRICE_CENTS = 100_000_000; // ₱1M/mo guardrail
+
+/** Sanitize an untrusted/stored value into a well-formed config (never throws).
+ *  Always returns exactly the canonical plans, in order, falling back per-field. */
+export function normalizePlanConfig(input: unknown): PlanConfig {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const raw = Array.isArray(o.plans) ? (o.plans as unknown[]) : [];
+  return {
+    plans: defaultPlanConfig().plans.map((d) => {
+      const r = (raw.find((x) => (x as Record<string, unknown> | null)?.key === d.key) ??
+        {}) as Record<string, unknown>;
+      const cents = Math.round(Number(r.priceCents));
+      const rawFeats = Array.isArray(r.feats) ? (r.feats as unknown[]) : null;
+      return {
+        key: d.key,
+        name: d.name,
+        priceCents: Number.isFinite(cents) && cents > 0 ? Math.min(cents, MAX_PRICE_CENTS) : d.priceCents,
+        blurb: typeof r.blurb === "string" ? r.blurb.slice(0, 300) : d.blurb,
+        tag: typeof r.tag === "string" ? r.tag.slice(0, 40) : d.tag,
+        feats: rawFeats
+          ? rawFeats.map((f) => String(f ?? "").trim().slice(0, 160)).filter(Boolean).slice(0, MAX_FEATS)
+          : [...d.feats],
+      };
+    }),
+  };
+}
+
+/** Effective monthly price for any plan key (incl. legacy aliases). */
+export function planConfigPriceCents(config: PlanConfig, key: string): number {
+  const pm = planMeta(key);
+  return config.plans.find((p) => p.key === pm.key)?.priceCents ?? pm.priceCents;
+}

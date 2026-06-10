@@ -9,7 +9,7 @@
 // customization panel; every control feeds the same live design object, so
 // all previews update in real time.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { ProductCard } from "../components/Catalog";
@@ -56,19 +56,41 @@ function frameWidth(device: Device, layout: CardDesign["layout"]): number {
 
 function noop() {}
 
+/** Keep Tab cycling inside an open dialog (lightweight focus trap). */
+function trapTab(e: React.KeyboardEvent<HTMLDivElement>) {
+  if (e.key !== "Tab") return;
+  const els = e.currentTarget.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  );
+  if (!els.length) return;
+  const first = els[0];
+  const last = els[els.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 /** A non-interactive, always-faithful card preview at a given frame width. */
 function Stage({
   design,
   sample,
   width,
+  collapse = false,
 }: {
   design: CardDesign;
   sample: Product;
   width?: number;
+  /** Force the phone behavior (horizontal → vertical) — the device frames run
+   *  in a desktop viewport, so the storefront's media query can't fire here. */
+  collapse?: boolean;
 }) {
   return (
     <div
-      className="cstudio-stage"
+      className={`cstudio-stage ${collapse ? "cstudio-stage--collapse" : ""}`}
       style={width ? { width, maxWidth: "100%" } : undefined}
       aria-hidden
     >
@@ -108,12 +130,12 @@ function DeviceTabs({ device, onChange }: { device: Device; onChange: (d: Device
     },
   ];
   return (
-    <div className="cstudio-devices" role="tablist" aria-label="Preview device">
+    <div className="cstudio-devices" role="group" aria-label="Preview device">
       {tabs.map((t) => (
         <button
           key={t.id}
-          role="tab"
-          aria-selected={device === t.id}
+          type="button"
+          aria-pressed={device === t.id}
           className={`cstudio-devices__tab ${device === t.id ? "is-active" : ""}`}
           onClick={() => onChange(t.id)}
           title={t.label}
@@ -259,6 +281,7 @@ function ColorRow({
             className={`cstudio-swatch cstudio-swatch--theme ${value === "" ? "is-active" : ""}`}
             onClick={() => onChange("")}
             title="Use your theme color"
+            aria-label={`${label}: use your theme color`}
           >
             {themeLabel}
           </button>
@@ -311,6 +334,31 @@ export function AdminCardStudio({
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
 
+  const workbenchRef = useRef<HTMLDivElement>(null);
+  const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const compareCloseRef = useRef<HTMLButtonElement>(null);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+
+  // Dialog a11y: Escape closes, focus moves to the dialog's close button on
+  // open and returns to the opener on close (Tab is trapped via trapTab).
+  const overlayOpen = !!modal || compareOpen;
+  useEffect(() => {
+    if (!overlayOpen) return;
+    lastFocusRef.current = document.activeElement as HTMLElement | null;
+    (modalCloseRef.current ?? compareCloseRef.current)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setModal(null);
+        setCompareOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      lastFocusRef.current?.focus?.();
+    };
+  }, [overlayOpen]);
+
   // Preview with the store's real catalog when possible — the first product
   // with an image — so the owner judges designs against their own content.
   const sample: Product = useMemo(() => {
@@ -333,6 +381,12 @@ export function AdminCardStudio({
   const apply = (d: CardDesign, name: string) => {
     setCardDesign({ ...d });
     toast(`Applied "${name}" — saving…`);
+    // The customization workbench mounts above the gallery — bring it into
+    // view so applying from deep in the gallery visibly opens the panel.
+    setTimeout(
+      () => workbenchRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      80,
+    );
   };
 
   const patch = (edits: Partial<CardDesign>) => {
@@ -346,10 +400,26 @@ export function AdminCardStudio({
     setCompareIds([]);
   };
 
-  // Whether the live design has drifted from the preset it started as.
-  const activePreset = design ? getCardPreset(design.preset) : undefined;
+  // Identity of the applied design. An applied template carries
+  // preset "template:<id>" so ITS tile lights up — not its origin preset —
+  // and "Customized" measures drift against the template, not the preset.
+  const appliedTemplate = design?.preset.startsWith("template:")
+    ? templates.find((t) => t.id === design.preset.slice("template:".length))
+    : undefined;
+  const activePreset = design && !appliedTemplate ? getCardPreset(design.preset) : undefined;
+  const activeKey = design
+    ? appliedTemplate
+      ? `t:${appliedTemplate.id}`
+      : `p:${design.preset}`
+    : null;
+  const baseline =
+    activePreset?.design ??
+    (appliedTemplate && design
+      ? { ...appliedTemplate.design, preset: design.preset }
+      : undefined);
+  const baselineName = activePreset?.name ?? appliedTemplate?.name ?? "Custom";
   const customized =
-    !!design && !!activePreset && JSON.stringify(design) !== JSON.stringify(activePreset.design);
+    !!design && !!baseline && JSON.stringify(design) !== JSON.stringify(baseline);
 
   const saveTemplate = () => {
     if (!design) return;
@@ -372,6 +442,11 @@ export function AdminCardStudio({
   // Compare entries can be presets ("p:<id>") or templates ("t:<id>").
   const compareEntries = compareIds
     .map((key): { key: string; name: string; design: CardDesign } | null => {
+      // The applied entry compares as it CURRENTLY looks, customizations
+      // included — comparing the pristine preset would lie about the live card.
+      if (design && key === activeKey) {
+        return { key, name: `${baselineName} (current)`, design };
+      }
       if (key.startsWith("p:")) {
         const p = getCardPreset(key.slice(2));
         return p ? { key, name: p.name, design: p.design } : null;
@@ -399,11 +474,17 @@ export function AdminCardStudio({
     d: CardDesign,
     extra?: React.ReactNode,
   ) => {
-    const isActive = !!design && design.preset === d.preset && key.startsWith("p:");
-    // The applied preset's tile previews the LIVE (possibly customized) design
+    const isActive = key === activeKey;
+    // The applied design's tile previews the LIVE (possibly customized) design
     // so the gallery tracks the panel in real time.
     const shown = isActive && design ? design : d;
     const inCompare = compareIds.includes(key);
+    const applyThis = () => {
+      if (isActive && design) return apply(design, name);
+      // Applying a template stamps the design with the template's identity.
+      if (key.startsWith("t:")) return apply({ ...d, preset: `template:${key.slice(2)}` }, name);
+      apply(d, name);
+    };
     return (
       <div
         key={key}
@@ -416,7 +497,7 @@ export function AdminCardStudio({
           <button
             type="button"
             className="cstudio-tile__hit"
-            onClick={() => apply(shown, name)}
+            onClick={applyThis}
             aria-label={`Apply the ${name} design`}
           />
           <div className="cstudio-tile__actions">
@@ -526,12 +607,12 @@ export function AdminCardStudio({
         )}
 
         {design ? (
-          <div className="cstudio-workbench">
+          <div className="cstudio-workbench" ref={workbenchRef}>
             <aside className="cstudio-panel" aria-label="Card customization">
               <div className="cstudio-panel__head">
                 <span>Customize</span>
                 <span className="cstudio-panel__preset">
-                  {activePreset?.name ?? "Custom"}
+                  {baselineName}
                   {customized && <span className="cstudio-chip">Customized</span>}
                 </span>
               </div>
@@ -757,7 +838,7 @@ export function AdminCardStudio({
                 <DeviceTabs device={device} onChange={setDevice} />
                 <button
                   className="cstudio-btn cstudio-btn--ghost"
-                  onClick={() => design && setModal({ name: activePreset?.name ?? "Current design", design })}
+                  onClick={() => design && setModal({ name: baselineName, design })}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
@@ -767,10 +848,16 @@ export function AdminCardStudio({
                 </button>
               </div>
               <div className={`cstudio-preview__frame cstudio-preview__frame--${device}`}>
-                <Stage design={design} sample={sample} width={frameWidth(device, design.layout)} />
+                <Stage
+                  design={design}
+                  sample={sample}
+                  width={frameWidth(device, design.layout)}
+                  collapse={device === "mobile"}
+                />
               </div>
               <p className="cstudio-preview__hint">
                 Changes apply to your live catalog instantly and save automatically.
+                Hover the preview to play the card&apos;s hover effect.
               </p>
             </section>
           </div>
@@ -826,19 +913,35 @@ export function AdminCardStudio({
 
       {/* Full-size preview modal */}
       {modal && (
-        <div className="cstudio-modal" role="dialog" aria-modal="true" aria-label={`${modal.name} preview`} onClick={() => setModal(null)}>
-          <div className="cstudio-modal__box" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="cstudio-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${modal.name} preview`}
+          onClick={() => setModal(null)}
+        >
+          <div className="cstudio-modal__box" onClick={(e) => e.stopPropagation()} onKeyDown={trapTab}>
             <div className="cstudio-modal__head">
               <h3>{modal.name}</h3>
               <DeviceTabs device={device} onChange={setDevice} />
-              <button className="cstudio-modal__close" onClick={() => setModal(null)} aria-label="Close preview">
+              <button
+                ref={modalCloseRef}
+                className="cstudio-modal__close"
+                onClick={() => setModal(null)}
+                aria-label="Close preview"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             </div>
             <div className="cstudio-modal__stage">
-              <Stage design={modal.design} sample={sample} width={frameWidth(device, modal.design.layout)} />
+              <Stage
+                design={modal.design}
+                sample={sample}
+                width={frameWidth(device, modal.design.layout)}
+                collapse={device === "mobile"}
+              />
             </div>
             <div className="cstudio-modal__foot">
               <button
@@ -870,12 +973,27 @@ export function AdminCardStudio({
         </div>
       )}
       {compareOpen && (
-        <div className="cstudio-modal" role="dialog" aria-modal="true" aria-label="Compare designs" onClick={() => setCompareOpen(false)}>
-          <div className="cstudio-modal__box cstudio-modal__box--wide" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="cstudio-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Compare designs"
+          onClick={() => setCompareOpen(false)}
+        >
+          <div
+            className="cstudio-modal__box cstudio-modal__box--wide"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={trapTab}
+          >
             <div className="cstudio-modal__head">
               <h3>Compare designs</h3>
               <DeviceTabs device={device} onChange={setDevice} />
-              <button className="cstudio-modal__close" onClick={() => setCompareOpen(false)} aria-label="Close compare">
+              <button
+                ref={compareCloseRef}
+                className="cstudio-modal__close"
+                onClick={() => setCompareOpen(false)}
+                aria-label="Close compare"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -885,7 +1003,12 @@ export function AdminCardStudio({
               {compareEntries.map((c) => (
                 <div key={c.key} className="cstudio-compare-cell">
                   <div className="cstudio-compare-cell__name">{c.name}</div>
-                  <Stage design={c.design} sample={sample} width={frameWidth(device, c.design.layout)} />
+                  <Stage
+                    design={c.design}
+                    sample={sample}
+                    width={frameWidth(device, c.design.layout)}
+                    collapse={device === "mobile"}
+                  />
                   <button
                     className="cstudio-btn"
                     onClick={() => {
@@ -902,7 +1025,7 @@ export function AdminCardStudio({
         </div>
       )}
 
-      <div className={`admin-toast ${toastMsg ? "is-shown" : ""}`}>{toastMsg}</div>
+      <div role="status" className={`admin-toast ${toastMsg ? "is-shown" : ""}`}>{toastMsg}</div>
     </div>
   );
 }

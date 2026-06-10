@@ -20,7 +20,7 @@ import {
   type StepProps,
 } from "./steps";
 import { submitOnboardingAction } from "@/actions/public-onboarding";
-import { SITE } from "@/marketing/config";
+import { SITE, type Package } from "@/marketing/config";
 import type { PackagePaymentConfig } from "@/lib/platform/package-payment";
 
 const STEP_COMPONENTS = [
@@ -33,7 +33,13 @@ const STEP_COMPONENTS = [
   CheckoutStep,
 ];
 
-export function OnboardingWizard({ packagePayment }: { packagePayment: PackagePaymentConfig }) {
+export function OnboardingWizard({
+  packagePayment,
+  packages,
+}: {
+  packagePayment: PackagePaymentConfig;
+  packages: Package[];
+}) {
   const { draft, update, clearDraft } = useOnboardingDraft();
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -159,7 +165,7 @@ export function OnboardingWizard({ packagePayment }: { packagePayment: PackagePa
           <div className="mk-step-body">
             <h1 className="mk-step-title">{STEPS[step].title}</h1>
             <p className="mk-step-sub">{STEPS[step].subtitle}</p>
-            <Current draft={draft} update={update} errors={errors} packagePayment={packagePayment} />
+            <Current draft={draft} update={update} errors={errors} packagePayment={packagePayment} packages={packages} />
             {submitError && (
               <p className="mk-error" role="alert" style={{ marginTop: 10 }}>
                 {submitError}

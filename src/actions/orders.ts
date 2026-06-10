@@ -17,17 +17,24 @@
 
 import type { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
+import { getTenantContext } from "@/lib/tenant/context";
 import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { withTenant } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import {
   isDemoMode,
+  getDemoBranding,
   getDemoStoreOrders,
   addDemoStoreOrder,
   saveDemoStoreOrders,
   nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
+import {
+  activeAdminFee,
+  ADMIN_FEE_LABEL_DEFAULT,
+  ADMIN_FEE_LABEL_MAX,
+} from "@/lib/storefront/admin-fee";
 import type { Order, OrderItem, OrderStatusEvent } from "@/storefront/types";
 
 export type UploadProofResult = { url: string } | { error: string };
@@ -82,6 +89,17 @@ function normalizeItems(input: unknown): OrderItem[] {
   });
 }
 
+/** Coerce a stored/untrusted fee blob into the order's fee, or undefined when
+ *  none was charged. Used for DB rows and demo orders alike; checkout itself
+ *  never trusts this — placeStorefrontOrderAction re-stamps it from config. */
+function normalizeOrderFee(input: unknown): Order["adminFee"] {
+  if (!input || typeof input !== "object") return undefined;
+  const x = input as Record<string, unknown>;
+  const amount = Math.max(0, num(x.amount));
+  if (amount <= 0) return undefined;
+  return { label: str(x.label, ADMIN_FEE_LABEL_MAX) || ADMIN_FEE_LABEL_DEFAULT, amount };
+}
+
 /** Coerce an untrusted status-history blob into clean, ordered journey events. */
 function normalizeStatusHistory(input: unknown): OrderStatusEvent[] {
   const arr = Array.isArray(input) ? input : [];
@@ -134,6 +152,7 @@ function normalizeOrderInput(input: unknown): Order {
     shippingNote: str(o.shippingNote, 500),
     items: normalizeItems(o.items),
     statusHistory: normalizeStatusHistory(o.statusHistory),
+    adminFee: normalizeOrderFee(o.adminFee),
     // Only accept a hosted URL here — the proof is uploaded separately via
     // uploadPaymentProofAction, which returns the ImageKit URL (or, when
     // ImageKit isn't configured, a data URL fallback). Cap generously so a
@@ -157,6 +176,7 @@ type DbOrderRow = {
   shipping: unknown;
   items: unknown;
   statusHistory: unknown;
+  adminFee: unknown;
   courier: string;
   trackingNumber: string;
   shippingNote: string;
@@ -175,6 +195,7 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     shipping: row.shipping,
     items: row.items,
     statusHistory: row.statusHistory,
+    adminFee: row.adminFee,
     courier: row.courier,
     trackingNumber: row.trackingNumber,
     shippingNote: row.shippingNote,
@@ -198,6 +219,8 @@ function orderToDbCreate(tenantId: string, p: Order) {
     shipping: p.shipping as unknown as Prisma.InputJsonValue,
     items: p.items as unknown as Prisma.InputJsonValue,
     statusHistory: (p.statusHistory ?? []) as unknown as Prisma.InputJsonValue,
+    // NULL (column default) when no fee was charged — omit rather than store {}.
+    ...(p.adminFee ? { adminFee: p.adminFee as unknown as Prisma.InputJsonValue } : {}),
     courier: p.courier,
     trackingNumber: p.trackingNumber,
     shippingNote: p.shippingNote,
@@ -287,6 +310,11 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // mint a second number / duplicate the order.
     const existing = getDemoStoreOrders(slug).find((o) => o.id === id);
     if (existing) return { ok: true, order: existing };
+    // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
+    // branding config at placement (any client-supplied value is discarded) and
+    // snapshotted on the order so a later config change never rewrites it.
+    const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
     const saved: Order = { ...p, id, orderNumber };
@@ -295,6 +323,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   }
 
   try {
+    // Same server-authoritative fee stamp as the demo path — read through the
+    // tag-invalidated tenant cache, so checkout charges exactly what the
+    // storefront (which renders from the same cache) displayed.
+    const { branding } = await getTenantContext(tenantId);
+    const config = (branding?.config ?? {}) as Record<string, unknown>;
+    p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
+
     const row = await createStorefrontOrder(tenantId, p);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
   } catch (e) {
@@ -375,6 +410,7 @@ export type TrackedOrder = {
   // can show what was ordered, the total, and the timestamped status timeline.
   items: OrderItem[];
   shippingFee: number;
+  adminFee: { label: string; amount: number } | null;
   statusHistory: OrderStatusEvent[];
 };
 export type TrackOrderResult =
@@ -403,6 +439,7 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
     shippingNote: o.shippingNote,
     items: o.items,
     shippingFee: o.shipping?.fee ?? 0,
+    adminFee: o.adminFee ?? null,
     statusHistory: o.statusHistory ?? [],
   });
   const matches = (o: Order) =>

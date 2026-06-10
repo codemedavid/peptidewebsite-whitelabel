@@ -12,7 +12,8 @@ import {
   type FeatureKey,
   type FeatureGroup,
 } from "@/lib/features/catalog";
-import { PLAN_CARDS, planMeta, formatPesos } from "@/lib/admin/plans";
+import { planMeta, formatPesos } from "@/lib/admin/plans";
+import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
 import { Ic, Toggle } from "./primitives";
 
 const STEPS = [
@@ -45,11 +46,15 @@ export function CreateTenantDrawer({
   open,
   onClose,
   onToast,
+  planCards,
 }: {
   open: boolean;
   onClose: () => void;
   onToast: (msg: string) => void;
+  // Operator-edited pricing/features (Super Admin → Plans & Billing).
+  planCards?: EditablePlanCard[];
 }) {
+  const cards = planCards ?? defaultPlanConfig().plans;
   const router = useRouter();
   const [state, formAction, pending] = useActionState<CreateTenantState, FormData>(createTenantAction, {});
   const [step, setStep] = useState(1);
@@ -212,9 +217,9 @@ export function CreateTenantDrawer({
             <div>
               <SectionTitle title="Subscription plan" subtitle="Sets defaults for features, limits and billing." />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
-                {PLAN_CARDS.map((p) => (
+                {cards.map((p) => (
                   <div key={p.key} className={"plan-card" + (plan === p.key ? " selected" : "")} onClick={() => setPlan(p.key)}>
-                    {"tag" in p && p.tag && <span className="plan-tag">{p.tag}</span>}
+                    {p.tag && <span className="plan-tag">{p.tag}</span>}
                     <div className="plan-name">{p.name}</div>
                     <div className="plan-price">
                       {formatPesos(p.priceCents)}
@@ -315,7 +320,9 @@ export function CreateTenantDrawer({
                     v={
                       <span className="row" style={{ gap: 6 }}>
                         <span className="badge badge-accent">{planMeta(plan).label}</span>
-                        <span className="muted">{formatPesos(planMeta(plan).priceCents)}/mo</span>
+                        <span className="muted">
+                          {formatPesos(cards.find((c) => c.key === plan)?.priceCents ?? planMeta(plan).priceCents)}/mo
+                        </span>
                       </span>
                     }
                   />

@@ -12,9 +12,12 @@ import {
   getDemoBranding,
   type DemoTenant,
 } from "@/lib/demo/fixtures";
-import { planMeta, planPriceCents } from "@/lib/admin/plans";
+import { planMeta } from "@/lib/admin/plans";
+import { planConfigPriceCents } from "@/lib/platform/plan-config";
+import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
+import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { BRAND } from "@/storefront/data";
 import type { ContactChannel } from "@/storefront/types";
 
@@ -101,6 +104,7 @@ export type TenantDetail = AdminTenantRow & {
   lifetimeRevenueCents: number;
   visitors: number;
   audit: ActivityItem[];
+  planPriceCents: number; // effective monthly price (operator-edited plan config)
 };
 
 /* ============================================================
@@ -285,6 +289,36 @@ export async function getTenantContactChannels(
   return fromConfig(t.name, (t.branding?.config ?? {}) as Record<string, unknown>);
 }
 
+export type TenantAdminFee = AdminFeeConfig & {
+  /** The store's currency symbol, for display next to the amount input. */
+  currency: string;
+};
+
+/** The tenant's checkout admin-fee config (super-admin toggle: whether a flat
+ *  fee is added on top of the order total, what it's for, and how much).
+ *  Read from the shared branding.config blob, same as the contact channels. */
+export async function getTenantAdminFee(slug: string): Promise<TenantAdminFee | null> {
+  const fromConfig = (config: Record<string, unknown>): TenantAdminFee => ({
+    ...normalizeAdminFee(config.adminFee),
+    currency:
+      typeof config.currency === "string" && config.currency.trim()
+        ? config.currency.trim()
+        : "₱",
+  });
+
+  if (isDemoMode()) {
+    if (!listDemoTenants().some((t) => t.slug === slug)) return null;
+    return fromConfig((getDemoBranding(slug).config ?? {}) as Record<string, unknown>);
+  }
+
+  const t = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { branding: { select: { config: true } } },
+  });
+  if (!t) return null;
+  return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>);
+}
+
 /** Current storefront-admin password override (blank = falls back to "admin").
  *  Read from the shared branding.config blob, same as the contact channels. */
 export async function getTenantAdminPassword(slug: string): Promise<string | null> {
@@ -384,14 +418,14 @@ export async function listAdminTenants(): Promise<AdminTenantRow[]> {
 }
 
 export async function getPlatformOverview(): Promise<OverviewData> {
-  const rows = await listAdminTenants();
+  const [rows, planConfig] = await Promise.all([listAdminTenants(), getPlanConfig()]);
   const totalTenants = rows.length;
   const activeSubscriptions = rows.filter((r) => r.status === "active").length;
   const activeTrials = rows.filter((r) => r.status === "trial").length;
   const totalOrders = rows.reduce((s, r) => s + r.orders, 0);
   const mrrCents = rows
     .filter((r) => r.status === "active")
-    .reduce((s, r) => s + planPriceCents(r.planKey), 0);
+    .reduce((s, r) => s + planConfigPriceCents(planConfig, r.planKey), 0);
 
   const now = Date.now();
   const D30 = 30 * 24 * 3600 * 1000;
@@ -530,7 +564,7 @@ function demoActivity(rows: AdminTenantRow[]): ActivityItem[] {
 }
 
 const _cachedTenantDetail = unstable_cache(
-  async (slug: string): Promise<TenantDetail | null> => {
+  async (slug: string): Promise<Omit<TenantDetail, "planPriceCents"> | null> => {
     const t = await prisma.tenant.findUnique({
       where: { slug },
       select: {
@@ -609,6 +643,9 @@ const _cachedTenantDetail = unstable_cache(
 );
 
 export async function getAdminTenantDetail(slug: string): Promise<TenantDetail | null> {
+  // Price is attached outside the cache so operator plan-config edits show
+  // immediately instead of waiting out the 120s revalidate window.
+  const planConfig = await getPlanConfig();
   if (isDemoMode()) {
     const t = listDemoTenants().find((x) => x.slug === slug);
     if (!t) return null;
@@ -625,9 +662,12 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
       lifetimeRevenueCents: Math.round(row.revenueCents * 3.6),
       visitors: (hashInt(t.slug) % 18000) + 800,
       audit: demoAudit(row),
+      planPriceCents: planConfigPriceCents(planConfig, row.planKey),
     };
   }
-  return _cachedTenantDetail(slug);
+  const detail = await _cachedTenantDetail(slug);
+  if (!detail) return null;
+  return { ...detail, planPriceCents: planConfigPriceCents(planConfig, detail.planKey) };
 }
 
 /* ============================================================
@@ -669,19 +709,19 @@ export type PlanRow = { key: string; label: string; priceCents: number; count: n
 
 /** Plan distribution + MRR/ARR for the Plans & Billing page. */
 export async function getPlanDistribution(): Promise<{ rows: PlanRow[]; mrrCents: number; arrCents: number; activeCount: number }> {
-  const rows = await listAdminTenants();
+  const [rows, planConfig] = await Promise.all([listAdminTenants(), getPlanConfig()]);
   const byKey = new Map<string, { count: number; mrrCents: number }>();
   for (const r of rows) {
     const pm = planMeta(r.planKey);
     const cur = byKey.get(pm.key) ?? { count: 0, mrrCents: 0 };
     cur.count += 1;
-    if (r.status === "active") cur.mrrCents += pm.priceCents;
+    if (r.status === "active") cur.mrrCents += planConfigPriceCents(planConfig, pm.key);
     byKey.set(pm.key, cur);
   }
   const planRows: PlanRow[] = ["starter", "pro", "enterprise"].map((key) => {
     const pm = planMeta(key);
     const agg = byKey.get(key) ?? { count: 0, mrrCents: 0 };
-    return { key, label: pm.label, priceCents: pm.priceCents, count: agg.count, mrrCents: agg.mrrCents };
+    return { key, label: pm.label, priceCents: planConfigPriceCents(planConfig, key), count: agg.count, mrrCents: agg.mrrCents };
   });
   const mrrCents = planRows.reduce((s, r) => s + r.mrrCents, 0);
   return { rows: planRows, mrrCents, arrCents: mrrCents * 12, activeCount: rows.filter((r) => r.status === "active").length };

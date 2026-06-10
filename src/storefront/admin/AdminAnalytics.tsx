@@ -9,8 +9,8 @@ import { ADMIN_TINTS } from "./shared";
 // server action as AdminOrders (demo/DB branching lives server-side); all
 // aggregation happens client-side because a tenant's order set is small.
 // Revenue policy: cancelled orders are excluded from every sales metric;
-// an order's total = items subtotal + shipping fee (no order-level total
-// is stored — same rule as AdminOrders/AdminOrderDetail).
+// an order's total = items subtotal + shipping fee + admin fee (no order-level
+// total is stored — same rule as AdminOrders/AdminOrderDetail).
 
 type RangeId = "7d" | "30d" | "90d" | "12m" | "all";
 
@@ -29,7 +29,8 @@ const MAX_MONTH_BUCKETS = 48;
 function totalOf(o: Order): number {
   return (
     (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) +
-    (o.shipping?.fee || 0)
+    (o.shipping?.fee || 0) +
+    (o.adminFee?.amount || 0)
   );
 }
 

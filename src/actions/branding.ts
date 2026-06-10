@@ -8,6 +8,7 @@ import { getPlatformUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
+import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 
 export type BrandingAssetKind = "logo" | "favicon";
@@ -293,6 +294,58 @@ export async function saveRequirePaymentProofAction(
 
   const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
   const config = { ...current, requireProofOfPayment } as Prisma.InputJsonValue;
+
+  await prisma.branding.upsert({
+    where: { tenantId: tenant.id },
+    update: { config },
+    create: { tenantId: tenant.id, config },
+  });
+
+  revalidatePath("/admin");
+  revalidateTenant(tenant.id, slug);
+  return { ok: true };
+}
+
+/**
+ * Configure the tenant's checkout admin fee: whether one is charged, what it's
+ * for (the line label customers see), and the flat amount added on top of the
+ * order total. Super-admin only. Stored in the shared `branding.config` blob as
+ * `adminFee` (read-modify-write, so it never clobbers the rest of the config).
+ * The label/amount persist even while the toggle is off, so flipping it back on
+ * restores the previous fee.
+ */
+export async function saveAdminFeeAction(
+  slug: string,
+  input: AdminFeeConfig,
+): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+
+  const adminFee = normalizeAdminFee(input);
+  // An enabled fee of zero would render a confusing "+ ₱0" line at checkout —
+  // require a real amount or an explicit off.
+  if (adminFee.enabled && adminFee.amount <= 0) {
+    return { error: "Set a fee amount above zero, or turn the fee off." };
+  }
+
+  if (isDemoMode()) {
+    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    saveDemoBranding(slug, { config: { ...current, adminFee } });
+    revalidatePath("/admin");
+    revalidateTenant(slug, slug);
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
+  if (!tenant) return { error: "Tenant not found." };
+
+  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const config = { ...current, adminFee } as Prisma.InputJsonValue;
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },

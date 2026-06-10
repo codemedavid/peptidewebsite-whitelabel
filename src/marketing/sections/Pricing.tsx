@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { PACKAGES } from "@/marketing/config";
+import { packagesFrom } from "@/marketing/config";
+import { getPlanConfig } from "@/lib/platform/plan-config-server";
 
-export function Pricing() {
+export async function Pricing() {
+  // Operator-edited pricing/features (Super Admin → Plans & Billing), falling
+  // back to the code defaults when nothing has been saved.
+  const packages = packagesFrom((await getPlanConfig()).plans);
   return (
     <section className="mk-section" id="pricing">
       <div className="mk-container">
@@ -15,7 +19,7 @@ export function Pricing() {
           </p>
         </div>
         <div className="mk-grid mk-grid-3">
-          {PACKAGES.map((p) => (
+          {packages.map((p) => (
             <div
               key={p.key}
               className={`mk-card mk-price-card${p.highlighted ? " mk-price-card--featured" : ""}`}

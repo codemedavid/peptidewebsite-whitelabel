@@ -3,6 +3,7 @@ import "./admin.css";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { getPlatformUser } from "@/lib/auth/session";
 import { listTenantNames } from "@/lib/admin/data";
+import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { AdminShell } from "@/components/admin/shell/AdminShell";
 
 /**
@@ -14,9 +15,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (pathname.endsWith("/login")) return <>{children}</>;
 
-  const [operator, tenants] = await Promise.all([
+  const [operator, tenants, planConfig] = await Promise.all([
     isDemoMode() ? Promise.resolve(null) : getPlatformUser(),
     listTenantNames(),
+    getPlanConfig(),
   ]);
 
   return (
@@ -24,6 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       operatorEmail={operator?.email ?? (isDemoMode() ? "demo@platform" : null)}
       tenantCount={tenants.count}
       tenantNameBySlug={tenants.bySlug}
+      planCards={planConfig.plans}
     >
       {children}
     </AdminShell>

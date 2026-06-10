@@ -77,6 +77,11 @@ export type Order = {
   items: OrderItem[];
   /** Fulfillment journey, oldest event first. Optional on legacy/demo orders. */
   statusHistory?: OrderStatusEvent[];
+  /** Admin/service fee charged on this order, snapshotted SERVER-SIDE at
+   *  placement from the tenant's branding.config so a later config change never
+   *  rewrites what an existing order was charged. Absent on legacy orders and
+   *  when the tenant's fee is off. Total = items + shipping.fee + adminFee. */
+  adminFee?: { label: string; amount: number };
   paymentProof: string | null;
 };
 
@@ -217,6 +222,9 @@ export type Brand = {
   // tenants that sell wholesale enable it from the store admin. Gated behind an
   // access code so the wholesale list isn't shown to regular shoppers.
   showPageMerchant?: boolean;
+  // Store-admin Sales Analytics view. Default ON for every package; the super
+  // admin can switch it off per tenant from the branding editor.
+  showAdminAnalytics?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;
@@ -337,6 +345,13 @@ export type Brand = {
   // super admin and persisted in branding.config. Absent → treated as required
   // (the historical default); set to false to make the proof upload optional.
   requireProofOfPayment?: boolean;
+
+  // Admin (service) fee added on top of the order total at checkout. Toggled
+  // and configured per tenant by the SUPER ADMIN (settings → Admin fee): the
+  // label says what the fee is for, the amount is a flat charge in the store's
+  // currency. Persisted in branding.config; absent or disabled → checkout shows
+  // no fee (the historical behavior). See lib/storefront/admin-fee.
+  adminFee?: { enabled: boolean; label: string; amount: number };
 
   // Protocol guide entries. Edited in the storefront #admin and persisted
   // server-side in branding.config (same mechanism as paymentMethods) so the

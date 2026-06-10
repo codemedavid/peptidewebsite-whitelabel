@@ -3,7 +3,8 @@
 // and payment instructions too. Packages re-use PLAN_CARDS / PLAN_META so the
 // sales site, the onboarding package step, and the admin never diverge on price.
 
-import { PLAN_CARDS, PLAN_META, formatPesos } from "@/lib/admin/plans";
+import { PLAN_META, formatPesos } from "@/lib/admin/plans";
+import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
 
@@ -127,8 +128,11 @@ export const DEMO_SITES: DemoSite[] = [
 ];
 
 // ──────────────────────────── Packages ────────────────────────────
-// Re-exported from the admin plan source of truth. `key` is the DB plan key
+// Derived from the admin plan source of truth. `key` is the DB plan key
 // (starter | pro | enterprise) — what the onboarding submission stores.
+// Pricing surfaces should call packagesFrom(getPlanConfig().plans) so
+// operator edits (Super Admin → Plans & Billing) show up; PACKAGES is the
+// code-default fallback.
 export type Package = {
   key: string;
   name: string;
@@ -139,15 +143,19 @@ export type Package = {
   highlighted: boolean;
 };
 
-export const PACKAGES: Package[] = PLAN_CARDS.map((p) => ({
-  key: p.key,
-  name: p.name,
-  priceLabel: formatPesos(p.priceCents),
-  blurb: p.blurb,
-  feats: p.feats,
-  tag: "tag" in p ? (p as { tag?: string }).tag : undefined,
-  highlighted: p.key === "pro",
-}));
+export function packagesFrom(plans: EditablePlanCard[]): Package[] {
+  return plans.map((p) => ({
+    key: p.key,
+    name: p.name,
+    priceLabel: formatPesos(p.priceCents),
+    blurb: p.blurb,
+    feats: p.feats,
+    tag: p.tag || undefined,
+    highlighted: p.key === "pro",
+  }));
+}
+
+export const PACKAGES: Package[] = packagesFrom(defaultPlanConfig().plans);
 
 export function packageLabel(key: string): string {
   return (PLAN_META[key] ?? PLAN_META.starter).label;

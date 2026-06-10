@@ -50,6 +50,8 @@ export default async function StorefrontLayout({
   // Hero typography lives on the storefront Brand config; load its distinct
   // title/body fonts (if any) alongside the theme fonts.
   const heroConfig = (branding?.config ?? {}) as {
+    headingFont?: string;
+    bodyFont?: string;
     heroTitleFont?: string;
     heroBodyFont?: string;
     buttonFont?: string;
@@ -61,6 +63,12 @@ export default async function StorefrontLayout({
   const fontsHref = googleFontsUrl(
     fonts.heading ?? "Inter",
     fonts.body ?? "Inter",
+    // The storefront home renders the Brand config's fonts (config wins over the
+    // structured fonts JSON — see (storefront)/page.tsx layering). If the two
+    // ever drift, the configured families must still be loaded or the header /
+    // footer brand text and headings silently fall back to Georgia/system-ui.
+    heroConfig.headingFont,
+    heroConfig.bodyFont,
     heroConfig.heroTitleFont,
     heroConfig.heroBodyFont,
     // Button font lives on the storefront Brand config (not the structured

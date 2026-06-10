@@ -116,6 +116,7 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
     shippingNote: o.shippingNote,
     items: o.items,
     shippingFee: o.shipping?.fee ?? 0,
+    adminFee: o.adminFee ?? null,
     statusHistory: o.statusHistory ?? [],
   });
 
@@ -288,6 +289,7 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
                 {(() => {
                   const subtotal = result.items.reduce((s, it) => s + it.price * it.qty, 0);
                   const shipping = result.shippingFee || 0;
+                  const fee = result.adminFee;
                   return (
                     <div className="track-summary__totals">
                       <div className="track-summary__row">
@@ -300,9 +302,15 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
                           <span>{money(shipping)}</span>
                         </div>
                       )}
+                      {fee && (
+                        <div className="track-summary__row">
+                          <span>{fee.label}</span>
+                          <span>{money(fee.amount)}</span>
+                        </div>
+                      )}
                       <div className="track-summary__row track-summary__row--total">
                         <span>Total</span>
-                        <span>{money(subtotal + shipping)}</span>
+                        <span>{money(subtotal + shipping + (fee?.amount ?? 0))}</span>
                       </div>
                     </div>
                   );

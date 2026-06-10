@@ -249,15 +249,20 @@ export function getCardPreset(id: string): CardPreset | undefined {
 
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
-/** Relative luminance check — drives qty-stepper/divider inversion on dark cards. */
-export function isDarkColor(hex: string): boolean {
+/** Approximate luminance (0–255) of a #RRGGBB color; non-hex → 255 (light). */
+function luma(hex: string): number {
   const m = /^#([0-9a-fA-F]{6})/.exec(hex.trim());
-  if (!m) return false;
+  if (!m) return 255;
   const n = parseInt(m[1], 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 140;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Relative luminance check — drives qty-stepper/divider inversion on dark cards. */
+export function isDarkColor(hex: string): boolean {
+  return luma(hex) < 140;
 }
 
 const TITLE_PX: Record<CardTitleSize, number> = { sm: 17, md: 20, lg: 23 };
@@ -285,34 +290,61 @@ export function cardDesignAttrs(d: CardDesign): {
 } {
   const vars: Record<string, string> = {};
 
+  // Every value interpolated into the style attribute is re-validated HERE,
+  // not only in the save action's normalizer — branding.config can also be
+  // written via the platform admin's whole-blob save, so the render path
+  // never trusts the blob (a free-string borderStyle/titleCase would otherwise
+  // ride into the style attribute).
   const bg = HEX_RE.test(d.background) ? d.background : "";
   const bg2 = HEX_RE.test(d.background2) ? d.background2 : "";
   const text = HEX_RE.test(d.textColor) ? d.textColor : "";
   const borderColor = HEX_RE.test(d.borderColor) ? d.borderColor : "";
   const btn = HEX_RE.test(d.buttonColor) ? d.buttonColor : "";
+  const borderStyle: CardBorderStyle =
+    d.borderStyle === "dashed" || d.borderStyle === "dotted" ? d.borderStyle : "solid";
+  const radius = Number.isFinite(d.radius) ? Math.max(0, Math.min(40, d.radius)) : 24;
+  const borderWidth = Number.isFinite(d.borderWidth) ? Math.max(1, Math.min(8, d.borderWidth)) : 1;
 
-  vars["--cd-radius"] = `${Math.max(0, Math.min(40, d.radius))}px`;
+  vars["--cd-radius"] = `${radius}px`;
   vars["--cd-border"] = d.borderEnabled
-    ? `${Math.max(1, Math.min(8, d.borderWidth))}px ${d.borderStyle} ${borderColor || "var(--brand-border)"}`
+    ? `${borderWidth}px ${borderStyle} ${borderColor || "var(--brand-border)"}`
     : "none";
   if (borderColor) vars["--cd-border-color"] = borderColor;
   vars["--cd-bg"] = bg || "var(--brand-surface)";
   if (d.surface === "gradient") {
     vars["--cd-bg2"] = bg2 || `color-mix(in srgb, ${bg || "var(--brand-surface)"} 55%, var(--brand-surface-2))`;
   }
+
+  // Card text. An explicit textColor wins; otherwise a dark custom background
+  // (or the overlay scrim) auto-switches to light text so a dark background
+  // without a hand-picked text color can never render dark-on-dark.
+  const bgDark = !!bg && isDarkColor(bg);
   if (text) {
     vars["--cd-heading"] = text;
     vars["--cd-body"] = `color-mix(in srgb, ${text} 76%, transparent)`;
+  } else if (d.layout === "overlay" || bgDark) {
+    vars["--cd-heading"] = "#FFFFFF";
+    vars["--cd-body"] = "rgba(255, 255, 255, 0.82)";
   }
+  const dark = d.layout === "overlay" || bgDark || (!!text && isDarkColor(bg || "#ffffff"));
+
   vars["--cd-btn"] = btn || "var(--brand-button)";
-  vars["--cd-btn-radius"] = BTN_RADIUS[d.buttonShape];
+  // Custom button color: derive the gradient's second stop and a readable
+  // label color; inherited color keeps the theme's configured pair.
+  vars["--cd-btn2"] = btn
+    ? `color-mix(in srgb, ${btn} 55%, #ffffff)`
+    : "var(--brand-button-2)";
+  vars["--cd-btn-text"] = btn
+    ? luma(btn) < 168 ? "#FFFFFF" : "#111827"
+    : "var(--brand-button-text)";
+  vars["--cd-btn-radius"] = BTN_RADIUS[d.buttonShape] ?? "999px";
   vars["--cd-title-font"] =
     d.titleFont === "display" ? "var(--brand-heading-font)" : "var(--brand-body-font)";
-  vars["--cd-title-weight"] = String(d.titleWeight);
-  vars["--cd-title-px"] = `${TITLE_PX[d.titleSize]}px`;
-  vars["--cd-title-case"] = d.titleCase;
-  vars["--cd-pad"] = `${PAD_PX[d.spacing]}px`;
-  vars["--cd-ratio"] = RATIO_CSS[d.imageRatio];
+  vars["--cd-title-weight"] = String(Number.isFinite(d.titleWeight) ? d.titleWeight : 500);
+  vars["--cd-title-px"] = `${TITLE_PX[d.titleSize] ?? 20}px`;
+  vars["--cd-title-case"] = d.titleCase === "uppercase" ? "uppercase" : "none";
+  vars["--cd-pad"] = `${PAD_PX[d.spacing] ?? 20}px`;
+  vars["--cd-ratio"] = RATIO_CSS[d.imageRatio] ?? "1 / 1";
 
   const shadowMap: Record<CardShadow, string> = {
     none: "none",
@@ -321,15 +353,7 @@ export function cardDesignAttrs(d: CardDesign): {
     lg: "var(--shadow-lg)",
     glow: `0 10px 40px -8px color-mix(in srgb, ${btn || "var(--brand-accent)"} 45%, transparent)`,
   };
-  vars["--cd-shadow"] = shadowMap[d.shadow];
-
-  // Overlay cards always sit on a photo/dark scrim; default the text to white.
-  const overlayText = d.layout === "overlay" && !text;
-  if (overlayText) {
-    vars["--cd-heading"] = "#FFFFFF";
-    vars["--cd-body"] = "rgba(255, 255, 255, 0.82)";
-  }
-  const dark = overlayText || (text ? isDarkColor(bg || "#ffffff") || d.layout === "overlay" : false);
+  vars["--cd-shadow"] = shadowMap[d.shadow] ?? shadowMap.sm;
 
   const data: Record<string, string> = {
     "data-cd": "1",
