@@ -511,14 +511,36 @@ export function ColorField({
   value,
   options = [],
   onChange,
+  optional = false,
+  fallback = "",
+  inheritLabel = "Inheriting default",
+  onClear,
 }: {
   label: string;
-  value: string;
+  value?: string;
   options?: string[];
   onChange: (v: string) => void;
+  /** When true, an empty/undefined `value` means "inherit": the swatch and the
+   *  native picker preview the `fallback` color, the text input is blank with an
+   *  inherit placeholder, and a reset link (→ `onClear`) clears the override. */
+  optional?: boolean;
+  /** The inherited color previewed while no override is set (optional mode). */
+  fallback?: string;
+  /** Hint/placeholder shown while inheriting, e.g. "Inheriting Surface". */
+  inheritLabel?: string;
+  /** Clear the override back to inherit. Falls back to onChange("") if omitted. */
+  onClear?: () => void;
 }) {
   const [input, setInput] = useState(value || "");
   const [invalid, setInvalid] = useState(false);
+
+  // The explicit override ("" = none) and the color actually previewed: the
+  // override when set, otherwise the inherited `fallback`. `inheriting` drives
+  // the blank input + inherit hint + reset affordance in optional mode.
+  const override = value || "";
+  const preview = override || fallback;
+  const inheriting = optional && !override;
+  const clear = () => (onClear ? onClear() : onChange(""));
 
   useEffect(() => {
     setInput(value || "");
@@ -576,7 +598,7 @@ export function ColorField({
       borderRadius: 8,
       border: "1px solid rgba(0,0,0,0.1)",
       flexShrink: 0,
-      background: isValid(value) ? value : "transparent",
+      background: isValid(preview) ? preview : "transparent",
       position: "relative",
       overflow: "hidden",
       cursor: "pointer",
@@ -603,6 +625,7 @@ export function ColorField({
       color: "rgba(0,0,0,0.85)",
     },
     swatches: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
+    reset: { flexShrink: 0, alignSelf: "center", marginTop: 0, whiteSpace: "nowrap" },
     hint: { fontSize: 10, color: invalid ? "#c33" : "rgba(0,0,0,0.5)", marginTop: 4 },
     nativeColor: { width: 0, height: 0, opacity: 0, pointerEvents: "none", position: "absolute" },
   };
@@ -626,7 +649,7 @@ export function ColorField({
           <span style={s.swatchCheck} />
           <input
             type="color"
-            value={toHex(value || "#000000")}
+            value={toHex(preview || "#000000")}
             onChange={(e) => onChange(e.target.value)}
             style={s.nativeColor}
           />
@@ -636,7 +659,7 @@ export function ColorField({
           type="text"
           spellCheck={false}
           value={input}
-          placeholder="#hex, rgb(), hsl(), oklch()…"
+          placeholder={inheriting ? inheritLabel : "#hex, rgb(), hsl(), oklch()…"}
           onChange={(e) => {
             setInput(e.target.value);
             setInvalid(false);
@@ -649,11 +672,18 @@ export function ColorField({
             }
           }}
         />
+        {optional && override && (
+          <button type="button" className="twk-acc-reset" style={s.reset} onClick={clear}>
+            Reset
+          </button>
+        )}
       </div>
       <div style={s.hint}>
         {invalid
           ? "Invalid color. Try #B0345E, rgb(176 52 94), hsl(340 55% 45%), oklch(0.55 0.18 350)"
-          : "Hex · RGB · HSL · OKLCH · named — any CSS color works."}
+          : inheriting
+            ? inheritLabel
+            : "Hex · RGB · HSL · OKLCH · named — any CSS color works."}
       </div>
       {options.length > 0 && (
         <div style={s.swatches}>
@@ -663,7 +693,7 @@ export function ColorField({
               type="button"
               title={c}
               aria-label={c}
-              style={chipStyle(c, c.toLowerCase() === (value || "").toLowerCase())}
+              style={chipStyle(c, c.toLowerCase() === override.toLowerCase())}
               onClick={() => onChange(c)}
             />
           ))}

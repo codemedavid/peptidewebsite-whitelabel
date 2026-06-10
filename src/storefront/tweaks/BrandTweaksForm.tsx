@@ -433,7 +433,29 @@ export function BrandTweaksForm({
       <TweakSelect label="Body font" value={t.bodyFont} options={[...FONT_OPTIONS]} onChange={(v) => setTweak("bodyFont", v)} />
       <TweakSelect label="Button font" value={t.buttonFont ?? t.bodyFont} options={[...FONT_OPTIONS]} onChange={(v) => setTweak("buttonFont", v)} />
 
-      <TweakSection label="Header elements" />
+      <TweakSection label="Header" />
+      {/* Optional header color overrides for the sticky site header. Unset =
+          inherit (background from Surface, text/icons from Main), so existing
+          tenants are unaffected. Mirrors the platform editor's Brand-tab Header
+          controls and writes the same headerBg/headerText brand fields. */}
+      <ColorField
+        label="Header background"
+        value={t.headerBg}
+        optional
+        fallback={t.surface}
+        inheritLabel="Inheriting Surface"
+        onChange={(v) => setTweak("headerBg", v)}
+        onClear={() => setTweak("headerBg", undefined)}
+        options={["#FFFFFF", "#FAFAFA", "#F5F5F5", "#FFF9F5", "#F8FBFF", "#1A1A20", "#252530", "#0F0F12"]} />
+      <ColorField
+        label="Header text"
+        value={t.headerText}
+        optional
+        fallback={t.main}
+        inheritLabel="Inheriting Main"
+        onChange={(v) => setTweak("headerText", v)}
+        onClear={() => setTweak("headerText", undefined)}
+        options={["#3B1F2A", "#1A1A1A", "#000000", "#2A2A33", "#3A3A3A", "#5A4A52", "#6B6B6B", "#EFEFEF", "#FFFFFF"]} />
       <TweakToggle label="Brand name in header" value={t.headerShowBrand !== false} onChange={(v) => setTweak("headerShowBrand", v)} />
       <TweakToggle label="Cart" value={t.headerShowCart !== false} onChange={(v) => setTweak("headerShowCart", v)} />
       <TweakToggle label="CTA button" value={t.headerShowCta !== false} onChange={(v) => setTweak("headerShowCta", v)} />
