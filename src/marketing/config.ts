@@ -105,14 +105,14 @@ export const FAQS: Faq[] = [
 // ──────────────────────────── Onboarding payment instructions ────────────────────────────
 // Jonina's OWN receiving details, shown on the checkout step so the client can
 // pay for their package before uploading proof. Fill these in with your accounts.
-export type PayTo = { method: string; account: string; number: string; note?: string };
+export type PayTo = { method: string; account: string; number: string; note?: string; qr?: string };
 
 export const PACKAGE_PAYMENT: { instructions: string; methods: PayTo[] } = {
   instructions:
     "Pay your selected package using any method below, then upload a screenshot of your payment to finish. We'll confirm and start building your store.",
   methods: [
-    { method: "GCash", account: "Jonina Store", number: "0917 000 0000", note: "Send to this number and screenshot the receipt." },
-    { method: "Maya", account: "Jonina Store", number: "0917 000 0000" },
+    { method: "GCash", account: "JO*N AN***O D.", number: "0992 821 ••••", note: "Scan the QR or send to this number, then screenshot the receipt.", qr: "/payment/gcash-qr.png" },
+    { method: "Maya", account: "Ma. Jonina Cassandra Donaire", number: "+63 *** *** 4519", note: "Scan the QR with your Maya app. Transfer fees may apply.", qr: "/payment/maya-qr.png" },
     { method: "Bank Transfer", account: "Jonina Store", number: "BPI 0000 0000 00", note: "Use your business name as the reference." },
   ],
 };

@@ -187,10 +187,6 @@ export function BrandingStep({ draft, update }: StepProps) {
         <SingleUpload value={draft.logoUrl} kind="logo" label="Upload logo"
           onChange={(url) => update({ logoUrl: url })} />
       </Field>
-      <Field label="Banner images" hint="Hero / promo images for your homepage.">
-        <MultiUpload value={draft.bannerUrls} kind="banner" max={4}
-          onChange={(urls) => update({ bannerUrls: urls })} />
-      </Field>
       <Field label="Inspiration images" hint="Screenshots of websites or styles you love.">
         <MultiUpload value={draft.inspirationUrls} kind="inspiration" max={6}
           onChange={(urls) => update({ inspirationUrls: urls })} />
@@ -396,6 +392,13 @@ export function CheckoutStep({ draft, update, errors }: StepProps) {
               <span>
                 <b>{m.method}</b>
                 {m.note && <small style={{ display: "block", color: "var(--ink-500)" }}>{m.note}</small>}
+                {m.qr && (
+                  <img
+                    src={m.qr}
+                    alt={`${m.method} payment QR code`}
+                    style={{ display: "block", width: 160, height: 160, objectFit: "contain", marginTop: 10, borderRadius: 8, background: "#fff" }}
+                  />
+                )}
               </span>
               <span style={{ textAlign: "right" }}>
                 {m.account}
