@@ -37,6 +37,12 @@ const FONTS =
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   await assertApex();
 
+  // The automation funnel (/automation) is a self-contained, white premium-SaaS
+  // landing page that ships its own header + footer and Tailwind styling, so it
+  // opts out of the rose `.mk` marketing shell. Apex guard above still applies.
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  if (pathname === "/automation") return <>{children}</>;
+
   return (
     <div className="mk">
       <link rel="preconnect" href="https://fonts.googleapis.com" />

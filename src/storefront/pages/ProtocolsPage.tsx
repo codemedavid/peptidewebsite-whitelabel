@@ -89,7 +89,11 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
               {filtered.length} protocol{filtered.length === 1 ? "" : "s"} found
             </div>
 
-            {filtered.map((p, i) => (
+            {filtered.map((p, i) => {
+              // "image" mode → the uploaded image *is* the protocol; otherwise
+              // render the typed fields. Legacy rows (no mode) default to details.
+              const imageOnly = (p.mode ?? "details") === "image" && !!p.image;
+              return (
               <details key={i} className="protocols__item" open={i === 0}>
                 <summary className="protocols__item-head">
                   <div>
@@ -101,8 +105,8 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                   </svg>
                 </summary>
                 <div className="protocols__item-body">
-                  {p.image && (
-                    <div className="protocols__image" style={{ marginBottom: 20 }}>
+                  {imageOnly ? (
+                    <div className="protocols__image">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={p.image}
@@ -116,7 +120,8 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                         }}
                       />
                     </div>
-                  )}
+                  ) : (
+                  <>
                   <div className="protocols__pills">
                     <div className="protocols__pill">
                       <div className="eyebrow">Dosage</div>
@@ -150,9 +155,12 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                       <strong>Storage:</strong> {p.storage}
                     </div>
                   )}
+                  </>
+                  )}
                 </div>
               </details>
-            ))}
+              );
+            })}
           </>
         )}
       </div>

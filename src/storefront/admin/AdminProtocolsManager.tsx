@@ -32,6 +32,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
         notes: [""],
         storage: "",
         image: "",
+        mode: "details",
       },
     ]);
 
@@ -162,7 +163,10 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
         </div>
 
         <div className="editor-list">
-          {list.map((p, i) => (
+          {list.map((p, i) => {
+            // Effective presentation mode (undefined = legacy rows → "details").
+            const mode = p.mode ?? "details";
+            return (
             <div key={i} className="editor-card">
               <div className="editor-card__head">
                 <input
@@ -207,6 +211,38 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                         ))}
                     </select>
                   </div>
+
+                  <div>
+                    <div className="small">How do you want to show this protocol?</div>
+                    <div className="admin-field__hint" style={{ marginBottom: 10 }}>
+                      Choose one: type out the details, or upload a single image
+                      (e.g. a dosing chart) that says it all.
+                    </div>
+                    <div className="admin-segmented" role="group">
+                      <button
+                        type="button"
+                        className={`admin-segmented__btn${
+                          mode === "details" ? " admin-segmented__btn--active" : ""
+                        }`}
+                        aria-pressed={mode === "details"}
+                        onClick={() => update(i, { mode: "details" })}
+                      >
+                        Type the details
+                      </button>
+                      <button
+                        type="button"
+                        className={`admin-segmented__btn${
+                          mode === "image" ? " admin-segmented__btn--active" : ""
+                        }`}
+                        aria-pressed={mode === "image"}
+                        onClick={() => update(i, { mode: "image" })}
+                      >
+                        Upload an image
+                      </button>
+                    </div>
+                  </div>
+
+                  {mode === "details" && (
                   <div className="protocols-pills-grid">
                     <div>
                       <div className="small">Dosage</div>
@@ -233,11 +269,14 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                       />
                     </div>
                   </div>
+                  )}
 
+                  {mode === "image" && (
                   <div>
-                    <div className="small">Protocol image (optional — shown on the public page)</div>
+                    <div className="small">Protocol image</div>
                     <div className="admin-field__hint" style={{ marginBottom: 10 }}>
-                      Upload an image (e.g. a dosing chart or infographic) to show instead of typing out the details.
+                      Upload one image (e.g. a dosing chart or infographic). It
+                      replaces the typed details on the public page.
                     </div>
                     {p.image ? (
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -312,7 +351,9 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                       </label>
                     )}
                   </div>
+                  )}
 
+                  {mode === "details" && (
                   <div>
                     <div className="small">Notes (one per line)</div>
                     <textarea
@@ -325,7 +366,9 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                       }
                     />
                   </div>
+                  )}
 
+                  {mode === "details" && (
                   <div>
                     <div className="small">Storage instructions</div>
                     <input
@@ -334,10 +377,12 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                       onChange={(e) => update(i, { storage: e.target.value })}
                     />
                   </div>
+                  )}
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
           {list.length === 0 && (
             <div className="admin-empty-set">
               No protocols yet.

@@ -275,6 +275,7 @@ function normalizeProtocols(input: unknown): Protocol[] {
       notes,
       storage: String(o.storage ?? "").slice(0, 500),
       image: typeof o.image === "string" ? o.image : "",
+      mode: o.mode === "image" ? "image" : "details",
     };
   });
 }

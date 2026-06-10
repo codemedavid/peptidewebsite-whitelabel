@@ -2714,6 +2714,33 @@
 }
 .sf-root .admin-image-btn svg { width: 16px; height: 16px; }
 
+/* ---- Segmented toggle (e.g. Protocols: "Type the details" vs "Upload an
+   image") — two mutually-exclusive choices in a single pill-shaped control. */
+.sf-root .admin-segmented {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+}
+.sf-root .admin-segmented__btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 14px;
+  background: transparent;
+  color: var(--brand-text-soft, var(--brand-text));
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sf-root .admin-segmented__btn--active {
+  background: linear-gradient(135deg, var(--brand-button), var(--brand-button-2));
+  color: var(--brand-button-text);
+}
+
 /* ---- Add / Edit product + Payment-methods forms — phone layout -------------
    .admin-form__bar (Back · title · Cancel · Save) was a non-wrapping flex row
    sized for desktop, so on a phone the Save button ran off the right edge and

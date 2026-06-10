@@ -131,9 +131,14 @@ export type Protocol = {
   notes: string[];
   storage: string;
   /** Optional protocol image (hosted on the tenant's ImageKit folder, or a
-   *  data URL in demo mode). Shown on the public protocol page in place of /
-   *  alongside the written details. */
+   *  data URL in demo mode). When `mode` is "image" this image *is* the
+   *  protocol (e.g. a dosing chart / infographic) and the written fields are
+   *  hidden; in "details" mode it's an optional supplement. */
   image?: string;
+  /** How the owner chose to present this protocol: type the structured fields
+   *  ("details", the default) or upload a single image ("image"). Left optional
+   *  for backward-compat — undefined is treated as "details". */
+  mode?: "details" | "image";
 };
 
 export type Review = {
