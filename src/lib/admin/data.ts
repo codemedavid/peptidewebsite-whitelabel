@@ -180,6 +180,34 @@ function monthlyRevenue(orders: { createdAt: Date; totalCents: number }[], offse
 }
 
 /* ============================================================
+   Storefront orders — manual-checkout orders live in StorefrontOrder
+   (JSON blobs, whole-currency prices), not the Stripe/analytics `Order`
+   table. Admin dashboards must aggregate BOTH or live tenants (which
+   only take manual checkouts today) read as $0 / 0 orders.
+   ============================================================ */
+
+type SfMoneyFields = { items: unknown; shipping: unknown; adminFee: unknown };
+
+/** Storefront order grand total in cents: items + shipping fee + admin fee. */
+function sfTotalCents(o: SfMoneyFields): number {
+  const items = Array.isArray(o.items) ? (o.items as { price?: number; qty?: number }[]) : [];
+  const sub = items.reduce((s, it) => s + (Number(it?.price) || 0) * (Number(it?.qty) || 1), 0);
+  const ship = Number((o.shipping as { fee?: number } | null)?.fee) || 0;
+  const fee = Number((o.adminFee as { amount?: number } | null)?.amount) || 0;
+  return Math.round((sub + ship + fee) * 100);
+}
+
+function sfCustomer(o: { customer: unknown }): { name: string; email: string } {
+  const c = (o.customer ?? {}) as { name?: unknown; email?: unknown };
+  return { name: typeof c.name === "string" ? c.name : "", email: typeof c.email === "string" ? c.email : "" };
+}
+
+/** Cancelled orders are excluded from revenue (mirrors the store admin). */
+function sfCountsForRevenue(status: string): boolean {
+  return status !== "cancelled";
+}
+
+/* ============================================================
    DEMO synthesis — file-backed tenants have no order history,
    so derive deterministic, stable numbers per slug.
    ============================================================ */
@@ -363,7 +391,7 @@ export async function listTenantDomains(slug: string): Promise<TenantDomainRow[]
 
 const _cachedAdminTenants = unstable_cache(
   async (): Promise<AdminTenantRow[]> => {
-    const [tenants, revenue] = await Promise.all([
+    const [tenants, revenue, sfOrders] = await Promise.all([
       prisma.tenant.findMany({
         orderBy: { createdAt: "desc" },
         select: {
@@ -380,8 +408,19 @@ const _cachedAdminTenants = unstable_cache(
         },
       }),
       prisma.order.groupBy({ by: ["tenantId"], _sum: { totalCents: true } }),
+      prisma.storefrontOrder.findMany({
+        select: { tenantId: true, status: true, items: true, shipping: true, adminFee: true },
+      }),
     ]);
     const revByTenant = new Map(revenue.map((r) => [r.tenantId, r._sum.totalCents ?? 0]));
+    const sfRevByTenant = new Map<string, number>();
+    const sfCountByTenant = new Map<string, number>();
+    for (const o of sfOrders) {
+      sfCountByTenant.set(o.tenantId, (sfCountByTenant.get(o.tenantId) ?? 0) + 1);
+      if (sfCountsForRevenue(o.status)) {
+        sfRevByTenant.set(o.tenantId, (sfRevByTenant.get(o.tenantId) ?? 0) + sfTotalCents(o));
+      }
+    }
     return tenants
       .map((t): AdminTenantRow => {
         const email = t.members[0]?.email;
@@ -396,8 +435,8 @@ const _cachedAdminTenants = unstable_cache(
           owner: nameFromEmail(email),
           email: email ?? "—",
           createdAt: isoDate(t.createdAt),
-          revenueCents: revByTenant.get(t.id) ?? 0,
-          orders: t._count.orders,
+          revenueCents: (revByTenant.get(t.id) ?? 0) + (sfRevByTenant.get(t.id) ?? 0),
+          orders: t._count.orders + (sfCountByTenant.get(t.id) ?? 0),
           features: countFeatures(
             t.plan.key,
             t.featureOverrides.map((o) => ({ enabled: o.enabled, key: o.feature.key })),
@@ -451,7 +490,7 @@ export async function getPlatformOverview(): Promise<OverviewData> {
     activity = demoActivity(rows);
   } else {
     const since24mo = new Date(new Date().getFullYear() - 2, new Date().getMonth(), 1);
-    const [orders24mo, customers, allTenants, recentOrders, recentEvents] = await Promise.all([
+    const [orders24mo, customers, allTenants, recentOrders, recentEvents, sfOrders] = await Promise.all([
       prisma.order.findMany({ where: { createdAt: { gte: since24mo } }, select: { createdAt: true, totalCents: true } }),
       prisma.contact.count(),
       prisma.tenant.findMany({ select: { createdAt: true } }),
@@ -461,14 +500,43 @@ export async function getPlatformOverview(): Promise<OverviewData> {
         select: { orderNumber: true, totalCents: true, createdAt: true, tenant: { select: { name: true } } },
       }),
       safeRecentEvents(),
+      prisma.storefrontOrder.findMany({
+        orderBy: { placedAt: "desc" },
+        select: {
+          tenantId: true,
+          orderNumber: true,
+          status: true,
+          placedAt: true,
+          customer: true,
+          items: true,
+          shipping: true,
+          adminFee: true,
+          tenant: { select: { name: true } },
+        },
+      }),
     ]);
-    revCurrent = monthlyRevenue(orders24mo, 0);
-    revPrevious = monthlyRevenue(orders24mo, 12);
-    totalCustomers = customers;
-    trailing30dOrderCents = orders24mo
+    const sfRevenueRows = sfOrders
+      .filter((o) => sfCountsForRevenue(o.status))
+      .map((o) => ({ createdAt: o.placedAt, totalCents: sfTotalCents(o) }));
+    const allOrders = [...orders24mo, ...sfRevenueRows];
+    revCurrent = monthlyRevenue(allOrders, 0);
+    revPrevious = monthlyRevenue(allOrders, 12);
+    // Contacts plus distinct storefront-checkout customers (manual checkout
+    // doesn't create Contact rows).
+    const sfCustomerKeys = new Set(
+      sfOrders
+        .map((o) => {
+          const c = sfCustomer(o);
+          const key = (c.email || c.name).toLowerCase().trim();
+          return key ? `${o.tenantId}:${key}` : "";
+        })
+        .filter(Boolean),
+    );
+    totalCustomers = customers + sfCustomerKeys.size;
+    trailing30dOrderCents = allOrders
       .filter((o) => now - o.createdAt.getTime() < D30)
       .reduce((s, o) => s + o.totalCents, 0);
-    newOrders30d = orders24mo.filter((o) => now - o.createdAt.getTime() < D30).length;
+    newOrders30d = allOrders.filter((o) => now - o.createdAt.getTime() < D30).length;
 
     // cumulative tenant growth across the trailing 12 months
     growth = (() => {
@@ -482,11 +550,17 @@ export async function getPlatformOverview(): Promise<OverviewData> {
 
     activity = recentEvents.length
       ? recentEvents
-      : recentOrders.map((o) => ({
-          icon: "Box",
-          text: `**${o.tenant.name}** received order ${o.orderNumber} · $${(o.totalCents / 100).toFixed(0)}`,
-          time: ago(o.createdAt),
-        }));
+      : [
+          ...recentOrders.map((o) => ({ name: o.tenant.name, orderNumber: o.orderNumber, totalCents: o.totalCents, at: o.createdAt })),
+          ...sfOrders.slice(0, 6).map((o) => ({ name: o.tenant.name, orderNumber: o.orderNumber, totalCents: sfTotalCents(o), at: o.placedAt })),
+        ]
+          .sort((a, b) => b.at.getTime() - a.at.getTime())
+          .slice(0, 6)
+          .map((o) => ({
+            icon: "Box",
+            text: `**${o.name}** received order ${o.orderNumber} · $${(o.totalCents / 100).toFixed(0)}`,
+            time: ago(o.at),
+          }));
     if (!activity.length) activity = demoActivity(rows);
   }
 
@@ -581,7 +655,7 @@ const _cachedTenantDetail = unstable_cache(
     });
     if (!t) return null;
 
-    const [revAgg, orders24mo, recentOrders, events, enabled] = await Promise.all([
+    const [revAgg, orders24mo, recentOrders, events, enabled, sfOrders] = await Promise.all([
       prisma.order.aggregate({ where: { tenantId: t.id }, _sum: { totalCents: true } }),
       prisma.order.findMany({
         where: { tenantId: t.id, createdAt: { gte: new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1) } },
@@ -602,11 +676,57 @@ const _cachedTenantDetail = unstable_cache(
       }),
       safeTenantEvents(t.id),
       getEntitlements(t.id),
+      prisma.storefrontOrder.findMany({
+        where: { tenantId: t.id },
+        orderBy: { placedAt: "desc" },
+        select: {
+          orderNumber: true,
+          status: true,
+          placedAt: true,
+          customer: true,
+          items: true,
+          shipping: true,
+          adminFee: true,
+        },
+      }),
     ]);
 
     const ceiling = planFeatureSet(t.plan.key);
     const email = t.members[0]?.email;
-    const lifetime = revAgg._sum.totalCents ?? 0;
+    const sfRevenue = sfOrders.filter((o) => sfCountsForRevenue(o.status));
+    const lifetime = (revAgg._sum.totalCents ?? 0) + sfRevenue.reduce((s, o) => s + sfTotalCents(o), 0);
+    const sfMonthly = sfRevenue.map((o) => ({ createdAt: o.placedAt, totalCents: sfTotalCents(o) }));
+    const sfCustomers = new Set(
+      sfOrders
+        .map((o) => {
+          const c = sfCustomer(o);
+          return (c.email || c.name).toLowerCase().trim();
+        })
+        .filter(Boolean),
+    );
+    const allRecent = [
+      ...recentOrders.map((o) => ({
+        orderNumber: o.orderNumber,
+        date: isoDate(o.createdAt),
+        customer: nameFromEmail(o.contact?.email),
+        items: o._count.items,
+        totalCents: o.totalCents,
+        status: o.status,
+      })),
+      ...sfOrders.slice(0, 12).map((o) => {
+        const c = sfCustomer(o);
+        return {
+          orderNumber: o.orderNumber,
+          date: isoDate(o.placedAt),
+          customer: c.name || nameFromEmail(c.email),
+          items: Array.isArray(o.items) ? o.items.length : 0,
+          totalCents: sfTotalCents(o),
+          status: o.status,
+        };
+      }),
+    ]
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice(0, 12);
 
     return {
       id: t.id,
@@ -619,22 +739,15 @@ const _cachedTenantDetail = unstable_cache(
       email: email ?? "—",
       createdAt: isoDate(t.createdAt),
       revenueCents: lifetime,
-      orders: t._count.orders,
+      orders: t._count.orders + sfOrders.length,
       features: enabled.size,
-      monthlyRevenue: monthlyRevenue(orders24mo, 0),
-      recentOrders: recentOrders.map((o) => ({
-        orderNumber: o.orderNumber,
-        date: isoDate(o.createdAt),
-        customer: nameFromEmail(o.contact?.email),
-        items: o._count.items,
-        totalCents: o.totalCents,
-        status: o.status,
-      })),
+      monthlyRevenue: monthlyRevenue([...orders24mo, ...sfMonthly], 0),
+      recentOrders: allRecent,
       featureStates: featureStates(ceiling, enabled),
       enabledFeatures: enabled.size,
       totalFeatures: ceilingPlusEnabled(ceiling, enabled),
       lifetimeRevenueCents: lifetime,
-      visitors: t._count.contacts,
+      visitors: t._count.contacts + sfCustomers.size,
       audit: events,
     };
   },
