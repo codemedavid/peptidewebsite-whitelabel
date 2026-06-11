@@ -70,7 +70,9 @@ export function Hero({
 
   const chip = brand.heroShowChip !== false && (
     <div className="hero__chip" style={chipStyle}>
-      <span className="hero__chip-dot" aria-hidden="true" style={chipDotStyle} />
+      {brand.heroChipShowDot !== false && (
+        <span className="hero__chip-dot" aria-hidden="true" style={chipDotStyle} />
+      )}
       {(brand.heroChipLabel || brand.name)?.toUpperCase()}
     </div>
   );

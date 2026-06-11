@@ -13,6 +13,7 @@ import {
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Category, PaymentMethod, Protocol } from "@/storefront/types";
+import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -159,6 +160,39 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
   const normalized = normalizeCategories(categories);
   const current = await readConfig(tenantId);
   const config = { ...current, categories: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+// ── Smart Cart & Checkout Logic ──────────────────────────────────────────────
+
+/**
+ * Persist the storefront's cart/checkout rules into the shared `branding.config`
+ * blob (read-modify-write, mirroring savePaymentMethodsAction so it never
+ * clobbers the rest of the storefront Brand config). The storefront reads the
+ * rules from `branding.config` server-side on every render, and
+ * placeStorefrontOrderAction re-validates against the same stored value, so the
+ * server enforces exactly what the owner configured.
+ */
+export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const checkoutRules = normalizeCheckoutRules(rules);
+  const current = await readConfig(tenantId);
+  const config = { ...current, checkoutRules };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

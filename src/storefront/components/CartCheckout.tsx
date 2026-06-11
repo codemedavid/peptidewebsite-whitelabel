@@ -14,6 +14,7 @@ import { useStore } from "../store";
 import type { Order } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
+import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import {
   activeChannels,
   activePaymentMethods,
@@ -46,7 +47,7 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, paymentMethods, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, products, paymentMethods, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
@@ -82,6 +83,17 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // value is re-stamped server-side at placement from the same config.
   const adminFee = useMemo(() => activeAdminFee(brand.adminFee), [brand]);
   const total = subtotal + (adminFee?.amount ?? 0);
+
+  // Smart Cart & Checkout rules (branding.config.checkoutRules) — the cart
+  // restrictions and checkout validations the owner configured, plus their
+  // custom copy. Blocking violations stop the checkout here AND are re-checked
+  // server-side at placement, so the gate can't be bypassed.
+  const rules = useMemo(() => normalizeCheckoutRules(brand.checkoutRules), [brand.checkoutRules]);
+  const violations = useMemo(
+    () => checkoutRuleViolations(lines, products, brand.checkoutRules),
+    [lines, products, brand.checkoutRules],
+  );
+  const blocked = violations.some((v) => v.blocking);
 
   // The store collects payment up-front only when it has methods configured;
   // otherwise checkout hands off to a channel straight from the details step.
@@ -162,6 +174,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     // Synchronous lock first (see placingRef note) — rejects a second click in
     // the same tick before any state update or await.
     if (!channel || placingRef.current) return;
+    // A blocking Smart Checkout violation (e.g. the cart was edited from
+    // another tab after passing the cart step) stops the hand-off — the server
+    // would reject it anyway, this just fails before the chat window opens.
+    const blocker = violations.find((v) => v.blocking);
+    if (blocker) {
+      toast(blocker.message);
+      return;
+    }
     placingRef.current = true;
     setPlacing(true);
 
@@ -214,6 +234,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         qty: l.qty,
         price: unitPrice(l.product, l.qty),
       })),
+      // Echo the fee this checkout DISPLAYED (zero when none was shown). The
+      // server never charges this value — it re-stamps the fee from config —
+      // but the admin-fee validation rule compares the two and rejects the
+      // order when the configured fee changed mid-session, so the customer is
+      // never charged a total they didn't see.
+      adminFee: { label: adminFee?.label ?? "", amount: adminFee?.amount ?? 0 },
       paymentProof: proof || null,
     };
 
@@ -317,6 +343,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
           {lines.length === 0 ? (
             <p className="sf-cart__empty">Your cart is empty.</p>
           ) : step === "cart" ? (
+            <>
+            {rules.cartWarning && <p className="sf-cart__notice">{rules.cartWarning}</p>}
             <ul className="sf-cart__lines">
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
@@ -370,9 +398,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 );
               })}
             </ul>
+            </>
           ) : step === "details" ? (
             <form className="sf-cart__form" onSubmit={(e) => e.preventDefault()}>
               {brand.checkoutNote && <p className="sf-cart__note">{brand.checkoutNote}</p>}
+              {rules.checkoutNotice && <p className="sf-cart__note">{rules.checkoutNotice}</p>}
               <div className="sf-cart__fields">
                 {FIELDS.map((f) => (
                   <label key={f.key} className="sf-cart__field">
@@ -528,9 +558,28 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             </div>
 
             {step === "cart" ? (
-              <button className="btn btn-primary sf-cart__cta" onClick={() => setStep("details")}>
-                Checkout
-              </button>
+              <>
+                {violations.length > 0 && (
+                  <div className="sf-cart__rules">
+                    {violations.map((v) => (
+                      <p
+                        key={v.rule}
+                        className={v.blocking ? "sf-cart__error" : "sf-cart__warn"}
+                        role={v.blocking ? "alert" : "status"}
+                      >
+                        {v.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                <button
+                  className="btn btn-primary sf-cart__cta"
+                  disabled={blocked}
+                  onClick={() => setStep("details")}
+                >
+                  Checkout
+                </button>
+              </>
             ) : channels.length === 0 ? (
               <p className="sf-cart__unavailable">
                 Online checkout isn&apos;t set up yet — please contact the store directly.

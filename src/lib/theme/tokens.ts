@@ -259,6 +259,8 @@ export type HeroFieldStyle = {
   italic?: boolean;
   transform?: TextTransform;
   letterSpacing?: number; // em
+  color?: string; // text color; unset = inherit element/theme color
+  bg?: string; // background color (CTA buttons); unset = inherit theme accent
 };
 
 /** Render an absolute px size as a responsive clamp so it never overflows on
@@ -280,6 +282,8 @@ export function heroFieldCss(style?: HeroFieldStyle): import("react").CSSPropert
   if (style.italic !== undefined) css.fontStyle = style.italic ? "italic" : "normal";
   if (style.transform) css.textTransform = style.transform;
   if (style.letterSpacing !== undefined) css.letterSpacing = `${style.letterSpacing}em`;
+  if (style.color) css.color = style.color;
+  if (style.bg) css.background = style.bg;
   return css;
 }
 

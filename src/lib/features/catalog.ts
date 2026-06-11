@@ -39,9 +39,42 @@ export const FEATURES = {
   STORE_RESELLER_PORTAL: "storefront.reseller",
   STORE_CARD_STUDIO: "storefront.card_studio",
   STORE_SALES_ANALYTICS: "storefront.sales_analytics",
+  // Sales Analytics internals. Each key toggles one slice of the store-admin
+  // Sales Analytics view; all of them are inert while the module itself
+  // (STORE_SALES_ANALYTICS) is off. They sit in every plan ceiling (default ON)
+  // so granting the module lights up the full dashboard; the operator revokes
+  // individual slices per tenant from admin → Features.
+  SA_SECTION_REVENUE: "storefront.sales_analytics.revenue",
+  SA_SECTION_PRODUCTS: "storefront.sales_analytics.products",
+  SA_SECTION_GROUP_BUYS: "storefront.sales_analytics.group_buys",
+  SA_SECTION_CUSTOMERS: "storefront.sales_analytics.customers",
+  SA_REPORT_DAILY: "storefront.sales_analytics.report_daily",
+  SA_REPORT_WEEKLY: "storefront.sales_analytics.report_weekly",
+  SA_REPORT_MONTHLY: "storefront.sales_analytics.report_monthly",
+  SA_EXPORT_EXCEL: "storefront.sales_analytics.export_excel",
+  SA_EXPORT_PDF: "storefront.sales_analytics.export_pdf",
   // Transactional notifications
   NOTIFY_EMAIL: "notify.email",
   NOTIFY_TELEGRAM: "notify.telegram",
+  // Group Buy Management Module
+  GB_MODULE: "groupbuy.module",
+  GB_CREATE: "groupbuy.create",
+  GB_EDIT: "groupbuy.edit",
+  GB_DUPLICATE: "groupbuy.duplicate",
+  GB_ARCHIVE: "groupbuy.archive",
+  GB_SCHEDULED: "groupbuy.scheduled",
+  GB_MULTIPLE_ACTIVE: "groupbuy.multiple_active",
+  GB_PRODUCT_ASSIGNMENT: "groupbuy.product_assignment",
+  GB_SUPPLIER_REPORTS: "groupbuy.supplier_reports",
+  GB_RULES: "groupbuy.rules",
+  // Excel & Supplier Reports — granular controls under "Supplier reports"
+  GB_REPORT_EXCEL: "groupbuy.reports.excel",
+  GB_REPORT_CSV: "groupbuy.reports.csv",
+  GB_REPORT_PDF: "groupbuy.reports.pdf",
+  GB_REPORT_AUTO_ON_CLOSE: "groupbuy.reports.auto_on_close",
+  GB_REPORT_CUSTOMER_BREAKDOWN: "groupbuy.reports.customer_breakdown",
+  GB_REPORT_PRODUCT_BREAKDOWN: "groupbuy.reports.product_breakdown",
+  GB_REPORT_SUPPLIER_SUMMARY: "groupbuy.reports.supplier_summary",
 } as const;
 
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
@@ -61,6 +94,17 @@ const STARTER: FeatureKey[] = [
   // only surfaces the gated #merchant page once the store owner also sets an
   // access code, so being in the plan ceiling (default-on) exposes nothing.
   FEATURES.STORE_RESELLER_PORTAL,
+  // Sales Analytics sub-features: in every plan ceiling (default ON) but inert
+  // until the operator grants the STORE_SALES_ANALYTICS module itself.
+  FEATURES.SA_SECTION_REVENUE,
+  FEATURES.SA_SECTION_PRODUCTS,
+  FEATURES.SA_SECTION_GROUP_BUYS,
+  FEATURES.SA_SECTION_CUSTOMERS,
+  FEATURES.SA_REPORT_DAILY,
+  FEATURES.SA_REPORT_WEEKLY,
+  FEATURES.SA_REPORT_MONTHLY,
+  FEATURES.SA_EXPORT_EXCEL,
+  FEATURES.SA_EXPORT_PDF,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -74,6 +118,15 @@ const PRO: FeatureKey[] = [
   FEATURES.STORE_ORDER_TRACKING,
   FEATURES.STORE_MULTI_CURRENCY,
   FEATURES.NOTIFY_EMAIL,
+  // Group buys ride on checkout, so the module starts at the ecommerce tier.
+  // Workflow extras (scheduling, parallel runs, supplier reports) are Enterprise.
+  FEATURES.GB_MODULE,
+  FEATURES.GB_CREATE,
+  FEATURES.GB_EDIT,
+  FEATURES.GB_DUPLICATE,
+  FEATURES.GB_ARCHIVE,
+  FEATURES.GB_PRODUCT_ASSIGNMENT,
+  FEATURES.GB_RULES,
 ];
 const ENTERPRISE: FeatureKey[] = [
   ...PRO,
@@ -88,6 +141,17 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.MARKETING_AUTOMATION,
   FEATURES.INTEGRATIONS,
   FEATURES.NOTIFY_TELEGRAM,
+  FEATURES.GB_SCHEDULED,
+  FEATURES.GB_MULTIPLE_ACTIVE,
+  FEATURES.GB_SUPPLIER_REPORTS,
+  // Excel & Supplier Reports controls ride on the supplier-reports tier.
+  FEATURES.GB_REPORT_EXCEL,
+  FEATURES.GB_REPORT_CSV,
+  FEATURES.GB_REPORT_PDF,
+  FEATURES.GB_REPORT_AUTO_ON_CLOSE,
+  FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN,
+  FEATURES.GB_REPORT_PRODUCT_BREAKDOWN,
+  FEATURES.GB_REPORT_SUPPLIER_SUMMARY,
 ];
 
 export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
@@ -131,6 +195,8 @@ export const FEATURE_GROUPS = [
   "Site",
   "Catalog",
   "Ecommerce",
+  "Sales Analytics",
+  "Group Buy",
   "Notifications",
   "Growth & Automation",
   "Integrations",
@@ -164,6 +230,34 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_MULTI_CURRENCY]: { label: "Multi-currency", description: "Display and charge in multiple currencies.", group: "Ecommerce" },
   [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
   [FEATURES.STORE_SALES_ANALYTICS]: { label: "Sales Analytics", description: "Sales Analytics view in the store admin (revenue & insights).", group: "Ecommerce" },
+
+  [FEATURES.SA_SECTION_REVENUE]: { label: "Revenue analytics", description: "Revenue KPIs, revenue-over-time chart and payment-method breakdown. Needs the Sales Analytics module on.", group: "Sales Analytics" },
+  [FEATURES.SA_SECTION_PRODUCTS]: { label: "Product analytics", description: "Items-sold KPI and top products by revenue. Needs the Sales Analytics module on.", group: "Sales Analytics" },
+  [FEATURES.SA_SECTION_GROUP_BUYS]: { label: "Group buy analytics", description: "Revenue and order breakdown per group buy. Needs the Sales Analytics module on.", group: "Sales Analytics" },
+  [FEATURES.SA_SECTION_CUSTOMERS]: { label: "Customer analytics", description: "Unique vs returning customers and top customers by revenue. Needs the Sales Analytics module on.", group: "Sales Analytics" },
+  [FEATURES.SA_REPORT_DAILY]: { label: "Daily reports", description: "Day-by-day sales report table in the analytics view.", group: "Sales Analytics" },
+  [FEATURES.SA_REPORT_WEEKLY]: { label: "Weekly reports", description: "Week-by-week sales report table in the analytics view.", group: "Sales Analytics" },
+  [FEATURES.SA_REPORT_MONTHLY]: { label: "Monthly reports", description: "Month-by-month sales report table in the analytics view.", group: "Sales Analytics" },
+  [FEATURES.SA_EXPORT_EXCEL]: { label: "Excel export", description: "Download the analytics view as an Excel workbook.", group: "Sales Analytics" },
+  [FEATURES.SA_EXPORT_PDF]: { label: "PDF export", description: "Print / save the analytics view as a PDF report.", group: "Sales Analytics" },
+
+  [FEATURES.GB_MODULE]: { label: "Group buy system", description: "Master switch for the Group Buy module — the store admin's Group Buys manager and order attribution. Off hides everything group-buy.", group: "Group Buy" },
+  [FEATURES.GB_CREATE]: { label: "Create group buys", description: "Lets the store owner open new group buys.", group: "Group Buy" },
+  [FEATURES.GB_EDIT]: { label: "Edit group buys", description: "Lets the store owner change a group buy's details, window and status.", group: "Group Buy" },
+  [FEATURES.GB_DUPLICATE]: { label: "Duplicate group buys", description: "One-click copy of an existing group buy as a new draft.", group: "Group Buy" },
+  [FEATURES.GB_ARCHIVE]: { label: "Archive group buys", description: "Lets the store owner archive finished group buys (kept for records, hidden from active lists).", group: "Group Buy" },
+  [FEATURES.GB_SCHEDULED]: { label: "Scheduled group buys", description: "Group buys can be scheduled with a start date and go live automatically.", group: "Group Buy" },
+  [FEATURES.GB_MULTIPLE_ACTIVE]: { label: "Multiple active group buys", description: "Allow more than one group buy to run at the same time.", group: "Group Buy" },
+  [FEATURES.GB_PRODUCT_ASSIGNMENT]: { label: "Product assignment", description: "Assign specific products to each group buy; unassigned products fall outside it.", group: "Group Buy" },
+  [FEATURES.GB_SUPPLIER_REPORTS]: { label: "Supplier reports", description: "Aggregated per-product order quantities for a group buy — the list to send the supplier.", group: "Group Buy" },
+  [FEATURES.GB_RULES]: { label: "Group buy rules engine", description: "Order rules for group buys: admin fee (fixed/percentage), per-product and total vial minimums, bac water limits, cart & checkout validation.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_EXCEL]: { label: "Excel export", description: "Download group-buy reports as Excel (.xlsx) workbooks. Applies when Supplier reports is on.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_CSV]: { label: "CSV export", description: "Download group-buy reports as CSV files. Applies when Supplier reports is on.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_PDF]: { label: "PDF export", description: "Download group-buy reports as print-ready PDFs. Applies when Supplier reports is on.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_AUTO_ON_CLOSE]: { label: "Auto report on close", description: "Generate the report automatically the moment a group buy closes.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN]: { label: "Customer breakdown", description: "Reports include a per-customer section: each customer's items, quantities and totals.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_PRODUCT_BREAKDOWN]: { label: "Product breakdown", description: "Reports include a per-product section: units sold, order count and revenue per product.", group: "Group Buy" },
+  [FEATURES.GB_REPORT_SUPPLIER_SUMMARY]: { label: "Supplier summary", description: "Reports include the consolidated order list for the supplier — aggregate quantity per product.", group: "Group Buy" },
 
   [FEATURES.NOTIFY_EMAIL]: { label: "Email notifications", description: "Transactional order emails to customers.", group: "Notifications" },
   [FEATURES.NOTIFY_TELEGRAM]: { label: "Telegram notifications", description: "Order alerts pushed to a Telegram channel.", group: "Notifications" },

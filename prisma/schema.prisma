@@ -33,6 +33,7 @@ model Tenant {
   adminPasswordHash String?
 
   domains           Domain[]
+  groupBuys         GroupBuy[]
   integrations      TenantIntegration[]
   featureOverrides  TenantFeatureOverride[]
   contacts          Contact[]
@@ -296,10 +297,42 @@ model StorefrontOrder {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt
 
+  // Group-buy attribution — stamped SERVER-SIDE at placement from the group buy
+  // that was live (and covering the ordered products) at checkout. The name is
+  // snapshotted alongside the id so supplier reports survive later renames.
+  // NULL = placed outside any group buy (or the module was off).
+  groupBuyId   String?
+  groupBuyName String?
+
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
+  @@index([tenantId, groupBuyId])
   @@map("storefront_orders")
+}
+
+// A buying window the store owner opens for customers to order together —
+// orders placed while it is live are attributed to it (StorefrontOrder.groupBuyId)
+// so the owner can aggregate quantities into one supplier order. Managed from the
+// store admin's "Group Buys" view; every capability is feature-gated (groupbuy.*).
+model GroupBuy {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String    @default("")
+  status      String    @default("draft") // draft | scheduled | active | closed | archived
+  startsAt    DateTime? // scheduled window — goes live at startsAt (groupbuy.scheduled)
+  endsAt      DateTime? // closes automatically once endsAt passes
+  deliveryEta String    @default("") // customer-facing ETA, e.g. "3–4 weeks after close"
+  // Product ids assigned to this group buy (groupbuy.product_assignment).
+  // Empty array = the group buy covers the whole catalog.
+  productIds  Json      @default("[]")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([tenantId, status])
+  @@map("group_buys")
 }
 
 // ──────────────────────────── Events, email, automation ────────────────────────────

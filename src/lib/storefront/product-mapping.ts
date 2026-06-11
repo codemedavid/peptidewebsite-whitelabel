@@ -50,6 +50,14 @@ export type ProductMetadata = {
    *  least one price leg is set — see `cleanReseller` so an empty `{}` never
    *  persists. `minQty` is the per-product wholesale threshold. */
   reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
+  /** Product Management module. `productType` is persisted only as "gb" (absent =
+   *  on-hand, the historical default); `gbPrice` is the per-unit group-buy price
+   *  (only with a "gb" type and > 0); `purchasable` is persisted only as `false`
+   *  (absent = orderable). All three are feature-gated at render time —
+   *  see (storefront)/page.tsx. */
+  productType?: "gb";
+  gbPrice?: number;
+  purchasable?: false;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -158,6 +166,9 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     sequence: meta.sequence ?? "",
     sizes: meta.sizes ?? "",
     reseller: cleanReseller(meta.reseller),
+    productType: meta.productType === "gb" ? "gb" : "onhand",
+    gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
+    purchasable: meta.purchasable !== false,
   };
 }
 
@@ -233,6 +244,11 @@ export function productToDbWrite(
       sizes: p.sizes || undefined,
       currencySymbol: displaySymbol || undefined,
       reseller: cleanReseller(p.reseller),
+      productType: p.productType === "gb" ? "gb" : undefined,
+      gbPrice:
+        p.productType === "gb" && Number(p.gbPrice) > 0 ? Number(p.gbPrice) : undefined,
+      // Only the restrictive value persists; compactMetadata keeps `false`.
+      purchasable: p.purchasable === false ? false : undefined,
     }),
   };
 }

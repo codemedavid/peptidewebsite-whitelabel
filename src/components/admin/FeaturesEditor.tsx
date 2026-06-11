@@ -13,6 +13,7 @@ import {
   Package,
   Plug,
   ShoppingCart,
+  Users,
   Zap,
 } from "lucide-react";
 import {
@@ -30,6 +31,7 @@ const GROUP_ICONS: Record<FeatureGroup, React.ReactNode> = {
   Site: <Globe size={16} aria-hidden />,
   Catalog: <Package size={16} aria-hidden />,
   Ecommerce: <ShoppingCart size={16} aria-hidden />,
+  "Group Buy": <Users size={16} aria-hidden />,
   Notifications: <Bell size={16} aria-hidden />,
   "Growth & Automation": <Zap size={16} aria-hidden />,
   Integrations: <Plug size={16} aria-hidden />,

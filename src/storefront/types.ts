@@ -2,6 +2,8 @@
 // Ported from the Claude Design handoff bundle (window.PRODUCTS, CATEGORIES, …).
 
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
+import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
+import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
@@ -232,6 +234,9 @@ export type Brand = {
   // (FEATURES.STORE_CARD_STUDIO, admin → Features) AND the branding-editor
   // toggle must both be on. Default ON for every package.
   showAdminCardStudio?: boolean;
+  // Store-admin Group Buy Rules view. Derived server-side from the platform
+  // entitlement (FEATURES.GB_RULES, admin → Features). Default OFF.
+  showAdminGroupBuy?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;
@@ -243,6 +248,8 @@ export type Brand = {
   // Larger values shrink the surrounding whitespace by enlarging the logo card.
   heroLogoSize?: number;
   heroShowChip: boolean;
+  // Hide the small accent dot inside the hero chip (default true = shown).
+  heroChipShowDot?: boolean;
   heroShowSub: boolean;
   heroShowCtas: boolean;
   heroShowCta2: boolean;
@@ -354,11 +361,33 @@ export type Brand = {
   requireProofOfPayment?: boolean;
 
   // Admin (service) fee added on top of the order total at checkout. Toggled
-  // and configured per tenant by the SUPER ADMIN (settings → Admin fee): the
-  // label says what the fee is for, the amount is a flat charge in the store's
-  // currency. Persisted in branding.config; absent or disabled → checkout shows
-  // no fee (the historical behavior). See lib/storefront/admin-fee.
-  adminFee?: { enabled: boolean; label: string; amount: number };
+  // and configured per tenant from the platform settings (settings → Admin fee)
+  // and the store admin's Group Buy Rules view — both edit this same key. The
+  // label says what the fee is for; the charge is a flat amount or a percentage
+  // of the items subtotal (mode/percent absent on legacy configs → fixed).
+  // Persisted in branding.config; absent or disabled → checkout shows no fee
+  // (the historical behavior). See lib/storefront/admin-fee.
+  adminFee?: {
+    enabled: boolean;
+    label: string;
+    amount: number;
+    mode?: "fixed" | "percentage";
+    percent?: number;
+  };
+
+  // Group Buy Rules Engine — vial minimums (per product / per order), bac water
+  // limits and the cart/checkout validation toggles. Edited in the storefront
+  // #admin ("Group Buy Rules", gated on the FEATURES.GB_RULES entitlement) and
+  // persisted in branding.config. Absent → no rules are enforced. See
+  // lib/storefront/group-buy-rules.
+  groupBuyRules?: GroupBuyRules;
+
+  // Smart Cart & Checkout Logic — cart restrictions (single order type, mixed
+  // cart prevention), checkout rules (min quantity, admin fee, bac water,
+  // rule-based checkout) and the customizable validation copy. Edited in the
+  // storefront #admin ("Smart Checkout") and persisted in branding.config.
+  // Absent → the defaults in lib/storefront/checkout-rules apply.
+  checkoutRules?: CheckoutRulesConfig;
 
   // Protocol guide entries. Edited in the storefront #admin and persisted
   // server-side in branding.config (same mechanism as paymentMethods) so the

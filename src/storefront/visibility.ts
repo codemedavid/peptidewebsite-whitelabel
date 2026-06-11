@@ -26,6 +26,9 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Card Studio ("design" view). Server-derived: platform Features toggle AND
   // the branding-editor switch. Default ON.
   design: (b) => b.showAdminCardStudio !== false,
+  // Group Buy Rules. Server-derived from the platform Features toggle
+  // (FEATURES.GB_RULES). Default OFF — entitlement-only, no branding switch.
+  groupbuy: (b) => b.showAdminGroupBuy === true,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

@@ -37,6 +37,7 @@ import {
   savePaymentMethodsAction,
   saveProtocolsAction,
 } from "@/actions/storefront-admin";
+import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
   Brand,
@@ -328,6 +329,14 @@ export function StoreProvider({
   // cart) — the server re-validates at checkout, this just keeps the UI honest.
   const addToCart = useCallback(
     (product: Product, qty: number = 1) => {
+      // Smart Checkout cart restriction: with mixed-cart prevention on, a
+      // product from a second category is rejected here (the friendliest spot —
+      // before it's in the cart). Checkout re-validates server-side regardless.
+      const restriction = addToCartViolation(product, cart, brand.checkoutRules);
+      if (restriction) {
+        toast(restriction);
+        return;
+      }
       const n = Math.max(1, Math.floor(qty));
       const stock = Math.max(0, product.stock || 0);
       const inCart = cart.filter((p) => p.id === product.id).length;
@@ -342,7 +351,7 @@ export function StoreProvider({
       if (room <= 0) return;
       setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => product)]);
     },
-    [cart, toast],
+    [cart, toast, brand.checkoutRules],
   );
 
   const decrementCart = useCallback((productId: string) => {

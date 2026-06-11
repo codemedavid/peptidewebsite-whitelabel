@@ -40,6 +40,16 @@ import {
   ADMIN_FEE_LABEL_DEFAULT,
   ADMIN_FEE_LABEL_MAX,
 } from "@/lib/storefront/admin-fee";
+import {
+  checkoutRuleViolations,
+  normalizeCheckoutRules,
+} from "@/lib/storefront/checkout-rules";
+import {
+  groupBuyViolations,
+  normalizeGroupBuyRules,
+} from "@/lib/storefront/group-buy-rules";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 
 export type UploadProofResult = { url: string } | { error: string };
@@ -151,6 +161,72 @@ function stockViolation(
     }
   }
   return null;
+}
+
+/**
+ * Re-run the tenant's Smart Checkout rules (lib/storefront/checkout-rules)
+ * against the stored catalog and config, so the server enforces exactly what
+ * the cart UI showed — a tampered or stale client can't skip them. Returns the
+ * first blocking violation as a customer-facing error, or null when the order
+ * passes. `clientFee` is the RAW adminFee the checkout echoed (the fee it
+ * displayed): when admin-fee validation is on and that snapshot no longer
+ * matches the configured fee, the order is rejected so the customer never pays
+ * a total they didn't see. Legacy clients that send no snapshot skip the check
+ * (the server-stamped fee remains authoritative either way).
+ */
+function checkoutRulesViolation(
+  config: Record<string, unknown>,
+  catalog: Product[],
+  items: OrderItem[],
+  clientFee: unknown,
+): string | null {
+  const rules = normalizeCheckoutRules(config.checkoutRules);
+
+  if (rules.adminFeeValidation && rules.ruleBasedCheckout && clientFee && typeof clientFee === "object") {
+    const shown = Math.max(0, num((clientFee as Record<string, unknown>).amount));
+    const charged = activeAdminFee(config.adminFee, itemsSubtotal(items))?.amount ?? 0;
+    if (shown !== charged) {
+      return "The store's fees changed while you were checking out — please review your updated total and try again.";
+    }
+  }
+
+  // Rebuild cart lines from the order's items. Lines match by productId
+  // (stamped at checkout) or exact name; unmatched lines aren't rule-checked,
+  // same as stockViolation.
+  const lines = items.flatMap((it) => {
+    const product = catalog.find((p) =>
+      it.productId ? p.id === it.productId : p.name === it.name,
+    );
+    return product ? [{ product, qty: it.qty }] : [];
+  });
+  const blocked = checkoutRuleViolations(lines, catalog, config.checkoutRules).find(
+    (v) => v.blocking,
+  );
+  return blocked?.message ?? null;
+}
+
+/** The order's items subtotal — the base a percentage admin fee is charged on
+ *  (same prices the order stores and every total surface sums). */
+function itemsSubtotal(items: OrderItem[]): number {
+  return items.reduce((s, it) => s + it.price * it.qty, 0);
+}
+
+/**
+ * Re-run the tenant's Group Buy rules (lib/storefront/group-buy-rules) against
+ * the order's items, so the server enforces exactly what the cart drawer
+ * validated — a tampered or stale client can't skip them. Only fires when the
+ * engine is on AND its checkout-validation toggle is on; the caller gates on
+ * the FEATURES.GB_RULES entitlement. Returns the first violation as a
+ * customer-facing error, or null when the order complies.
+ */
+function groupBuyViolation(
+  config: Record<string, unknown>,
+  items: OrderItem[],
+): string | null {
+  const rules = normalizeGroupBuyRules(config.groupBuyRules);
+  if (!rules.enabled || !rules.validation.checkout) return null;
+  const lines = items.map((it) => ({ name: it.name, qty: it.qty }));
+  return groupBuyViolations(rules, lines)[0] ?? null;
 }
 
 /** Apply an order's line items to a product list (− on deduct, + on restock),
@@ -378,6 +454,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   const p = normalizeOrderInput(input);
   if (!p.items.length) return { error: "Your cart is empty." };
 
+  // The fee the checkout DISPLAYED, exactly as sent — kept raw (not the
+  // normalized p.adminFee, which collapses an explicit zero to undefined) so
+  // the admin-fee validation rule can tell "showed no fee" from "legacy client
+  // that sent nothing".
+  const clientFee = ((input ?? {}) as Record<string, unknown>).adminFee;
+
   // Seed the fulfillment journey with the opening event so the Track page can
   // show "Order received" with a real timestamp from the moment of checkout.
   if (!p.statusHistory || p.statusHistory.length === 0) {
@@ -404,6 +486,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // branding config at placement (any client-supplied value is discarded) and
     // snapshotted on the order so a later config change never rewrites it.
     const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    // Smart Checkout rules — reject the order when it violates a blocking rule.
+    const demoRuleError = checkoutRulesViolation(config, demoProducts, p.items, clientFee);
+    if (demoRuleError) return { error: demoRuleError };
     p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
@@ -422,15 +507,21 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
-    // order the inventory can't cover.
-    const catalog = await withTenant(tenantId, (db) =>
-      db.product.findMany({
-        where: { status: { not: "archived" } },
-        select: { id: true, name: true, stock: true },
-      }),
+    // order the inventory can't cover. Full rows (not just id/name/stock)
+    // because the Smart Checkout rules below need categories, reseller tiers
+    // and names to classify the cart.
+    const rows = await withTenant(tenantId, (db) =>
+      db.product.findMany({ where: { status: { not: "archived" } } }),
+    );
+    const catalog = rows.map((r) =>
+      dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
     );
     const violation = stockViolation(catalog, p.items);
     if (violation) return { error: violation };
+
+    // Smart Checkout rules — reject the order when it violates a blocking rule.
+    const ruleError = checkoutRulesViolation(config, catalog, p.items, clientFee);
+    if (ruleError) return { error: ruleError };
 
     const row = await createStorefrontOrder(tenantId, p);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };

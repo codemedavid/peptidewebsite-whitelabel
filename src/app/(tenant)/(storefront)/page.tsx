@@ -66,6 +66,13 @@ export default async function HomePage() {
   const salesAnalyticsEntitled = await hasFeature(tenantId, FEATURES.STORE_SALES_ANALYTICS);
   brand.showAdminAnalytics = salesAnalyticsEntitled && config.showAdminAnalytics !== false;
 
+  // Group Buy Rules engine: the store-admin view AND rule enforcement are gated
+  // on the platform entitlement alone. Revoking the feature both hides the
+  // editor and stops the saved rules from constraining the cart.
+  const groupBuyEntitled = await hasFeature(tenantId, FEATURES.GB_RULES);
+  brand.showAdminGroupBuy = groupBuyEntitled;
+  if (!groupBuyEntitled) delete (brand as Record<string, unknown>).groupBuyRules;
+
   // Products are the source of truth in the DB. Load the tenant's catalog
   // server-side (demo: file-backed store, seeded from the builtin fixtures) and
   // hand it to the storefront — both the public catalog and the #admin manager

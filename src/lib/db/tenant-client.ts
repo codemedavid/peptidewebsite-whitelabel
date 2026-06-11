@@ -32,6 +32,7 @@ import { prisma } from "./prisma";
 // camelCase delegate names that carry a `tenantId` scalar column.
 const TENANT_MODELS = new Set<string>([
   "domain",
+  "groupBuy",
   "tenantIntegration",
   "tenantFeatureOverride",
   "contact",
