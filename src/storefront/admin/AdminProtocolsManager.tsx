@@ -20,9 +20,10 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
     setDirty(true);
   };
 
+  // Prepend so the fresh card lands at the top of the list, right under the
+  // header, instead of below the (potentially long) existing guide.
   const add = () =>
     edit([
-      ...list,
       {
         category: "General",
         name: "New Protocol",
@@ -34,6 +35,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
         image: "",
         mode: "details",
       },
+      ...list,
     ]);
 
   const update = (i: number, patch: Partial<Protocol>) =>
