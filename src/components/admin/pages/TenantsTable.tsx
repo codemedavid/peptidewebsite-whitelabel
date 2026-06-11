@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Ic, StatusBadge, TenantAvatar } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
-import { planMeta } from "@/lib/admin/plans";
+import { planMeta, formatPesosCompact } from "@/lib/admin/plans";
 import { suspendTenantAction, deleteTenantAction } from "@/actions/admin";
 import type { AdminTenantRow } from "@/lib/admin/data";
 
@@ -79,7 +79,7 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         <div>
           <h1 className="page-title">Tenants</h1>
           <p className="page-sub">
-            <span className="tnum">{filtered.length}</span> of <span className="tnum">{tenants.length}</span> tenants · ${(totalRevenue / 100 / 1000).toFixed(1)}k revenue ·{" "}
+            <span className="tnum">{filtered.length}</span> of <span className="tnum">{tenants.length}</span> tenants · {formatPesosCompact(totalRevenue)} revenue ·{" "}
             {totalOrders.toLocaleString()} orders
           </p>
         </div>
@@ -178,7 +178,7 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }} className="tnum">
-                    ${(t.revenueCents / 100 / 1000).toFixed(1)}k
+                    {formatPesosCompact(t.revenueCents)}
                   </td>
                   <td style={{ textAlign: "right" }} className="tnum muted">
                     {t.orders.toLocaleString()}

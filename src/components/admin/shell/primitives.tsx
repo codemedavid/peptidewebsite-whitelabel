@@ -110,10 +110,10 @@ export const Ic: Record<string, LucideIcon> = {
 };
 
 /* ---------- formatting ---------- */
-export function formatMoney(dollars: number): string {
-  if (dollars >= 1e6) return "$" + (dollars / 1e6).toFixed(2) + "M";
-  if (dollars >= 1e3) return "$" + (dollars / 1e3).toFixed(1) + "k";
-  return "$" + Math.round(dollars).toLocaleString();
+export function formatMoney(pesos: number): string {
+  if (pesos >= 1e6) return "₱" + (pesos / 1e6).toFixed(2) + "M";
+  if (pesos >= 1e3) return "₱" + (pesos / 1e3).toFixed(1) + "k";
+  return "₱" + Math.round(pesos).toLocaleString();
 }
 export function formatMoneyCents(cents: number): string {
   return formatMoney(cents / 100);

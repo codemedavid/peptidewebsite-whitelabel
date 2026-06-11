@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Ic, StatusBadge, TenantAvatar, FeedText, tenantColor } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
-import { planMeta, planLimits, formatPesos } from "@/lib/admin/plans";
+import { planMeta, planLimits, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
 import { suspendTenantAction } from "@/actions/admin";
 import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
@@ -97,8 +97,8 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border-soft)", background: "var(--bg-canvas)" }}>
           {[
-            { label: "Lifetime revenue", v: `$${(tenant.revenueCents / 100 / 1000).toFixed(1)}k`, sub: "all orders" },
-            { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `$${aov} AOV` : "—" },
+            { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
+            { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
             { label: "MRR", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.planPriceCents), sub: `${pm.label} plan` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
@@ -233,7 +233,7 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
                     <td>{o.customer}</td>
                     <td className="tnum muted">{o.items}</td>
                     <td className="tnum" style={{ textAlign: "right", fontWeight: 500 }}>
-                      ${(o.totalCents / 100).toFixed(0)}
+                      {formatPesos(o.totalCents)}
                     </td>
                     <td>
                       <StatusBadge status={o.status} />
@@ -442,7 +442,7 @@ function WebsitePreview({ tenant, storefront }: { tenant: TenantDetail; storefro
                     <div style={{ padding: "8px 10px" }}>
                       <div style={{ fontSize: 10.5, fontWeight: 600 }}>{p}</div>
                       <div style={{ fontSize: 9.5, color: "#56627a" }}>5mg vial</div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, marginTop: 4 }}>${[89, 119, 64][i]}.00</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, marginTop: 4 }}>₱{[89, 119, 64][i]}.00</div>
                     </div>
                   </div>
                 ))}
@@ -596,7 +596,7 @@ function OrdersPanel({ tenant }: { tenant: TenantDetail }) {
                 <td>{o.customer}</td>
                 <td className="tnum muted">{o.items}</td>
                 <td className="tnum" style={{ textAlign: "right", fontWeight: 500 }}>
-                  ${(o.totalCents / 100).toFixed(0)}
+                  {formatPesos(o.totalCents)}
                 </td>
                 <td>
                   <StatusBadge status={o.status} />
@@ -685,7 +685,7 @@ function BillingPanel({ tenant }: { tenant: TenantDetail }) {
             <h3 className="card-title">Lifetime metrics</h3>
           </div>
           <div className="card-body">
-            <ReviewRow k="Lifetime revenue" v={<span className="tnum">${(tenant.revenueCents / 100 / 1000).toFixed(1)}k</span>} />
+            <ReviewRow k="Lifetime revenue" v={<span className="tnum">{formatPesosCompact(tenant.revenueCents)}</span>} />
             <ReviewRow k="Total orders" v={<span className="tnum">{tenant.orders.toLocaleString()}</span>} />
             <ReviewRow k="Failed payments" v={tenant.status === "past_due" ? <span style={{ color: "var(--danger)" }}>1 · needs review</span> : "0"} />
           </div>

@@ -558,7 +558,7 @@ export async function getPlatformOverview(): Promise<OverviewData> {
           .slice(0, 6)
           .map((o) => ({
             icon: "Box",
-            text: `**${o.name}** received order ${o.orderNumber} · $${(o.totalCents / 100).toFixed(0)}`,
+            text: `**${o.name}** received order ${o.orderNumber} · ₱${Math.round(o.totalCents / 100).toLocaleString("en-PH")}`,
             time: ago(o.at),
           }));
     if (!activity.length) activity = demoActivity(rows);

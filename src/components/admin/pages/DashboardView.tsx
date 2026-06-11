@@ -11,6 +11,7 @@ import {
   TenantAvatar,
 } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
+import { formatPesosCompact } from "@/lib/admin/plans";
 import type { OverviewData } from "@/lib/admin/data";
 
 /* ---------- revenue chart (SVG, hover tooltip) ---------- */
@@ -56,7 +57,7 @@ function RevenueChart({ series }: { series: OverviewData["revenueSeries"] }) {
           <g key={i}>
             <line x1={pad.l} x2={w - pad.r} y1={sy(v)} y2={sy(v)} stroke="var(--border-soft)" strokeDasharray="2 4" />
             <text x={pad.l - 8} y={sy(v) + 4} fontSize="10.5" textAnchor="end" fill="var(--ink-400)" fontFamily="var(--font-mono)">
-              {v >= 1000 ? "$" + v / 1000 + "k" : "$" + v}
+              {v >= 1000 ? "₱" + v / 1000 + "k" : "₱" + v}
             </text>
           </g>
         ))}
@@ -93,12 +94,12 @@ function RevenueChart({ series }: { series: OverviewData["revenueSeries"] }) {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
             <span style={{ color: "var(--ink-500)" }}>This year</span>
             <span className="tnum" style={{ fontWeight: 600 }}>
-              ${(data[hover] / 1000).toFixed(0)}k
+              {formatPesosCompact(data[hover] * 100)}
             </span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 2 }}>
             <span style={{ color: "var(--ink-400)" }}>Prev year</span>
-            <span className="tnum muted">${(prev[hover] / 1000).toFixed(0)}k</span>
+            <span className="tnum muted">{formatPesosCompact(prev[hover] * 100)}</span>
           </div>
         </div>
       )}
@@ -138,7 +139,7 @@ export function DashboardView({ data }: { data: OverviewData }) {
   const kpis = [
     { label: "Total tenants", value: <CounterValue value={k.totalTenants} />, delta: `+${k.newTenants30d} vs 30d`, deltaDir: "up" as const, icon: "Buildings", spark: data.sparks.tenants },
     { label: "Active subscriptions", value: <CounterValue value={k.activeSubscriptions} />, delta: "Live", deltaDir: "flat" as const, icon: "Card", spark: data.sparks.subscriptions },
-    { label: "Monthly revenue", value: <CounterValue value={Math.round(k.monthlyRevenueCents / 100 / 1000)} prefix="$" suffix="k" />, delta: "MRR + 30d", deltaDir: "up" as const, icon: "DollarSign", spark: data.sparks.revenue },
+    { label: "Monthly revenue", value: <CounterValue value={Math.round(k.monthlyRevenueCents / 100 / 1000)} prefix="₱" suffix="k" />, delta: "MRR + 30d", deltaDir: "up" as const, icon: "DollarSign", spark: data.sparks.revenue },
     { label: "Total orders", value: <CounterValue value={k.totalOrders} />, delta: `+${k.newOrders30d} vs 30d`, deltaDir: "up" as const, icon: "Box", spark: data.sparks.orders },
     { label: "Total customers", value: <CounterValue value={k.totalCustomers} />, delta: "Lifetime", deltaDir: "flat" as const, icon: "Users", spark: data.sparks.customers, sparkColor: "var(--success)" },
     { label: "Active trials", value: <CounterValue value={k.activeTrials} />, delta: "In trial", deltaDir: "flat" as const, icon: "Sparkles", spark: data.sparks.trials, sparkColor: "var(--warn)" },
@@ -241,7 +242,7 @@ export function DashboardView({ data }: { data: OverviewData }) {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div className="tnum" style={{ fontWeight: 600 }}>
-                    ${(t.revenueCents / 100 / 1000).toFixed(1)}k
+                    {formatPesosCompact(t.revenueCents)}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--ink-400)" }} className="tnum">
                     {t.orders.toLocaleString()} orders

@@ -1088,7 +1088,7 @@ function StorefrontPreview({
               <hr className="border-border" />
               <div className="flex flex-col gap-2 p-3">
                 <div className="text-base font-semibold text-brand" style={{ fontFamily: "var(--font-heading)" }}>
-                  $49.99
+                  ₱49.99
                 </div>
                 <button
                   className="w-full rounded-full px-3 py-1.5 text-[11px] font-semibold"

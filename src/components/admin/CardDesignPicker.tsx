@@ -37,7 +37,7 @@ const SAMPLE_PRODUCT: Product = {
   name: "Sample Product 10mg",
   description: "A short example description to judge type, spacing and color.",
   price: 49.99,
-  currency: "$",
+  currency: "₱",
   purity: "99.9%",
   category: "all",
   featured: true,
