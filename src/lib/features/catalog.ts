@@ -39,6 +39,7 @@ export const FEATURES = {
   STORE_RESELLER_PORTAL: "storefront.reseller",
   STORE_CARD_STUDIO: "storefront.card_studio",
   STORE_SALES_ANALYTICS: "storefront.sales_analytics",
+  STORE_SMART_CHECKOUT: "storefront.smart_checkout",
   // Sales Analytics internals. Each key toggles one slice of the store-admin
   // Sales Analytics view; all of them are inert while the module itself
   // (STORE_SALES_ANALYTICS) is off. They sit in every plan ceiling (default ON)
@@ -171,6 +172,7 @@ export const ALL_FEATURES = Object.values(FEATURES);
 export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_CARD_STUDIO,
   FEATURES.STORE_SALES_ANALYTICS,
+  FEATURES.STORE_SMART_CHECKOUT,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
@@ -230,6 +232,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_MULTI_CURRENCY]: { label: "Multi-currency", description: "Display and charge in multiple currencies.", group: "Ecommerce" },
   [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
   [FEATURES.STORE_SALES_ANALYTICS]: { label: "Sales Analytics", description: "Sales Analytics view in the store admin (revenue & insights).", group: "Ecommerce" },
+  [FEATURES.STORE_SMART_CHECKOUT]: { label: "Smart Checkout", description: "Smart Cart & Checkout rules view in the store admin — cart restrictions, checkout validations and custom messages. Off hides the editor and stops saved rules from constraining the cart.", group: "Ecommerce" },
 
   [FEATURES.SA_SECTION_REVENUE]: { label: "Revenue analytics", description: "Revenue KPIs, revenue-over-time chart and payment-method breakdown. Needs the Sales Analytics module on.", group: "Sales Analytics" },
   [FEATURES.SA_SECTION_PRODUCTS]: { label: "Product analytics", description: "Items-sold KPI and top products by revenue. Needs the Sales Analytics module on.", group: "Sales Analytics" },

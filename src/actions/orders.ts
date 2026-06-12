@@ -526,7 +526,11 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // snapshotted on the order so a later config change never rewrites it.
     const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
     // Smart Checkout rules — reject the order when it violates a blocking rule.
-    const demoRuleError = checkoutRulesViolation(config, demoProducts, p.items, clientFee);
+    // Entitlement-gated: a tenant without the feature keeps any saved rules
+    // dormant, matching the storefront (which strips brand.checkoutRules).
+    const demoRuleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
+      ? checkoutRulesViolation(config, demoProducts, p.items, clientFee)
+      : null;
     if (demoRuleError) return { error: demoRuleError };
     p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
     // Group-buy attribution — same server-authoritative stamp as the fee.
@@ -561,7 +565,10 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     if (violation) return { error: violation };
 
     // Smart Checkout rules — reject the order when it violates a blocking rule.
-    const ruleError = checkoutRulesViolation(config, catalog, p.items, clientFee);
+    // Entitlement-gated, same as the demo path above.
+    const ruleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
+      ? checkoutRulesViolation(config, catalog, p.items, clientFee)
+      : null;
     if (ruleError) return { error: ruleError };
 
     // Group-buy attribution — same server-authoritative stamp as the fee.

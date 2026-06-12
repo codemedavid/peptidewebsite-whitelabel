@@ -33,6 +33,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Group Buy Rules. Server-derived from the platform Features toggle
   // (FEATURES.GB_RULES). Default OFF — entitlement-only, no branding switch.
   groupbuy: (b) => b.showAdminGroupBuy === true,
+  // Smart Checkout (cart & checkout rules). Server-derived from the platform
+  // Features toggle (FEATURES.STORE_SMART_CHECKOUT). Default OFF —
+  // operator-grantable, outside every plan ceiling.
+  checkout: (b) => b.showAdminCheckout === true,
   // Group Buy MANAGEMENT (the "Group Buys" manager view). Server-derived from
   // the groupbuy.module entitlement via brand.groupBuyCaps. Default OFF.
   groupbuys: (b) => b.groupBuyCaps?.enabled === true,

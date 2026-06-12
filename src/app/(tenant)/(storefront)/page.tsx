@@ -78,6 +78,13 @@ export default async function HomePage() {
   brand.showAdminGroupBuy = groupBuyEntitled;
   if (!groupBuyEntitled) delete (brand as Record<string, unknown>).groupBuyRules;
 
+  // Smart Checkout (cart & checkout rules): operator-grantable, default OFF for
+  // every tenant. Revoking hides the store-admin view AND stops the saved rules
+  // from constraining the cart — orders.ts re-applies the same gate at placement.
+  const smartCheckoutEntitled = await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT);
+  brand.showAdminCheckout = smartCheckoutEntitled;
+  if (!smartCheckoutEntitled) delete (brand as Record<string, unknown>).checkoutRules;
+
   // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the
   // rules editor above): ship the resolved groupbuy.* capability set so the
   // admin view knows which buttons to draw, plus the operator-set form
