@@ -71,6 +71,15 @@ export default async function HomePage() {
   const salesAnalyticsEntitled = await hasFeature(tenantId, FEATURES.STORE_SALES_ANALYTICS);
   brand.showAdminAnalytics = salesAnalyticsEntitled && config.showAdminAnalytics !== false;
 
+  // Reconstitution calculator: gated on the platform entitlement (admin →
+  // Features, FEATURES.STORE_CALCULATOR) AND the branding-editor toggle.
+  // Revoking the feature hides the storefront page/nav AND the store-admin
+  // toggle for it (the form keys off `calculatorEntitled`). Default-on: the
+  // feature ships in every plan ceiling, so existing tenants keep it.
+  const calculatorEntitled = await hasFeature(tenantId, FEATURES.STORE_CALCULATOR);
+  brand.calculatorEntitled = calculatorEntitled;
+  brand.showPageCalculator = calculatorEntitled && config.showPageCalculator !== false;
+
   // Group Buy Rules engine: the store-admin view AND rule enforcement are gated
   // on the platform entitlement alone. Revoking the feature both hides the
   // editor and stops the saved rules from constraining the cart.

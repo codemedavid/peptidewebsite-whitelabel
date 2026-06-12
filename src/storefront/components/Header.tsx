@@ -23,6 +23,15 @@ export function Header({
   if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {
     nav.push({ label: "Resellers", href: "#merchant" });
   }
+  // Surface the reconstitution calculator (default-on) for every tenant — even
+  // those whose stored nav predates the feature. Slot it before Reviews when
+  // present, otherwise append.
+  if (brand.showPageCalculator !== false && !nav.some((i) => i.href === "#calculator")) {
+    const reviewsIdx = nav.findIndex((i) => i.href === "#reviews");
+    const link = { label: "Calculator", href: "#calculator" };
+    if (reviewsIdx >= 0) nav.splice(reviewsIdx, 0, link);
+    else nav.push(link);
+  }
 
   // Lock background scroll + close on Escape while the drawer is open.
   useEffect(() => {

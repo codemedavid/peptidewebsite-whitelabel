@@ -253,6 +253,12 @@ export type Brand = {
   showPageFAQ: boolean;
   showPageCOA: boolean;
   showPageProtocols: boolean;
+  showPageCalculator: boolean;
+  // Server-derived: is the reconstitution calculator (FEATURES.STORE_CALCULATOR)
+  // entitled for this tenant? Drives whether the store-admin even offers the
+  // "Calculator page" toggle. Undefined outside the entitlement-aware storefront
+  // render (treated as entitled there).
+  calculatorEntitled?: boolean;
   showPageReviews: boolean;
   // Reseller / merchant wholesale price list (#merchant). Default OFF — only
   // tenants that sell wholesale enable it from the store admin. Gated behind an
@@ -370,6 +376,13 @@ export type Brand = {
   protocolsGuidelines: { label: string; text: string }[];
   protocolsStorageTitle: string;
   protocolsStorage: { title: string; text: string }[];
+
+  // Reconstitution / dosing calculator copy (#calculator).
+  calculatorEyebrow?: string;
+  calculatorTitle?: string;
+  calculatorSub?: string;
+  calculatorBackLabel?: string;
+  calculatorDisclaimer?: string;
 
   reviewsTitle: string;
   reviewsBackLabel: string;

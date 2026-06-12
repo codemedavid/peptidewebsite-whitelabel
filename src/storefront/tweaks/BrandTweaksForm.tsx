@@ -386,6 +386,12 @@ export function BrandTweaksForm({
       <TweakToggle label="FAQ page" value={t.showPageFAQ !== false} onChange={(v) => setTweak("showPageFAQ", v)} />
       <TweakToggle label="Lab Reports (COA) page" value={t.showPageCOA !== false} onChange={(v) => setTweak("showPageCOA", v)} />
       <TweakToggle label="Protocols page" value={t.showPageProtocols !== false} onChange={(v) => setTweak("showPageProtocols", v)} />
+      {/* Hidden when the platform operator hasn't granted the calculator feature
+          (admin → Features). Undefined entitlement (e.g. platform branding
+          editor) is treated as available. */}
+      {t.calculatorEntitled !== false && (
+        <TweakToggle label="Calculator page" value={t.showPageCalculator !== false} onChange={(v) => setTweak("showPageCalculator", v)} />
+      )}
       <TweakToggle label="Reviews page" value={t.showPageReviews !== false} onChange={(v) => setTweak("showPageReviews", v)} />
       <TweakButton label="Open: Home" onClick={goHome} secondary />
       <TweakButton label="Open: Track Order" onClick={() => goPage("track")} secondary />

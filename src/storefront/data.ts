@@ -47,6 +47,7 @@ export const BRAND: Brand = {
   showPageFAQ: true,
   showPageCOA: true,
   showPageProtocols: true,
+  showPageCalculator: true,
   showPageReviews: true,
   showPageMerchant: false,
   showAdminAnalytics: true,
@@ -114,6 +115,7 @@ export const BRAND: Brand = {
       links: [
         { label: "COAs", href: "#coa" },
         { label: "Protocols", href: "#protocols" },
+        { label: "Calculator", href: "#calculator" },
         { label: "Reviews", href: "#reviews" },
         { label: "Blog", href: "#" },
       ],
@@ -198,6 +200,7 @@ export const BRAND: Brand = {
     { label: "FAQ", href: "#faq" },
     { label: "COA", href: "#coa" },
     { label: "Protocols", href: "#protocols" },
+    { label: "Calculator", href: "#calculator" },
     { label: "Reviews", href: "#reviews" },
   ],
 };

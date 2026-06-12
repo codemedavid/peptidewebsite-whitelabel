@@ -7,6 +7,7 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   faq: (b) => b.showPageFAQ !== false,
   coa: (b) => b.showPageCOA !== false,
   protocols: (b) => b.showPageProtocols !== false,
+  calculator: (b) => b.showPageCalculator !== false,
   reviews: (b) => b.showPageReviews !== false,
   // Default OFF — the wholesale page only exists for tenants that opt in.
   merchant: (b) => b.showPageMerchant === true,
