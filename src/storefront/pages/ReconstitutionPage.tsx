@@ -29,6 +29,67 @@ function fmt(n: number, digits = 2): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
+// A simple side-on insulin syringe whose barrel fills (from the plunger end
+// toward the needle) in proportion to the units drawn. Tick labels are spaced
+// off the syringe's full capacity so the fill mark lands where a user would
+// actually pull the plunger to. Over-capacity draws clamp to full + go amber.
+function SyringeDiagram({ units, capacity, over }: { units: number; capacity: number; over: boolean }) {
+  const ratio = capacity > 0 ? Math.min(units / capacity, 1) : 0;
+  const X0 = 26;
+  const X1 = 300;
+  const W = X1 - X0;
+  const Y0 = 26;
+  const H = 38;
+  const fillW = W * ratio;
+  const fillRight = X0 + fillW;
+  const step = capacity <= 30 ? 5 : capacity <= 50 ? 10 : 20;
+  const ticks: number[] = [];
+  for (let u = 0; u <= capacity + 0.001; u += step) ticks.push(Math.round(u));
+
+  return (
+    <svg
+      className="recon__syringe"
+      viewBox="0 0 360 100"
+      role="img"
+      aria-label={`Insulin syringe filled to ${fmt(units, 1)} of ${capacity} units`}
+    >
+      {/* Plunger thumb rest + rod */}
+      <rect x="2" y="33" width="9" height="22" rx="2" className="recon__sy-part" />
+      <rect x="11" y="41.5" width="15" height="7" className="recon__sy-part" />
+      {/* Barrel */}
+      <rect x={X0} y={Y0} width={W} height={H} rx="7" className="recon__sy-barrel" />
+      {/* Liquid */}
+      {fillW > 0 && (
+        <rect
+          x={X0}
+          y={Y0}
+          width={fillW}
+          height={H}
+          rx="7"
+          className={`recon__sy-fill ${over ? "is-over" : ""}`}
+        />
+      )}
+      {/* Needle hub + needle */}
+      <path d={`M${X1} ${Y0} L${X1 + 14} ${Y0 + 9} L${X1 + 14} ${Y0 + H - 9} L${X1} ${Y0 + H} Z`} className="recon__sy-part" />
+      <line x1={X1 + 14} y1={Y0 + H / 2} x2="352" y2={Y0 + H / 2} className="recon__sy-needle" />
+      {/* Tick marks + unit labels */}
+      {ticks.map((u) => {
+        const x = X0 + W * (u / capacity);
+        return (
+          <g key={u}>
+            <line x1={x} y1={Y0 + H} x2={x} y2={Y0 + H + 6} className="recon__sy-tick" />
+            <text x={x} y={Y0 + H + 18} className="recon__sy-label" textAnchor="middle">
+              {u}
+            </text>
+          </g>
+        );
+      })}
+      {/* Fill boundary marker */}
+      {ratio > 0 && <line x1={fillRight} y1={Y0 - 7} x2={fillRight} y2={Y0 + H} className="recon__sy-marker" />}
+    </svg>
+  );
+}
+
 export function ReconstitutionPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const [vialMg, setVialMg] = useState("5");
   const [waterMl, setWaterMl] = useState("2");
@@ -174,6 +235,10 @@ export function ReconstitutionPage({ brand, onBack }: { brand: Brand; onBack: ()
                       <span>{r.sub}</span>
                     </div>
                   ))}
+                </div>
+                <div className="recon__syringe-wrap">
+                  <div className="eyebrow">Draw to this mark</div>
+                  <SyringeDiagram units={drawUnits} capacity={syringeMl * 100} over={overSyringe} />
                 </div>
                 {overSyringe && (
                   <div className="recon__warn">

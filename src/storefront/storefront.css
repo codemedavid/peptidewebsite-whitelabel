@@ -2090,6 +2090,23 @@
   color: var(--brand-text);
   line-height: 1.5;
 }
+.sf-root .recon__syringe-wrap {
+  margin-top: 18px;
+  padding: 16px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-md);
+}
+.sf-root .recon__syringe-wrap .eyebrow { font-size: 10px; margin-bottom: 10px; }
+.sf-root .recon__syringe { width: 100%; height: auto; display: block; overflow: visible; }
+.sf-root .recon__sy-barrel { fill: var(--brand-background); stroke: var(--brand-border); stroke-width: 2; }
+.sf-root .recon__sy-fill { fill: color-mix(in srgb, var(--brand-accent) 38%, transparent); transition: width .2s ease; }
+.sf-root .recon__sy-fill.is-over { fill: color-mix(in srgb, #C25E1A 42%, transparent); }
+.sf-root .recon__sy-part { fill: color-mix(in srgb, var(--brand-text-muted) 55%, var(--brand-border)); }
+.sf-root .recon__sy-needle { stroke: var(--brand-text-muted); stroke-width: 2; }
+.sf-root .recon__sy-tick { stroke: var(--brand-border); stroke-width: 1.5; }
+.sf-root .recon__sy-label { fill: var(--brand-text-muted); font-size: 10px; font-family: var(--brand-body-font); }
+.sf-root .recon__sy-marker { stroke: var(--brand-accent); stroke-width: 2; stroke-dasharray: 3 3; }
 .sf-root .recon__empty {
   display: flex;
   flex-direction: column;
