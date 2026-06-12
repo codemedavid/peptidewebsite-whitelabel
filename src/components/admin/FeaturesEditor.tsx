@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   Check,
   ExternalLink,
@@ -31,6 +32,7 @@ const GROUP_ICONS: Record<FeatureGroup, React.ReactNode> = {
   Site: <Globe size={16} aria-hidden />,
   Catalog: <Package size={16} aria-hidden />,
   Ecommerce: <ShoppingCart size={16} aria-hidden />,
+  "Sales Analytics": <BarChart3 size={16} aria-hidden />,
   "Group Buy": <Users size={16} aria-hidden />,
   Notifications: <Bell size={16} aria-hidden />,
   "Growth & Automation": <Zap size={16} aria-hidden />,

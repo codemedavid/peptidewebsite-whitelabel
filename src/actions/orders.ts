@@ -489,7 +489,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     const demoRuleError = checkoutRulesViolation(config, demoProducts, p.items, clientFee);
     if (demoRuleError) return { error: demoRuleError };
-    p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
+    p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
     const saved: Order = { ...p, id, orderNumber };
@@ -503,7 +503,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // storefront (which renders from the same cache) displayed.
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
-    p.adminFee = activeAdminFee(config.adminFee) ?? undefined;
+    p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an

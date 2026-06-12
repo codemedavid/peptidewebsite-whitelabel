@@ -81,7 +81,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // Per-tenant admin fee (super admin toggle, branding.config.adminFee) — a flat
   // charge on top of the items. Displayed here for transparency; the AUTHORITATIVE
   // value is re-stamped server-side at placement from the same config.
-  const adminFee = useMemo(() => activeAdminFee(brand.adminFee), [brand]);
+  const adminFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
   const total = subtotal + (adminFee?.amount ?? 0);
 
   // Smart Cart & Checkout rules (branding.config.checkoutRules) — the cart

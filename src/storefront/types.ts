@@ -32,6 +32,13 @@ export type Product = {
    *  per-product minimum order that unlocks the wholesale price; unset falls back
    *  to the global RESELLER_MIN_QTY default. */
   reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
+  /** "gb" = group-buy listing (sold under a buying window, priced by gbPrice);
+   *  "onhand" / absent = regular stocked item. */
+  productType?: "gb" | "onhand";
+  /** Group-buy price for productType "gb"; 0/absent = uses the regular price. */
+  gbPrice?: number;
+  /** False keeps the product visible in the catalog but blocks add-to-cart. */
+  purchasable?: boolean;
 };
 
 export type Category = { id: string; label: string };

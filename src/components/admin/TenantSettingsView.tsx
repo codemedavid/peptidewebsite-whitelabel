@@ -263,6 +263,10 @@ export function TenantSettingsView({
       enabled: feeEnabled,
       label: feeLabel,
       amount: Number(feeAmount) || 0,
+      // This view only edits the flat fee; pass the saved mode/percent through
+      // so a percentage fee configured elsewhere isn't clobbered to fixed.
+      mode: initialAdminFee.mode,
+      percent: initialAdminFee.percent,
     });
     setSaving(null);
     if ("ok" in res) {
