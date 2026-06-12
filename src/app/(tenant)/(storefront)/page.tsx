@@ -9,6 +9,8 @@ import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
+import { normalizeGroupBuySettings } from "@/lib/storefront/group-buy";
+import { resolveGroupBuyCaps } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -75,6 +77,13 @@ export default async function HomePage() {
   const groupBuyEntitled = await hasFeature(tenantId, FEATURES.GB_RULES);
   brand.showAdminGroupBuy = groupBuyEntitled;
   if (!groupBuyEntitled) delete (brand as Record<string, unknown>).groupBuyRules;
+
+  // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the
+  // rules editor above): ship the resolved groupbuy.* capability set so the
+  // admin view knows which buttons to draw, plus the operator-set form
+  // defaults. The server actions re-check every capability on call.
+  brand.groupBuyCaps = await resolveGroupBuyCaps(tenantId);
+  brand.groupBuySettings = normalizeGroupBuySettings(config.groupBuySettings);
 
   // Products are the source of truth in the DB. Load the tenant's catalog
   // server-side (demo: file-backed store, seeded from the builtin fixtures) and

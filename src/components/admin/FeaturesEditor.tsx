@@ -54,6 +54,8 @@ type Props = {
   name: string;
   planLabel: string;
   items: FeatureItem[];
+  /** Extra cards rendered below the feature groups (e.g. Group Buy Settings). */
+  children?: React.ReactNode;
 };
 
 type SaveStatus = "saved" | "saving" | "error";
@@ -85,7 +87,7 @@ function Toggle({
   );
 }
 
-export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
+export function FeaturesEditor({ slug, name, planLabel, items, children }: Props) {
   // Toggle state for plan-permitted features only; locked ones are never on.
   const [state, setState] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(items.map((i) => [i.key, i.enabled])),
@@ -291,6 +293,8 @@ export function FeaturesEditor({ slug, name, planLabel, items }: Props) {
           </section>
         );
       })}
+
+      {children}
     </div>
   );
 }

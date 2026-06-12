@@ -28,6 +28,18 @@ export type GroupBuy = {
   updatedAt: string;
 };
 
+/** Report-output entitlements (groupbuy.reports.*) — which export formats and
+ *  report sections the supplier-report view may offer. */
+export type GroupBuyReportCapabilities = {
+  excel: boolean;
+  csv: boolean;
+  pdf: boolean;
+  autoOnClose: boolean;
+  customerBreakdown: boolean;
+  productBreakdown: boolean;
+  supplierSummary: boolean;
+};
+
 /** Per-tenant capability flags resolved from entitlements — shipped to the store
  *  admin UI (to hide buttons) and re-checked server-side in every action. */
 export type GroupBuyCapabilities = {
@@ -40,6 +52,7 @@ export type GroupBuyCapabilities = {
   multipleActive: boolean;
   productAssignment: boolean;
   supplierReports: boolean;
+  reports: GroupBuyReportCapabilities;
 };
 
 export const GROUP_BUY_CAPS_OFF: GroupBuyCapabilities = {
@@ -52,6 +65,15 @@ export const GROUP_BUY_CAPS_OFF: GroupBuyCapabilities = {
   multipleActive: false,
   productAssignment: false,
   supplierReports: false,
+  reports: {
+    excel: false,
+    csv: false,
+    pdf: false,
+    autoOnClose: false,
+    customerBreakdown: false,
+    productBreakdown: false,
+    supplierSummary: false,
+  },
 };
 
 // ── Per-tenant defaults (branding.config.groupBuySettings) ──────────────────

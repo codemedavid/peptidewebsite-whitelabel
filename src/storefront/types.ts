@@ -4,6 +4,7 @@
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
+import type { GroupBuyCapabilities, GroupBuySettings } from "@/lib/storefront/group-buy";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
@@ -93,6 +94,11 @@ export type Order = {
    *  rewrites what an existing order was charged. Absent on legacy orders and
    *  when the tenant's fee is off. Total = items + shipping.fee + adminFee. */
   adminFee?: { label: string; amount: number };
+  /** Group buy this order was placed under, stamped SERVER-SIDE at placement
+   *  (id + name snapshot — see lib/storefront/group-buy). Null/absent = placed
+   *  outside any group buy or before the module existed. */
+  groupBuyId?: string | null;
+  groupBuyName?: string | null;
   paymentProof: string | null;
 };
 
@@ -257,6 +263,14 @@ export type Brand = {
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
   // access code (showPageMerchant).
   showAdminReseller?: boolean;
+  // Group Buy MANAGEMENT module (the "Group Buys" manager view, distinct from
+  // the rules editor above). Derived server-side from the groupbuy.* feature
+  // entitlements — see lib/storefront/group-buy-server. Absent = module off.
+  groupBuyCaps?: GroupBuyCapabilities;
+  // Per-tenant defaults for the "New group buy" form (status / duration /
+  // delivery ETA). Set by the platform operator on the tenant's Features page;
+  // persisted in branding.config.groupBuySettings.
+  groupBuySettings?: GroupBuySettings;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;

@@ -33,6 +33,9 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Group Buy Rules. Server-derived from the platform Features toggle
   // (FEATURES.GB_RULES). Default OFF — entitlement-only, no branding switch.
   groupbuy: (b) => b.showAdminGroupBuy === true,
+  // Group Buy MANAGEMENT (the "Group Buys" manager view). Server-derived from
+  // the groupbuy.module entitlement via brand.groupBuyCaps. Default OFF.
+  groupbuys: (b) => b.groupBuyCaps?.enabled === true,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

@@ -106,6 +106,7 @@ const FEATURES_FILE = path.join(DATA_DIR, "features.json");
 const ORDER_FORMAT_FILE = path.join(DATA_DIR, "order-format.json");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
 const ORDERS_FILE = path.join(DATA_DIR, "storefront-orders.json");
+const GROUP_BUYS_FILE = path.join(DATA_DIR, "group-buys.json");
 const PLATFORM_SETTINGS_FILE = path.join(DATA_DIR, "platform-settings.json");
 
 export type DemoBranding = {
@@ -224,6 +225,31 @@ export function saveDemoStoreOrders(slug: string, orders: Order[]): void {
   const all = readStoreOrders();
   all[slug] = orders;
   writeStoreOrders(all);
+}
+
+// ── Group buys (demo persistence) ──
+// The file-backed analogue of the real `group_buys` table, keyed by tenant slug.
+// Stored as plain JSON blobs; actions/group-buys.ts normalizes on read/write.
+
+function readGroupBuys(): Record<string, unknown[]> {
+  try {
+    return JSON.parse(fs.readFileSync(GROUP_BUYS_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+/** A tenant's group buys (raw blobs — callers normalize), empty if none yet. */
+export function getDemoGroupBuys(slug: string): unknown[] {
+  return readGroupBuys()[slug] ?? [];
+}
+
+/** Replace the tenant's full group-buy list (demo mode). */
+export function saveDemoGroupBuys(slug: string, groupBuys: unknown[]): void {
+  const all = readGroupBuys();
+  all[slug] = groupBuys;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(GROUP_BUYS_FILE, JSON.stringify(all, null, 2));
 }
 
 /**

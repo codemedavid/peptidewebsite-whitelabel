@@ -44,6 +44,8 @@ import {
   checkoutRuleViolations,
   normalizeCheckoutRules,
 } from "@/lib/storefront/checkout-rules";
+import { groupBuyForOrder } from "@/lib/storefront/group-buy";
+import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
@@ -246,6 +248,32 @@ function adjustProductStock(
   });
 }
 
+/**
+ * Stamp the order with the group buy it belongs to (or null) — SERVER-SIDE,
+ * from the tenant's live group buys at the moment of placement, never from the
+ * client. The name is snapshotted alongside the id so supplier reports survive
+ * later renames. No-ops (stamps null) when the tenant lacks groupbuy.module.
+ */
+async function stampGroupBuy(p: Order, tenantId: string, demoSlug: string): Promise<void> {
+  p.groupBuyId = null;
+  p.groupBuyName = null;
+  try {
+    const caps = await resolveGroupBuyCaps(tenantId);
+    if (!caps.enabled) return;
+    const groupBuys = await loadGroupBuys(tenantId, demoSlug);
+    const orderedIds = p.items
+      .map((it) => it.productId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    const gb = groupBuyForOrder(groupBuys, caps, orderedIds);
+    if (gb) {
+      p.groupBuyId = gb.id;
+      p.groupBuyName = gb.name;
+    }
+  } catch {
+    /* attribution is best-effort — never block checkout on it */
+  }
+}
+
 /** Coerce a stored/untrusted fee blob into the order's fee, or undefined when
  *  none was charged. Used for DB rows and demo orders alike; checkout itself
  *  never trusts this — placeStorefrontOrderAction re-stamps it from config. */
@@ -310,6 +338,11 @@ function normalizeOrderInput(input: unknown): Order {
     items: normalizeItems(o.items),
     statusHistory: normalizeStatusHistory(o.statusHistory),
     adminFee: normalizeOrderFee(o.adminFee),
+    // Carried for stored orders (admin list, demo file). Checkout never trusts
+    // these — placeStorefrontOrderAction re-stamps them server-side.
+    groupBuyId: typeof o.groupBuyId === "string" && o.groupBuyId ? str(o.groupBuyId, 64) : null,
+    groupBuyName:
+      typeof o.groupBuyName === "string" && o.groupBuyName ? str(o.groupBuyName, 200) : null,
     // Only accept a hosted URL here — the proof is uploaded separately via
     // uploadPaymentProofAction, which returns the ImageKit URL (or, when
     // ImageKit isn't configured, a data URL fallback). Cap generously so a
@@ -338,6 +371,8 @@ type DbOrderRow = {
   trackingNumber: string;
   shippingNote: string;
   placedAt: Date;
+  groupBuyId?: string | null;
+  groupBuyName?: string | null;
 };
 
 function dbOrderToStorefront(row: DbOrderRow): Order {
@@ -356,6 +391,8 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     courier: row.courier,
     trackingNumber: row.trackingNumber,
     shippingNote: row.shippingNote,
+    groupBuyId: row.groupBuyId,
+    groupBuyName: row.groupBuyName,
     paymentProof: row.paymentProofUrl,
   });
   return base;
@@ -378,6 +415,8 @@ function orderToDbCreate(tenantId: string, p: Order) {
     statusHistory: (p.statusHistory ?? []) as unknown as Prisma.InputJsonValue,
     // NULL (column default) when no fee was charged — omit rather than store {}.
     ...(p.adminFee ? { adminFee: p.adminFee as unknown as Prisma.InputJsonValue } : {}),
+    groupBuyId: p.groupBuyId ?? null,
+    groupBuyName: p.groupBuyName ?? null,
     courier: p.courier,
     trackingNumber: p.trackingNumber,
     shippingNote: p.shippingNote,
@@ -490,6 +529,8 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const demoRuleError = checkoutRulesViolation(config, demoProducts, p.items, clientFee);
     if (demoRuleError) return { error: demoRuleError };
     p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
+    // Group-buy attribution — same server-authoritative stamp as the fee.
+    await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
     const saved: Order = { ...p, id, orderNumber };
@@ -522,6 +563,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     const ruleError = checkoutRulesViolation(config, catalog, p.items, clientFee);
     if (ruleError) return { error: ruleError };
+
+    // Group-buy attribution — same server-authoritative stamp as the fee.
+    await stampGroupBuy(p, tenantId, (await getTenantSlug()) ?? tenantId);
 
     const row = await createStorefrontOrder(tenantId, p);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
