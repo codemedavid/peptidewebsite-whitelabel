@@ -23,6 +23,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Not tied to a storefront page — a direct super-admin switch. On for every
   // package by default; flips off per tenant from the branding editor.
   analytics: (b) => b.showAdminAnalytics !== false,
+  // Reseller Portal manager. Server-derived from the platform Features toggle
+  // (FEATURES.STORE_RESELLER_PORTAL). In every plan ceiling, so default ON —
+  // unlike the #merchant page, which additionally needs an access code.
+  reseller: (b) => b.showAdminReseller !== false,
   // Card Studio ("design" view). Server-derived: platform Features toggle AND
   // the branding-editor switch. Default ON.
   design: (b) => b.showAdminCardStudio !== false,

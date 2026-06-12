@@ -53,6 +53,9 @@ export default async function HomePage() {
   const resellerCode =
     typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
   brand.showPageMerchant = resellerEntitled && resellerCode !== "";
+  // The store-admin manager view gates on the entitlement alone — the owner
+  // sets the access code from inside it, so it can't require one to appear.
+  brand.showAdminReseller = resellerEntitled;
 
   // The reseller access code is validated server-side (verifyResellerCodeAction);
   // never ship it to the browser, even though the rest of `config` is public.

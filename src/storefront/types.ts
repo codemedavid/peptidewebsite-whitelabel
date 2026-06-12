@@ -245,6 +245,11 @@ export type Brand = {
   // Store-admin Group Buy Rules view. Derived server-side from the platform
   // entitlement (FEATURES.GB_RULES, admin → Features). Default OFF.
   showAdminGroupBuy?: boolean;
+  // Store-admin Reseller Portal manager. Derived server-side from the platform
+  // entitlement (FEATURES.STORE_RESELLER_PORTAL, admin → Features). In every
+  // plan ceiling so it defaults ON; the #merchant page additionally needs an
+  // access code (showPageMerchant).
+  showAdminReseller?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;
