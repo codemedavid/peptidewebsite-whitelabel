@@ -12,7 +12,7 @@ import {
 } from "@/lib/auth/storefront-admin";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
-import type { Category, Courier, PaymentMethod, Protocol } from "@/storefront/types";
+import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
@@ -212,6 +212,63 @@ export async function saveCouriersAction(couriers: unknown): Promise<ActionResul
   const normalized = normalizeCouriers(couriers);
   const current = await readConfig(tenantId);
   const config = { ...current, couriers: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/** Coerce untrusted client input into clean ShippingLocation rows. Each row
+ *  carries the courier it belongs to (courierId); blank when unassigned. */
+function normalizeShippingLocations(input: unknown): ShippingLocation[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: ShippingLocation[] = [];
+  for (const l of input.slice(0, 500)) {
+    const o = (l ?? {}) as Record<string, unknown>;
+    const id = String(o.id ?? "").slice(0, 64).trim();
+    const code = String(o.code ?? "").slice(0, 64).trim();
+    const name = String(o.name ?? "").slice(0, 120).trim();
+    if (!id || !code || !name || seen.has(id)) continue;
+    seen.add(id);
+    const price = Number(o.price);
+    out.push({
+      id,
+      courierId: String(o.courierId ?? "").slice(0, 64).trim(),
+      code,
+      name,
+      price: Number.isFinite(price) ? Math.max(0, price) : 0,
+      active: o.active !== false,
+    });
+  }
+  return out;
+}
+
+/**
+ * Persist the store's shipping locations into the shared `branding.config` blob
+ * (read-modify-write, mirroring saveCouriersAction so it never clobbers the rest
+ * of the storefront Brand config). The storefront reads them from
+ * `branding.config` server-side on every render, so the configured set — and
+ * each location's courier link + fee — feeds the checkout courier/location
+ * selectors on every device, not only the editing browser.
+ */
+export async function saveShippingLocationsAction(locations: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeShippingLocations(locations);
+  const current = await readConfig(tenantId);
+  const config = { ...current, shippingLocations: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

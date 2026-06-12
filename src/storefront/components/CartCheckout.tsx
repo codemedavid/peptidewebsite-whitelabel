@@ -47,10 +47,15 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, products, paymentMethods, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, products, paymentMethods, couriers, shippingLocations, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
+  // Courier + shipping location the customer picks at checkout. The customer
+  // chooses a courier first; only that courier's locations are then offered, and
+  // the matching fee is added to the total (see the computed values below).
+  const [courierId, setCourierId] = useState("");
+  const [locationId, setLocationId] = useState("");
   // True while the order is being persisted — drives the disabled/"Placing…"
   // button UI. `placingRef` is the SYNCHRONOUS counterpart: React state lags a
   // render, so two clicks in the same tick (fast double-click, or two different
@@ -82,7 +87,31 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // charge on top of the items. Displayed here for transparency; the AUTHORITATIVE
   // value is re-stamped server-side at placement from the same config.
   const adminFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
-  const total = subtotal + (adminFee?.amount ?? 0);
+
+  // Shipping: couriers linked to locations. A courier is offered only when it's
+  // active AND has at least one active location (a fee the customer can pick).
+  // When the store has configured none, `shippingEnabled` is false and checkout
+  // behaves exactly as before — no selectors, no fee — so unconfigured stores
+  // are unaffected.
+  const shipCouriers = useMemo(
+    () =>
+      couriers.filter(
+        (c) => c.active && shippingLocations.some((l) => l.active && l.courierId === c.id),
+      ),
+    [couriers, shippingLocations],
+  );
+  const shippingEnabled = shipCouriers.length > 0;
+  // The active locations belonging to the selected courier.
+  const courierLocations = useMemo(
+    () => shippingLocations.filter((l) => l.active && l.courierId === courierId),
+    [shippingLocations, courierId],
+  );
+  const selectedCourier = shipCouriers.find((c) => c.id === courierId);
+  const selectedLocation = courierLocations.find((l) => l.id === locationId);
+  const shippingFee = selectedLocation?.price ?? 0;
+  // Shipping is required to proceed only when the store actually offers it.
+  const shippingValid = !shippingEnabled || (!!selectedCourier && !!selectedLocation);
+  const total = subtotal + (adminFee?.amount ?? 0) + shippingFee;
 
   // Smart Cart & Checkout rules (branding.config.checkoutRules) — the cart
   // restrictions and checkout validations the owner configured, plus their
@@ -111,6 +140,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     if (open) {
       setStep("cart");
       setTouched(false);
+      setCourierId("");
+      setLocationId("");
       setPaymentTouched(false);
       setMethodId("");
       setProof("");
@@ -223,9 +254,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         postal: customer.postal,
         country: customer.country,
         region: "",
-        fee: 0,
+        // The fee this checkout DISPLAYED. The server re-derives the
+        // authoritative fee from config by `locationId` (like the admin fee), so
+        // a tampered/stale client can't undercharge shipping.
+        fee: shippingFee,
+        ...(selectedLocation ? { locationId: selectedLocation.id } : {}),
       },
-      courier: "",
+      // Courier the customer chose (its name) — the admin order detail dropdown
+      // and tracking both read this. Empty when the store has no shipping set up.
+      courier: selectedCourier?.name || "",
       trackingNumber: "",
       shippingNote: "",
       items: lines.map((l) => ({
@@ -289,6 +326,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // The fee the server actually charged (snapshotted on the stored order),
       // so the chat total can never drift from the persisted one.
       order.adminFee ?? null,
+      // Same for shipping — use the server-stamped courier + fee, not the local
+      // selection, so the messaged total matches what was persisted.
+      { courier: order.courier, fee: order.shipping?.fee ?? 0 },
     );
 
     // Navigate the pre-opened window to the channel, then copy the summary as a
@@ -420,6 +460,59 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   </label>
                 ))}
               </div>
+
+              {shippingEnabled && (
+                <div className="sf-cart__ship">
+                  <label className="sf-cart__field">
+                    <span>
+                      Courier<em aria-hidden> *</em>
+                    </span>
+                    <select
+                      className="sf-cart__select"
+                      value={courierId}
+                      aria-invalid={touched && !selectedCourier ? true : undefined}
+                      onChange={(e) => {
+                        // Switching couriers invalidates the prior location pick.
+                        setCourierId(e.target.value);
+                        setLocationId("");
+                      }}
+                    >
+                      <option value="" disabled>
+                        Select a courier…
+                      </option>
+                      {shipCouriers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="sf-cart__field">
+                    <span>
+                      Shipping location<em aria-hidden> *</em>
+                    </span>
+                    <select
+                      className="sf-cart__select"
+                      value={locationId}
+                      disabled={!selectedCourier}
+                      aria-invalid={
+                        touched && !!selectedCourier && !selectedLocation ? true : undefined
+                      }
+                      onChange={(e) => setLocationId(e.target.value)}
+                    >
+                      <option value="" disabled>
+                        {selectedCourier ? "Select a location…" : "Choose a courier first"}
+                      </option>
+                      {courierLocations.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} — {currency}
+                          {l.price.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
             </form>
           ) : (
             <div className="sf-cart__pay">
@@ -530,7 +623,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         {lines.length > 0 && (
           <footer className="sf-cart__foot">
             <div className="sf-cart__totals">
-              {adminFee && (
+              {(adminFee || shippingFee > 0) && (
                 <>
                   <div className="sf-cart__total sf-cart__total--sub">
                     <span>Subtotal</span>
@@ -539,13 +632,27 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       {subtotal.toLocaleString()}
                     </span>
                   </div>
-                  <div className="sf-cart__total sf-cart__total--sub">
-                    <span>{adminFee.label}</span>
-                    <span>
-                      {currency}
-                      {adminFee.amount.toLocaleString()}
-                    </span>
-                  </div>
+                  {shippingFee > 0 && (
+                    <div className="sf-cart__total sf-cart__total--sub">
+                      <span>
+                        Shipping
+                        {selectedLocation ? ` · ${selectedLocation.name}` : ""}
+                      </span>
+                      <span>
+                        {currency}
+                        {shippingFee.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {adminFee && (
+                    <div className="sf-cart__total sf-cart__total--sub">
+                      <span>{adminFee.label}</span>
+                      <span>
+                        {currency}
+                        {adminFee.amount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
               <div className="sf-cart__total">
@@ -589,11 +696,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 {touched && !detailsValid && (
                   <p className="sf-cart__error">Please fill in the required fields.</p>
                 )}
+                {touched && detailsValid && !shippingValid && (
+                  <p className="sf-cart__error">Please choose a courier and shipping location.</p>
+                )}
                 <button
                   className="btn btn-primary sf-cart__cta"
                   onClick={() => {
                     setTouched(true);
-                    if (detailsValid) setStep("payment");
+                    if (detailsValid && shippingValid) setStep("payment");
                   }}
                 >
                   Continue to payment
@@ -606,6 +716,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
               <>
                 {step === "details" && touched && !detailsValid && (
                   <p className="sf-cart__error">Please fill in the required fields.</p>
+                )}
+                {step === "details" && touched && detailsValid && !shippingValid && (
+                  <p className="sf-cart__error">Please choose a courier and shipping location.</p>
                 )}
                 {step === "payment" && paymentTouched && !paymentValid && (
                   <p className="sf-cart__error">
@@ -625,7 +738,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       onClick={() => {
                         if (step === "details") setTouched(true);
                         if (step === "payment") setPaymentTouched(true);
-                        if (detailsValid && paymentValid) void placeOrder(c.type);
+                        if (detailsValid && shippingValid && paymentValid) void placeOrder(c.type);
                       }}
                     >
                       {placing ? "Placing order…" : CHANNEL_LABELS[c.type]}

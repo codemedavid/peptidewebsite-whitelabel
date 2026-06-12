@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Brand, ShippingLocation } from "../types";
+import type { Brand, Courier, ShippingLocation } from "../types";
 import { useStore } from "../store";
 
 // ─── ShippingLocationModal ────────────────────────────────────────────────────
@@ -10,21 +10,30 @@ type ShippingLocationEditing = ShippingLocation & { _new?: boolean };
 
 function ShippingLocationModal({
   location,
+  couriers,
   currency,
   onCancel,
   onSave,
 }: {
   location: ShippingLocationEditing;
+  couriers: Courier[];
   currency: string;
   onCancel: () => void;
   onSave: (loc: ShippingLocationEditing) => void;
 }) {
+  const [courierId, setCourierId] = useState<string>(location.courierId || "");
   const [code, setCode] = useState<string>(location.code || "");
   const [name, setName] = useState<string>(location.name || "");
   const [price, setPrice] = useState<number>(location.price ?? 0);
   const [active, setActive] = useState<boolean>(location.active !== false);
 
-  const canSave = name.trim() && code.trim();
+  // The location's saved courier may have since been disabled or deleted — keep
+  // it selectable so editing an existing row doesn't silently re-assign it.
+  const courierOrphaned =
+    !!courierId && !couriers.some((c) => c.id === courierId);
+  const selectableCouriers = couriers.filter((c) => c.active);
+
+  const canSave = courierId.trim() && name.trim() && code.trim();
 
   return (
     <div className="admin-modal" onClick={onCancel}>
@@ -46,6 +55,40 @@ function ShippingLocationModal({
           </svg>
           {location._new ? "Add Shipping Location" : "Edit Shipping Location"}
         </h2>
+
+        <div className="admin-modal__row">
+          <label className="admin-field__label">
+            Courier
+            <span className="req" style={{ color: "var(--brand-accent)" }}>
+              *
+            </span>
+          </label>
+          <select
+            className="admin-select"
+            value={courierId}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setCourierId(e.target.value)
+            }
+          >
+            <option value="" disabled>
+              {selectableCouriers.length === 0
+                ? "No couriers yet — add one first"
+                : "Select a courier…"}
+            </option>
+            {courierOrphaned && (
+              <option value={courierId}>(unavailable) {courierId}</option>
+            )}
+            {selectableCouriers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <div className="admin-field__hint">
+            Which courier this location&apos;s fee applies to. Customers pick the
+            courier first, then only its locations are shown.
+          </div>
+        </div>
 
         <div className="admin-modal__row">
           <label className="admin-field__label">
@@ -120,6 +163,7 @@ function ShippingLocationModal({
             onClick={() =>
               onSave({
                 ...location,
+                courierId,
                 code,
                 name,
                 price: Number(price) || 0,
@@ -144,8 +188,13 @@ export function AdminShippingLocations({
   brand: Brand;
   onBack: () => void;
 }) {
-  const { shippingLocations, setShippingLocations } = useStore();
+  const { shippingLocations, setShippingLocations, couriers } = useStore();
   const [editing, setEditing] = useState<ShippingLocationEditing | null>(null);
+
+  // Courier name for a location's courierId — for the list rows. Falls back to
+  // a placeholder when the linked courier was deleted or the row predates the link.
+  const courierName = (id: string) =>
+    couriers.find((c) => c.id === id)?.name ?? (id ? "Unknown courier" : "No courier");
 
   const commit = (next: ShippingLocation[]) => {
     setShippingLocations(next);
@@ -154,6 +203,11 @@ export function AdminShippingLocations({
   const startAdd = () =>
     setEditing({
       id: `s${Date.now()}`,
+      // Pre-select the only courier when there's exactly one, so the common
+      // single-courier store skips a click; otherwise force an explicit pick.
+      courierId: couriers.filter((c) => c.active).length === 1
+        ? couriers.find((c) => c.active)!.id
+        : "",
       code: "",
       name: "",
       price: 0,
@@ -254,6 +308,7 @@ export function AdminShippingLocations({
               <div className="admin-ship-row__info">
                 <div className="admin-ship-row__code">{l.code || "—"}</div>
                 <div className="admin-ship-row__name">{l.name}</div>
+                <div className="admin-ship-row__courier">{courierName(l.courierId)}</div>
               </div>
               <div className="admin-ship-row__price">
                 {currency}
@@ -345,6 +400,7 @@ export function AdminShippingLocations({
         {editing && (
           <ShippingLocationModal
             location={editing}
+            couriers={couriers}
             currency={currency}
             onCancel={() => setEditing(null)}
             onSave={save}

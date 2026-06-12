@@ -82,6 +82,11 @@ export type Order = {
     country: string;
     region: string;
     fee: number;
+    /** The ShippingLocation the customer picked at checkout (ShippingLocation.id).
+     *  Sent so the server can re-derive the authoritative fee from config — the
+     *  client's `fee` is only what was displayed. Absent on legacy/demo orders
+     *  and when the store has no shipping locations configured. */
+    locationId?: string;
   };
   courier: string;
   trackingNumber: string;
@@ -104,6 +109,12 @@ export type Order = {
 
 export type ShippingLocation = {
   id: string;
+  /** The courier this location's fee belongs to (Courier.id). A shipping
+   *  location is configured per courier: the customer picks a courier first,
+   *  then only that courier's locations are offered, and the fee shown is the
+   *  one defined for this courier + location combination. Empty on legacy rows
+   *  saved before couriers were linked (treated as "unassigned"). */
+  courierId: string;
   code: string;
   name: string;
   price: number;
@@ -439,6 +450,14 @@ export type Brand = {
   // the owner's couriers show on every device. Absent until the owner saves
   // once → admin falls back to the seed couriers.
   couriers?: Courier[];
+
+  // Shipping locations + their fees, each linked to a courier (courierId). At
+  // checkout the customer picks a courier, then one of that courier's locations,
+  // and the matching fee is added to the total. Edited in the storefront #admin
+  // and persisted server-side in branding.config (same mechanism as couriers) so
+  // every device/customer sees the same set — not the editing browser's
+  // localStorage. Absent until the owner saves once → falls back to the seeds.
+  shippingLocations?: ShippingLocation[];
 
   // Storefront product categories (the tabs customers filter by, and the
   // dropdown the admin's product form offers). Edited in the storefront #admin

@@ -38,6 +38,7 @@ import {
   saveCouriersAction,
   savePaymentMethodsAction,
   saveProtocolsAction,
+  saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import type { CardDesign, CardTemplate } from "./cardDesign";
@@ -190,7 +191,13 @@ export function StoreProvider({
   // Customer's own placed orders — NOT seeded (a visitor must only see orders
   // they actually placed in this browser, never the sample/admin data).
   const [myOrders, setMyOrdersState] = useState<Order[]>([]);
-  const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(SEED_SHIPPING_LOCATIONS);
+  // Shipping locations load from the DB server-side (page → branding.config
+  // spread into the brand prop), same as couriers, so the checkout's courier +
+  // location selectors offer the same set on every device. Seed defaults apply
+  // until the owner saves once.
+  const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(
+    brandSeed.shippingLocations ?? SEED_SHIPPING_LOCATIONS,
+  );
   // Couriers load from the DB server-side (page → branding.config spread into
   // the brand prop), same as categories, so the order-detail dropdown is
   // identical on every device. Seed defaults apply until the owner saves once.
@@ -233,9 +240,12 @@ export function StoreProvider({
     // come from the DB via the server-provided brand prop (branding.config), so
     // a stale local copy can't override what the owner saved (the cross-device
     // bug). They persist through saveCategoriesAction instead.
+    // NOTE: shipping locations are intentionally NOT hydrated from localStorage —
+    // they come from the DB via the server-provided brand prop (branding.config),
+    // same as couriers, so a stale local copy can't override what the owner saved
+    // (the cross-device bug). They persist through saveShippingLocationsAction.
     setOrdersState(load(NS + "orders", SEED_ORDERS));
     setMyOrdersState(load(NS + "myorders", [] as Order[]));
-    setShippingState(load(NS + "shipping", SEED_SHIPPING_LOCATIONS));
     setCoaState(load(NS + "coa", SEED_COA_REPORTS));
     setPromoState(load(NS + "promo", SEED_PROMO_CODES));
     // NOTE: payment methods are intentionally NOT hydrated from localStorage —
@@ -304,8 +314,6 @@ export function StoreProvider({
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setShippingLocations = useMemo(() => makeSetter<ShippingLocation[]>("shipping", "SHIPPING_LOCATIONS", setShippingState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -498,6 +506,30 @@ export function StoreProvider({
         });
     },
     [toast, couriers],
+  );
+
+  // Shipping locations persist to the DB (branding.config), not localStorage, so
+  // the checkout's courier + location selectors offer the same set (and fees) on
+  // every device/customer. Mirrors setCouriers: gated on the storefront-admin
+  // session; local state updates optimistically and we only surface failures.
+  const setShippingLocations = useCallback(
+    (next: Updater<ShippingLocation[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: ShippingLocation[]) => ShippingLocation[])(shippingLocations)
+          : next;
+      setShippingState(value);
+      saveShippingLocationsAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save shipping locations: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save shipping locations — please sign in again and retry.");
+        });
+    },
+    [toast, shippingLocations],
   );
 
   // Categories persist to the DB (branding.config), not localStorage, so every

@@ -156,6 +156,7 @@ export function buildOrderMessage(
   payment?: CheckoutPayment,
   orderNumber?: string,
   adminFee?: { label: string; amount: number } | null,
+  shipping?: { courier: string; fee: number } | null,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -170,15 +171,26 @@ export function buildOrderMessage(
     })
     .join("\n");
   const subtotal = cartTotal(lines);
-  // With a fee, break the math down so the customer sees why the total is
-  // higher than the items; without one, keep the historical single Total line.
-  const totalLines = adminFee
-    ? [
-        `Subtotal: ${money(subtotal, currency)}`,
-        `${adminFee.label}: ${money(adminFee.amount, currency)}`,
-        `Total: ${money(subtotal + adminFee.amount, currency)}`,
-      ]
-    : [`Total: ${money(subtotal, currency)}`];
+  const shippingFee = shipping?.fee ?? 0;
+  // With a fee (shipping and/or admin), break the math down so the customer sees
+  // why the total is higher than the items; without one, keep the historical
+  // single Total line.
+  const totalLines =
+    adminFee || shippingFee > 0
+      ? [
+          `Subtotal: ${money(subtotal, currency)}`,
+          ...(shippingFee > 0
+            ? [
+                `Shipping${shipping?.courier ? ` (${shipping.courier})` : ""}: ${money(
+                  shippingFee,
+                  currency,
+                )}`,
+              ]
+            : []),
+          ...(adminFee ? [`${adminFee.label}: ${money(adminFee.amount, currency)}`] : []),
+          `Total: ${money(subtotal + (adminFee?.amount ?? 0) + shippingFee, currency)}`,
+        ]
+      : [`Total: ${money(subtotal, currency)}`];
 
   const ship = [
     customer.address,
@@ -214,7 +226,7 @@ export function buildOrderMessage(
     `Name: ${customer.name}`,
     `Email: ${customer.email}`,
     `Phone: ${customer.phone}`,
-    `Shipping: ${ship || "—"}`,
+    `Ship to: ${ship || "—"}`,
     ...paymentLines,
   ].join("\n");
 }

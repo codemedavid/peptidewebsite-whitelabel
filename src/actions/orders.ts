@@ -214,6 +214,40 @@ function itemsSubtotal(items: OrderItem[]): number {
 }
 
 /**
+ * Re-derive the SERVER-AUTHORITATIVE shipping fee + courier from the tenant's
+ * configured shipping locations, keyed by the `locationId` the checkout sent.
+ * Mirrors the admin-fee stamp: the client's displayed fee is never trusted, so a
+ * tampered or stale selection can't undercharge shipping. Mutates the order in
+ * place. No-ops when the store has no shipping locations configured, or the
+ * order carries no locationId (legacy/unconfigured checkout → keep what was
+ * sent). An unknown or inactive locationId zeroes the fee and clears the courier
+ * — a pick that no longer exists can't smuggle a charge through.
+ */
+function stampShipping(config: Record<string, unknown>, p: Order): void {
+  const locationId = p.shipping.locationId;
+  const locations = Array.isArray(config.shippingLocations)
+    ? (config.shippingLocations as Array<Record<string, unknown>>)
+    : [];
+  if (!locationId || locations.length === 0) return;
+  const loc = locations.find(
+    (l) => String((l ?? {}).id ?? "") === locationId && (l ?? {}).active !== false,
+  );
+  if (!loc) {
+    p.shipping.fee = 0;
+    p.courier = "";
+    return;
+  }
+  p.shipping.fee = Math.max(0, num(loc.price));
+  // Re-stamp the courier NAME from config so it matches the linked courier;
+  // fall back to the client-sent name only when the courier was since removed.
+  const couriers = Array.isArray(config.couriers)
+    ? (config.couriers as Array<Record<string, unknown>>)
+    : [];
+  const courier = couriers.find((c) => String((c ?? {}).id ?? "") === String(loc.courierId ?? ""));
+  if (courier) p.courier = str(courier.name, 120);
+}
+
+/**
  * Re-run the tenant's Group Buy rules (lib/storefront/group-buy-rules) against
  * the order's items, so the server enforces exactly what the cart drawer
  * validated — a tampered or stale client can't skip them. Only fires when the
@@ -331,6 +365,12 @@ function normalizeOrderInput(input: unknown): Order {
       country: str(s.country, 120),
       region: str(s.region, 120),
       fee: Math.max(0, num(s.fee)),
+      // The location the customer picked — carried so the server can re-derive
+      // the authoritative fee (see stampShipping). The client `fee` above is
+      // only what was displayed.
+      ...(typeof s.locationId === "string" && s.locationId
+        ? { locationId: str(s.locationId, 64) }
+        : {}),
     },
     courier: str(o.courier, 120),
     trackingNumber: str(o.trackingNumber, 120),
@@ -533,6 +573,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       : null;
     if (demoRuleError) return { error: demoRuleError };
     p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
+    // Shipping fee + courier — re-derived from the tenant's shipping locations,
+    // never trusted from the client (same authority as the admin fee).
+    stampShipping(config, p);
     // Group-buy attribution — same server-authoritative stamp as the fee.
     await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
@@ -549,6 +592,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
     p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
+    // Shipping fee + courier — re-derived from the tenant's shipping locations,
+    // never trusted from the client (same authority as the admin fee).
+    stampShipping(config, p);
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
