@@ -10,6 +10,7 @@ import { AdminCategoriesManager } from "./AdminCategoriesManager";
 import { AdminOrders } from "./AdminOrders";
 import { AdminOrderDetail } from "./AdminOrderDetail";
 import { AdminShippingLocations } from "./AdminShippingLocations";
+import { AdminCouriers } from "./AdminCouriers";
 import { AdminInventory } from "./AdminInventory";
 import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
@@ -31,6 +32,7 @@ type View =
   | "orders"
   | "order-detail"
   | "shipping"
+  | "couriers"
   | "inv"
   | "lab"
   | "promo"
@@ -126,6 +128,7 @@ export function AdminPage({
   if (activeView === "analytics") return <AdminAnalytics brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "design") return <AdminCardStudio brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "shipping") return <AdminShippingLocations brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "couriers") return <AdminCouriers brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "inv") return <AdminInventory brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
@@ -260,6 +263,7 @@ export function AdminPage({
                     if (q.id === "analytics") return setView("analytics");
                     if (q.id === "inv") return setView("inv");
                     if (q.id === "ship") return setView("shipping");
+                    if (q.id === "couriers") return setView("couriers");
                     if (q.id === "lab") return setView("lab");
                     if (q.id === "promo") return setView("promo");
                     if (q.id === "pay") return setView("pay");

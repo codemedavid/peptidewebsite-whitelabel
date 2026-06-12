@@ -21,6 +21,7 @@ import {
   BRAND,
   SEED_CATEGORIES,
   SEED_COA_REPORTS,
+  SEED_COURIERS,
   SEED_FAQ_GROUPS,
   SEED_ORDERS,
   SEED_PAYMENT_METHODS,
@@ -34,6 +35,7 @@ import {
   saveCardDesignAction,
   saveCardTemplatesAction,
   saveCategoriesAction,
+  saveCouriersAction,
   savePaymentMethodsAction,
   saveProtocolsAction,
 } from "@/actions/storefront-admin";
@@ -43,6 +45,7 @@ import type {
   Brand,
   Category,
   CoaReport,
+  Courier,
   FaqGroup,
   Order,
   PaymentMethod,
@@ -81,6 +84,8 @@ export type Store = {
   setMyOrders: (next: Updater<Order[]>) => void;
   shippingLocations: ShippingLocation[];
   setShippingLocations: (next: Updater<ShippingLocation[]>) => void;
+  couriers: Courier[];
+  setCouriers: (next: Updater<Courier[]>) => void;
   coaReports: CoaReport[];
   setCoaReports: (next: Updater<CoaReport[]>) => void;
   promoCodes: PromoCode[];
@@ -186,6 +191,12 @@ export function StoreProvider({
   // they actually placed in this browser, never the sample/admin data).
   const [myOrders, setMyOrdersState] = useState<Order[]>([]);
   const [shippingLocations, setShippingState] = useState<ShippingLocation[]>(SEED_SHIPPING_LOCATIONS);
+  // Couriers load from the DB server-side (page → branding.config spread into
+  // the brand prop), same as categories, so the order-detail dropdown is
+  // identical on every device. Seed defaults apply until the owner saves once.
+  const [couriers, setCouriersState] = useState<Courier[]>(
+    brandSeed.couriers ?? SEED_COURIERS,
+  );
   const [coaReports, setCoaState] = useState<CoaReport[]>(SEED_COA_REPORTS);
   const [promoCodes, setPromoState] = useState<PromoCode[]>(SEED_PROMO_CODES);
   // Payment methods load from the DB server-side (page.tsx spreads
@@ -311,6 +322,7 @@ export function StoreProvider({
     w.CATEGORIES = categories;
     w.ORDERS = orders;
     w.SHIPPING_LOCATIONS = shippingLocations;
+    w.COURIERS = couriers;
     w.COA_REPORTS = coaReports;
     w.PROMO_CODES = promoCodes;
     w.PAYMENT_METHODS = paymentMethods;
@@ -464,6 +476,30 @@ export function StoreProvider({
     [toast, brand.cardTemplates],
   );
 
+  // Couriers persist to the DB (branding.config), not localStorage, so the
+  // order-detail dropdown offers the same list on every device. Mirrors
+  // setCategories: gated on the storefront-admin session; local state updates
+  // optimistically and we only surface failures.
+  const setCouriers = useCallback(
+    (next: Updater<Courier[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: Courier[]) => Courier[])(couriers)
+          : next;
+      setCouriersState(value);
+      saveCouriersAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save couriers: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save couriers — please sign in again and retry.");
+        });
+    },
+    [toast, couriers],
+  );
+
   // Categories persist to the DB (branding.config), not localStorage, so every
   // device/customer sees the owner's configured tabs and the product form's
   // dropdown stays in sync. Mirrors setProtocols: gated on the storefront-admin
@@ -496,6 +532,7 @@ export function StoreProvider({
     orders, setOrders,
     myOrders, setMyOrders,
     shippingLocations, setShippingLocations,
+    couriers, setCouriers,
     coaReports, setCoaReports,
     promoCodes, setPromoCodes,
     paymentMethods, setPaymentMethods,

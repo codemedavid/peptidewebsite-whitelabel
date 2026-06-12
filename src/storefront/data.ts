@@ -6,6 +6,7 @@ import type {
   Brand,
   Category,
   CoaReport,
+  Courier,
   FaqGroup,
   Order,
   PaymentMethod,
@@ -233,6 +234,15 @@ export const SEED_SHIPPING_LOCATIONS: ShippingLocation[] = [
   { id: "s6", code: "VISAYAS_MINDANAO", name: "Visayas & Mindanao", price: 130, active: true },
   { id: "s7", code: "JNT_METRO_MANILA", name: "J&T - Metro Manila", price: 120, active: true },
   { id: "s8", code: "LBC EXPRESS", name: "LBC - LUZON, VISAYAS, MINDANAO", price: 450, active: true },
+];
+
+export const SEED_COURIERS: Courier[] = [
+  { id: "c1", name: "LBC Express", trackingUrl: "", active: true },
+  { id: "c2", name: "J&T Express", trackingUrl: "", active: true },
+  { id: "c3", name: "Flash Express", trackingUrl: "", active: true },
+  { id: "c4", name: "Ninja Van", trackingUrl: "", active: true },
+  { id: "c5", name: "JRS Express", trackingUrl: "", active: true },
+  { id: "c6", name: "Grab Express", trackingUrl: "", active: true },
 ];
 
 export const SEED_COA_REPORTS: CoaReport[] = [

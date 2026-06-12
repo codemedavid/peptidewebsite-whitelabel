@@ -48,9 +48,15 @@ export function AdminOrderDetail({
   order: Order;
   onBack: () => void;
 }) {
+  const { setProducts, couriers } = useStore();
+  // The configured courier list (Couriers admin view), active rows only — plus
+  // the order's saved courier if it was since deleted/disabled, so an old
+  // order's selection never silently changes.
+  const courierOptions = couriers.filter((c) => c.active).map((c) => c.name);
   const [o, setO] = useState<Order>(order);
   const [tracking, setTracking] = useState<string>(o.trackingNumber || "");
-  const [courier, setCourier] = useState<string>(o.courier || "LBC Express");
+  const [courier, setCourier] = useState<string>(o.courier || courierOptions[0] || "");
+  if (courier && !courierOptions.includes(courier)) courierOptions.unshift(courier);
   const [note, setNote] = useState<string>(o.shippingNote || "");
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -63,8 +69,6 @@ export function AdminOrderDetail({
   const ship = o.shipping?.fee || 0;
   const fee = o.adminFee?.amount || 0;
   const total = sub + ship + fee;
-
-  const { setProducts } = useStore();
 
   // Persist a patch to the DB (store admin gated). Optimistically apply locally,
   // roll back + surface the error if the write fails.
@@ -285,12 +289,11 @@ export function AdminOrderDetail({
                 value={courier}
                 onChange={(e) => setCourier(e.target.value)}
               >
-                <option>LBC Express</option>
-                <option>J&amp;T Express</option>
-                <option>Flash Express</option>
-                <option>Ninja Van</option>
-                <option>JRS Express</option>
-                <option>Grab Express</option>
+                {courierOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
               </select>
               <input
                 className="admin-input"

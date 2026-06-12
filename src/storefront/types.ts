@@ -97,6 +97,14 @@ export type ShippingLocation = {
   active: boolean;
 };
 
+export type Courier = {
+  id: string;
+  name: string;
+  /** Optional tracking page URL shared with customers (e.g. LBC's tracker). */
+  trackingUrl: string;
+  active: boolean;
+};
+
 export type CoaReport = {
   id: string;
   name: string;
@@ -394,6 +402,13 @@ export type Brand = {
   // owner's edits show on every device/customer rather than only the editing
   // browser. Absent until the owner saves once → storefront falls back to seeds.
   protocols?: Protocol[];
+
+  // Couriers the store ships with (the dropdown the admin picks from when
+  // saving tracking info on an order). Edited in the storefront #admin and
+  // persisted server-side in branding.config (same mechanism as categories) so
+  // the owner's couriers show on every device. Absent until the owner saves
+  // once → admin falls back to the seed couriers.
+  couriers?: Courier[];
 
   // Storefront product categories (the tabs customers filter by, and the
   // dropdown the admin's product form offers). Edited in the storefront #admin

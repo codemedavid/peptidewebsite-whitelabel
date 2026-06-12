@@ -12,7 +12,7 @@ import {
 } from "@/lib/auth/storefront-admin";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
-import type { Category, PaymentMethod, Protocol } from "@/storefront/types";
+import type { Category, Courier, PaymentMethod, Protocol } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
@@ -160,6 +160,58 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
   const normalized = normalizeCategories(categories);
   const current = await readConfig(tenantId);
   const config = { ...current, categories: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/** Coerce untrusted client input into clean Courier rows. */
+function normalizeCouriers(input: unknown): Courier[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: Courier[] = [];
+  for (const c of input.slice(0, 100)) {
+    const o = (c ?? {}) as Record<string, unknown>;
+    const id = String(o.id ?? "").slice(0, 64).trim();
+    const name = String(o.name ?? "").slice(0, 120).trim();
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name,
+      trackingUrl: typeof o.trackingUrl === "string" ? o.trackingUrl.slice(0, 300).trim() : "",
+      active: o.active !== false,
+    });
+  }
+  return out;
+}
+
+/**
+ * Persist the store's couriers into the shared `branding.config` blob
+ * (read-modify-write, mirroring saveCategoriesAction so it never clobbers the
+ * rest of the storefront Brand config). The storefront reads couriers from
+ * `branding.config` server-side on every render, so the configured list feeds
+ * the order-detail courier dropdown on every device — not only the editing
+ * browser.
+ */
+export async function saveCouriersAction(couriers: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeCouriers(couriers);
+  const current = await readConfig(tenantId);
+  const config = { ...current, couriers: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
