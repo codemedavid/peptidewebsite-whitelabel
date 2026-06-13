@@ -63,6 +63,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // immediately and reliably rejects the second one.
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
+  // A persistent, visible error from the last placement attempt (usually a
+  // server validation rejection). Rendered next to the channel buttons — unlike
+  // the fleeting toast it survives focus changes / tab switches, so the customer
+  // actually sees WHY the hand-off didn't happen instead of just bouncing back.
+  const [placeError, setPlaceError] = useState("");
   // Stable idempotency key for one logical order. Kept across a failed attempt
   // so a retry returns the same stored order (server dedupes on it) instead of
   // creating a duplicate; reset on success and when the drawer (re)opens.
@@ -148,6 +153,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       setProofName("");
       setUploadingProof(false);
       setPlacing(false);
+      setPlaceError("");
       placingRef.current = false;
       draftIdRef.current = null;
     }
@@ -215,6 +221,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
     placingRef.current = true;
     setPlacing(true);
+    setPlaceError("");
 
     // One stable idempotency key per logical order, reused across retries so a
     // committed-but-unacknowledged write isn't duplicated on the next attempt.
@@ -223,14 +230,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       (draftIdRef.current =
         typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
 
-    // Open the chat window synchronously, inside the click, so it isn't
-    // popup-blocked — then navigate it once the server confirms the order. We
-    // can't pass the prefilled URL yet because the authoritative order number
-    // only exists after the (awaited) persist below.
-    // NB: do NOT pass "noopener"/"noreferrer" here — they make window.open()
-    // return null, losing the handle we need to navigate after the await. We
-    // sever `opener` ourselves before navigating, for the same security benefit.
-    const chatWin = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+    // We deliberately do NOT pre-open a chat window here. Pre-opening
+    // `about:blank` and navigating it after the awaited persist was unreliable:
+    // on mobile the gesture is spent by the time the server responds (the tab
+    // can't be navigated), and on desktop a server rejection closed the blank
+    // tab and bounced the customer straight back to the store with no idea why.
+    // Instead we persist first, then do a top-level navigation (see below) which
+    // is never popup-blocked and behaves identically on every device.
 
     // The order NUMBER is assigned SERVER-SIDE (per tenant); `id` here is the
     // idempotency key the server stores as clientId — not the DB primary key.
@@ -291,14 +297,17 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
 
     if (!result || "error" in result) {
-      chatWin?.close();
       placingRef.current = false;
       setPlacing(false);
       // Keep the cart and the drawer open so the customer can retry — nothing
       // was stored, so nothing is lost. draftIdRef is intentionally kept so the
       // retry carries the same idempotency key (a committed-but-unacknowledged
       // write returns the same order instead of duplicating it).
-      toast(`Couldn't place your order: ${result?.error ?? "please try again."}`);
+      const reason = result?.error ?? "please try again.";
+      // Persistent banner (survives focus changes) AND a toast — the toast alone
+      // was being missed because nothing visibly changed in the drawer.
+      setPlaceError(`Couldn't place your order: ${reason}`);
+      toast(`Couldn't place your order: ${reason}`);
       return;
     }
 
@@ -331,19 +340,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       { courier: order.courier, fee: order.shipping?.fee ?? 0 },
     );
 
-    // Navigate the pre-opened window to the channel, then copy the summary as a
-    // fallback (Telegram/Messenger can't prefill a DM; WhatsApp carries the text
-    // in the link).
+    // Copy the summary as a fallback (Telegram/Messenger can't prefill a DM;
+    // WhatsApp carries the text in the link). Best-effort and awaited so the
+    // write completes BEFORE we navigate the tab away — otherwise the unload
+    // would abort it.
     const url = channelUrl(channel, message);
-    if (chatWin && !chatWin.closed) {
-      try { chatWin.opener = null; } catch { /* already cross-origin — ignore */ }
-      chatWin.location.href = url;
-    } else {
-      // Popup was blocked when we tried to pre-open it — open inline as a
-      // fallback; the clipboard copy below is the ultimate backstop.
-      window.open(url, "_blank", "noreferrer");
+    if (!channelPrefills(channel.type)) {
+      try { await navigator.clipboard?.writeText(message); } catch { /* clipboard denied — link still opens */ }
     }
-    void navigator.clipboard?.writeText(message).catch(() => {});
     toast(
       channelPrefills(channel.type)
         ? `Order ${orderNum} placed — opening ${CHANNEL_LABELS[channel.type]}…`
@@ -356,6 +360,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     placingRef.current = false;
     setPlacing(false);
     onClose();
+
+    // Top-level navigation to the chat channel. Unlike window.open() this is
+    // NEVER popup-blocked and works identically on desktop and mobile — the
+    // customer is handed straight to WhatsApp / Telegram / Messenger, and the
+    // browser Back button returns them to the store. This is the last thing we
+    // do so all the state above is committed first.
+    if (typeof window !== "undefined") window.location.href = url;
   }
 
   if (!open) return null;
@@ -725,6 +736,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     {!selectedMethod
                       ? "Please choose a payment method."
                       : "Please upload your proof of payment."}
+                  </p>
+                )}
+                {placeError && (
+                  <p className="sf-cart__error" role="alert">
+                    {placeError}
                   </p>
                 )}
                 <p className="sf-cart__channels-label">Send your order via</p>
