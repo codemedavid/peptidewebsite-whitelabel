@@ -119,15 +119,11 @@ const PRO: FeatureKey[] = [
   FEATURES.STORE_ORDER_TRACKING,
   FEATURES.STORE_MULTI_CURRENCY,
   FEATURES.NOTIFY_EMAIL,
-  // Group buys ride on checkout, so the module starts at the ecommerce tier.
-  // Workflow extras (scheduling, parallel runs, supplier reports) are Enterprise.
-  FEATURES.GB_MODULE,
-  FEATURES.GB_CREATE,
-  FEATURES.GB_EDIT,
-  FEATURES.GB_DUPLICATE,
-  FEATURES.GB_ARCHIVE,
-  FEATURES.GB_PRODUCT_ASSIGNMENT,
-  FEATURES.GB_RULES,
+  // NB: Group Buy (GB_*) is intentionally OUT of every plan default until the
+  // module is finished — the feature keys still exist in FEATURES so they can be
+  // gated per tenant, but no plan grants them, so GB_MODULE stays off everywhere
+  // (admin screen hidden, orders never attributed). Re-add GB_MODULE + the basic
+  // caps here, and the Enterprise extras below, when it's ready to ship.
 ];
 const ENTERPRISE: FeatureKey[] = [
   ...PRO,
@@ -142,17 +138,9 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.MARKETING_AUTOMATION,
   FEATURES.INTEGRATIONS,
   FEATURES.NOTIFY_TELEGRAM,
-  FEATURES.GB_SCHEDULED,
-  FEATURES.GB_MULTIPLE_ACTIVE,
-  FEATURES.GB_SUPPLIER_REPORTS,
-  // Excel & Supplier Reports controls ride on the supplier-reports tier.
-  FEATURES.GB_REPORT_EXCEL,
-  FEATURES.GB_REPORT_CSV,
-  FEATURES.GB_REPORT_PDF,
-  FEATURES.GB_REPORT_AUTO_ON_CLOSE,
-  FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN,
-  FEATURES.GB_REPORT_PRODUCT_BREAKDOWN,
-  FEATURES.GB_REPORT_SUPPLIER_SUMMARY,
+  // Group Buy Enterprise extras (scheduling, parallel runs, supplier reports +
+  // the GB_REPORT_* controls) are also held back until the module ships — see
+  // the note in PRO above.
 ];
 
 export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
