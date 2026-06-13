@@ -123,8 +123,7 @@ export const FEATURES: Feature[] = [
 export type DemoSite = { name: string; category: string; blurb: string; slug: string };
 
 export const DEMO_SITES: DemoSite[] = [
-  { name: "Peppertones", category: "Peptides & Research", blurb: "Clean clinical storefront with COA pages and order tracking.", slug: "peppertones" },
-  { name: "Peppies Intl", category: "Wellness & Peptides", blurb: "Curated catalog with WhatsApp checkout and QR payments.", slug: "peppies-intl" },
+  { name: "AR Jonina", category: "Peptides & Research", blurb: "Clean clinical storefront with a full catalog, checkout, and order tracking.", slug: "ar-jonina" },
 ];
 
 // ──────────────────────────── Packages ────────────────────────────
