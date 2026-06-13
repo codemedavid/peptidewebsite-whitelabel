@@ -23,15 +23,19 @@ const TENANT_SLUG = "ar-jonina";
 const SRC_DIR = join(homedir(), "Downloads", "product images");
 
 // slug (in our catalog) → image filename (in SRC_DIR). Exact matches only.
+// Batch 2 (added Jun 13) fills in the products that had no photo before.
 const MAP: Record<string, string> = {
-  "tirzepatide-15mg-ba3": "tirzepatide 15mg.png",
-  "tirzepatide-30mg-ba5": "tirzepatide 30mg.png",
-  "ghk-cu-50mg-ba10": "ghk-cu 50mg.png",
-  "ghk-cu-100mg-ba10": "ghk-cu 100mg.png",
-  "aod-9604-bac-water": "aod-9604 5mg.png",
-  "nad-500mg-ba10": "nad+ 500mg.png",
-  "glutathione-1500mg-ba10": "gluthathione 1500mg.jpeg",
-  "lipo-c-fat-blaster": "lipo c 10ml.jpeg",
+  "retatrutide-20mg-ba3": "retatrutide 20mg.png",
+  "tirzepatide-60mg-ba10": "tirzepatide 60mg.png",
+  "cagrilintide-5mg-ba3": "cagrilintide 5mg.png",
+  "glow-70mg-ba10": "glow 70mg.png",
+  "klow-ba10": "klow 80mg.png",
+  "kpv-10mg-ba3": "kpv 10mg.png",
+  "mnm-blend-ba10": "mnm blend.png",
+  "pt-141-10mg-ba3": "pt-141 10mg.png",
+  "bpc-157-10mg": "bpc-157 10mg.png",
+  "selank-10mg": "selank 10mg.png",
+  "semax-10mg": "3332e5a5-73d0-4a90-b344-470b5f3dac61.png",
 };
 
 /** Ensure the ImageKit env vars are present (Prisma loads .env; belt-and-braces). */
