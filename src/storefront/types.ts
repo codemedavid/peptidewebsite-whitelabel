@@ -40,6 +40,10 @@ export type Product = {
   gbPrice?: number;
   /** False keeps the product visible in the catalog but blocks add-to-cart. */
   purchasable?: boolean;
+  /** "Price on request": the item is on hand but has no fixed price. The catalog
+   *  shows an "On hand — message for price" label instead of a price and blocks
+   *  add-to-cart (the customer messages the store to order). */
+  priceOnRequest?: boolean;
 };
 
 export type Category = { id: string; label: string };

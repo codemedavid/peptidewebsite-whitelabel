@@ -1076,6 +1076,13 @@
   font-size: 22px;
   color: var(--brand-main);
 }
+/* "Price on request" label shown in place of a price for on-hand items with no
+   fixed price. Smaller/muted so it reads as a status, not a headline number. */
+.sf-root .product-card__price-poa {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand-text-muted, var(--brand-main));
+}
 /* Wholesale / reseller tiers shown under the retail price. Reset the inherited
    display font (the price block is .font-display) so these read as small,
    muted metadata rather than another headline. */

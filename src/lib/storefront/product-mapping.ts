@@ -58,6 +58,9 @@ export type ProductMetadata = {
   productType?: "gb";
   gbPrice?: number;
   purchasable?: false;
+  /** On-hand item with no fixed price — see Product.priceOnRequest. Persisted
+   *  only as `true` (absent = a normal priced product). */
+  priceOnRequest?: true;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -169,6 +172,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     productType: meta.productType === "gb" ? "gb" : "onhand",
     gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
     purchasable: meta.purchasable !== false,
+    priceOnRequest: meta.priceOnRequest === true,
   };
 }
 
@@ -249,6 +253,7 @@ export function productToDbWrite(
         p.productType === "gb" && Number(p.gbPrice) > 0 ? Number(p.gbPrice) : undefined,
       // Only the restrictive value persists; compactMetadata keeps `false`.
       purchasable: p.purchasable === false ? false : undefined,
+      priceOnRequest: p.priceOnRequest ? true : undefined,
     }),
   };
 }

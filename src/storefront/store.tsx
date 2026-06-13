@@ -349,6 +349,12 @@ export function StoreProvider({
   // cart) — the server re-validates at checkout, this just keeps the UI honest.
   const addToCart = useCallback(
     (product: Product, qty: number = 1) => {
+      // Price-on-request items are on hand but have no fixed price — they can't
+      // be bought through the cart; the customer messages the store to order.
+      if (product.priceOnRequest) {
+        toast(`${product.name} is on hand — message us for the price.`);
+        return;
+      }
       // Smart Checkout cart restriction: with mixed-cart prevention on, a
       // product from a second category is rejected here (the friendliest spot —
       // before it's in the cart). Checkout re-validates server-side regardless.

@@ -82,7 +82,7 @@ const SEEDS: Seed[] = [
   {
     slug: "tirzepatide-60mg-ba10",
     name: "Tirzepatide 60mg + Bac Water 10ml",
-    price: 1800,
+    price: 2500,
     category: "Weight Loss",
     stock: 5,
     description: "Tirzepatide (GLP-1/GIP) 60 mg research vial, paired with 10 ml bacteriostatic water.",
@@ -226,6 +226,14 @@ const SEEDS: Seed[] = [
     category: "Supplies",
     stock: 30,
     description: "Bacteriostatic water, 10 mL (BA10), for reconstituting research peptides.",
+  },
+  {
+    slug: "pharma-bac",
+    name: "Pharma Bac",
+    price: 130,
+    category: "Supplies",
+    stock: 0, // no count given — set a real count in admin
+    description: "Pharmaceutical-grade bacteriostatic water for reconstituting research peptides.",
   },
 ];
 

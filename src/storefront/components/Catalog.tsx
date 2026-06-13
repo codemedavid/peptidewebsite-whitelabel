@@ -30,6 +30,9 @@ export function ProductCard({
   // server enforce the same cap — this is the first, visible line of defense.
   const stock = Math.max(0, product.stock || 0);
   const outOfStock = stock <= 0;
+  // "Price on request": on hand but no fixed price. Show a label instead of a
+  // price and block add-to-cart — the customer messages the store to order.
+  const poa = product.priceOnRequest === true;
   // Wholesale / reseller prices are deliberately NOT shown on the public catalog
   // — they live only on the gated reseller page (#merchant). The cart still
   // auto-applies the bulk price at the per-product minimum (see checkout.ts), so
@@ -38,6 +41,8 @@ export function ProductCard({
     <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
       {outOfStock ? (
         <span className="product-card__badge badge badge-soft">Out of stock</span>
+      ) : poa ? (
+        <span className="product-card__badge badge badge-soft">On hand</span>
       ) : (
         product.featured && (
           <span className="product-card__badge badge badge-solid">Featured</span>
@@ -85,45 +90,59 @@ export function ProductCard({
 
       <div className="product-card__foot">
         <div className="product-card__price font-display">
-          {product.currency}
-          {product.price.toLocaleString()}
+          {poa ? (
+            <span className="product-card__price-poa">Message for price</span>
+          ) : (
+            <>
+              {product.currency}
+              {product.price.toLocaleString()}
+            </>
+          )}
         </div>
-        <div className="product-card__buy">
-          <div className="sf-qty product-card__qty">
-            <button
-              type="button"
-              aria-label={`Remove one ${product.name}`}
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              disabled={qty <= 1}
-            >
-              −
-            </button>
-            <span aria-live="polite">{qty}</span>
-            <button
-              type="button"
-              aria-label={`Add one ${product.name}`}
-              onClick={() => setQty((q) => Math.min(stock || 1, q + 1))}
-              disabled={outOfStock || qty >= stock}
-            >
-              +
+        {poa ? (
+          <div className="product-card__buy">
+            <button className="btn btn-primary product-card__cta" disabled>
+              Message to order
             </button>
           </div>
-          <button
-            className="btn btn-primary product-card__cta"
-            disabled={outOfStock}
-            onClick={() => {
-              onAdd(qty);
-              setQty(1);
-            }}
-          >
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
-            </svg>
-            {outOfStock ? "Out of Stock" : "Add to Cart"}
-          </button>
-        </div>
+        ) : (
+          <div className="product-card__buy">
+            <div className="sf-qty product-card__qty">
+              <button
+                type="button"
+                aria-label={`Remove one ${product.name}`}
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+              >
+                −
+              </button>
+              <span aria-live="polite">{qty}</span>
+              <button
+                type="button"
+                aria-label={`Add one ${product.name}`}
+                onClick={() => setQty((q) => Math.min(stock || 1, q + 1))}
+                disabled={outOfStock || qty >= stock}
+              >
+                +
+              </button>
+            </div>
+            <button
+              className="btn btn-primary product-card__cta"
+              disabled={outOfStock}
+              onClick={() => {
+                onAdd(qty);
+                setQty(1);
+              }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
+              </svg>
+              {outOfStock ? "Out of Stock" : "Add to Cart"}
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );
