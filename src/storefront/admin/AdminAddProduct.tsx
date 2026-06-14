@@ -104,6 +104,61 @@ function SetInclusionsEditor({ items, onChange }: SetInclusionsEditorProps) {
   );
 }
 
+type Variation = { name: string; price: number };
+
+type VariationsEditorProps = {
+  items: Variation[];
+  currency: string;
+  onChange: (items: Variation[]) => void;
+};
+
+function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) {
+  const add = () => onChange([...items, { name: "", price: 0 }]);
+  const upd = (i: number, patch: Partial<Variation>) =>
+    onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+  const rm = (i: number) => onChange(items.filter((_, j) => j !== i));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((it, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 140px 36px", gap: 10 }}>
+          <input
+            className="admin-input"
+            placeholder="Variation (e.g. 5mg)"
+            value={it.name}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => upd(i, { name: e.target.value })}
+          />
+          <input
+            className="admin-input"
+            type="number"
+            min="0"
+            placeholder={`Price (${currency})`}
+            value={it.price}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              upd(i, { price: Number(e.target.value) || 0 })
+            }
+          />
+          <button
+            className="admin-image-btn admin-image-btn--secondary"
+            style={{ padding: 0, width: 36, justifyContent: "center" }}
+            onClick={() => rm(i)}
+            aria-label="Remove"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        className="admin-image-btn admin-image-btn--secondary"
+        style={{ alignSelf: "flex-start" }}
+        onClick={add}
+      >
+        + Add variation
+      </button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -137,6 +192,7 @@ export function AdminAddProduct({
   const [sequence, setSequence]     = useState<string>(initial?.sequence || "");
   const [isSet, setIsSet]           = useState<boolean>(initial?.isSet || false);
   const [setItems, setSetItems]     = useState<Inclusion[]>(initial?.inclusions || []);
+  const [variations, setVariations] = useState<Variation[]>(initial?.variations || []);
   const [stock, setStock]           = useState<number | string>(initial?.stock ?? 0);
   const [featured, setFeatured]     = useState<boolean>(initial?.featured || false);
   const [available, setAvailable]   = useState<boolean>(initial?.available !== false);
@@ -206,6 +262,9 @@ export function AdminAddProduct({
       sequence,
       isSet,
       inclusions: setItems,
+      variations: variations
+        .map((v) => ({ name: v.name.trim(), price: Number(v.price) || 0 }))
+        .filter((v) => v.name),
       stock: Number(stock) || 0,
       featured,
       available,
@@ -373,6 +432,17 @@ export function AdminAddProduct({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSequence(e.target.value)} />
             </div>
           </div>
+        </div>
+
+        {/* ---------- Variations ---------- */}
+        <div className="admin-form__card">
+          <h2 className="admin-form__section">🧬 Variations</h2>
+          <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
+            Offer the same product in multiple options — e.g. dosages or sizes like
+            5mg / 10mg — each with its own price ({currency}). Leave empty to sell
+            the product as a single option at the base price above.
+          </div>
+          <VariationsEditor items={variations} currency={currency} onChange={setVariations} />
         </div>
 
         {/* ---------- Complete Set Inclusions ---------- */}

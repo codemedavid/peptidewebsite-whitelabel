@@ -201,7 +201,11 @@ export function AdminProductsList({
                   </td>
                   <td data-label="Category"><span style={{ fontSize: 14 }}>{catLabel(p.category)}</span></td>
                   <td className="admin-cell-price" data-label="Price">{currency}{(p.price || 0).toLocaleString()}</td>
-                  <td className="admin-cell-muted" data-label="Sizes">{p.sizes || "No sizes"}</td>
+                  <td className="admin-cell-muted" data-label="Sizes">
+                    {p.variations && p.variations.length
+                      ? p.variations.map((v) => v.name).join(", ")
+                      : p.sizes || "No sizes"}
+                  </td>
                   <td data-label="Purity"><span className="admin-pill admin-pill--dark">{p.purity || "—"}</span></td>
                   <td className="admin-cell-price" data-label="Stock">{p.stock ?? 0}</td>
                   <td data-label="Status">

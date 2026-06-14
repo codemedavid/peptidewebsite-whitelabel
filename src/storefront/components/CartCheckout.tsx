@@ -40,10 +40,10 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
   { key: "email", label: "Email", required: true, type: "email" },
   { key: "phone", label: "Phone", required: true, type: "tel" },
   { key: "address", label: "Address", required: true },
+  { key: "barangay", label: "Barangay", required: true },
   { key: "city", label: "City / Municipality", required: true },
   { key: "province", label: "Province / State", required: true },
   { key: "postal", label: "Postal code", required: false },
-  { key: "country", label: "Country", required: true },
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -254,11 +254,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       },
       shipping: {
         address: customer.address,
-        barangay: "",
+        barangay: customer.barangay,
         city: customer.city,
         province: customer.province,
         postal: customer.postal,
-        country: customer.country,
+        country: "Philippines",
         region: "",
         // The fee this checkout DISPLAYED. The server re-derives the
         // authoritative fee from config by `locationId` (like the admin fee), so

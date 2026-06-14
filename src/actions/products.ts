@@ -55,6 +55,14 @@ function normalizeProductInput(input: unknown): Product {
     const x = (it ?? {}) as Record<string, unknown>;
     return { name: str(x.name, 200), qty: Math.max(1, Math.round(num(x.qty)) || 1) };
   });
+  const variationsRaw = Array.isArray(o.variations) ? o.variations : [];
+  const variations = variationsRaw
+    .slice(0, 100)
+    .map((it) => {
+      const x = (it ?? {}) as Record<string, unknown>;
+      return { name: str(x.name, 80).trim(), price: Math.max(0, num(x.price)) };
+    })
+    .filter((v) => v.name);
   return {
     id: str(o.id, 64),
     name: str(o.name, 200).trim(),
@@ -78,6 +86,7 @@ function normalizeProductInput(input: unknown): Product {
     storage: str(o.storage, 200),
     sequence: str(o.sequence, 1000),
     sizes: str(o.sizes, 200),
+    variations,
     reseller: ((): Product["reseller"] => {
       const r = (o.reseller ?? {}) as Record<string, unknown>;
       const vialsOnly = Math.max(0, num(r.vialsOnly));

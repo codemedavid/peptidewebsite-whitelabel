@@ -28,6 +28,11 @@ export type Product = {
   storage?: string;
   sequence?: string;
   sizes?: string;
+  /** Per-product variations (e.g. dosage/size options like "5mg", "10mg"), each
+   *  with its own price in the storefront's major units. Empty/absent = the
+   *  product is sold as a single option at the base `price`. Stored in
+   *  `metadata.variations`; the admin Products screen edits these. */
+  variations?: { name: string; price: number }[];
   /** Wholesale / reseller pricing tier. Both price legs optional — "vials only" =
    *  peptide + bac water; "complete set" = with syringes/swabs. `minQty` is the
    *  per-product minimum order that unlocks the wholesale price; unset falls back

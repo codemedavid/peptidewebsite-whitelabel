@@ -41,6 +41,9 @@ export type ProductMetadata = {
   storage?: string;
   sequence?: string;
   sizes?: string;
+  /** Per-product variations (dosage/size options + their price). Only present
+   *  when at least one named variation exists — see `cleanVariations`. */
+  variations?: { name: string; price: number }[];
   /** The display symbol the storefront renders (e.g. "₱") — distinct from the
    *  ISO `currency` column used by Intl on the product detail page. */
   currencySymbol?: string;
@@ -168,6 +171,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     storage: meta.storage ?? "",
     sequence: meta.sequence ?? "",
     sizes: meta.sizes ?? "",
+    variations: cleanVariations(meta.variations) ?? [],
     reseller: cleanReseller(meta.reseller),
     productType: meta.productType === "gb" ? "gb" : "onhand",
     gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
@@ -196,6 +200,24 @@ function cleanReseller(
     // falls back to the global RESELLER_MIN_QTY default.
     ...(minQty > 0 ? { minQty } : {}),
   };
+}
+
+/**
+ * Normalize a variations list: trim names, coerce prices to non-negative
+ * numbers, and drop rows without a name. Returns `undefined` when nothing
+ * survives so `compactMetadata` never persists an empty `[]`.
+ */
+function cleanVariations(
+  v: { name?: string; price?: number }[] | undefined,
+): { name: string; price: number }[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .map((x) => ({
+      name: String(x?.name ?? "").trim(),
+      price: Math.max(0, Number(x?.price) || 0),
+    }))
+    .filter((x) => x.name);
+  return out.length ? out : undefined;
 }
 
 // ── storefront → DB ─────────────────────────────────────────────────────────
@@ -246,6 +268,7 @@ export function productToDbWrite(
       storage: p.storage || undefined,
       sequence: p.sequence || undefined,
       sizes: p.sizes || undefined,
+      variations: cleanVariations(p.variations),
       currencySymbol: displaySymbol || undefined,
       reseller: cleanReseller(p.reseller),
       productType: p.productType === "gb" ? "gb" : undefined,

@@ -19,10 +19,10 @@ export type CheckoutCustomer = {
   email: string;
   phone: string;
   address: string;
+  barangay: string;
   city: string;
   province: string;
   postal: string;
-  country: string;
 };
 
 export const EMPTY_CUSTOMER: CheckoutCustomer = {
@@ -30,10 +30,10 @@ export const EMPTY_CUSTOMER: CheckoutCustomer = {
   email: "",
   phone: "",
   address: "",
+  barangay: "",
   city: "",
   province: "",
   postal: "",
-  country: "",
 };
 
 export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
@@ -194,10 +194,10 @@ export function buildOrderMessage(
 
   const ship = [
     customer.address,
+    customer.barangay,
     customer.city,
     customer.province,
     customer.postal,
-    customer.country,
   ]
     .map((s) => s.trim())
     .filter(Boolean)
