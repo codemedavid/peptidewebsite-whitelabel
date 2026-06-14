@@ -104,7 +104,10 @@ function SetInclusionsEditor({ items, onChange }: SetInclusionsEditorProps) {
   );
 }
 
-type Variation = { name: string; price: number };
+// `price` is kept as `number | string` so the input can be cleared to an empty
+// string while editing (a bare `0` you can't delete is annoying); the save path
+// coerces it back to a number.
+type Variation = { name: string; price: number | string };
 
 type VariationsEditorProps = {
   items: Variation[];
@@ -113,7 +116,7 @@ type VariationsEditorProps = {
 };
 
 function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) {
-  const add = () => onChange([...items, { name: "", price: 0 }]);
+  const add = () => onChange([...items, { name: "", price: "" }]);
   const upd = (i: number, patch: Partial<Variation>) =>
     onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const rm = (i: number) => onChange(items.filter((_, j) => j !== i));
@@ -135,7 +138,7 @@ function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) 
             placeholder={`Price (${currency})`}
             value={it.price}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              upd(i, { price: Number(e.target.value) || 0 })
+              upd(i, { price: e.target.value })
             }
           />
           <button
