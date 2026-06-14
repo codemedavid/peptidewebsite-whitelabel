@@ -24,16 +24,26 @@ export function ProductCard({
   rating?: { value: number; count: number };
 }) {
   const [qty, setQty] = useState(1);
-  // Per-product variations (e.g. 5mg / 10mg), each with its own price. When the
-  // product has them, the customer picks one; the chosen option drives the price
-  // shown and is what gets added to the cart. No variations → unchanged behavior.
+  // Per-product variations (e.g. 5mg / 10mg), each with its own price. When a
+  // product has them, the customer picks an option; the chosen one drives the
+  // price shown and what's added to the cart. The product's own base price stays
+  // available as a default "Standard" option (so a single variation still gives a
+  // real choice) — skipped only when the seller left the base price at 0. No
+  // variations → unchanged single-price behavior.
   const variations = Array.isArray(product.variations) ? product.variations : [];
-  const hasVariations = variations.length > 0;
-  const [variantIdx, setVariantIdx] = useState(0);
-  const selectedVariation = hasVariations
-    ? variations[Math.min(variantIdx, variations.length - 1)]
-    : null;
-  const displayPrice = selectedVariation ? selectedVariation.price : product.price;
+  const options: { name: string; price: number; variation?: { name: string; price: number } }[] =
+    variations.length > 0
+      ? [
+          ...(product.price > 0 ? [{ name: "Standard", price: product.price }] : []),
+          ...variations.map((v) => ({ name: v.name, price: v.price, variation: v })),
+        ]
+      : [];
+  const [optIdx, setOptIdx] = useState(0);
+  const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
+  // Show the pill picker only when there's a genuine choice (>1 option); a lone
+  // option still sets the price + add payload without a pointless single button.
+  const showSelector = options.length > 1;
+  const displayPrice = selectedOpt ? selectedOpt.price : product.price;
   const cd = design ? cardDesignAttrs(design) : null;
   // Stock-aware buying: the stepper can't exceed what's left, and a product
   // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
@@ -94,22 +104,22 @@ export function ProductCard({
         {product.purity && (
           <span className="badge badge-soft">{product.purity} Purity</span>
         )}
-        {hasVariations && !poa && (
+        {showSelector && !poa && (
           <div
             className="product-card__variations"
             role="group"
             aria-label={`Options for ${product.name}`}
             style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
           >
-            {variations.map((v, i) => {
-              const active = i === variantIdx;
+            {options.map((o, i) => {
+              const active = i === optIdx;
               return (
                 <button
-                  key={`${v.name}-${i}`}
+                  key={`${o.name}-${i}`}
                   type="button"
                   className="badge"
                   aria-pressed={active}
-                  onClick={() => setVariantIdx(i)}
+                  onClick={() => setOptIdx(i)}
                   style={{
                     cursor: "pointer",
                     border: active
@@ -120,7 +130,7 @@ export function ProductCard({
                     fontWeight: active ? 600 : 500,
                   }}
                 >
-                  {v.name}
+                  {o.name}
                 </button>
               );
             })}
@@ -172,7 +182,7 @@ export function ProductCard({
               className="btn btn-primary product-card__cta"
               disabled={outOfStock}
               onClick={() => {
-                onAdd(qty, selectedVariation ?? undefined);
+                onAdd(qty, selectedOpt?.variation ?? undefined);
                 setQty(1);
               }}
             >
