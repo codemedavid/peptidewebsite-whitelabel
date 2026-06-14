@@ -33,6 +33,13 @@ export type Product = {
    *  product is sold as a single option at the base `price`. Stored in
    *  `metadata.variations`; the admin Products screen edits these. */
   variations?: { name: string; price: number }[];
+  /** Set on a CART ENTRY that represents a chosen variation (a catalog product
+   *  is cloned with the variation's price + a composite `id`). `variantOf` is the
+   *  underlying catalog product id — used so the shared product stock is counted
+   *  correctly and the order's stock deduction matches the real row. `variantName`
+   *  is the chosen option label. Both absent on catalog products. */
+  variantOf?: string;
+  variantName?: string;
   /** Wholesale / reseller pricing tier. Both price legs optional — "vials only" =
    *  peptide + bac water; "complete set" = with syringes/swabs. `minQty` is the
    *  per-product minimum order that unlocks the wholesale price; unset falls back
@@ -55,7 +62,16 @@ export type Category = { id: string; label: string };
 
 /** `productId` links the line back to the catalog so confirming the order can
  *  deduct stock; absent on legacy orders, which fall back to a name match. */
-export type OrderItem = { name: string; qty: number; price: number; productId?: string };
+export type OrderItem = {
+  name: string;
+  qty: number;
+  price: number;
+  productId?: string;
+  /** The chosen variation/option label (e.g. "10mg") when the line was a product
+   *  variation. The `name` already carries it for display; this keeps it as a
+   *  structured field for reports. Absent on single-option lines. */
+  variation?: string;
+};
 
 export type OrderStatus =
   | "new"

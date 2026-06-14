@@ -103,6 +103,7 @@ function normalizeItems(input: unknown): OrderItem[] {
       qty: Math.max(1, Math.round(num(x.qty)) || 1),
       price: Math.max(0, num(x.price)),
       ...(x.productId ? { productId: str(x.productId, 64) } : {}),
+      ...(x.variation ? { variation: str(x.variation, 80) } : {}),
     };
   });
 }

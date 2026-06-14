@@ -18,6 +18,7 @@ import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront
 import {
   activeChannels,
   activePaymentMethods,
+  baseProductId,
   buildOrderMessage,
   cartLines,
   cartTotal,
@@ -272,10 +273,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       trackingNumber: "",
       shippingNote: "",
       items: lines.map((l) => ({
-        productId: l.product.id,
+        // The underlying catalog row id (a variation line carries a composite id),
+        // so the server matches stock + checkout rules to the real product.
+        productId: baseProductId(l.product),
         name: l.product.name,
         qty: l.qty,
         price: unitPrice(l.product, l.qty),
+        ...(l.product.variantName ? { variation: l.product.variantName } : {}),
       })),
       // Echo the fee this checkout DISPLAYED (zero when none was shown). The
       // server never charges this value — it re-stamps the fee from config —

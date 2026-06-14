@@ -42,6 +42,37 @@ export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
   messenger: "Messenger",
 };
 
+/** The underlying catalog product id for a cart entry — the real id for a
+ *  variation clone (so shared stock + order deduction key off the true row),
+ *  or the entry's own id for an ordinary product. */
+export function baseProductId(p: Product): string {
+  return p.variantOf ?? p.id;
+}
+
+/**
+ * Clone a catalog product into the cart entry for a chosen variation: a composite
+ * id (so the cart keeps each option as its own line), the option baked into the
+ * name (so every order/message surface shows it), and the variation's own price.
+ * A variation carries its own price, so base-product promos/wholesale don't apply
+ * to it — those stay on the single-option base product.
+ */
+export function makeVariationEntry(
+  product: Product,
+  variation: { name: string; price: number },
+): Product {
+  return {
+    ...product,
+    id: `${product.id}::${variation.name}`,
+    name: `${product.name} — ${variation.name}`,
+    price: Math.max(0, Number(variation.price) || 0),
+    variantOf: product.id,
+    variantName: variation.name,
+    discountEnabled: false,
+    discountPrice: 0,
+    reseller: undefined,
+  };
+}
+
 /** Group the flat cart (one entry per unit) into deduplicated lines. */
 export function cartLines(cart: Product[]): CartLine[] {
   const byId = new Map<string, CartLine>();

@@ -17,13 +17,23 @@ export function ProductCard({
   rating,
 }: {
   product: Product;
-  onAdd: (qty: number) => void;
+  onAdd: (qty: number, variation?: { name: string; price: number }) => void;
   design?: CardDesign;
   /** Sample rating shown by Card Studio previews. The public catalog passes
    *  nothing — products carry no rating data, so none is invented. */
   rating?: { value: number; count: number };
 }) {
   const [qty, setQty] = useState(1);
+  // Per-product variations (e.g. 5mg / 10mg), each with its own price. When the
+  // product has them, the customer picks one; the chosen option drives the price
+  // shown and is what gets added to the cart. No variations → unchanged behavior.
+  const variations = Array.isArray(product.variations) ? product.variations : [];
+  const hasVariations = variations.length > 0;
+  const [variantIdx, setVariantIdx] = useState(0);
+  const selectedVariation = hasVariations
+    ? variations[Math.min(variantIdx, variations.length - 1)]
+    : null;
+  const displayPrice = selectedVariation ? selectedVariation.price : product.price;
   const cd = design ? cardDesignAttrs(design) : null;
   // Stock-aware buying: the stepper can't exceed what's left, and a product
   // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
@@ -84,6 +94,38 @@ export function ProductCard({
         {product.purity && (
           <span className="badge badge-soft">{product.purity} Purity</span>
         )}
+        {hasVariations && !poa && (
+          <div
+            className="product-card__variations"
+            role="group"
+            aria-label={`Options for ${product.name}`}
+            style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
+          >
+            {variations.map((v, i) => {
+              const active = i === variantIdx;
+              return (
+                <button
+                  key={`${v.name}-${i}`}
+                  type="button"
+                  className="badge"
+                  aria-pressed={active}
+                  onClick={() => setVariantIdx(i)}
+                  style={{
+                    cursor: "pointer",
+                    border: active
+                      ? "1px solid var(--brand-main, #111)"
+                      : "1px solid var(--hairline, rgba(0,0,0,.14))",
+                    background: active ? "var(--brand-main, #111)" : "transparent",
+                    color: active ? "var(--brand-button-text, #fff)" : "inherit",
+                    fontWeight: active ? 600 : 500,
+                  }}
+                >
+                  {v.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <hr className="hairline" />
@@ -95,7 +137,7 @@ export function ProductCard({
           ) : (
             <>
               {product.currency}
-              {product.price.toLocaleString()}
+              {displayPrice.toLocaleString()}
             </>
           )}
         </div>
@@ -130,7 +172,7 @@ export function ProductCard({
               className="btn btn-primary product-card__cta"
               disabled={outOfStock}
               onClick={() => {
-                onAdd(qty);
+                onAdd(qty, selectedVariation ?? undefined);
                 setQty(1);
               }}
             >
@@ -156,7 +198,7 @@ export function Catalog({
 }: {
   products: Product[];
   category: string;
-  onAddToCart: (p: Product, qty?: number) => void;
+  onAddToCart: (p: Product, qty?: number, variation?: { name: string; price: number }) => void;
   brand: Brand;
 }) {
   const [query, setQuery] = useState("");
@@ -239,7 +281,7 @@ export function Catalog({
               key={p.id}
               product={p}
               design={brand.cardDesign}
-              onAdd={(qty) => onAddToCart(p, qty)}
+              onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
             />
           ))}
           {filtered.length === 0 && (

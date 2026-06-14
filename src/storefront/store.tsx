@@ -41,6 +41,7 @@ import {
   saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
+import { baseProductId, makeVariationEntry } from "./checkout";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
   Brand,
@@ -101,7 +102,11 @@ export type Store = {
   setReviews: (next: Updater<Review[]>) => void;
 
   cart: Product[];
-  addToCart: (product: Product, qty?: number) => void;
+  addToCart: (
+    product: Product,
+    qty?: number,
+    variation?: { name: string; price: number },
+  ) => void;
   /** Remove one unit of the product from the cart. */
   decrementCart: (productId: string) => void;
   /** Remove every unit of the product (delete the line). */
@@ -348,7 +353,11 @@ export function StoreProvider({
   // Adding is capped at the product's stock (counting what's already in the
   // cart) — the server re-validates at checkout, this just keeps the UI honest.
   const addToCart = useCallback(
-    (product: Product, qty: number = 1) => {
+    (
+      product: Product,
+      qty: number = 1,
+      variation?: { name: string; price: number },
+    ) => {
       // Price-on-request items are on hand but have no fixed price — they can't
       // be bought through the cart; the customer messages the store to order.
       if (product.priceOnRequest) {
@@ -363,9 +372,14 @@ export function StoreProvider({
         toast(restriction);
         return;
       }
+      // The actual entry pushed: a variation clone (own price + composite id) when
+      // an option was chosen, else the product itself. Re-adds from the cart pass a
+      // clone straight through. Stock is shared across a product's variations, so
+      // count every entry that resolves to the same base product.
+      const entry = variation ? makeVariationEntry(product, variation) : product;
       const n = Math.max(1, Math.floor(qty));
       const stock = Math.max(0, product.stock || 0);
-      const inCart = cart.filter((p) => p.id === product.id).length;
+      const inCart = cart.filter((p) => baseProductId(p) === baseProductId(product)).length;
       const room = Math.max(0, stock - inCart);
       if (room < n) {
         toast(
@@ -375,7 +389,7 @@ export function StoreProvider({
         );
       }
       if (room <= 0) return;
-      setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => product)]);
+      setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
     },
     [cart, toast, brand.checkoutRules],
   );

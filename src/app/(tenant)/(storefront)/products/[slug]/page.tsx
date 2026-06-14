@@ -31,7 +31,14 @@ export default async function ProductPage({
   if (!product) notFound();
 
   const images = Array.isArray(product.images) ? (product.images as string[]) : [];
-  const meta = (product.metadata ?? {}) as { purity?: string; coaUrl?: string };
+  const meta = (product.metadata ?? {}) as {
+    purity?: string;
+    coaUrl?: string;
+    variations?: { name: string; price: number }[];
+  };
+  // Variation prices are stored in the storefront's major units; formatPrice
+  // takes cents, so scale up to reuse the same currency formatting as the base price.
+  const variations = Array.isArray(meta.variations) ? meta.variations.filter((v) => v?.name) : [];
 
   return (
     <div className="container grid gap-10 py-16 md:grid-cols-2">
@@ -50,6 +57,17 @@ export default async function ProductPage({
         <p className="mt-2 text-2xl text-accent">
           {formatPrice(product.priceCents, product.currency)}
         </p>
+        {variations.length > 0 && (
+          <dl className="mt-4 space-y-1 text-sm">
+            <dt className="font-medium text-foreground">Options</dt>
+            {variations.map((v, i) => (
+              <dd key={`${v.name}-${i}`} className="flex justify-between text-muted-foreground">
+                <span>{v.name}</span>
+                <span>{formatPrice(Math.round((Number(v.price) || 0) * 100), product.currency)}</span>
+              </dd>
+            ))}
+          </dl>
+        )}
         {product.description && (
           <p className="mt-6 text-muted-foreground">{product.description}</p>
         )}
