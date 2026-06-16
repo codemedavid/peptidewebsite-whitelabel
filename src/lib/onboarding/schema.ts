@@ -10,6 +10,20 @@ export const THEME_STYLES = ["minimal", "luxury", "ecommerce", "dark", "custom"]
 export const ORDER_DESTINATIONS = ["whatsapp", "messenger", "telegram", "email"] as const;
 export const PACKAGE_KEYS = ["starter", "pro", "enterprise"] as const;
 
+// Starter add-on features: the storefront ships with ordering/catalog always on;
+// a Starter client picks exactly STARTER_FEATURE_LIMIT of these. Each key maps to
+// a storefront `showPage*` toggle in the brand config (see lib/onboarding/mapping).
+export const STARTER_FEATURE_KEYS = ["track", "faq", "calculator", "protocols", "coa"] as const;
+export type StarterFeatureKey = (typeof STARTER_FEATURE_KEYS)[number];
+export const STARTER_FEATURE_LIMIT = 2;
+export const STARTER_FEATURE_LABELS: Record<StarterFeatureKey, string> = {
+  track: "Order Tracking",
+  faq: "FAQ Page",
+  calculator: "Peptide Calculator",
+  protocols: "Protocols (20+)",
+  coa: "Lab Results (COA)",
+};
+
 const url = z.string().trim().max(2_000_000); // permits hosted URLs and demo data-URLs
 
 export const onboardingProductSchema = z.object({
@@ -60,6 +74,11 @@ export const onboardingSchema = z.object({
 
   // Step 6 — package selection (marketing label or alias → normalized server-side)
   packageKey: z.string().trim().min(1).max(40).default("starter"),
+
+  // Step 6 — Starter add-on features (exactly STARTER_FEATURE_LIMIT for Starter;
+  // ignored/empty for other tiers, which ship with all pages on). Enforced for
+  // Starter in the server action.
+  selectedFeatures: z.array(z.enum(STARTER_FEATURE_KEYS)).max(STARTER_FEATURE_LIMIT).optional().default([]),
 
   // Step 7 — checkout
   paymentProofUrl: url.optional().default(""),

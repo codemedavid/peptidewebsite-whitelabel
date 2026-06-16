@@ -13,7 +13,24 @@ import {
   type ProductDbWrite,
 } from "@/lib/storefront/product-mapping";
 import { META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
+import { planMeta } from "@/lib/admin/plans";
 import type { OnboardingPayload } from "./schema";
+
+// Each Starter add-on feature maps to a storefront `showPage*` toggle, which
+// reveals both its public page and (where coupled) its store-admin manager.
+// Anything not chosen is forced off; reviews/merchant aren't part of the Starter
+// offer either. Other tiers keep storefront defaults (all pages on).
+function starterPageToggles(selected: string[]): Partial<Brand> {
+  const chosen = new Set(selected);
+  return {
+    showPageTrack: chosen.has("track"),
+    showPageFAQ: chosen.has("faq"),
+    showPageCalculator: chosen.has("calculator"),
+    showPageProtocols: chosen.has("protocols"),
+    showPageCOA: chosen.has("coa"),
+    showPageReviews: false,
+  };
+}
 
 // The business is PH-focused (GCash/Maya/bank). Peso is the storefront default.
 const CURRENCY_SYMBOL = "₱";
@@ -99,6 +116,11 @@ function brandConfigFrom(payload: OnboardingPayload): Partial<Brand> {
     config.button = accent;
     config.button2 = accent;
     config.buttonText = "#ffffff";
+  }
+  // Starter ships ordering/catalog only; the client's 2 picks gate the rest.
+  // Other tiers keep every page on (storefront defaults), so leave them untouched.
+  if (planMeta(payload.packageKey).key === "starter") {
+    Object.assign(config, starterPageToggles(payload.selectedFeatures));
   }
   return config;
 }

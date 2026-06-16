@@ -14,6 +14,11 @@ import {
   Plus,
   Trash2,
   Check,
+  Truck,
+  HelpCircle,
+  Calculator,
+  BookOpen,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -22,7 +27,10 @@ import {
   THEME_STYLE_OPTIONS,
   ORDER_DESTINATION_OPTIONS,
   PAYMENT_PRESETS,
+  STARTER_FEATURE_OPTIONS,
+  STARTER_FEATURE_LIMIT,
 } from "../useOnboardingForm";
+import { STARTER_FEATURE_LABELS, type StarterFeatureKey } from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
 import { packageLabel, type Package } from "@/marketing/config";
 import {
@@ -52,6 +60,11 @@ const ICONS: Record<string, LucideIcon> = {
   MessagesSquare,
   Send,
   Mail,
+  Truck,
+  HelpCircle,
+  Calculator,
+  BookOpen,
+  ShieldCheck,
 };
 
 /* ---------- shared field helpers ---------- */
@@ -363,7 +376,19 @@ export function PaymentsStep({ draft, update }: StepProps) {
 }
 
 /* ============================================================ Step 6 */
-export function PackageStep({ draft, update, packages }: StepProps) {
+export function PackageStep({ draft, update, errors, packages }: StepProps) {
+  const isStarter = draft.packageKey === "starter";
+  const picked = draft.selectedFeatures;
+
+  function toggleFeature(id: StarterFeatureKey) {
+    if (picked.includes(id)) {
+      update({ selectedFeatures: picked.filter((f) => f !== id) });
+    } else if (picked.length < STARTER_FEATURE_LIMIT) {
+      update({ selectedFeatures: [...picked, id] });
+    }
+    // At the limit, ignore further additions — the client must deselect first.
+  }
+
   return (
     <div className="mk-choices">
       {packages.map((p) => {
@@ -384,6 +409,45 @@ export function PackageStep({ draft, update, packages }: StepProps) {
           </button>
         );
       })}
+
+      {isStarter && (
+        <div className="mk-card" style={{ marginTop: 8, gridColumn: "1 / -1" }}>
+          <h3 className="mk-h3" style={{ fontSize: "1.05rem", marginBottom: 4 }}>
+            Pick {STARTER_FEATURE_LIMIT} features
+          </h3>
+          <p className="mk-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Your Starter store always includes the ordering website, product catalog, and full
+            store admin. Choose {STARTER_FEATURE_LIMIT} add-on pages to go live with
+            ({picked.length}/{STARTER_FEATURE_LIMIT} selected).
+          </p>
+          <div className="mk-choices">
+            {STARTER_FEATURE_OPTIONS.map((f) => {
+              const on = picked.includes(f.id);
+              const atLimit = !on && picked.length >= STARTER_FEATURE_LIMIT;
+              const Icon = ICONS[f.icon];
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  className="mk-choice"
+                  data-selected={on}
+                  disabled={atLimit}
+                  style={{ alignItems: "flex-start", opacity: atLimit ? 0.5 : 1 }}
+                  onClick={() => toggleFeature(f.id)}
+                >
+                  {Icon && <Icon size={20} style={{ flexShrink: 0, marginTop: 2 }} />}
+                  <span style={{ flex: 1 }}>
+                    <b style={{ fontSize: 15 }}>{f.label}</b>
+                    <small style={{ display: "block", marginTop: 2 }}>{f.desc}</small>
+                  </span>
+                  {on && <Check className="mk-choice-check" size={20} />}
+                </button>
+              );
+            })}
+          </div>
+          {errors.selectedFeatures && <p className="mk-error">{errors.selectedFeatures}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -435,6 +499,16 @@ export function CheckoutStep({ draft, update, errors, packagePayment }: StepProp
           <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
           <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>
           <div className="mk-review-item"><span>Payment methods</span><b>{draft.paymentMethods.length || "—"}</b></div>
+          {draft.packageKey === "starter" && (
+            <div className="mk-review-item">
+              <span>Features</span>
+              <b>
+                {draft.selectedFeatures.length
+                  ? draft.selectedFeatures.map((f) => STARTER_FEATURE_LABELS[f]).join(", ")
+                  : "—"}
+              </b>
+            </div>
+          )}
         </div>
       </div>
 
@@ -442,8 +516,11 @@ export function CheckoutStep({ draft, update, errors, packagePayment }: StepProp
         <input type="checkbox" checked={draft.termsAccepted}
           onChange={(e) => update({ termsAccepted: e.target.checked })} />
         <span>
-          I understand the timeline, revisions, and onboarding process, and I agree to the terms
-          and conditions.
+          I understand the timeline, revisions, and onboarding process, and I agree to the{" "}
+          <a href="/terms" target="_blank" rel="noreferrer" className="mk-link">
+            terms and conditions
+          </a>
+          .
         </span>
       </label>
       {errors.termsAccepted && <p className="mk-error">{errors.termsAccepted}</p>}

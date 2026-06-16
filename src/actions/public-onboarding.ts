@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db/prisma";
 import { planMeta } from "@/lib/admin/plans";
 import { slugify, uniqueize } from "@/lib/storefront/product-mapping";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
-import { onboardingSchema, type OnboardingPayload } from "@/lib/onboarding/schema";
+import { onboardingSchema, STARTER_FEATURE_LIMIT, type OnboardingPayload } from "@/lib/onboarding/schema";
 import { buildProvisioning } from "@/lib/onboarding/mapping";
 import {
   isDemoMode,
@@ -92,6 +92,14 @@ export async function submitOnboardingAction(
   if (!payload.paymentProofUrl) return { error: "Please upload your proof of payment." };
 
   const planKey = planMeta(payload.packageKey).key; // normalize aliases → starter|pro|enterprise
+
+  // Starter must commit to exactly N add-on features (the schema caps the max;
+  // enforce the exact count here authoritatively). Other tiers ignore the field.
+  const selectedFeatures = planKey === "starter" ? payload.selectedFeatures : [];
+  if (planKey === "starter" && selectedFeatures.length !== STARTER_FEATURE_LIMIT) {
+    return { error: `Please pick exactly ${STARTER_FEATURE_LIMIT} features for the Starter package.` };
+  }
+
   const { brandConfig, settings } = buildProvisioning(payload);
   const orderNumberFormat = normalizeOrderNumberFormat({}, payload.businessName);
 
@@ -182,6 +190,7 @@ export async function submitOnboardingAction(
             orderDestinationValue: payload.orderDestinationValue || null,
             paymentMethods: payload.paymentMethods as unknown as Prisma.InputJsonValue,
             packageKey: planKey,
+            selectedFeatures: selectedFeatures as unknown as Prisma.InputJsonValue,
             paymentProofUrl: payload.paymentProofUrl || null,
             termsAccepted: payload.termsAccepted,
             slug: tenant.slug,

@@ -75,6 +75,51 @@ export async function hasStorefrontAdminSessionAction(): Promise<boolean> {
   return (await requireStorefrontAdmin()) !== null;
 }
 
+/**
+ * Change the storefront admin password. Requires a valid session, re-verifies the
+ * current password (so a hijacked open session can't silently rotate the
+ * credential), then persists the new one into `branding.config.adminPassword`
+ * (read-modify-write, mirroring the save* actions). Passwords are stored as the
+ * plaintext the owner typed — same scheme signInStorefrontAdminAction checks.
+ */
+export async function changeStorefrontAdminPasswordAction(
+  currentPassword: string,
+  newPassword: string,
+): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+
+  if ((currentPassword ?? "").trim() !== resolvePassword(current)) {
+    return { error: "Current password is incorrect." };
+  }
+
+  const next = (newPassword ?? "").trim();
+  if (next.length < 6) {
+    return { error: "New password must be at least 6 characters." };
+  }
+  if (next === resolvePassword(current)) {
+    return { error: "New password must be different from the current one." };
+  }
+
+  const config = { ...current, adminPassword: next };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
 /** Coerce untrusted client input into clean PaymentMethod rows. */
 function normalizeMethods(input: unknown): PaymentMethod[] {
   if (!Array.isArray(input)) return [];

@@ -78,5 +78,7 @@ export type OnboardingDetailView = OnboardingSummary & {
   orderDestination: string | null;
   orderDestinationValue: string | null;
   paymentMethods: OnboardingPaymentView[];
+  // Starter add-on feature labels (e.g. "FAQ Page", "Order Tracking"); [] for other tiers.
+  selectedFeatures: string[];
   termsAccepted: boolean;
 };

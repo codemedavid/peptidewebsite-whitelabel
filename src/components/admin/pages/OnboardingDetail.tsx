@@ -267,6 +267,13 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
             </DetailCard>
           )}
 
+          {/* Starter add-on features */}
+          {submission.selectedFeatures.length > 0 && (
+            <DetailCard title={`Selected Features (${submission.selectedFeatures.length})`} icon="Sparkles">
+              <InfoGrid items={submission.selectedFeatures.map((f) => ({ k: f, v: "Included" }))} />
+            </DetailCard>
+          )}
+
           {/* Payment methods */}
           {submission.paymentMethods.length > 0 && (
             <DetailCard title={`Payment Methods (${submission.paymentMethods.length})`} icon="Card">

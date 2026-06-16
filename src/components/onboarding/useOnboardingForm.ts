@@ -6,7 +6,15 @@
 // survives). The wizard component drives step navigation + submission.
 
 import { useCallback, useEffect, useState } from "react";
-import type { OnboardingPayload } from "@/lib/onboarding/schema";
+import {
+  STARTER_FEATURE_KEYS,
+  STARTER_FEATURE_LABELS,
+  STARTER_FEATURE_LIMIT,
+  type OnboardingPayload,
+  type StarterFeatureKey,
+} from "@/lib/onboarding/schema";
+
+export { STARTER_FEATURE_LIMIT };
 
 export type DraftProduct = {
   name: string;
@@ -51,6 +59,8 @@ export type Draft = {
   paymentMethods: DraftPayment[];
   // 6 — package
   packageKey: string;
+  // 6 — Starter add-on features (exactly STARTER_FEATURE_LIMIT chosen for Starter)
+  selectedFeatures: StarterFeatureKey[];
   // 7 — checkout
   paymentProofUrl: string;
   termsAccepted: boolean;
@@ -87,6 +97,7 @@ export const INITIAL_DRAFT: Draft = {
   orderDestinationValue: "",
   paymentMethods: [],
   packageKey: "starter",
+  selectedFeatures: [],
   paymentProofUrl: "",
   termsAccepted: false,
   website: "",
@@ -119,6 +130,21 @@ export const ORDER_DESTINATION_OPTIONS = [
 
 export const PAYMENT_PRESETS = ["GCash", "Maya", "Bank Transfer", "PayPal", "QR Payments", "Crypto"] as const;
 
+// The Starter "pick 2" add-on features. Labels come from the shared schema so the
+// storefront, server, and operator views all agree. Icons are Lucide names.
+export const STARTER_FEATURE_OPTIONS: {
+  id: StarterFeatureKey;
+  label: string;
+  desc: string;
+  icon: string;
+}[] = [
+  { id: "track", label: STARTER_FEATURE_LABELS.track, desc: "Customers look up their order status by reference.", icon: "Truck" },
+  { id: "faq", label: STARTER_FEATURE_LABELS.faq, desc: "A dedicated page answering common questions.", icon: "HelpCircle" },
+  { id: "calculator", label: STARTER_FEATURE_LABELS.calculator, desc: "Reconstitution / dosage calculator.", icon: "Calculator" },
+  { id: "protocols", label: STARTER_FEATURE_LABELS.protocols, desc: "20+ ready-made protocol guides.", icon: "BookOpen" },
+  { id: "coa", label: STARTER_FEATURE_LABELS.coa, desc: "Publish certificates of analysis (lab results).", icon: "ShieldCheck" },
+];
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Per-step validation. Returns a field→message map (empty = valid). */
@@ -140,6 +166,9 @@ export function validateStep(step: number, d: Draft): Record<string, string> {
   }
   if (step === 5) {
     if (!d.packageKey) e.packageKey = "Please choose a package.";
+    if (d.packageKey === "starter" && d.selectedFeatures.length !== STARTER_FEATURE_LIMIT) {
+      e.selectedFeatures = `Pick exactly ${STARTER_FEATURE_LIMIT} features for the Starter package.`;
+    }
   }
   if (step === 6) {
     if (!d.paymentProofUrl) e.paymentProofUrl = "Please upload your proof of payment.";
@@ -185,6 +214,8 @@ export function draftToPayload(d: Draft): OnboardingPayload {
       instructions: m.instructions.trim(),
     })),
     packageKey: d.packageKey,
+    // Only Starter carries feature picks; other tiers ship with all pages on.
+    selectedFeatures: d.packageKey === "starter" ? d.selectedFeatures.slice(0, STARTER_FEATURE_LIMIT) : [],
     paymentProofUrl: d.paymentProofUrl,
     termsAccepted: d.termsAccepted,
     website: d.website,

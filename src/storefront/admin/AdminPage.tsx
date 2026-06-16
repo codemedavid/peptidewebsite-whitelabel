@@ -23,6 +23,7 @@ import { AdminCheckoutRules } from "./AdminCheckoutRules";
 import { AdminGroupBuys } from "./AdminGroupBuys";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
+import { AdminAccountSettings } from "./AdminAccountSettings";
 import { isAdminViewVisible } from "../visibility";
 
 type View =
@@ -45,7 +46,8 @@ type View =
   | "analytics"
   | "design"
   | "checkout"
-  | "groupbuys";
+  | "groupbuys"
+  | "account";
 
 export function AdminPage({
   brand,
@@ -140,6 +142,7 @@ export function AdminPage({
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
     return (
       <AdminResellerSettings
@@ -179,6 +182,7 @@ export function AdminPage({
     { id: "reseller", label: "Reseller Portal", hint: "Wholesale page & prices", icon: "tag", tint: "purple" },
     { id: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan" },
     { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
+    { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
   ].filter((q) => isAdminViewVisible(brand, q.id));
 
   const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
@@ -277,6 +281,7 @@ export function AdminPage({
                     if (q.id === "reseller") return setView("reseller");
                     if (q.id === "checkout") return setView("checkout");
                     if (q.id === "groupbuys") return setView("groupbuys");
+                    if (q.id === "account") return setView("account");
                     toast(`"${q.label}" — wire to your backend`);
                   }}
                 >

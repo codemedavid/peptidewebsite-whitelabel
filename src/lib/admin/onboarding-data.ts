@@ -15,6 +15,7 @@ import {
   type OnboardingSummary,
   type OnboardingDetailView,
 } from "@/lib/admin/onboarding-types";
+import { STARTER_FEATURE_LABELS, type StarterFeatureKey } from "@/lib/onboarding/schema";
 
 /* ============================================================
    Self-serve onboarding submissions — read models for the
@@ -71,6 +72,13 @@ function paymentViews(v: unknown): OnboardingPaymentView[] {
   });
 }
 
+/** Map stored Starter feature keys to their human labels (drops unknown keys). */
+function featureViews(v: unknown): string[] {
+  return asArray<string>(v)
+    .filter((k): k is StarterFeatureKey => typeof k === "string" && k in STARTER_FEATURE_LABELS)
+    .map((k) => STARTER_FEATURE_LABELS[k]);
+}
+
 type DbRow = {
   id: string;
   businessName: string;
@@ -93,6 +101,7 @@ type DbRow = {
   orderDestinationValue: string | null;
   paymentMethods: unknown;
   packageKey: string;
+  selectedFeatures: unknown;
   paymentProofUrl: string | null;
   termsAccepted: boolean;
   slug: string;
@@ -143,6 +152,7 @@ function detailFromDb(r: DbRow): OnboardingDetailView {
     orderDestination: r.orderDestination,
     orderDestinationValue: r.orderDestinationValue,
     paymentMethods: paymentViews(r.paymentMethods),
+    selectedFeatures: featureViews(r.selectedFeatures),
     termsAccepted: r.termsAccepted,
   };
 }
@@ -190,6 +200,7 @@ function detailFromDemo(s: DemoOnboardingSubmission): OnboardingDetailView {
     orderDestination: str(d.orderDestination) || null,
     orderDestinationValue: str(d.orderDestinationValue) || null,
     paymentMethods: paymentViews(d.paymentMethods),
+    selectedFeatures: featureViews(d.selectedFeatures),
     termsAccepted: !!d.termsAccepted,
   };
 }
@@ -216,6 +227,7 @@ const SELECT = {
   orderDestinationValue: true,
   paymentMethods: true,
   packageKey: true,
+  selectedFeatures: true,
   paymentProofUrl: true,
   termsAccepted: true,
   slug: true,

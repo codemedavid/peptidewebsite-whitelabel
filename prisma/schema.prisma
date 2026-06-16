@@ -575,6 +575,10 @@ model OnboardingSubmission {
   // Step 6 — package (DB plan key: starter | pro | enterprise)
   packageKey String @default("starter")
 
+  // Step 6 — Starter add-on features the client picked: string[] of
+  // track | faq | calculator | protocols | coa (empty for other tiers)
+  selectedFeatures Json @default("[]")
+
   // Step 7 — checkout
   paymentProofUrl String?
   termsAccepted   Boolean @default(false)

@@ -95,6 +95,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
             <div>
               <h4>Get Started</h4>
               <Link href="/get-started">Start your website</Link>
+              <Link href="/terms">Terms &amp; Conditions</Link>
               <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>
             </div>
           </div>
