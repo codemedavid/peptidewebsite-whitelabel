@@ -146,6 +146,21 @@ export function OnboardingWizard({
 
         <div className="mk-wizard">
           <div className="mk-wizard-head">
+            {step === 0 ? (
+              <Link href="/" className="mk-wizard-back" aria-label="Back to home">
+                <ArrowLeft size={18} />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="mk-wizard-back"
+                onClick={goBack}
+                disabled={submitting}
+                aria-label={`Back to ${STEPS[step - 1].title}`}
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
             <div className="mk-progress">
               <i style={{ width: `${pct}%` }} />
             </div>
