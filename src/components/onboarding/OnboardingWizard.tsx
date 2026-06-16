@@ -75,6 +75,15 @@ export function OnboardingWizard({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function goTo(target: number) {
+    // Allow jumping straight back to any earlier step. The draft is preserved,
+    // so users can revise prior answers without losing what they've entered.
+    if (target >= step) return;
+    setErrors({});
+    setStep(target);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit() {
     setSubmitting(true);
     setSubmitError(null);
@@ -149,17 +158,25 @@ export function OnboardingWizard({
           </div>
 
           <div className="mk-steps-rail" role="list" aria-label="Onboarding steps">
-            {STEPS.map((s, i) => (
-              <span
-                key={s.key}
-                role="listitem"
-                className="mk-step-dot"
-                data-state={i === step ? "active" : i < step ? "done" : "upcoming"}
-              >
-                {i < step && <Check size={13} />}
-                {s.title.split(" ")[0]}
-              </span>
-            ))}
+            {STEPS.map((s, i) => {
+              const state = i === step ? "active" : i < step ? "done" : "upcoming";
+              const canGoBack = i < step;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  role="listitem"
+                  className="mk-step-dot"
+                  data-state={state}
+                  onClick={() => goTo(i)}
+                  disabled={!canGoBack || submitting}
+                  aria-label={canGoBack ? `Go back to ${s.title}` : s.title}
+                >
+                  {i < step && <Check size={13} />}
+                  {s.title.split(" ")[0]}
+                </button>
+              );
+            })}
           </div>
 
           <div className="mk-step-body">
