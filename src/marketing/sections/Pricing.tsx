@@ -27,7 +27,14 @@ export async function Pricing() {
               {p.tag && <span className="mk-price-tag">{p.tag}</span>}
               <div className="mk-price-name">{p.name}</div>
               <div className="mk-price-amount">
-                <b>{p.priceLabel}</b>
+                {p.discountLabel ? (
+                  <>
+                    <b>{p.discountLabel}</b>
+                    <s style={{ marginLeft: 8, opacity: 0.55, fontWeight: 400 }}>{p.priceLabel}</s>
+                  </>
+                ) : (
+                  <b>{p.priceLabel}</b>
+                )}
               </div>
               <p className="mk-price-blurb">{p.blurb}</p>
               <ul className="mk-price-feats">

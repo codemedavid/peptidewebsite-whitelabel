@@ -135,7 +135,8 @@ export const DEMO_SITES: DemoSite[] = [
 export type Package = {
   key: string;
   name: string;
-  priceLabel: string;
+  priceLabel: string; // list price
+  discountLabel?: string; // promo price when set; show it as the headline with priceLabel struck through
   blurb: string;
   feats: readonly string[];
   tag?: string;
@@ -147,6 +148,10 @@ export function packagesFrom(plans: EditablePlanCard[]): Package[] {
     key: p.key,
     name: p.name,
     priceLabel: formatPesos(p.priceCents),
+    discountLabel:
+      p.discountPriceCents && p.discountPriceCents < p.priceCents
+        ? formatPesos(p.discountPriceCents)
+        : undefined,
     blurb: p.blurb,
     feats: p.feats,
     tag: p.tag || undefined,

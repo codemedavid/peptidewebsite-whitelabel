@@ -24,6 +24,7 @@ type PlanDraft = {
   key: string;
   name: string;
   priceText: string; // pesos, free-form while typing
+  discountText: string; // optional promo price in pesos ("" = none)
   blurb: string;
   tag: string;
   feats: FeatRow[];
@@ -34,6 +35,7 @@ function toDrafts(config: PlanConfig): PlanDraft[] {
     key: p.key,
     name: p.name,
     priceText: String(p.priceCents / 100),
+    discountText: p.discountPriceCents ? String(p.discountPriceCents / 100) : "",
     blurb: p.blurb,
     tag: p.tag,
     feats: p.feats.map((text) => ({ id: ++nextId, text })),
@@ -43,6 +45,13 @@ function toDrafts(config: PlanConfig): PlanDraft[] {
 function draftPriceCents(d: PlanDraft): number {
   const pesos = Number(d.priceText);
   return Number.isFinite(pesos) ? Math.round(pesos * 100) : 0;
+}
+
+// 0 = no discount (empty/invalid field).
+function draftDiscountCents(d: PlanDraft): number {
+  if (d.discountText.trim() === "") return 0;
+  const pesos = Number(d.discountText);
+  return Number.isFinite(pesos) && pesos > 0 ? Math.round(pesos * 100) : 0;
 }
 
 export function PlansManager({
@@ -127,6 +136,13 @@ export function PlansManager({
         showToast(msg);
         return;
       }
+      const discount = draftDiscountCents(p);
+      if (discount > 0 && discount >= draftPriceCents(p)) {
+        const msg = `${p.name}'s discount price must be below its monthly price.`;
+        setError(msg);
+        showToast(msg);
+        return;
+      }
       if (!p.feats.some((f) => f.text.trim())) {
         const msg = `${p.name} needs at least one feature bullet.`;
         setError(msg);
@@ -136,14 +152,18 @@ export function PlansManager({
     }
     startTransition(async () => {
       const res = await savePlanConfigAction({
-        plans: plans.map((p) => ({
-          key: p.key,
-          name: p.name,
-          priceCents: draftPriceCents(p),
-          blurb: p.blurb,
-          tag: p.tag,
-          feats: p.feats.map((f) => f.text.trim()).filter(Boolean),
-        })),
+        plans: plans.map((p) => {
+          const discount = draftDiscountCents(p);
+          return {
+            key: p.key,
+            name: p.name,
+            priceCents: draftPriceCents(p),
+            ...(discount > 0 ? { discountPriceCents: discount } : {}),
+            blurb: p.blurb,
+            tag: p.tag,
+            feats: p.feats.map((f) => f.text.trim()).filter(Boolean),
+          };
+        }),
       });
       if ("error" in res) {
         setError(res.error);
@@ -208,6 +228,8 @@ export function PlansManager({
           const row = rows.find((r) => r.key === p.key);
           const share = totalTenants && row ? Math.round((row.count / totalTenants) * 100) : 0;
           const cents = draftPriceCents(p);
+          const discountCents = draftDiscountCents(p);
+          const showDiscount = discountCents > 0 && discountCents < cents;
           return (
             <div key={p.key} className="card">
               <div className="card-body">
@@ -225,7 +247,16 @@ export function PlansManager({
                   />
                 </div>
                 <div className="plan-price" style={{ fontSize: 24 }}>
-                  {cents > 0 ? formatPesos(cents) : "₱—"}
+                  {showDiscount ? (
+                    <>
+                      {formatPesos(discountCents)}
+                      <s style={{ marginLeft: 8, fontSize: 16, opacity: 0.55, fontWeight: 400 }}>
+                        {formatPesos(cents)}
+                      </s>
+                    </>
+                  ) : (
+                    cents > 0 ? formatPesos(cents) : "₱—"
+                  )}
                   <small>/mo</small>
                 </div>
 
@@ -239,6 +270,19 @@ export function PlansManager({
                     step={1}
                     value={p.priceText}
                     onChange={(e) => patchPlan(p.key, { priceText: e.target.value })}
+                  />
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label className="field-label">Discount price (₱) — optional</label>
+                  <input
+                    className="input"
+                    style={{ width: "100%", marginTop: 4 }}
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder="Leave blank for no discount"
+                    value={p.discountText}
+                    onChange={(e) => patchPlan(p.key, { discountText: e.target.value })}
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>

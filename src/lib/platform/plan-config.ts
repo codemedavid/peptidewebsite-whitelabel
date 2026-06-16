@@ -13,7 +13,8 @@ export const PLAN_CONFIG_KEY = "plan_config";
 export type EditablePlanCard = {
   key: string; // canonical plan key (starter | pro | enterprise) — fixed
   name: string; // display label — fixed, mirrors planMeta
-  priceCents: number; // monthly price in PHP centavos
+  priceCents: number; // monthly (list) price in PHP centavos
+  discountPriceCents?: number; // optional promo price (< priceCents); display only — MRR/billing use priceCents
   blurb: string; // short pitch under the price
   tag: string; // card badge, e.g. "Popular" ("" = none)
   feats: string[]; // feature bullets shown on the card
@@ -48,11 +49,18 @@ export function normalizePlanConfig(input: unknown): PlanConfig {
       const r = (raw.find((x) => (x as Record<string, unknown> | null)?.key === d.key) ??
         {}) as Record<string, unknown>;
       const cents = Math.round(Number(r.priceCents));
+      const priceCents = Number.isFinite(cents) && cents > 0 ? Math.min(cents, MAX_PRICE_CENTS) : d.priceCents;
+      // Promo price is optional and only valid when it's a positive amount strictly
+      // below the list price; anything else means "no discount" and is dropped.
+      const discount = Math.round(Number(r.discountPriceCents));
+      const discountPriceCents =
+        Number.isFinite(discount) && discount > 0 && discount < priceCents ? discount : undefined;
       const rawFeats = Array.isArray(r.feats) ? (r.feats as unknown[]) : null;
       return {
         key: d.key,
         name: d.name,
-        priceCents: Number.isFinite(cents) && cents > 0 ? Math.min(cents, MAX_PRICE_CENTS) : d.priceCents,
+        priceCents,
+        ...(discountPriceCents ? { discountPriceCents } : {}),
         blurb: typeof r.blurb === "string" ? r.blurb.slice(0, 300) : d.blurb,
         tag: typeof r.tag === "string" ? r.tag.slice(0, 40) : d.tag,
         feats: rawFeats

@@ -402,7 +402,12 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
               </b>
               <small style={{ display: "block", margin: "4px 0 8px" }}>{p.blurb}</small>
               <span style={{ fontFamily: "var(--font-head)", fontSize: 22, color: "var(--rose-700)", fontWeight: 700 }}>
-                {p.priceLabel}
+                {p.discountLabel ?? p.priceLabel}
+                {p.discountLabel && (
+                  <s style={{ marginLeft: 8, fontSize: 16, opacity: 0.5, fontWeight: 400, color: "inherit" }}>
+                    {p.priceLabel}
+                  </s>
+                )}
               </span>
             </span>
             {selected && <Check className="mk-choice-check" size={22} />}
