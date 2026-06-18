@@ -11,11 +11,15 @@ export const ORDER_DESTINATIONS = ["whatsapp", "messenger", "telegram", "email"]
 export const PACKAGE_KEYS = ["starter", "pro", "enterprise"] as const;
 
 // Starter add-on features: the storefront ships with ordering/catalog always on;
-// a Starter client picks exactly STARTER_FEATURE_LIMIT of these. Each key maps to
-// a storefront `showPage*` toggle in the brand config (see lib/onboarding/mapping).
+// a Starter client gets STARTER_FEATURE_LIMIT of these included, and may add more
+// for STARTER_EXTRA_FEATURE_PRICE_CENTS each. Each key maps to a storefront
+// `showPage*` toggle in the brand config (see lib/onboarding/mapping).
 export const STARTER_FEATURE_KEYS = ["track", "faq", "calculator", "protocols", "coa"] as const;
 export type StarterFeatureKey = (typeof STARTER_FEATURE_KEYS)[number];
+// Features included in the Starter base price; clients must pick at least this many.
 export const STARTER_FEATURE_LIMIT = 2;
+// Price per add-on feature beyond the included STARTER_FEATURE_LIMIT (₱1,500).
+export const STARTER_EXTRA_FEATURE_PRICE_CENTS = 150_000;
 export const STARTER_FEATURE_LABELS: Record<StarterFeatureKey, string> = {
   track: "Order Tracking",
   faq: "FAQ Page",
@@ -75,10 +79,10 @@ export const onboardingSchema = z.object({
   // Step 6 — package selection (marketing label or alias → normalized server-side)
   packageKey: z.string().trim().min(1).max(40).default("starter"),
 
-  // Step 6 — Starter add-on features (exactly STARTER_FEATURE_LIMIT for Starter;
-  // ignored/empty for other tiers, which ship with all pages on). Enforced for
-  // Starter in the server action.
-  selectedFeatures: z.array(z.enum(STARTER_FEATURE_KEYS)).max(STARTER_FEATURE_LIMIT).optional().default([]),
+  // Step 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT for Starter,
+  // extras billed per STARTER_EXTRA_FEATURE_PRICE_CENTS; ignored/empty for other
+  // tiers, which ship with all pages on). Enforced for Starter in the server action.
+  selectedFeatures: z.array(z.enum(STARTER_FEATURE_KEYS)).max(STARTER_FEATURE_KEYS.length).optional().default([]),
 
   // Step 7 — checkout
   paymentProofUrl: url.optional().default(""),

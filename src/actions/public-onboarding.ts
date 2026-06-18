@@ -93,11 +93,12 @@ export async function submitOnboardingAction(
 
   const planKey = planMeta(payload.packageKey).key; // normalize aliases → starter|pro|enterprise
 
-  // Starter must commit to exactly N add-on features (the schema caps the max;
-  // enforce the exact count here authoritatively). Other tiers ignore the field.
+  // Starter must commit to at least N included add-on features (extras beyond N
+  // are billed per STARTER_EXTRA_FEATURE_PRICE_CENTS; the schema caps the max at
+  // the full feature set). Other tiers ignore the field.
   const selectedFeatures = planKey === "starter" ? payload.selectedFeatures : [];
-  if (planKey === "starter" && selectedFeatures.length !== STARTER_FEATURE_LIMIT) {
-    return { error: `Please pick exactly ${STARTER_FEATURE_LIMIT} features for the Starter package.` };
+  if (planKey === "starter" && selectedFeatures.length < STARTER_FEATURE_LIMIT) {
+    return { error: `Please pick at least ${STARTER_FEATURE_LIMIT} features for the Starter package.` };
   }
 
   const { brandConfig, settings } = buildProvisioning(payload);

@@ -10,11 +10,12 @@ import {
   STARTER_FEATURE_KEYS,
   STARTER_FEATURE_LABELS,
   STARTER_FEATURE_LIMIT,
+  STARTER_EXTRA_FEATURE_PRICE_CENTS,
   type OnboardingPayload,
   type StarterFeatureKey,
 } from "@/lib/onboarding/schema";
 
-export { STARTER_FEATURE_LIMIT };
+export { STARTER_FEATURE_LIMIT, STARTER_EXTRA_FEATURE_PRICE_CENTS };
 
 export type DraftProduct = {
   name: string;
@@ -59,7 +60,7 @@ export type Draft = {
   paymentMethods: DraftPayment[];
   // 6 — package
   packageKey: string;
-  // 6 — Starter add-on features (exactly STARTER_FEATURE_LIMIT chosen for Starter)
+  // 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT; extras billed per feature)
   selectedFeatures: StarterFeatureKey[];
   // 7 — checkout
   paymentProofUrl: string;
@@ -166,8 +167,8 @@ export function validateStep(step: number, d: Draft): Record<string, string> {
   }
   if (step === 5) {
     if (!d.packageKey) e.packageKey = "Please choose a package.";
-    if (d.packageKey === "starter" && d.selectedFeatures.length !== STARTER_FEATURE_LIMIT) {
-      e.selectedFeatures = `Pick exactly ${STARTER_FEATURE_LIMIT} features for the Starter package.`;
+    if (d.packageKey === "starter" && d.selectedFeatures.length < STARTER_FEATURE_LIMIT) {
+      e.selectedFeatures = `Pick at least ${STARTER_FEATURE_LIMIT} features for the Starter package.`;
     }
   }
   if (step === 6) {
@@ -215,7 +216,7 @@ export function draftToPayload(d: Draft): OnboardingPayload {
     })),
     packageKey: d.packageKey,
     // Only Starter carries feature picks; other tiers ship with all pages on.
-    selectedFeatures: d.packageKey === "starter" ? d.selectedFeatures.slice(0, STARTER_FEATURE_LIMIT) : [],
+    selectedFeatures: d.packageKey === "starter" ? d.selectedFeatures : [],
     paymentProofUrl: d.paymentProofUrl,
     termsAccepted: d.termsAccepted,
     website: d.website,

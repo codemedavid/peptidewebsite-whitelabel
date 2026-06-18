@@ -74,7 +74,7 @@ export const PLAN_CARDS = [
       "Ordering form",
       "Order success + order-details page",
       "Auto-send order to Messenger / WhatsApp",
-      "Pick any 2 add-on features",
+      "2 add-on features included (+₱1,500 each extra)",
       "Standard support",
     ],
   },

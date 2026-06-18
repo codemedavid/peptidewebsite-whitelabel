@@ -29,6 +29,7 @@ import {
   PAYMENT_PRESETS,
   STARTER_FEATURE_OPTIONS,
   STARTER_FEATURE_LIMIT,
+  STARTER_EXTRA_FEATURE_PRICE_CENTS,
 } from "../useOnboardingForm";
 import { STARTER_FEATURE_LABELS, type StarterFeatureKey } from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
@@ -66,6 +67,11 @@ const ICONS: Record<string, LucideIcon> = {
   BookOpen,
   ShieldCheck,
 };
+
+/** Format integer centavos as a peso string, e.g. 150000 → "₱1,500". */
+function peso(cents: number): string {
+  return `₱${(cents / 100).toLocaleString("en-PH")}`;
+}
 
 /* ---------- shared field helpers ---------- */
 function Field({
@@ -379,14 +385,16 @@ export function PaymentsStep({ draft, update }: StepProps) {
 export function PackageStep({ draft, update, errors, packages }: StepProps) {
   const isStarter = draft.packageKey === "starter";
   const picked = draft.selectedFeatures;
+  const extras = Math.max(0, picked.length - STARTER_FEATURE_LIMIT);
+  const addonCents = extras * STARTER_EXTRA_FEATURE_PRICE_CENTS;
 
   function toggleFeature(id: StarterFeatureKey) {
     if (picked.includes(id)) {
       update({ selectedFeatures: picked.filter((f) => f !== id) });
-    } else if (picked.length < STARTER_FEATURE_LIMIT) {
+    } else {
+      // First STARTER_FEATURE_LIMIT are included; each extra is billed per feature.
       update({ selectedFeatures: [...picked, id] });
     }
-    // At the limit, ignore further additions — the client must deselect first.
   }
 
   return (
@@ -418,17 +426,21 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
       {isStarter && (
         <div className="mk-card" style={{ marginTop: 8, gridColumn: "1 / -1" }}>
           <h3 className="mk-h3" style={{ fontSize: "1.05rem", marginBottom: 4 }}>
-            Pick {STARTER_FEATURE_LIMIT} features
+            Pick your features
           </h3>
           <p className="mk-hint" style={{ marginTop: 0, marginBottom: 12 }}>
             Your Starter store always includes the ordering website, product catalog, and full
-            store admin. Choose {STARTER_FEATURE_LIMIT} add-on pages to go live with
-            ({picked.length}/{STARTER_FEATURE_LIMIT} selected).
+            store admin. The first {STARTER_FEATURE_LIMIT} add-on pages are included — each extra
+            is {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)}. ({picked.length} selected)
           </p>
           <div className="mk-choices">
             {STARTER_FEATURE_OPTIONS.map((f) => {
               const on = picked.includes(f.id);
-              const atLimit = !on && picked.length >= STARTER_FEATURE_LIMIT;
+              // A pick is billed once the included allotment is used up: selected
+              // features beyond the limit, or the next pick when already at/over it.
+              const billed = on
+                ? picked.indexOf(f.id) >= STARTER_FEATURE_LIMIT
+                : picked.length >= STARTER_FEATURE_LIMIT;
               const Icon = ICONS[f.icon];
               return (
                 <button
@@ -436,13 +448,19 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                   type="button"
                   className="mk-choice"
                   data-selected={on}
-                  disabled={atLimit}
-                  style={{ alignItems: "flex-start", opacity: atLimit ? 0.5 : 1 }}
+                  style={{ alignItems: "flex-start" }}
                   onClick={() => toggleFeature(f.id)}
                 >
                   {Icon && <Icon size={20} style={{ flexShrink: 0, marginTop: 2 }} />}
                   <span style={{ flex: 1 }}>
-                    <b style={{ fontSize: 15 }}>{f.label}</b>
+                    <b style={{ fontSize: 15 }}>
+                      {f.label}{" "}
+                      {billed && (
+                        <span className="mk-chip" style={{ marginLeft: 4, padding: "2px 8px", fontSize: 11 }}>
+                          +{peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)}
+                        </span>
+                      )}
+                    </b>
                     <small style={{ display: "block", marginTop: 2 }}>{f.desc}</small>
                   </span>
                   {on && <Check className="mk-choice-check" size={20} />}
@@ -450,6 +468,12 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
               );
             })}
           </div>
+          {extras > 0 && (
+            <p className="mk-hint" style={{ marginTop: 12, fontWeight: 600, color: "var(--ink-900)" }}>
+              {extras} extra feature{extras > 1 ? "s" : ""} × {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
+              <span style={{ color: "var(--rose-700)" }}>{peso(addonCents)}</span> added to your one-time setup.
+            </p>
+          )}
           {errors.selectedFeatures && <p className="mk-error">{errors.selectedFeatures}</p>}
         </div>
       )}
@@ -511,6 +535,16 @@ export function CheckoutStep({ draft, update, errors, packagePayment }: StepProp
                 {draft.selectedFeatures.length
                   ? draft.selectedFeatures.map((f) => STARTER_FEATURE_LABELS[f]).join(", ")
                   : "—"}
+              </b>
+            </div>
+          )}
+          {draft.packageKey === "starter" && draft.selectedFeatures.length > STARTER_FEATURE_LIMIT && (
+            <div className="mk-review-item">
+              <span>Extra features</span>
+              <b>
+                {draft.selectedFeatures.length - STARTER_FEATURE_LIMIT} ×{" "}
+                {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
+                {peso((draft.selectedFeatures.length - STARTER_FEATURE_LIMIT) * STARTER_EXTRA_FEATURE_PRICE_CENTS)}
               </b>
             </div>
           )}
