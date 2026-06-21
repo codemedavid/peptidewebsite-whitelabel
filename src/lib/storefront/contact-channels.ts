@@ -15,8 +15,9 @@ export const CONTACT_CHANNEL_META: {
   hint: string;
 }[] = [
   { type: "whatsapp", label: "WhatsApp", placeholder: "e.g. 639171234567", hint: "International number, digits only." },
-  { type: "telegram", label: "Telegram", placeholder: "e.g. mystore", hint: "Username, with or without @." },
+  { type: "telegram", label: "Telegram", placeholder: "e.g. mystore or 639171234567", hint: "Username (with or without @) or an international phone number." },
   { type: "messenger", label: "Messenger", placeholder: "e.g. mystore", hint: "Page username." },
+  { type: "viber", label: "Viber", placeholder: "e.g. 639171234567", hint: "International number, digits only." },
 ];
 
 /** Coerce whatever is stored in config into the three canonical channels, in a

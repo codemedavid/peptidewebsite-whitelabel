@@ -40,6 +40,7 @@ export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
   whatsapp: "WhatsApp",
   telegram: "Telegram",
   messenger: "Messenger",
+  viber: "Viber",
 };
 
 /** The underlying catalog product id for a cart entry — the real id for a
@@ -271,10 +272,20 @@ export function channelUrl(channel: ContactChannel, message: string): string {
       const digits = dest.replace(/[^\d]/g, "");
       return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
     }
-    case "telegram":
-      return `https://t.me/${dest.replace(/^@/, "")}`;
+    case "telegram": {
+      // A "+"-prefixed or all-digit value is a phone number; Telegram resolves
+      // those via https://t.me/+<digits>. Anything else is a @username.
+      const handle = dest.replace(/^@/, "");
+      if (/^\+?[\d\s().-]+$/.test(handle)) {
+        return `https://t.me/+${handle.replace(/[^\d]/g, "")}`;
+      }
+      return `https://t.me/${handle}`;
+    }
     case "messenger":
       return `https://m.me/${dest.replace(/^@/, "")}`;
+    case "viber":
+      // Viber deep links are phone-number based: viber://chat?number=<digits>.
+      return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;
   }
 }
 

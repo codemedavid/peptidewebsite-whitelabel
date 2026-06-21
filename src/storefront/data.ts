@@ -192,6 +192,7 @@ export const BRAND: Brand = {
     { type: "whatsapp", destination: "", enabled: false },
     { type: "telegram", destination: "", enabled: false },
     { type: "messenger", destination: "", enabled: false },
+    { type: "viber", destination: "", enabled: false },
   ],
 
   nav: [

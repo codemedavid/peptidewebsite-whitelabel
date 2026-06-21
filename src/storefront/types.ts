@@ -220,12 +220,13 @@ export type Review = {
 /** Messaging channels the customer can complete an order through. The set of
  *  enabled channels + their destinations is configured per tenant by the
  *  super admin (BrandingEditor → storefront config). */
-export type ContactChannelType = "whatsapp" | "telegram" | "messenger";
+export type ContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber";
 
 export type ContactChannel = {
   type: ContactChannelType;
-  /** WhatsApp: phone in international format (digits, no "+"). Telegram /
-   *  Messenger: the username (with or without a leading "@"). */
+  /** WhatsApp / Viber: phone in international format (digits). Telegram: a
+   *  username, or a phone number (resolved via t.me/+<digits>). Messenger:
+   *  the page username (with or without a leading "@"). */
   destination: string;
   enabled: boolean;
 };

@@ -723,6 +723,7 @@
 .sa .set-channel-icon.whatsapp { background: #25d366; }
 .sa .set-channel-icon.telegram { background: #229ed9; }
 .sa .set-channel-icon.messenger { background: linear-gradient(135deg, #0084ff, #6e3bff); }
+.sa .set-channel-icon.viber { background: #7360f2; }
 .sa .set-channel-meta .name { font-size: 14px; font-weight: 600; color: var(--ink-900); }
 .sa .set-channel-meta .sub { font-size: 12px; color: var(--ink-400); margin-top: 2px; }
 .sa .set-channel-body { padding: 0 16px 16px 70px; }
