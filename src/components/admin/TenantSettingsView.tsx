@@ -846,6 +846,13 @@ export function TenantSettingsView({
                   />
                 </div>
               </div>
+              {/* Shown here (outside the featureOn gate) so a failed/reverted
+                  master toggle never collapses silently. */}
+              {!featureOn && errors.fee && (
+                <div role="alert" className="set-err">
+                  {errors.fee}
+                </div>
+              )}
               {featureOn && (
                 <>
               <div className="set-row">

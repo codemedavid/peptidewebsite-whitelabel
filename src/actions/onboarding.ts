@@ -25,6 +25,7 @@ import {
 } from "@/actions/demo";
 import type { DemoFeatureMap } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { PLAN_FEATURES, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
 
@@ -332,6 +333,44 @@ export async function saveFeaturesAction(
 }
 
 /**
+ * Ensure a catalog feature has its DB rows (the Feature row + a PlanFeature link
+ * for every plan whose ceiling includes it), idempotently. Mirrors prisma/seed.ts
+ * so a feature added after a DB was seeded self-registers the first time it's
+ * touched — `setTenantFeatureAction` relies on this so its toggle never fails
+ * with "feature not registered". Returns null for a key not in the catalog.
+ */
+async function ensureFeatureRegistered(key: string): Promise<{ id: string }> {
+  const feature = await prisma.feature.upsert({
+    where: { key },
+    update: {},
+    create: { key },
+    select: { id: true },
+  });
+
+  const planKeys = Object.entries(PLAN_FEATURES)
+    .filter(([, keys]) => (keys as readonly string[]).includes(key))
+    .map(([planKey]) => planKey);
+  if (planKeys.length) {
+    const plans = await prisma.plan.findMany({
+      where: { key: { in: planKeys } },
+      select: { id: true },
+    });
+    if (plans.length) {
+      await prisma.$transaction(
+        plans.map((p) =>
+          prisma.planFeature.upsert({
+            where: { planId_featureId: { planId: p.id, featureId: feature.id } },
+            update: {},
+            create: { planId: p.id, featureId: feature.id },
+          }),
+        ),
+      );
+    }
+  }
+  return feature;
+}
+
+/**
  * Toggle a SINGLE feature for one tenant WITHOUT disturbing its other overrides
  * — for focused, in-context switches (e.g. the "Admin fee" section in tenant
  * settings) so the operator needn't open the full Features editor. Merge-safe in
@@ -360,19 +399,20 @@ export async function setTenantFeatureAction(
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: {
-      id: true,
-      plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
-    },
+    select: { id: true, plan: { select: { key: true } } },
   });
   if (!tenant) return { error: `Tenant not found: ${slug}` };
 
-  const feature = await prisma.feature.findUnique({ where: { key }, select: { id: true } });
-  if (!feature) {
-    return { error: "Feature not registered in the database — re-run the seed to add it." };
-  }
+  // Self-heal: a feature added to the catalog after this DB was seeded has no
+  // Feature/PlanFeature rows, so the toggle would fail and trap the operator.
+  // Register it on demand exactly as prisma/seed.ts would — Feature row plus the
+  // plan links for every plan whose ceiling includes it — so it behaves as the
+  // catalog declares (e.g. admin_fee is default-on) instead of erroring.
+  const feature = await ensureFeatureRegistered(key);
 
-  const planHas = tenant.plan.features.some((pf) => pf.feature.key === key);
+  // Plan default comes from the catalog (the source of truth we just synced the
+  // DB to), so it's correct even on the first toggle that created the rows.
+  const planHas = planFeatureSet(tenant.plan.key).has(key as FeatureKey);
   if (enabled === planHas) {
     // Back to the plan default → no override row needed.
     await prisma.tenantFeatureOverride.deleteMany({
