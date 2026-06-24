@@ -288,8 +288,14 @@ export function channelUrl(channel: ContactChannel, message: string): string {
       // Viber deep links are phone-number based: viber://chat?number=<digits>.
       return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;
     case "gmail":
-      // Email: a mailto link carries the order as the message body.
-      return `mailto:${dest}?subject=${encodeURIComponent("New order")}&body=${encodeURIComponent(message)}`;
+      // Use Gmail's web compose URL (a normal https navigation) rather than a
+      // mailto: link. mailto: launches an external mail handler, which browsers
+      // block when it's navigated to programmatically after async work — the
+      // user-gesture activation has expired by then ("blocked from
+      // automatically composing an email"). The https compose URL is never
+      // blocked and matches the channel's name; it carries the order as the
+      // subject + body just like the other prefilled channels.
+      return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(dest)}&su=${encodeURIComponent("New order")}&body=${encodeURIComponent(message)}`;
   }
 }
 
