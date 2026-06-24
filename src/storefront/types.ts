@@ -144,8 +144,8 @@ export type ShippingLocation = {
   name: string;
   /** The shipping fee for this location. Optional: leave it unset to make the
    *  location a label only (no per-location fee) — e.g. when the store charges a
-   *  single flat shipping/admin fee instead. Absent/undefined renders as "Free"
-   *  at checkout and adds 0 to the order total. */
+   *  single flat shipping/admin fee instead. Absent/undefined shows just the
+   *  location name at checkout (no "Free" label) and adds 0 to the order total. */
   price?: number;
   active: boolean;
 };
@@ -224,13 +224,13 @@ export type Review = {
 /** Messaging channels the customer can complete an order through. The set of
  *  enabled channels + their destinations is configured per tenant by the
  *  super admin (BrandingEditor → storefront config). */
-export type ContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber";
+export type ContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber" | "gmail";
 
 export type ContactChannel = {
   type: ContactChannelType;
   /** WhatsApp / Viber: phone in international format (digits). Telegram: a
    *  username, or a phone number (resolved via t.me/+<digits>). Messenger:
-   *  the page username (with or without a leading "@"). */
+   *  the page username (with or without a leading "@"). Gmail: an email address. */
   destination: string;
   enabled: boolean;
 };

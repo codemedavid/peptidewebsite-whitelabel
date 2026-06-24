@@ -41,6 +41,7 @@ export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
   telegram: "Telegram",
   messenger: "Messenger",
   viber: "Viber",
+  gmail: "Gmail",
 };
 
 /** The underlying catalog product id for a cart entry — the real id for a
@@ -286,10 +287,13 @@ export function channelUrl(channel: ContactChannel, message: string): string {
     case "viber":
       // Viber deep links are phone-number based: viber://chat?number=<digits>.
       return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;
+    case "gmail":
+      // Email: a mailto link carries the order as the message body.
+      return `mailto:${dest}?subject=${encodeURIComponent("New order")}&body=${encodeURIComponent(message)}`;
   }
 }
 
 /** Whether the channel carries the message in its URL (so no clipboard hint). */
 export function channelPrefills(type: ContactChannelType): boolean {
-  return type === "whatsapp";
+  return type === "whatsapp" || type === "gmail";
 }

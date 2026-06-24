@@ -138,7 +138,7 @@ function ShippingLocationModal({
             type="number"
             min={0}
             value={price}
-            placeholder="Leave blank for no fee (Free)"
+            placeholder="Leave blank for no fee"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               setPrice(e.target.value)
             }
@@ -225,9 +225,9 @@ export function AdminShippingLocations({
         : "",
       code: "",
       name: "",
-      // No default fee — a new location is "Free" until the owner enters an
-      // amount. Supports stores that charge a single flat fee instead of
-      // per-location rates.
+      // No default fee — a new location carries no per-location fee until the
+      // owner enters an amount. Supports stores that charge a single flat fee
+      // instead of per-location rates.
       active: true,
       _new: true,
     });
@@ -328,7 +328,8 @@ export function AdminShippingLocations({
                 <div className="admin-ship-row__courier">{courierName(l.courierId)}</div>
               </div>
               <div className="admin-ship-row__price">
-                {l.price ? `${currency}${l.price.toLocaleString()}` : "Free"}
+                {/* No per-location fee → show a neutral dash, not "Free". */}
+                {l.price ? `${currency}${l.price.toLocaleString()}` : "—"}
               </div>
               <button
                 className={`admin-ship-row__check ${l.active ? "" : "is-off"}`}

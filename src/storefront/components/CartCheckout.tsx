@@ -520,8 +520,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       </option>
                       {courierLocations.map((l) => (
                         <option key={l.id} value={l.id}>
-                          {l.name} —{" "}
-                          {l.price ? `${currency}${l.price.toLocaleString()}` : "Free"}
+                          {/* No per-location fee → just the location name; don't
+                              label it "Free" (the store may charge shipping another
+                              way, e.g. a flat/admin fee). */}
+                          {l.price
+                            ? `${l.name} — ${currency}${l.price.toLocaleString()}`
+                            : l.name}
                         </option>
                       ))}
                     </select>

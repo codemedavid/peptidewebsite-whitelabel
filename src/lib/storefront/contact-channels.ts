@@ -18,6 +18,7 @@ export const CONTACT_CHANNEL_META: {
   { type: "telegram", label: "Telegram", placeholder: "e.g. mystore or 639171234567", hint: "Username (with or without @) or an international phone number." },
   { type: "messenger", label: "Messenger", placeholder: "e.g. mystore", hint: "Page username." },
   { type: "viber", label: "Viber", placeholder: "e.g. 639171234567", hint: "International number, digits only." },
+  { type: "gmail", label: "Gmail", placeholder: "e.g. store@gmail.com", hint: "Email address orders are sent to." },
 ];
 
 /** Coerce whatever is stored in config into the three canonical channels, in a
