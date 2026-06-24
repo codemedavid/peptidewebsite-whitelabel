@@ -142,7 +142,11 @@ export type ShippingLocation = {
   courierId: string;
   code: string;
   name: string;
-  price: number;
+  /** The shipping fee for this location. Optional: leave it unset to make the
+   *  location a label only (no per-location fee) — e.g. when the store charges a
+   *  single flat shipping/admin fee instead. Absent/undefined renders as "Free"
+   *  at checkout and adds 0 to the order total. */
+  price?: number;
   active: boolean;
 };
 

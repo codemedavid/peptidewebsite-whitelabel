@@ -14,6 +14,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
+import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -285,13 +286,17 @@ function normalizeShippingLocations(input: unknown): ShippingLocation[] {
     const name = String(o.name ?? "").slice(0, 120).trim();
     if (!id || !code || !name || seen.has(id)) continue;
     seen.add(id);
-    const price = Number(o.price);
+    // Price is OPTIONAL: a blank/non-numeric value means "no per-location fee"
+    // (the location is a label only — e.g. the store charges a flat fee instead).
+    // Store it as undefined in that case so checkout shows "Free" rather than ₱0.
+    const hasPrice =
+      o.price !== "" && o.price !== null && o.price !== undefined && Number.isFinite(Number(o.price));
     out.push({
       id,
       courierId: String(o.courierId ?? "").slice(0, 64).trim(),
       code,
       name,
-      price: Number.isFinite(price) ? Math.max(0, price) : 0,
+      ...(hasPrice ? { price: Math.max(0, Number(o.price)) } : {}),
       active: o.active !== false,
     });
   }
@@ -347,6 +352,41 @@ export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionRes
   const checkoutRules = normalizeCheckoutRules(rules);
   const current = await readConfig(tenantId);
   const config = { ...current, checkoutRules };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+// ── Admin / service / shipping fee ───────────────────────────────────────────
+
+/**
+ * Persist the storefront's checkout fee into the shared `branding.config` blob
+ * (read-modify-write, mirroring saveCheckoutRulesAction so it never clobbers the
+ * rest of the Brand config). This is the SAME `adminFee` key the platform
+ * operator edits in the tenant settings — the store owner can now configure it
+ * themselves (toggle, label, amount). The label is free text, so a store that
+ * prefers a single flat shipping charge can label it "Shipping fee" instead of
+ * "Admin fee". Checkout and placeStorefrontOrderAction read this same stored
+ * value, so the server charges exactly what the owner configured.
+ */
+export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const adminFee = normalizeAdminFee(input);
+  const current = await readConfig(tenantId);
+  const config = { ...current, adminFee };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

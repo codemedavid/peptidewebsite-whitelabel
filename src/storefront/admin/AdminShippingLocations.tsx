@@ -24,7 +24,11 @@ function ShippingLocationModal({
   const [courierId, setCourierId] = useState<string>(location.courierId || "");
   const [code, setCode] = useState<string>(location.code || "");
   const [name, setName] = useState<string>(location.name || "");
-  const [price, setPrice] = useState<number>(location.price ?? 0);
+  // Kept as the raw input string so a blank field stays blank (= no fee) rather
+  // than snapping to 0. Parsed on save; blank → the price is left unset.
+  const [price, setPrice] = useState<string>(
+    typeof location.price === "number" ? String(location.price) : "",
+  );
   const [active, setActive] = useState<boolean>(location.active !== false);
 
   // The location's saved courier may have since been disabled or deleted — keep
@@ -134,10 +138,16 @@ function ShippingLocationModal({
             type="number"
             min={0}
             value={price}
+            placeholder="Leave blank for no fee (Free)"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setPrice(Number(e.target.value) || 0)
+              setPrice(e.target.value)
             }
           />
+          <div className="admin-field__hint">
+            Leave this blank to charge no fee for this location — useful when you
+            charge a single flat shipping fee elsewhere instead of per-location
+            rates.
+          </div>
         </div>
 
         <div className="admin-modal__row">
@@ -160,16 +170,21 @@ function ShippingLocationModal({
           <button
             className="admin-btn"
             disabled={!canSave}
-            onClick={() =>
+            onClick={() => {
+              const trimmed = price.trim();
+              const parsed = Number(trimmed);
+              const hasPrice = trimmed !== "" && Number.isFinite(parsed);
+              const { price: _drop, ...rest } = location;
+              void _drop;
               onSave({
-                ...location,
+                ...rest,
                 courierId,
                 code,
                 name,
-                price: Number(price) || 0,
+                ...(hasPrice ? { price: Math.max(0, parsed) } : {}),
                 active,
-              })
-            }
+              });
+            }}
           >
             Save
           </button>
@@ -210,7 +225,9 @@ export function AdminShippingLocations({
         : "",
       code: "",
       name: "",
-      price: 0,
+      // No default fee — a new location is "Free" until the owner enters an
+      // amount. Supports stores that charge a single flat fee instead of
+      // per-location rates.
       active: true,
       _new: true,
     });
@@ -311,8 +328,7 @@ export function AdminShippingLocations({
                 <div className="admin-ship-row__courier">{courierName(l.courierId)}</div>
               </div>
               <div className="admin-ship-row__price">
-                {currency}
-                {(l.price || 0).toLocaleString()}
+                {l.price ? `${currency}${l.price.toLocaleString()}` : "Free"}
               </div>
               <button
                 className={`admin-ship-row__check ${l.active ? "" : "is-off"}`}

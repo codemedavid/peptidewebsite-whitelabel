@@ -520,8 +520,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       </option>
                       {courierLocations.map((l) => (
                         <option key={l.id} value={l.id}>
-                          {l.name} — {currency}
-                          {l.price.toLocaleString()}
+                          {l.name} —{" "}
+                          {l.price ? `${currency}${l.price.toLocaleString()}` : "Free"}
                         </option>
                       ))}
                     </select>

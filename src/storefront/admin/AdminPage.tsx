@@ -20,6 +20,7 @@ import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
 import { AdminResellerSettings } from "./AdminResellerSettings";
 import { AdminCheckoutRules } from "./AdminCheckoutRules";
+import { AdminFeeSettings } from "./AdminFeeSettings";
 import { AdminGroupBuys } from "./AdminGroupBuys";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
@@ -46,6 +47,7 @@ type View =
   | "analytics"
   | "design"
   | "checkout"
+  | "fee"
   | "groupbuys"
   | "account";
 
@@ -141,6 +143,7 @@ export function AdminPage({
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
@@ -172,6 +175,7 @@ export function AdminPage({
     { id: "analytics", label: "Sales Analytics", hint: "Revenue & insights", icon: "trend", tint: "cyan" },
     { id: "inv", label: "Inventory", hint: "Track stock", icon: "inbox", tint: "orange" },
     { id: "ship", label: "Shipping", hint: "Manage rates", icon: "pin", tint: "cyan" },
+    { id: "fee", label: "Checkout Fee", hint: "Shipping / service fee", icon: "tag", tint: "yellow" },
     { id: "couriers", label: "Couriers", hint: "Manage couriers", icon: "truck", tint: "mint" },
     { id: "lab", label: "Lab Results", hint: "Manage COAs", icon: "shield", tint: "pink" },
     { id: "promo", label: "Promo Codes", hint: "Manage discounts", icon: "tag", tint: "red" },
@@ -271,6 +275,7 @@ export function AdminPage({
                     if (q.id === "analytics") return setView("analytics");
                     if (q.id === "inv") return setView("inv");
                     if (q.id === "ship") return setView("shipping");
+                    if (q.id === "fee") return setView("fee");
                     if (q.id === "couriers") return setView("couriers");
                     if (q.id === "lab") return setView("lab");
                     if (q.id === "promo") return setView("promo");
