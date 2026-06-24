@@ -78,6 +78,9 @@ type Props = {
   initialRequireProofOfPayment: boolean;
   /** Checkout admin-fee config + the store's currency symbol for display. */
   initialAdminFee: AdminFeeConfig & { currency: string };
+  /** Whether the tenant is entitled to the admin-fee feature (admin → Features).
+   *  When false the fee section is shown locked — no fee is charged at checkout. */
+  adminFeeEntitled: boolean;
   /** Storefront-admin password override; blank means the default ("admin"). */
   initialAdminPassword: string;
   lastSaved?: string;
@@ -106,6 +109,7 @@ export function TenantSettingsView({
   initialMetaDescription,
   initialRequireProofOfPayment,
   initialAdminFee,
+  adminFeeEntitled,
   initialAdminPassword,
   lastSaved,
   domains,
@@ -778,10 +782,35 @@ export function TenantSettingsView({
                   the order&apos;s total everywhere (checkout, tracking, store admin, analytics).
                 </p>
               </div>
-              <span className={"badge " + (feeEnabled ? "badge-success" : "badge-neutral")}>
-                {feeEnabled ? "Charged" : "Off"}
+              <span
+                className={
+                  "badge " +
+                  (!adminFeeEntitled
+                    ? "badge-neutral"
+                    : feeEnabled
+                      ? "badge-success"
+                      : "badge-neutral")
+                }
+              >
+                {!adminFeeEntitled ? "Disabled" : feeEnabled ? "Charged" : "Off"}
               </span>
             </div>
+            {!adminFeeEntitled ? (
+              <div className="set-card-body">
+                <div className="set-row">
+                  <div>
+                    <div className="set-row-label">Turned off for this store</div>
+                    <div className="set-row-help">
+                      The admin fee feature is switched off for this tenant, so no fee is charged at
+                      checkout and this form is locked. Turn it back on under{" "}
+                      <Link href={`/admin/tenants/${slug}/features`}>Features → Admin fee</Link>. Any
+                      saved fee label and amount are kept and resume once it&apos;s re-enabled.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="set-card-body">
               <div className="set-row">
                 <div>
@@ -920,6 +949,8 @@ export function TenantSettingsView({
                 </button>
               </div>
             </div>
+            </>
+            )}
           </section>
 
           {/* ---------- checkout copy ---------- */}

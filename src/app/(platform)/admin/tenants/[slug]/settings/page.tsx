@@ -41,6 +41,7 @@ export default async function TenantSettingsPage({
       initialMetaDescription={contact.metaDescription}
       initialRequireProofOfPayment={contact.requireProofOfPayment}
       initialAdminFee={adminFee}
+      adminFeeEntitled={adminFee.entitled}
       initialAdminPassword={adminPassword ?? ""}
       domains={<DomainManager slug={slug} initialDomains={domains} />}
     />

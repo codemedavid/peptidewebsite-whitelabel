@@ -94,6 +94,12 @@ export default async function HomePage() {
   brand.showAdminCheckout = smartCheckoutEntitled;
   if (!smartCheckoutEntitled) delete (brand as Record<string, unknown>).checkoutRules;
 
+  // Checkout admin fee: operator-revocable per tenant (admin → Features),
+  // default ON. Revoking drops the fee line from checkout — orders.ts re-applies
+  // the same gate at placement so a stale client can't reinstate it.
+  const adminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
+  if (!adminFeeEntitled) delete (brand as Record<string, unknown>).adminFee;
+
   // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the
   // rules editor above): ship the resolved groupbuy.* capability set so the
   // admin view knows which buttons to draw, plus the operator-set form

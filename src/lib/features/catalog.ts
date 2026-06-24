@@ -40,6 +40,7 @@ export const FEATURES = {
   STORE_CARD_STUDIO: "storefront.card_studio",
   STORE_SALES_ANALYTICS: "storefront.sales_analytics",
   STORE_SMART_CHECKOUT: "storefront.smart_checkout",
+  STORE_ADMIN_FEE: "storefront.admin_fee",
   // Sales Analytics internals. Each key toggles one slice of the store-admin
   // Sales Analytics view; all of them are inert while the module itself
   // (STORE_SALES_ANALYTICS) is off. They sit in every plan ceiling (default ON)
@@ -95,6 +96,11 @@ const STARTER: FeatureKey[] = [
   // only surfaces the gated #merchant page once the store owner also sets an
   // access code, so being in the plan ceiling (default-on) exposes nothing.
   FEATURES.STORE_RESELLER_PORTAL,
+  // Checkout admin fee: in every plan ceiling (default ON) so any tenant that
+  // already configured a fee keeps charging it. The operator revokes it per
+  // tenant from admin → Features to switch the whole admin-fee section off —
+  // the storefront then drops the line and orders.ts stops stamping it.
+  FEATURES.STORE_ADMIN_FEE,
   // Sales Analytics sub-features: in every plan ceiling (default ON) but inert
   // until the operator grants the STORE_SALES_ANALYTICS module itself.
   FEATURES.SA_SECTION_REVENUE,
@@ -221,6 +227,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
   [FEATURES.STORE_SALES_ANALYTICS]: { label: "Sales Analytics", description: "Sales Analytics view in the store admin (revenue & insights).", group: "Ecommerce" },
   [FEATURES.STORE_SMART_CHECKOUT]: { label: "Smart Checkout", description: "Smart Cart & Checkout rules view in the store admin — cart restrictions, checkout validations and custom messages. Off hides the editor and stops saved rules from constraining the cart.", group: "Ecommerce" },
+  [FEATURES.STORE_ADMIN_FEE]: { label: "Admin fee", description: "The flat checkout admin (service) fee, configured per tenant in platform settings → Admin fee. Off hides the section, drops the fee line at checkout and stops orders charging it; saved label/amount are kept for when it's switched back on.", group: "Ecommerce" },
 
   [FEATURES.SA_SECTION_REVENUE]: { label: "Revenue analytics", description: "Revenue KPIs, revenue-over-time chart and payment-method breakdown. Needs the Sales Analytics module on.", group: "Sales Analytics" },
   [FEATURES.SA_SECTION_PRODUCTS]: { label: "Product analytics", description: "Items-sold KPI and top products by revenue. Needs the Sales Analytics module on.", group: "Sales Analytics" },

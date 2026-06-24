@@ -2,7 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/features/entitlements";
-import { planFeatureSet, FEATURE_META, ALL_FEATURES, FEATURE_GROUPS, type FeatureKey } from "@/lib/features/catalog";
+import { planFeatureSet, FEATURE_META, ALL_FEATURES, FEATURE_GROUPS, FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import {
   isDemoMode,
   listDemoTenants,
@@ -320,31 +320,38 @@ export async function getTenantContactChannels(
 export type TenantAdminFee = AdminFeeConfig & {
   /** The store's currency symbol, for display next to the amount input. */
   currency: string;
+  /** Whether the tenant is entitled to the admin-fee feature (admin → Features).
+   *  When false the platform settings form is shown locked and no fee is charged. */
+  entitled: boolean;
 };
 
 /** The tenant's checkout admin-fee config (super-admin toggle: whether a flat
  *  fee is added on top of the order total, what it's for, and how much).
- *  Read from the shared branding.config blob, same as the contact channels. */
+ *  Read from the shared branding.config blob, same as the contact channels.
+ *  `entitled` reflects the operator's admin → Features toggle (STORE_ADMIN_FEE). */
 export async function getTenantAdminFee(slug: string): Promise<TenantAdminFee | null> {
-  const fromConfig = (config: Record<string, unknown>): TenantAdminFee => ({
+  const fromConfig = (config: Record<string, unknown>, entitled: boolean): TenantAdminFee => ({
     ...normalizeAdminFee(config.adminFee),
     currency:
       typeof config.currency === "string" && config.currency.trim()
         ? config.currency.trim()
         : "₱",
+    entitled,
   });
 
   if (isDemoMode()) {
     if (!listDemoTenants().some((t) => t.slug === slug)) return null;
-    return fromConfig((getDemoBranding(slug).config ?? {}) as Record<string, unknown>);
+    const entitled = getDemoEntitlements(slug).has(FEATURES.STORE_ADMIN_FEE);
+    return fromConfig((getDemoBranding(slug).config ?? {}) as Record<string, unknown>, entitled);
   }
 
   const t = await prisma.tenant.findUnique({
     where: { slug },
-    select: { branding: { select: { config: true } } },
+    select: { id: true, branding: { select: { config: true } } },
   });
   if (!t) return null;
-  return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>);
+  const entitled = (await getEntitlements(t.id)).has(FEATURES.STORE_ADMIN_FEE);
+  return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>, entitled);
 }
 
 /** Current storefront-admin password override (blank = falls back to "admin").

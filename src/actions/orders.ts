@@ -182,12 +182,16 @@ function checkoutRulesViolation(
   catalog: Product[],
   items: OrderItem[],
   clientFee: unknown,
+  adminFeeEntitled: boolean,
 ): string | null {
   const rules = normalizeCheckoutRules(config.checkoutRules);
 
   if (rules.adminFeeValidation && rules.ruleBasedCheckout && clientFee && typeof clientFee === "object") {
     const shown = Math.max(0, num((clientFee as Record<string, unknown>).amount));
-    const charged = activeAdminFee(config.adminFee, itemsSubtotal(items))?.amount ?? 0;
+    // No fee is charged when the tenant isn't entitled, so it must validate to 0.
+    const charged = adminFeeEntitled
+      ? (activeAdminFee(config.adminFee, itemsSubtotal(items))?.amount ?? 0)
+      : 0;
     if (shown !== charged) {
       return "The store's fees changed while you were checking out — please review your updated total and try again.";
     }
@@ -569,11 +573,17 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     // Entitlement-gated: a tenant without the feature keeps any saved rules
     // dormant, matching the storefront (which strips brand.checkoutRules).
+    // Admin fee is operator-revocable per tenant (admin → Features). When the
+    // tenant isn't entitled the fee is neither stamped nor validated — same gate
+    // the storefront uses to drop the line.
+    const demoAdminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
     const demoRuleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
-      ? checkoutRulesViolation(config, demoProducts, p.items, clientFee)
+      ? checkoutRulesViolation(config, demoProducts, p.items, clientFee, demoAdminFeeEntitled)
       : null;
     if (demoRuleError) return { error: demoRuleError };
-    p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
+    p.adminFee = demoAdminFeeEntitled
+      ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
+      : undefined;
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
     stampShipping(config, p);
@@ -592,7 +602,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // storefront (which renders from the same cache) displayed.
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
-    p.adminFee = activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined;
+    // Admin fee is operator-revocable per tenant (admin → Features); when the
+    // tenant isn't entitled it's neither stamped nor validated, matching the
+    // storefront which drops the line.
+    const adminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
+    p.adminFee = adminFeeEntitled
+      ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
+      : undefined;
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
     stampShipping(config, p);
@@ -614,7 +630,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     // Entitlement-gated, same as the demo path above.
     const ruleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
-      ? checkoutRulesViolation(config, catalog, p.items, clientFee)
+      ? checkoutRulesViolation(config, catalog, p.items, clientFee, adminFeeEntitled)
       : null;
     if (ruleError) return { error: ruleError };
 
