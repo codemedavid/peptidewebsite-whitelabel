@@ -5,7 +5,12 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPlatformUser } from "@/lib/auth/session";
-import { isDemoMode, type DemoBranding } from "@/lib/demo/fixtures";
+import {
+  isDemoMode,
+  getDemoFeatures,
+  saveDemoFeatures,
+  type DemoBranding,
+} from "@/lib/demo/fixtures";
 import {
   normalizeOrderNumberFormat,
   validatePrefix,
@@ -324,4 +329,67 @@ export async function saveFeaturesAction(
 ): Promise<{ ok: true } | { error: string }> {
   if (isDemoMode()) return saveFeaturesDemoAction(slug, map as DemoFeatureMap);
   return saveFeatures({ slug, map });
+}
+
+/**
+ * Toggle a SINGLE feature for one tenant WITHOUT disturbing its other overrides
+ * — for focused, in-context switches (e.g. the "Admin fee" section in tenant
+ * settings) so the operator needn't open the full Features editor. Merge-safe in
+ * demo mode (the bulk editor REPLACES the whole override map). DB path mirrors
+ * `saveFeatures`: matches plan default → drop the override; diverges → upsert it.
+ * Platform operator only.
+ */
+export async function setTenantFeatureAction(
+  slug: string,
+  key: string,
+  enabled: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+  if (!/^[a-z0-9_.]+$/.test(key)) return { error: "Invalid feature key." };
+
+  if (isDemoMode()) {
+    saveDemoFeatures(slug, { ...getDemoFeatures(slug), [key]: enabled });
+    revalidatePath("/admin");
+    revalidatePath(`/admin/tenants/${slug}/settings`);
+    revalidateTenant(slug, slug);
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
+    },
+  });
+  if (!tenant) return { error: `Tenant not found: ${slug}` };
+
+  const feature = await prisma.feature.findUnique({ where: { key }, select: { id: true } });
+  if (!feature) {
+    return { error: "Feature not registered in the database — re-run the seed to add it." };
+  }
+
+  const planHas = tenant.plan.features.some((pf) => pf.feature.key === key);
+  if (enabled === planHas) {
+    // Back to the plan default → no override row needed.
+    await prisma.tenantFeatureOverride.deleteMany({
+      where: { tenantId: tenant.id, featureId: feature.id },
+    });
+  } else {
+    await prisma.tenantFeatureOverride.upsert({
+      where: { tenantId_featureId: { tenantId: tenant.id, featureId: feature.id } },
+      update: { enabled, expiresAt: null },
+      create: { tenantId: tenant.id, featureId: feature.id, enabled },
+    });
+  }
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/tenants/${slug}`);
+  revalidatePath(`/admin/tenants/${slug}/features`);
+  revalidatePath(`/admin/tenants/${slug}/settings`);
+  revalidateTenant(tenant.id, slug);
+  return { ok: true };
 }

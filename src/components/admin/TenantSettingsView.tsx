@@ -11,7 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Ic } from "@/components/admin/shell/primitives";
-import { saveOrderFormatAction } from "@/actions/onboarding";
+import { saveOrderFormatAction, setTenantFeatureAction } from "@/actions/onboarding";
+import { FEATURES } from "@/lib/features/catalog";
 import {
   saveContactChannelsAction,
   saveAdminFeeAction,
@@ -128,6 +129,12 @@ export function TenantSettingsView({
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
 
   /* ---------- admin fee ---------- */
+  // Master on/off for the whole admin-fee capability (the STORE_ADMIN_FEE
+  // entitlement). Off = no fee anywhere + the config fields below are hidden.
+  // Saved immediately on toggle via setTenantFeatureAction (its own flow, so it
+  // never marks the section dirty), with optimistic state + revert on failure.
+  const [featureOn, setFeatureOn] = useState(adminFeeEntitled);
+  const [featureSaving, setFeatureSaving] = useState(false);
   const [feeEnabled, setFeeEnabled] = useState(initialAdminFee.enabled);
   const [feeLabel, setFeeLabel] = useState(initialAdminFee.label);
   // Kept as the raw input string so partial entries ("12.") don't fight the
@@ -285,6 +292,23 @@ export function TenantSettingsView({
     }
     setErrors((e) => ({ ...e, fee: res.error }));
     return false;
+  }
+
+  async function toggleAdminFeeFeature() {
+    if (featureSaving) return;
+    const next = !featureOn;
+    setFeatureOn(next); // optimistic
+    setFeatureSaving(true);
+    setErrors((e) => ({ ...e, fee: undefined }));
+    const res = await setTenantFeatureAction(slug, FEATURES.STORE_ADMIN_FEE, next);
+    setFeatureSaving(false);
+    if (!("ok" in res)) {
+      setFeatureOn(!next); // revert
+      setErrors((e) => ({
+        ...e,
+        fee: res.error === "FORBIDDEN" ? "You don't have permission to change this." : res.error,
+      }));
+    }
   }
 
   async function saveAdminPassword(): Promise<boolean> {
@@ -785,33 +809,45 @@ export function TenantSettingsView({
               <span
                 className={
                   "badge " +
-                  (!adminFeeEntitled
-                    ? "badge-neutral"
-                    : feeEnabled
-                      ? "badge-success"
-                      : "badge-neutral")
+                  (featureOn ? (feeEnabled ? "badge-success" : "badge-neutral") : "badge-neutral")
                 }
               >
-                {!adminFeeEntitled ? "Disabled" : feeEnabled ? "Charged" : "Off"}
+                {!featureOn ? "Disabled" : feeEnabled ? "Charged" : "Off"}
               </span>
             </div>
-            {!adminFeeEntitled ? (
-              <div className="set-card-body">
-                <div className="set-row">
-                  <div>
-                    <div className="set-row-label">Turned off for this store</div>
-                    <div className="set-row-help">
-                      The admin fee feature is switched off for this tenant, so no fee is charged at
-                      checkout and this form is locked. Turn it back on under{" "}
-                      <Link href={`/admin/tenants/${slug}/features`}>Features → Admin fee</Link>. Any
-                      saved fee label and amount are kept and resume once it&apos;s re-enabled.
-                    </div>
+            <div className="set-card-body">
+              {/* Master on/off for the whole admin-fee capability (the
+                  STORE_ADMIN_FEE entitlement). Saves immediately on toggle. */}
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Show admin fee for this store</div>
+                  <div className="set-row-help">
+                    Master switch for this tenant. When off, no fee is charged, the checkout line is
+                    removed everywhere, and the fields below are hidden. Saved fee label and amount
+                    are kept and resume when it&apos;s switched back on. Same control as{" "}
+                    <Link href={`/admin/tenants/${slug}/features`}>Features → Admin fee</Link>.
                   </div>
                 </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (featureOn ? " on" : "")}
+                    role="switch"
+                    aria-checked={featureOn}
+                    aria-busy={featureSaving}
+                    aria-label="Enable the admin fee for this store"
+                    tabIndex={0}
+                    onClick={toggleAdminFeeFeature}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleAdminFeeFeature();
+                      }
+                    }}
+                  />
+                </div>
               </div>
-            ) : (
-            <>
-            <div className="set-card-body">
+              {featureOn && (
+                <>
               <div className="set-row">
                 <div>
                   <div className="set-row-label">Charge an admin fee</div>
@@ -903,7 +939,10 @@ export function TenantSettingsView({
                   </div>
                 </>
               )}
+                </>
+              )}
             </div>
+            {featureOn && (
             <div className="set-foot">
               <span className="hint">
                 <Ic.AlertCircle />
@@ -949,7 +988,6 @@ export function TenantSettingsView({
                 </button>
               </div>
             </div>
-            </>
             )}
           </section>
 
