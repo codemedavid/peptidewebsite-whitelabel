@@ -319,6 +319,87 @@ function ReportModal({
 
   const money = (n: number) => `${currency}${n.toLocaleString()}`;
 
+  const fileStem = `group-buy-${groupBuy.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-report`;
+
+  /** Shared HTML table markup for the Excel (.xls) and PDF (print) exports. */
+  const reportHtml = (): string => {
+    if (!report) return "";
+    const esc = (v: string | number) =>
+      String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const supplierRows = report.lines
+      .map(
+        (l) =>
+          `<tr><td>${esc(l.name)}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${esc(
+            money(l.revenue),
+          )}</td></tr>`,
+      )
+      .join("");
+    const supplierTable = `
+      <h3>Supplier order list</h3>
+      <table>
+        <thead><tr><th>Product</th><th style="text-align:right">Qty</th><th style="text-align:right">Revenue</th></tr></thead>
+        <tbody>${supplierRows}
+          <tr style="font-weight:bold;border-top:2px solid #000">
+            <td>TOTAL</td><td style="text-align:right">${report.totalQty}</td><td style="text-align:right">${esc(
+              money(report.totalRevenue),
+            )}</td>
+          </tr>
+        </tbody>
+      </table>`;
+    const customerTable =
+      customers && customers.length
+        ? `
+      <h3>Per customer</h3>
+      <table>
+        <thead><tr><th>Customer</th><th>Email</th><th style="text-align:right">Orders</th><th style="text-align:right">Qty</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${customers
+          .map(
+            (c) =>
+              `<tr><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td style="text-align:right">${c.orders}</td><td style="text-align:right">${c.qty}</td><td style="text-align:right">${esc(
+                money(c.total),
+              )}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>`
+        : "";
+    return `
+      <h1>Supplier Report — ${esc(groupBuy.name)}</h1>
+      <p>${report.orderCount} order(s) · ${report.totalQty} units · ${esc(money(report.totalRevenue))} in items</p>
+      ${supplierTable}
+      ${customerTable}`;
+  };
+
+  const downloadExcel = () => {
+    if (!report) return;
+    // No xlsx dependency: an HTML table with the ms-excel mime opens natively in
+    // Excel / Numbers / Google Sheets as a spreadsheet.
+    const html = `<html><head><meta charset="utf-8"><style>table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head><body>${reportHtml()}</body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${fileStem}.xls`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const downloadPdf = () => {
+    if (!report) return;
+    // No PDF library: open the report in a print window and let the browser's
+    // "Save as PDF" handle it (same approach as the Sales Analytics PDF export).
+    const w = window.open("", "_blank", "width=800,height=600");
+    if (!w) return;
+    w.document.write(
+      `<html><head><title>${fileStem}</title><style>
+        body{font:14px/1.5 system-ui,sans-serif;padding:32px;color:#111}
+        h1{font-size:20px;margin:0 0 4px} h3{margin:24px 0 8px}
+        table{border-collapse:collapse;width:100%} td,th{border:1px solid #ccc;padding:6px 10px;text-align:left}
+      </style></head><body>${reportHtml()}</body></html>`,
+    );
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
   const downloadCsv = () => {
     if (!report) return;
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
@@ -423,7 +504,17 @@ function ReportModal({
         <div className="admin-modal__actions">
           {report && report.lines.length > 0 && caps.reports.csv && (
             <button className="admin-btn admin-btn--ghost" onClick={downloadCsv}>
-              Download CSV
+              CSV
+            </button>
+          )}
+          {report && report.lines.length > 0 && caps.reports.excel && (
+            <button className="admin-btn admin-btn--ghost" onClick={downloadExcel}>
+              Excel
+            </button>
+          )}
+          {report && report.lines.length > 0 && caps.reports.pdf && (
+            <button className="admin-btn admin-btn--ghost" onClick={downloadPdf}>
+              PDF
             </button>
           )}
           <button className="admin-btn" onClick={onClose}>
@@ -453,6 +544,29 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reporting, setReporting] = useState<GroupBuy | null>(null);
 
+  // Auto report on close (groupbuy.reports.auto_on_close): when the manager
+  // opens, surface the supplier report for any run that has effectively just
+  // closed. There's no server cron, so "on close" is detected here on the first
+  // load after the window lapsed; localStorage dedups so each run pops once.
+  const maybeAutoReport = (list: GroupBuy[]) => {
+    if (!caps.reports.autoOnClose || !caps.supplierReports) return;
+    if (typeof window === "undefined") return;
+    const closed = list.find(
+      (gb) =>
+        gb.status !== "archived" &&
+        effectiveGroupBuyStatus(gb, caps.scheduled) === "closed",
+    );
+    if (!closed) return;
+    const seenKey = `gb-autoreport:${closed.id}:${closed.updatedAt}`;
+    try {
+      if (localStorage.getItem(seenKey)) return;
+      localStorage.setItem(seenKey, "1");
+    } catch {
+      // private mode / storage disabled — fall through and just show it
+    }
+    setReporting(closed);
+  };
+
   useEffect(() => {
     let alive = true;
     listGroupBuysAction().then((res) => {
@@ -461,12 +575,14 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
       else {
         setGroupBuys(res.groupBuys);
         setSettings(res.settings);
+        maybeAutoReport(res.groupBuys);
       }
       setLoaded(true);
     });
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visible = groupBuys.filter((gb) =>

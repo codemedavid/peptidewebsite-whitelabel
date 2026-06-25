@@ -37,6 +37,7 @@ import {
   saveCategoriesAction,
   saveCouriersAction,
   savePaymentMethodsAction,
+  savePromoCodesAction,
   saveProtocolsAction,
   saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
@@ -210,7 +211,13 @@ export function StoreProvider({
     brandSeed.couriers ?? SEED_COURIERS,
   );
   const [coaReports, setCoaState] = useState<CoaReport[]>(SEED_COA_REPORTS);
-  const [promoCodes, setPromoState] = useState<PromoCode[]>(SEED_PROMO_CODES);
+  // Promo / discount codes load from the DB server-side (page → branding.config
+  // spread into the brand prop), same as couriers, so the codes the owner created
+  // are honored for every customer on every device — not just the editing
+  // browser. Seed defaults apply only until the owner saves once.
+  const [promoCodes, setPromoState] = useState<PromoCode[]>(
+    brandSeed.promoCodes ?? SEED_PROMO_CODES,
+  );
   // Payment methods load from the DB server-side (page.tsx spreads
   // branding.config into the brand prop), so they're identical on every device.
   // Seed defaults apply only until the owner saves the first time.
@@ -252,7 +259,11 @@ export function StoreProvider({
     setOrdersState(load(NS + "orders", SEED_ORDERS));
     setMyOrdersState(load(NS + "myorders", [] as Order[]));
     setCoaState(load(NS + "coa", SEED_COA_REPORTS));
-    setPromoState(load(NS + "promo", SEED_PROMO_CODES));
+    // NOTE: promo codes are intentionally NOT hydrated from localStorage — they
+    // come from the DB via the server-provided brand prop (branding.config), so a
+    // stale local copy can't hide a code the owner created on another device (and
+    // a customer would otherwise never see the owner's codes at all). They persist
+    // through savePromoCodesAction instead.
     // NOTE: payment methods are intentionally NOT hydrated from localStorage —
     // they come from the DB via the server-provided brand prop, so a stale local
     // copy can't override what the owner configured (this was the cross-device
@@ -321,8 +332,6 @@ export function StoreProvider({
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setPromoCodes = useMemo(() => makeSetter<PromoCode[]>("promo", "PROMO_CODES", setPromoState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -526,6 +535,30 @@ export function StoreProvider({
         });
     },
     [toast, couriers],
+  );
+
+  // Promo codes persist to the DB (branding.config), not localStorage, so the
+  // codes the owner creates are offered to every customer on every device — not
+  // just the editing browser. Mirrors setCouriers: gated on the storefront-admin
+  // session; local state updates optimistically and we only surface failures.
+  const setPromoCodes = useCallback(
+    (next: Updater<PromoCode[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: PromoCode[]) => PromoCode[])(promoCodes)
+          : next;
+      setPromoState(value);
+      savePromoCodesAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save promo codes: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save promo codes — please sign in again and retry.");
+        });
+    },
+    [toast, promoCodes],
   );
 
   // Shipping locations persist to the DB (branding.config), not localStorage, so

@@ -20,6 +20,7 @@ function CourierModal({
   const [name, setName] = useState<string>(courier.name || "");
   const [trackingUrl, setTrackingUrl] = useState<string>(courier.trackingUrl || "");
   const [active, setActive] = useState<boolean>(courier.active !== false);
+  const [noLocation, setNoLocation] = useState<boolean>(courier.noLocation === true);
 
   const canSave = name.trim().length > 0;
 
@@ -82,6 +83,24 @@ function CourierModal({
           <label className="admin-check">
             <input
               type="checkbox"
+              checked={noLocation}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setNoLocation(e.target.checked)
+              }
+            />
+            <span>No shipping location / fee — cash on delivery only</span>
+          </label>
+          <div className="admin-field__hint">
+            For couriers like Lalamove or Maxim where the customer just pays COD.
+            Offered at checkout without a location selector and adds no shipping
+            fee.
+          </div>
+        </div>
+
+        <div className="admin-modal__row">
+          <label className="admin-check">
+            <input
+              type="checkbox"
               checked={active}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setActive(e.target.checked)
@@ -104,6 +123,7 @@ function CourierModal({
                 name: name.trim(),
                 trackingUrl: trackingUrl.trim(),
                 active,
+                noLocation,
               })
             }
           >
@@ -124,10 +144,18 @@ export function AdminCouriers({
   brand: Brand;
   onBack: () => void;
 }) {
-  const { couriers, setCouriers } = useStore();
+  const { couriers, setCouriers, shippingLocations } = useStore();
   const [editing, setEditing] = useState<CourierEditing | null>(null);
 
   void brand;
+
+  // A courier is only offered at checkout when it's active AND either it's a
+  // COD/no-location courier OR it has at least one active shipping location (the
+  // customer needs a location/fee to pick). An active location-based courier with
+  // no location is silently dropped from the storefront, so flag it here to
+  // explain the admin/storefront mismatch.
+  const hasActiveLocation = (courierId: string) =>
+    shippingLocations.some((l) => l.active && l.courierId === courierId);
 
   const startAdd = () =>
     setEditing({
@@ -229,6 +257,54 @@ export function AdminCouriers({
                 {c.trackingUrl && (
                   <div className="admin-ship-row__code" style={{ textTransform: "none" }}>
                     {c.trackingUrl}
+                  </div>
+                )}
+                {c.noLocation && (
+                  <div
+                    className="admin-ship-row__code"
+                    style={{
+                      marginTop: 4,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      textTransform: "none",
+                      color: "var(--brand-accent)",
+                    }}
+                  >
+                    Cash on delivery — no shipping location or fee
+                  </div>
+                )}
+                {c.active && !c.noLocation && !hasActiveLocation(c.id) && (
+                  <div
+                    className="admin-ship-row__warn"
+                    style={{
+                      marginTop: 4,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#b45309",
+                    }}
+                    title="Add an active shipping location for this courier so customers can choose it."
+                  >
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    No shipping location — won&apos;t show at checkout
                   </div>
                 )}
               </div>

@@ -8,10 +8,12 @@ import {
 } from "@/actions/orders";
 
 function totalOf(o: Order): number {
-  return (
-    (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) +
-    (o.shipping?.fee || 0) +
-    (o.adminFee?.amount || 0)
+  return Math.max(
+    0,
+    (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -
+      (o.discount?.amount || 0) +
+      (o.shipping?.fee || 0) +
+      (o.adminFee?.amount || 0),
   );
 }
 

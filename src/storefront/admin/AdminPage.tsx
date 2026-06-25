@@ -19,12 +19,14 @@ import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
 import { AdminResellerSettings } from "./AdminResellerSettings";
+import { AdminAccessCode } from "./AdminAccessCode";
 import { AdminCheckoutRules } from "./AdminCheckoutRules";
 import { AdminFeeSettings } from "./AdminFeeSettings";
 import { AdminGroupBuys } from "./AdminGroupBuys";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
+import { AdminHeroSettings } from "./AdminHeroSettings";
 import { isAdminViewVisible } from "../visibility";
 
 type View =
@@ -44,11 +46,13 @@ type View =
   | "proto"
   | "reviews"
   | "reseller"
+  | "access-code"
   | "analytics"
   | "design"
   | "checkout"
   | "fee"
   | "groupbuys"
+  | "hero"
   | "account";
 
 export function AdminPage({
@@ -145,7 +149,9 @@ export function AdminPage({
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
     return (
       <AdminResellerSettings
@@ -170,6 +176,7 @@ export function AdminPage({
     { id: "add", label: "Add Product", hint: "Create new item", icon: "plus", tint: "pink" },
     { id: "manage", label: "Manage Products", hint: "Edit existing items", icon: "box", tint: "green" },
     { id: "cats", label: "Categories", hint: "Organize items", icon: "folder", tint: "orange" },
+    { id: "hero", label: "Hero Section", hint: "Homepage headline & tagline", icon: "sparkle", tint: "yellow" },
     { id: "design", label: "Card Studio", hint: "Product card designs", icon: "palette", tint: "purple" },
     { id: "orders", label: "Orders", hint: "View transactions", icon: "cart", tint: "yellow" },
     { id: "analytics", label: "Sales Analytics", hint: "Revenue & insights", icon: "trend", tint: "cyan" },
@@ -184,6 +191,7 @@ export function AdminPage({
     { id: "proto", label: "Protocols", hint: "Peptide guides", icon: "shield", tint: "pink" },
     { id: "reviews", label: "Reviews", hint: "Manage testimonials", icon: "star", tint: "pink" },
     { id: "reseller", label: "Reseller Portal", hint: "Wholesale page & prices", icon: "tag", tint: "purple" },
+    { id: "access-code", label: "Access Code", hint: "Private store gate", icon: "shield", tint: "red" },
     { id: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan" },
     { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
     { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
@@ -270,6 +278,7 @@ export function AdminPage({
                     }
                     if (q.id === "manage") return setView("products");
                     if (q.id === "cats") return setView("categories");
+                    if (q.id === "hero") return setView("hero");
                     if (q.id === "design") return setView("design");
                     if (q.id === "orders") return setView("orders");
                     if (q.id === "analytics") return setView("analytics");
@@ -284,6 +293,7 @@ export function AdminPage({
                     if (q.id === "proto") return setView("proto");
                     if (q.id === "reviews") return setView("reviews");
                     if (q.id === "reseller") return setView("reseller");
+                    if (q.id === "access-code") return setView("access-code");
                     if (q.id === "checkout") return setView("checkout");
                     if (q.id === "groupbuys") return setView("groupbuys");
                     if (q.id === "account") return setView("account");

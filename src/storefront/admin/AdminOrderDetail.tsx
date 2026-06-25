@@ -68,7 +68,8 @@ export function AdminOrderDetail({
   );
   const ship = o.shipping?.fee || 0;
   const fee = o.adminFee?.amount || 0;
-  const total = sub + ship + fee;
+  const discount = o.discount?.amount || 0;
+  const total = Math.max(0, sub - discount + ship + fee);
 
   // Persist a patch to the DB (store admin gated). Optimistically apply locally,
   // roll back + surface the error if the write fails.
@@ -385,6 +386,12 @@ export function AdminOrderDetail({
               <span>Subtotal:</span>
               <span>{formatPHP(sub)}</span>
             </div>
+            {discount > 0 && (
+              <div className="admin-detail__totals-row">
+                <span>{o.discount?.label || "Discount"}:</span>
+                <span>−{formatPHP(discount)}</span>
+              </div>
+            )}
             <div className="admin-detail__totals-row">
               <span>Shipping Fee:</span>
               <span>{formatPHP(ship)}</span>

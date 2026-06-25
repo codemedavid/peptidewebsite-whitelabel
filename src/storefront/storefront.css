@@ -351,6 +351,54 @@
 }
 .sf-root .sf-cart__select:disabled { opacity: 0.55; cursor: not-allowed; }
 .sf-root .sf-cart__select[aria-invalid="true"] { border-color: #d23; }
+/* COD/no-location courier — no location selector, just a note that there's no
+   shipping fee (the customer pays on delivery). */
+.sf-root .sf-cart__ship-cod-note {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px dashed rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #555;
+}
+
+/* Discount-code field in the checkout details step. */
+.sf-root .sf-cart__promo { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+.sf-root .sf-cart__promo-label { font-size: 13px; font-weight: 600; }
+.sf-root .sf-cart__promo-row { display: flex; gap: 8px; }
+.sf-root .sf-cart__promo-input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 9px 11px; border-radius: 8px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-surface); color: var(--brand-text);
+  font: inherit; font-size: 16px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.sf-root .sf-cart__promo-input[aria-invalid="true"] { border-color: #d23; }
+.sf-root .sf-cart__promo-apply {
+  flex: 0 0 auto;
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--brand-accent, var(--brand-text));
+  background: var(--brand-accent, var(--brand-text)); color: var(--brand-on-accent, #fff);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.sf-root .sf-cart__promo-apply:disabled { opacity: 0.5; cursor: not-allowed; }
+.sf-root .sf-cart__promo-applied {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; border-radius: 8px;
+  border: 1px dashed var(--brand-border);
+  background: color-mix(in srgb, var(--brand-accent, #2a8) 8%, transparent);
+}
+.sf-root .sf-cart__promo-chip { font-weight: 600; font-size: 14px; }
+.sf-root .sf-cart__promo-remove {
+  background: none; border: 0; color: var(--brand-text-muted);
+  cursor: pointer; font: inherit; font-size: 13px; text-decoration: underline;
+}
+.sf-root .sf-cart__promo-error { margin: 0; font-size: 12.5px; color: #d23; }
+/* Discount line in the totals breakdown reads as a credit. */
+.sf-root .sf-cart__total--discount { color: var(--brand-success, #1a8a4a); }
 
 .sf-root .sf-cart__foot { border-top: 1px solid var(--brand-border); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
 .sf-root .sf-cart__totals { display: flex; flex-direction: column; gap: 6px; }

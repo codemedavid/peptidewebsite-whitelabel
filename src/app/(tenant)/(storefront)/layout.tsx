@@ -9,6 +9,10 @@ import { ComplianceBanner } from "@/modules/sections/ComplianceBanner";
 import { Monogram } from "@/components/Monogram";
 import { Gate } from "@/components/Gate";
 import { FEATURES } from "@/lib/features/catalog";
+import { isDemoMode } from "@/lib/demo/fixtures";
+import { getTenantGateState } from "@/lib/tenant/gate-state";
+import { isGateUnlocked } from "@/lib/auth/storefront-gate";
+import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
 import "@/storefront/storefront.css";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
@@ -45,6 +49,35 @@ export default async function StorefrontLayout({
   const cssVars = resolveCssVars(branding);
   const compliance = (settings?.compliance ?? {}) as { researchUseOnly?: string };
   const name = settings?.storeName ?? tenant.name;
+
+  // ── Visitor access-code gate ────────────────────────────────────────────────
+  // When the tenant has the gate ON (and a code set), render the access wall
+  // server-side INSTEAD of the store for any visitor without a valid cookie for
+  // this tenant at the current code version — so the gated store HTML never
+  // reaches an unauthenticated browser. The gate STATE is read fresh (see
+  // getTenantGateState — uncached on purpose, it's a security boundary); the
+  // cookie check is read-only (Server Components can't write cookies, so the
+  // cookie is minted by verifyAccessCodeAction). Skipped in demo mode.
+  if (!isDemoMode()) {
+    const gate = await getTenantGateState(tenantId);
+    if (
+      gate.enabled &&
+      gate.hasCode &&
+      !(await isGateUnlocked({ id: tenantId, accessCodeVersion: gate.codeVersion }))
+    ) {
+      const colors = (branding?.colors ?? {}) as { primary?: string };
+      return (
+        <div style={cssVars} className="min-h-screen">
+          <AccessCodeGate
+            storeName={name}
+            logoUrl={branding?.logoUrl}
+            brandColor={colors.primary || "#0f172a"}
+            heading={gate.heading}
+          />
+        </div>
+      );
+    }
+  }
 
   const fonts = (branding?.fonts ?? {}) as { heading?: string; body?: string };
   // Hero typography lives on the storefront Brand config; load its distinct

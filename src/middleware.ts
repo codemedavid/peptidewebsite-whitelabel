@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshSupabaseSession } from "@/lib/auth/middleware-session";
+import { rollGateCookie } from "@/lib/auth/gate-roll";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(
   /:\d+$/,
@@ -105,7 +106,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   };
 
-  return refreshSupabaseSession(req, requestHeaders, rebuild);
+  const res = await refreshSupabaseSession(req, requestHeaders, rebuild);
+
+  // Rolling timeout for the visitor access-code gate: on tenant storefront hosts,
+  // re-stamp a still-valid `tenant.sid` with a fresh 15-min expiry so active
+  // visitors aren't bounced to the gate mid-session. Edge HMAC only — no DB, no
+  // effect on admin/apex hosts or API routes, and a no-op when there's no valid
+  // gate cookie. Done after the Supabase refresh so it lands on the final response.
+  if (!isAdmin && !isApex && !url.pathname.startsWith("/api")) {
+    await rollGateCookie(req, res);
+  }
+
+  return res;
 }
 
 export const config = {

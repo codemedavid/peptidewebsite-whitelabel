@@ -15,6 +15,7 @@ import { FEATURES } from "@/lib/features/catalog";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
+import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -237,6 +238,9 @@ function normalizeCouriers(input: unknown): Courier[] {
       name,
       trackingUrl: typeof o.trackingUrl === "string" ? o.trackingUrl.slice(0, 300).trim() : "",
       active: o.active !== false,
+      // COD/no-location couriers (Lalamove, Maxim) need no shipping location or
+      // fee — only persist the flag when set so legacy rows stay unchanged.
+      ...(o.noLocation === true ? { noLocation: true } : {}),
     });
   }
   return out;
@@ -319,6 +323,96 @@ export async function saveShippingLocationsAction(locations: unknown): Promise<A
   const normalized = normalizeShippingLocations(locations);
   const current = await readConfig(tenantId);
   const config = { ...current, shippingLocations: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the store's discount / promo codes into the shared `branding.config`
+ * blob (read-modify-write, mirroring saveCouriersAction so it never clobbers the
+ * rest of the storefront Brand config). The storefront reads promo codes from
+ * `branding.config` server-side on every render, so the owner's codes are offered
+ * to every customer on every device — not only the editing browser — and
+ * placeStorefrontOrderAction re-derives each discount from this same stored set.
+ */
+export async function savePromoCodesAction(codes: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const promoCodes = normalizePromoCodes(codes);
+  const current = await readConfig(tenantId);
+  const config = { ...current, promoCodes };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+// ── Hero copy (homepage hero section) ────────────────────────────────────────
+
+/**
+ * The editable hero copy fields. These are the SAME `hero*` keys the platform
+ * operator edits in the Branding editor's Hero tab — the store owner can now
+ * edit the text themselves. Only the copy is exposed here (chip, headline lines,
+ * tagline, CTA labels); layout/typography/variant stay operator-controlled.
+ */
+const HERO_COPY_FIELDS = [
+  "heroChipLabel",
+  "heroLine1",
+  "heroLine2",
+  "heroSub",
+  "heroCta1",
+  "heroCta2",
+] as const;
+
+/** Coerce untrusted client input into clean hero copy strings (trimmed, capped). */
+function normalizeHeroContent(input: unknown): Record<string, string> {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const key of HERO_COPY_FIELDS) {
+    // Headline lines and CTA labels are short; the tagline gets more room.
+    const cap = key === "heroSub" ? 400 : 120;
+    out[key] = String(o[key] ?? "").slice(0, cap).trim();
+  }
+  return out;
+}
+
+/**
+ * Persist the storefront's hero copy into the shared `branding.config` blob
+ * (read-modify-write, mirroring savePaymentMethodsAction so it never clobbers
+ * the rest of the storefront Brand config). The storefront reads the hero text
+ * from `branding.config` server-side on every render, so the owner's edits show
+ * on every device/customer — not only the editing browser.
+ */
+export async function saveHeroContentAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+
+  const slug = await getTenantSlug();
+  const hero = normalizeHeroContent(input);
+  const current = await readConfig(tenantId);
+  const config = { ...current, ...hero };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

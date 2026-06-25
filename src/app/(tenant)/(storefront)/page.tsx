@@ -70,6 +70,10 @@ export default async function HomePage() {
   brand.showAdminCardStudio = cardStudioEntitled && config.showAdminCardStudio !== false;
   const salesAnalyticsEntitled = await hasFeature(tenantId, FEATURES.STORE_SALES_ANALYTICS);
   brand.showAdminAnalytics = salesAnalyticsEntitled && config.showAdminAnalytics !== false;
+  // Group buy breakdown inside Sales Analytics: only when the module is on AND
+  // the SA_SECTION_GROUP_BUYS slice is granted (default-on in every plan ceiling).
+  brand.showAnalyticsGroupBuys =
+    salesAnalyticsEntitled && (await hasFeature(tenantId, FEATURES.SA_SECTION_GROUP_BUYS));
 
   // Reconstitution calculator: gated on the platform entitlement (admin →
   // Features, FEATURES.STORE_CALCULATOR) AND the branding-editor toggle.

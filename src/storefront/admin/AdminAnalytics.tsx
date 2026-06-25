@@ -27,10 +27,12 @@ const RANGES: { id: RangeId; label: string; prevLabel: string }[] = [
 const MAX_MONTH_BUCKETS = 48;
 
 function totalOf(o: Order): number {
-  return (
-    (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) +
-    (o.shipping?.fee || 0) +
-    (o.adminFee?.amount || 0)
+  return Math.max(
+    0,
+    (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -
+      (o.discount?.amount || 0) +
+      (o.shipping?.fee || 0) +
+      (o.adminFee?.amount || 0),
   );
 }
 
@@ -181,8 +183,6 @@ export function AdminAnalytics({
   const [loadFailed, setLoadFailed] = useState<boolean>(false);
   const [range, setRange] = useState<RangeId>("30d");
 
-  void brand;
-
   const refresh = useCallback(async () => {
     setLoading(true);
     setLoadFailed(false);
@@ -318,12 +318,17 @@ export function AdminAnalytics({
     const productAgg = new Map<string, { qty: number; revenue: number }>();
     const methodAgg = new Map<string, { count: number; revenue: number }>();
     const placeAgg = new Map<string, { count: number; revenue: number }>();
+    // Group buy attribution: orders carry groupBuyId/groupBuyName when placed
+    // inside a live group-buy window (stamped server-side at checkout).
+    const groupBuyAgg = new Map<string, { name: string; orders: number; qty: number; revenue: number }>();
     for (const o of sales) {
       const t = totalOf(o);
       revenue += t;
       if (o.paymentStatus === "paid") paidRevenue += t;
+      let orderQty = 0;
       for (const it of o.items || []) {
         const qty = it.qty || 1;
+        orderQty += qty;
         itemsSold += qty;
         const name = (it.name || "").trim() || "Unnamed product";
         const p = productAgg.get(name) || { qty: 0, revenue: 0 };
@@ -331,6 +336,21 @@ export function AdminAnalytics({
         p.revenue += (it.price || 0) * qty;
         productAgg.set(name, p);
       }
+
+      if (o.groupBuyId || o.groupBuyName) {
+        const key = o.groupBuyId || `name:${o.groupBuyName}`;
+        const g = groupBuyAgg.get(key) || {
+          name: (o.groupBuyName || "").trim() || "Group buy",
+          orders: 0,
+          qty: 0,
+          revenue: 0,
+        };
+        g.orders += 1;
+        g.qty += orderQty;
+        g.revenue += t;
+        groupBuyAgg.set(key, g);
+      }
+
       const method = (o.paymentMethod || "").trim() || "Unspecified";
       const m = methodAgg.get(method) || { count: 0, revenue: 0 };
       m.count += 1;
@@ -391,6 +411,8 @@ export function AdminAnalytics({
       aovDelta: pctDelta(aov, prevAov),
       itemsDelta: pctDelta(itemsSold, prevItems),
       topProducts: rankBy(productAgg, (v) => v.revenue, 8),
+      groupBuys: [...groupBuyAgg.values()].sort((x, y) => y.revenue - x.revenue).slice(0, 8),
+      groupBuyRevenue: [...groupBuyAgg.values()].reduce((s, g) => s + g.revenue, 0),
       methods: rankBy(methodAgg, (v) => v.revenue, 8),
       places: rankBy(placeAgg, (v) => v.revenue, 6),
       statusCounts,
@@ -664,6 +686,33 @@ export function AdminAnalytics({
                 )}
               </div>
             </div>
+
+            {brand?.showAnalyticsGroupBuys && (
+              <div className="admin-card admin-analytics__card">
+                <h2 className="admin-card__title">Group Buys</h2>
+                <div className="admin-card__caption">
+                  Revenue and orders attributed to each group buy in the selected period
+                </div>
+                {a.groupBuys.length ? (
+                  <div className="admin-bars">
+                    {a.groupBuys.map((g, i) => (
+                      <BreakdownRow
+                        key={g.name + i}
+                        name={g.name}
+                        meta={`${g.orders.toLocaleString()} order(s) · ${g.qty.toLocaleString()} unit(s) · ${shareLabel(g.revenue, a.groupBuyRevenue)} of group-buy revenue`}
+                        amount={formatPHP(g.revenue)}
+                        pct={(g.revenue / (a.groupBuys[0].revenue || 1)) * 100}
+                        color={barColor(i)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="admin-analytics__empty">
+                    No group-buy orders in this period.
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </main>

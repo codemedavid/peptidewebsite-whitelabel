@@ -18,6 +18,7 @@
 import type { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
+import { prisma } from "@/lib/db/prisma";
 import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { withTenant } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
@@ -26,6 +27,7 @@ import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   isDemoMode,
   getDemoBranding,
+  saveDemoBranding,
   getDemoProducts,
   getDemoStoreProducts,
   saveDemoStoreProducts,
@@ -52,6 +54,13 @@ import {
 } from "@/lib/storefront/group-buy-rules";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
+import {
+  findPromoCode,
+  normalizePromoCodes,
+  promoCodeError,
+  promoDiscountAmount,
+  promoLabel,
+} from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 
 export type UploadProofResult = { url: string } | { error: string };
@@ -230,10 +239,31 @@ function itemsSubtotal(items: OrderItem[]): number {
  */
 function stampShipping(config: Record<string, unknown>, p: Order): void {
   const locationId = p.shipping.locationId;
+  const couriers = Array.isArray(config.couriers)
+    ? (config.couriers as Array<Record<string, unknown>>)
+    : [];
   const locations = Array.isArray(config.shippingLocations)
     ? (config.shippingLocations as Array<Record<string, unknown>>)
     : [];
-  if (!locationId || locations.length === 0) return;
+  // No location sent: either a legacy/unconfigured checkout (keep what the
+  // client sent), or a COD/no-location courier (Lalamove, Maxim…) the customer
+  // picked. Those carry no shipping fee, so when the sent courier matches an
+  // active no-location courier, zero the fee and re-stamp its name — a tampered
+  // client can't smuggle a shipping charge onto a COD pick.
+  if (!locationId) {
+    const cod = couriers.find(
+      (c) =>
+        (c ?? {}).active !== false &&
+        (c ?? {}).noLocation === true &&
+        str((c ?? {}).name, 120) === p.courier,
+    );
+    if (cod) {
+      p.shipping.fee = 0;
+      p.courier = str(cod.name, 120);
+    }
+    return;
+  }
+  if (locations.length === 0) return;
   const loc = locations.find(
     (l) => String((l ?? {}).id ?? "") === locationId && (l ?? {}).active !== false,
   );
@@ -245,9 +275,6 @@ function stampShipping(config: Record<string, unknown>, p: Order): void {
   p.shipping.fee = Math.max(0, num(loc.price));
   // Re-stamp the courier NAME from config so it matches the linked courier;
   // fall back to the client-sent name only when the courier was since removed.
-  const couriers = Array.isArray(config.couriers)
-    ? (config.couriers as Array<Record<string, unknown>>)
-    : [];
   const courier = couriers.find((c) => String((c ?? {}).id ?? "") === String(loc.courierId ?? ""));
   if (courier) p.courier = str(courier.name, 120);
 }
@@ -324,6 +351,89 @@ function normalizeOrderFee(input: unknown): Order["adminFee"] {
   return { label: str(x.label, ADMIN_FEE_LABEL_MAX) || ADMIN_FEE_LABEL_DEFAULT, amount };
 }
 
+/** Coerce a stored/untrusted discount blob into the order's discount, or
+ *  undefined when none applied. Used for DB rows and demo orders alike; checkout
+ *  itself never trusts this — placeStorefrontOrderAction re-derives it from
+ *  branding.config.promoCodes. */
+function normalizeOrderDiscount(input: unknown): Order["discount"] {
+  if (!input || typeof input !== "object") return undefined;
+  const x = input as Record<string, unknown>;
+  const amount = Math.max(0, num(x.amount));
+  const code = str(x.code, 64).toUpperCase();
+  if (amount <= 0 || !code) return undefined;
+  return { code, label: str(x.label, 120) || promoLabel(code), amount };
+}
+
+/**
+ * Re-derive the SERVER-AUTHORITATIVE discount from the tenant's configured promo
+ * codes, keyed by the `code` the checkout applied. Mirrors stampShipping/the
+ * admin-fee stamp: the client's displayed amount is never trusted, so a tampered
+ * client can't inflate the discount. Mutates the order in place. No-ops (clears
+ * the discount) when no code was applied. Returns a customer-facing error string
+ * when a code WAS applied but is no longer valid (deactivated / expired / over
+ * its usage limit / cart fell below the minimum) so the customer is never charged
+ * a total that silently differs from the one they saw — null when it's fine.
+ */
+function stampDiscount(config: Record<string, unknown>, p: Order): string | null {
+  const applied = p.discount?.code;
+  if (!applied) {
+    p.discount = undefined;
+    return null;
+  }
+  const codes = normalizePromoCodes(config.promoCodes);
+  const promo = findPromoCode(codes, applied);
+  const subtotal = itemsSubtotal(p.items);
+  const err = promoCodeError(promo, subtotal);
+  if (err || !promo) {
+    return "The discount code is no longer valid — please review your total and try again.";
+  }
+  p.discount = { code: promo.code, label: promoLabel(promo.code), amount: promoDiscountAmount(promo, subtotal) };
+  return null;
+}
+
+/**
+ * Best-effort: bump a promo code's `used` counter by one after an order that
+ * applied it is genuinely stored (so usage limits actually tighten). Read-modify-
+ * write on branding.config.promoCodes, mirroring savePromoCodesAction. NEVER
+ * throws — a failed counter update must not fail an already-placed order, and the
+ * worst case is a code that under-counts its uses.
+ */
+async function incrementPromoUsage(tenantId: string, slug: string, code: string | undefined): Promise<void> {
+  if (!code) return;
+  const bump = (config: Record<string, unknown>): { next: Record<string, unknown>; changed: boolean } => {
+    const codes = normalizePromoCodes(config.promoCodes);
+    let changed = false;
+    const promoCodes = codes.map((c) => {
+      if (c.code.toUpperCase() === code.toUpperCase()) {
+        changed = true;
+        return { ...c, used: c.used + 1 };
+      }
+      return c;
+    });
+    return { next: { ...config, promoCodes }, changed };
+  };
+  try {
+    if (isDemoMode()) {
+      const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      const { next, changed } = bump(config);
+      if (changed) saveDemoBranding(slug, { config: next });
+      return;
+    }
+    const branding = await prisma.branding.findUnique({ where: { tenantId }, select: { config: true } });
+    const config = (branding?.config ?? {}) as Record<string, unknown>;
+    const { next, changed } = bump(config);
+    if (!changed) return;
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: next as Prisma.InputJsonValue },
+      create: { tenantId, config: next as Prisma.InputJsonValue },
+    });
+    revalidateTenant(tenantId, slug);
+  } catch {
+    /* best-effort — never block a placed order on the usage counter */
+  }
+}
+
 /** Coerce an untrusted status-history blob into clean, ordered journey events. */
 function normalizeStatusHistory(input: unknown): OrderStatusEvent[] {
   const arr = Array.isArray(input) ? input : [];
@@ -383,6 +493,7 @@ function normalizeOrderInput(input: unknown): Order {
     items: normalizeItems(o.items),
     statusHistory: normalizeStatusHistory(o.statusHistory),
     adminFee: normalizeOrderFee(o.adminFee),
+    discount: normalizeOrderDiscount(o.discount),
     // Carried for stored orders (admin list, demo file). Checkout never trusts
     // these — placeStorefrontOrderAction re-stamps them server-side.
     groupBuyId: typeof o.groupBuyId === "string" && o.groupBuyId ? str(o.groupBuyId, 64) : null,
@@ -412,6 +523,7 @@ type DbOrderRow = {
   items: unknown;
   statusHistory: unknown;
   adminFee: unknown;
+  discount: unknown;
   courier: string;
   trackingNumber: string;
   shippingNote: string;
@@ -433,6 +545,7 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     items: row.items,
     statusHistory: row.statusHistory,
     adminFee: row.adminFee,
+    discount: row.discount,
     courier: row.courier,
     trackingNumber: row.trackingNumber,
     shippingNote: row.shippingNote,
@@ -460,6 +573,8 @@ function orderToDbCreate(tenantId: string, p: Order) {
     statusHistory: (p.statusHistory ?? []) as unknown as Prisma.InputJsonValue,
     // NULL (column default) when no fee was charged — omit rather than store {}.
     ...(p.adminFee ? { adminFee: p.adminFee as unknown as Prisma.InputJsonValue } : {}),
+    // NULL when no code was applied — omit rather than store {}.
+    ...(p.discount ? { discount: p.discount as unknown as Prisma.InputJsonValue } : {}),
     groupBuyId: p.groupBuyId ?? null,
     groupBuyName: p.groupBuyName ?? null,
     courier: p.courier,
@@ -587,12 +702,20 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
     stampShipping(config, p);
+    // Discount — re-derived from the tenant's promo codes by the applied code,
+    // never trusted from the client. Rejected (not silently dropped) when the
+    // code is no longer valid, so the customer never pays a higher total than
+    // the one they saw.
+    const demoDiscountError = stampDiscount(config, p);
+    if (demoDiscountError) return { error: demoDiscountError };
     // Group-buy attribution — same server-authoritative stamp as the fee.
     await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
     const saved: Order = { ...p, id, orderNumber };
     addDemoStoreOrder(slug, saved);
+    // Genuinely-new order (the idempotent retry returned above) → count the code.
+    await incrementPromoUsage(tenantId, slug, saved.discount?.code);
     return { ok: true, order: saved };
   }
 
@@ -612,6 +735,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
     stampShipping(config, p);
+    // Discount — re-derived from the tenant's promo codes by the applied code,
+    // never trusted from the client. Rejected (not silently dropped) when the
+    // code is no longer valid, so the customer never pays a higher total than
+    // the one they saw.
+    const discountError = stampDiscount(config, p);
+    if (discountError) return { error: discountError };
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
@@ -635,9 +764,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     if (ruleError) return { error: ruleError };
 
     // Group-buy attribution — same server-authoritative stamp as the fee.
-    await stampGroupBuy(p, tenantId, (await getTenantSlug()) ?? tenantId);
+    const slug = (await getTenantSlug()) ?? tenantId;
+    await stampGroupBuy(p, tenantId, slug);
 
-    const row = await createStorefrontOrder(tenantId, p);
+    const { row, created } = await createStorefrontOrder(tenantId, p);
+    // Only count the code on a genuinely-new row — an idempotent retry that
+    // returned the already-stored order must not double-count.
+    if (created) await incrementPromoUsage(tenantId, slug, p.discount?.code);
     return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't place the order." };
@@ -672,7 +805,7 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
     const existing = await withTenant(tenantId, (db) =>
       db.storefrontOrder.findFirst({ where: { clientId } }),
     );
-    if (existing) return existing;
+    if (existing) return { row: existing, created: false };
   }
 
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -680,9 +813,10 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
       generateStorefrontOrderNumber(db, tenantId),
     );
     try {
-      return await withTenant(tenantId, (db) =>
+      const row = await withTenant(tenantId, (db) =>
         db.storefrontOrder.create({ data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId } }),
       );
+      return { row, created: true };
     } catch (e) {
       if ((e as { code?: string }).code === "P2002") {
         // The collision is on one of two unique keys:
@@ -692,7 +826,7 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
           const existing = await withTenant(tenantId, (db) =>
             db.storefrontOrder.findFirst({ where: { clientId } }),
           );
-          if (existing) return existing;
+          if (existing) return { row: existing, created: false };
         }
         //  • (tenantId, orderNumber) — a legacy code occupies this slot or a
         //    random code hit; reserve a fresh, higher number next iteration.
@@ -718,6 +852,7 @@ export type TrackedOrder = {
   items: OrderItem[];
   shippingFee: number;
   adminFee: { label: string; amount: number } | null;
+  discount: { code: string; label: string; amount: number } | null;
   statusHistory: OrderStatusEvent[];
 };
 export type TrackOrderResult =
@@ -747,6 +882,7 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
     items: o.items,
     shippingFee: o.shipping?.fee ?? 0,
     adminFee: o.adminFee ?? null,
+    discount: o.discount ?? null,
     statusHistory: o.statusHistory ?? [],
   });
   const matches = (o: Order) =>

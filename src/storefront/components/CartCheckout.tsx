@@ -11,9 +11,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
-import type { Order } from "../types";
+import type { Order, PromoCode } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
+import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import {
   activeChannels,
@@ -48,7 +49,7 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, products, paymentMethods, couriers, shippingLocations, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, products, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
@@ -57,6 +58,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // the matching fee is added to the total (see the computed values below).
   const [courierId, setCourierId] = useState("");
   const [locationId, setLocationId] = useState("");
+  // Discount code the customer typed, and the validated promo it resolved to.
+  // `appliedPromo` is null until a valid code is applied; the discount it grants
+  // is re-derived server-side at placement (never trusted from here).
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [promoError, setPromoError] = useState("");
   // True while the order is being persisted — drives the disabled/"Placing…"
   // button UI. `placingRef` is the SYNCHRONOUS counterpart: React state lags a
   // render, so two clicks in the same tick (fast double-click, or two different
@@ -94,15 +101,19 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // value is re-stamped server-side at placement from the same config.
   const adminFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
 
-  // Shipping: couriers linked to locations. A courier is offered only when it's
-  // active AND has at least one active location (a fee the customer can pick).
-  // When the store has configured none, `shippingEnabled` is false and checkout
-  // behaves exactly as before — no selectors, no fee — so unconfigured stores
-  // are unaffected.
+  // Shipping: couriers linked to locations. A courier is offered when it's active
+  // AND either it's a COD/no-location courier (Lalamove, Maxim — no location or
+  // fee, the customer just pays on delivery) OR it has at least one active
+  // location (a fee the customer can pick). When the store has configured none,
+  // `shippingEnabled` is false and checkout behaves exactly as before — no
+  // selectors, no fee — so unconfigured stores are unaffected.
   const shipCouriers = useMemo(
     () =>
       couriers.filter(
-        (c) => c.active && shippingLocations.some((l) => l.active && l.courierId === c.id),
+        (c) =>
+          c.active &&
+          (c.noLocation ||
+            shippingLocations.some((l) => l.active && l.courierId === c.id)),
       ),
     [couriers, shippingLocations],
   );
@@ -113,11 +124,29 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     [shippingLocations, courierId],
   );
   const selectedCourier = shipCouriers.find((c) => c.id === courierId);
+  // A COD/no-location courier needs no location pick and carries no fee.
+  const codCourier = selectedCourier?.noLocation === true;
   const selectedLocation = courierLocations.find((l) => l.id === locationId);
-  const shippingFee = selectedLocation?.price ?? 0;
-  // Shipping is required to proceed only when the store actually offers it.
-  const shippingValid = !shippingEnabled || (!!selectedCourier && !!selectedLocation);
-  const total = subtotal + (adminFee?.amount ?? 0) + shippingFee;
+  const shippingFee = codCourier ? 0 : selectedLocation?.price ?? 0;
+  // Shipping is required to proceed only when the store actually offers it. A COD
+  // courier just needs to be picked; a location-based one also needs a location.
+  const shippingValid =
+    !shippingEnabled || (!!selectedCourier && (codCourier || !!selectedLocation));
+  // Tailor the prompt: a courier is always needed; a location only when the
+  // chosen courier isn't COD/no-location.
+  const shippingError = !selectedCourier
+    ? "Please choose a courier."
+    : "Please choose a shipping location.";
+  // Discount the applied code takes off the items subtotal. Displayed here for
+  // transparency; the AUTHORITATIVE amount is re-derived server-side at placement
+  // from the same promoCodes config, so a tampered client can't inflate it.
+  const discountAmount = useMemo(
+    () => promoDiscountAmount(appliedPromo, subtotal),
+    [appliedPromo, subtotal],
+  );
+  // Total never goes below zero — a discount caps at the items subtotal, but a
+  // store could in theory configure a fee larger than the cart.
+  const total = Math.max(0, subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee);
 
   // Smart Cart & Checkout rules (branding.config.checkoutRules) — the cart
   // restrictions and checkout validations the owner configured, plus their
@@ -148,6 +177,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       setTouched(false);
       setCourierId("");
       setLocationId("");
+      setDiscountInput("");
+      setAppliedPromo(null);
+      setPromoError("");
       setPaymentTouched(false);
       setMethodId("");
       setProof("");
@@ -175,6 +207,39 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
   const set = (key: keyof CheckoutCustomer, val: string) =>
     setCustomer((c) => ({ ...c, [key]: val }));
+
+  // Validate the typed code against the store's promo codes and, if good, apply
+  // it. Validity (active, not expired, under its usage limit, min-purchase met)
+  // is shared with the server via promoCodeError, so the apply button and the
+  // placement agree on whether a code is honored.
+  const applyPromo = () => {
+    const promo = findPromoCode(promoCodes, discountInput);
+    const err = promoCodeError(promo, subtotal, currency);
+    if (err || !promo) {
+      setAppliedPromo(null);
+      setPromoError(err ?? "That code isn't valid.");
+      return;
+    }
+    setAppliedPromo(promo);
+    setPromoError("");
+  };
+
+  const removePromo = () => {
+    setAppliedPromo(null);
+    setDiscountInput("");
+    setPromoError("");
+  };
+
+  // If the cart changes after a code was applied (e.g. items removed so the
+  // min-purchase is no longer met), drop the now-invalid code and tell the
+  // customer, so the displayed total can never claim a discount the store
+  // wouldn't honor.
+  useEffect(() => {
+    if (appliedPromo && promoCodeError(appliedPromo, subtotal, currency)) {
+      setAppliedPromo(null);
+      setPromoError("Your discount code no longer applies to this cart.");
+    }
+  }, [appliedPromo, subtotal, currency]);
 
   const missing = FIELDS.filter((f) => f.required && !customer[f.key].trim());
   const detailsValid = missing.length === 0;
@@ -287,6 +352,19 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // order when the configured fee changed mid-session, so the customer is
       // never charged a total they didn't see.
       adminFee: { label: adminFee?.label ?? "", amount: adminFee?.amount ?? 0 },
+      // The discount this checkout DISPLAYED. The server re-derives the
+      // authoritative amount from config.promoCodes by `code` (like the admin
+      // fee / shipping), so a tampered/stale client can't inflate it; it's
+      // carried only so the server knows which code the customer applied.
+      ...(appliedPromo && discountAmount > 0
+        ? {
+            discount: {
+              code: appliedPromo.code,
+              label: promoLabel(appliedPromo.code),
+              amount: discountAmount,
+            },
+          }
+        : {}),
       paymentProof: proof || null,
     };
 
@@ -342,6 +420,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // Same for shipping — use the server-stamped courier + fee, not the local
       // selection, so the messaged total matches what was persisted.
       { courier: order.courier, fee: order.shipping?.fee ?? 0 },
+      // The server-stamped discount (re-derived from config), so the messaged
+      // total reflects what was actually persisted, not the local selection.
+      order.discount ?? null,
     );
 
     // Copy the summary as a fallback (Telegram/Messenger can't prefill a DM;
@@ -502,36 +583,104 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       ))}
                     </select>
                   </label>
-                  <label className="sf-cart__field">
-                    <span>
-                      Shipping location<em aria-hidden> *</em>
-                    </span>
-                    <select
-                      className="sf-cart__select"
-                      value={locationId}
-                      disabled={!selectedCourier}
-                      aria-invalid={
-                        touched && !!selectedCourier && !selectedLocation ? true : undefined
-                      }
-                      onChange={(e) => setLocationId(e.target.value)}
-                    >
-                      <option value="" disabled>
-                        {selectedCourier ? "Select a location…" : "Choose a courier first"}
-                      </option>
-                      {courierLocations.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {/* No per-location fee → just the location name; don't
-                              label it "Free" (the store may charge shipping another
-                              way, e.g. a flat/admin fee). */}
-                          {l.price
-                            ? `${l.name} — ${currency}${l.price.toLocaleString()}`
-                            : l.name}
+                  {codCourier ? (
+                    // COD/no-location courier (Lalamove, Maxim…) — no location to
+                    // pick and no shipping fee; the customer pays on delivery.
+                    <div className="sf-cart__field sf-cart__ship-cod">
+                      <span>Shipping</span>
+                      <p className="sf-cart__ship-cod-note">
+                        Cash on delivery — no shipping fee collected here.
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="sf-cart__field">
+                      <span>
+                        Shipping location<em aria-hidden> *</em>
+                      </span>
+                      <select
+                        className="sf-cart__select"
+                        value={locationId}
+                        disabled={!selectedCourier}
+                        aria-invalid={
+                          touched && !!selectedCourier && !selectedLocation ? true : undefined
+                        }
+                        onChange={(e) => setLocationId(e.target.value)}
+                      >
+                        <option value="" disabled>
+                          {selectedCourier ? "Select a location…" : "Choose a courier first"}
                         </option>
-                      ))}
-                    </select>
-                  </label>
+                        {courierLocations.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {/* No per-location fee → just the location name; don't
+                                label it "Free" (the store may charge shipping another
+                                way, e.g. a flat/admin fee). */}
+                            {l.price
+                              ? `${l.name} — ${currency}${l.price.toLocaleString()}`
+                              : l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
               )}
+
+              <div className="sf-cart__promo">
+                <span className="sf-cart__promo-label">Discount code</span>
+                {appliedPromo ? (
+                  <div className="sf-cart__promo-applied">
+                    <span className="sf-cart__promo-chip">
+                      {appliedPromo.code} —{" "}
+                      {appliedPromo.type === "percent"
+                        ? `${appliedPromo.value}% off`
+                        : `${currency}${appliedPromo.value.toLocaleString()} off`}
+                    </span>
+                    <button
+                      type="button"
+                      className="sf-cart__promo-remove"
+                      onClick={removePromo}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="sf-cart__promo-row">
+                    <input
+                      type="text"
+                      className="sf-cart__promo-input"
+                      value={discountInput}
+                      placeholder="Enter code"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      aria-invalid={promoError ? true : undefined}
+                      onChange={(e) => {
+                        setDiscountInput(e.target.value.toUpperCase());
+                        if (promoError) setPromoError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          applyPromo();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="sf-cart__promo-apply"
+                      disabled={!discountInput.trim()}
+                      onClick={applyPromo}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+                {promoError && (
+                  <p className="sf-cart__promo-error" role="alert">
+                    {promoError}
+                  </p>
+                )}
+              </div>
             </form>
           ) : (
             <div className="sf-cart__pay">
@@ -642,7 +791,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         {lines.length > 0 && (
           <footer className="sf-cart__foot">
             <div className="sf-cart__totals">
-              {(adminFee || shippingFee > 0) && (
+              {(adminFee || shippingFee > 0 || discountAmount > 0) && (
                 <>
                   <div className="sf-cart__total sf-cart__total--sub">
                     <span>Subtotal</span>
@@ -651,6 +800,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       {subtotal.toLocaleString()}
                     </span>
                   </div>
+                  {discountAmount > 0 && (
+                    <div className="sf-cart__total sf-cart__total--sub sf-cart__total--discount">
+                      <span>Discount{appliedPromo ? ` · ${appliedPromo.code}` : ""}</span>
+                      <span>
+                        −{currency}
+                        {discountAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   {shippingFee > 0 && (
                     <div className="sf-cart__total sf-cart__total--sub">
                       <span>
@@ -716,7 +874,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   <p className="sf-cart__error">Please fill in the required fields.</p>
                 )}
                 {touched && detailsValid && !shippingValid && (
-                  <p className="sf-cart__error">Please choose a courier and shipping location.</p>
+                  <p className="sf-cart__error">{shippingError}</p>
                 )}
                 <button
                   className="btn btn-primary sf-cart__cta"
@@ -737,7 +895,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   <p className="sf-cart__error">Please fill in the required fields.</p>
                 )}
                 {step === "details" && touched && detailsValid && !shippingValid && (
-                  <p className="sf-cart__error">Please choose a courier and shipping location.</p>
+                  <p className="sf-cart__error">{shippingError}</p>
                 )}
                 {step === "payment" && paymentTouched && !paymentValid && (
                   <p className="sf-cart__error">

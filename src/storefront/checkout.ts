@@ -190,6 +190,7 @@ export function buildOrderMessage(
   orderNumber?: string,
   adminFee?: { label: string; amount: number } | null,
   shipping?: { courier: string; fee: number } | null,
+  discount?: { code?: string; label: string; amount: number } | null,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -205,13 +206,24 @@ export function buildOrderMessage(
     .join("\n");
   const subtotal = cartTotal(lines);
   const shippingFee = shipping?.fee ?? 0;
-  // With a fee (shipping and/or admin), break the math down so the customer sees
-  // why the total is higher than the items; without one, keep the historical
-  // single Total line.
+  const discountAmount = discount?.amount ?? 0;
+  // The grand total never drops below zero (a discount caps at the subtotal).
+  const grandTotal = Math.max(0, subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee);
+  // With a fee (shipping and/or admin) or a discount, break the math down so the
+  // customer sees why the total differs from the items; without any, keep the
+  // historical single Total line.
   const totalLines =
-    adminFee || shippingFee > 0
+    adminFee || shippingFee > 0 || discountAmount > 0
       ? [
           `Subtotal: ${money(subtotal, currency)}`,
+          ...(discountAmount > 0
+            ? [
+                `Discount${discount?.code ? ` (${discount.code})` : ""}: -${money(
+                  discountAmount,
+                  currency,
+                )}`,
+              ]
+            : []),
           ...(shippingFee > 0
             ? [
                 `Shipping${shipping?.courier ? ` (${shipping.courier})` : ""}: ${money(
@@ -221,7 +233,7 @@ export function buildOrderMessage(
               ]
             : []),
           ...(adminFee ? [`${adminFee.label}: ${money(adminFee.amount, currency)}`] : []),
-          `Total: ${money(subtotal + (adminFee?.amount ?? 0) + shippingFee, currency)}`,
+          `Total: ${money(grandTotal, currency)}`,
         ]
       : [`Total: ${money(subtotal, currency)}`];
 

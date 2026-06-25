@@ -186,15 +186,16 @@ function monthlyRevenue(orders: { createdAt: Date; totalCents: number }[], offse
    only take manual checkouts today) read as $0 / 0 orders.
    ============================================================ */
 
-type SfMoneyFields = { items: unknown; shipping: unknown; adminFee: unknown };
+type SfMoneyFields = { items: unknown; shipping: unknown; adminFee: unknown; discount?: unknown };
 
-/** Storefront order grand total in cents: items + shipping fee + admin fee. */
+/** Storefront order grand total in cents: items − discount + shipping fee + admin fee. */
 function sfTotalCents(o: SfMoneyFields): number {
   const items = Array.isArray(o.items) ? (o.items as { price?: number; qty?: number }[]) : [];
   const sub = items.reduce((s, it) => s + (Number(it?.price) || 0) * (Number(it?.qty) || 1), 0);
   const ship = Number((o.shipping as { fee?: number } | null)?.fee) || 0;
   const fee = Number((o.adminFee as { amount?: number } | null)?.amount) || 0;
-  return Math.round((sub + ship + fee) * 100);
+  const discount = Number((o.discount as { amount?: number } | null)?.amount) || 0;
+  return Math.round((Math.max(0, sub - discount + ship + fee)) * 100);
 }
 
 function sfCustomer(o: { customer: unknown }): { name: string; email: string } {
@@ -416,7 +417,7 @@ const _cachedAdminTenants = unstable_cache(
       }),
       prisma.order.groupBy({ by: ["tenantId"], _sum: { totalCents: true } }),
       prisma.storefrontOrder.findMany({
-        select: { tenantId: true, status: true, items: true, shipping: true, adminFee: true },
+        select: { tenantId: true, status: true, items: true, shipping: true, adminFee: true, discount: true },
       }),
     ]);
     const revByTenant = new Map(revenue.map((r) => [r.tenantId, r._sum.totalCents ?? 0]));
@@ -518,6 +519,7 @@ export async function getPlatformOverview(): Promise<OverviewData> {
           items: true,
           shipping: true,
           adminFee: true,
+          discount: true,
           tenant: { select: { name: true } },
         },
       }),

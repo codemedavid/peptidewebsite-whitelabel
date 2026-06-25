@@ -32,6 +32,15 @@ model Tenant {
   // ("scrypt$<salt-hex>$<hash-hex>"). Null = password not yet set by the platform owner.
   adminPasswordHash String?
 
+  // Visitor access-code gate (per-tenant "enter a code to view the store").
+  // Hash is scrypt-derived, same format as adminPasswordHash. Null = no gate set
+  // (the storefront is open). The gate is only enforced when this is non-null AND
+  // branding.config.accessGate.enabled is true. Bumping accessCodeVersion (done on
+  // every code rotation) is what instantly invalidates all live visitor cookies:
+  // a cookie carries the version it was minted under and is rejected once it drifts.
+  accessCodeHash    String?
+  accessCodeVersion Int     @default(1)
+
   domains           Domain[]
   groupBuys         GroupBuy[]
   integrations      TenantIntegration[]
@@ -285,6 +294,12 @@ model StorefrontOrder {
   // server-side at placement from branding.config.adminFee so changing the
   // tenant's fee never rewrites existing orders. NULL = no fee was charged.
   adminFee Json?
+  // Discount code applied to this order — { code, label, amount }, snapshotted
+  // server-side at placement from branding.config.promoCodes (re-derived, never
+  // trusted from the client) so the saved amount can't be inflated and a later
+  // code edit never rewrites existing orders. It REDUCES the total. NULL = no
+  // code was applied.
+  discount Json?
   // Append-only fulfillment journey: one entry per status transition, oldest
   // first, e.g. [{ status: "new", at }, { status: "confirmed", at }, …]. Drives
   // the storefront Track page's timeline. Seeded with the "new" event at create.

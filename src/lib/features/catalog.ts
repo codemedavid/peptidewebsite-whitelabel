@@ -112,6 +112,24 @@ const STARTER: FeatureKey[] = [
   FEATURES.SA_REPORT_MONTHLY,
   FEATURES.SA_EXPORT_EXCEL,
   FEATURES.SA_EXPORT_PDF,
+  // Group Buy sub-capabilities sit in every plan ceiling (default ON) but stay
+  // inert until the operator grants the GB_MODULE master switch per tenant (see
+  // OPERATOR_GRANTABLE). resolveGroupBuyCaps ANDs each one with GB_MODULE, so
+  // being default-on here just means granting the module lights up the basics.
+  // The Enterprise-only extras (scheduling, parallel runs, auto-on-close) live
+  // in ENTERPRISE below, not here.
+  FEATURES.GB_CREATE,
+  FEATURES.GB_EDIT,
+  FEATURES.GB_DUPLICATE,
+  FEATURES.GB_ARCHIVE,
+  FEATURES.GB_PRODUCT_ASSIGNMENT,
+  FEATURES.GB_SUPPLIER_REPORTS,
+  FEATURES.GB_REPORT_CSV,
+  FEATURES.GB_REPORT_EXCEL,
+  FEATURES.GB_REPORT_PDF,
+  FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN,
+  FEATURES.GB_REPORT_PRODUCT_BREAKDOWN,
+  FEATURES.GB_REPORT_SUPPLIER_SUMMARY,
 ];
 const PRO: FeatureKey[] = [
   ...STARTER,
@@ -125,11 +143,6 @@ const PRO: FeatureKey[] = [
   FEATURES.STORE_ORDER_TRACKING,
   FEATURES.STORE_MULTI_CURRENCY,
   FEATURES.NOTIFY_EMAIL,
-  // NB: Group Buy (GB_*) is intentionally OUT of every plan default until the
-  // module is finished — the feature keys still exist in FEATURES so they can be
-  // gated per tenant, but no plan grants them, so GB_MODULE stays off everywhere
-  // (admin screen hidden, orders never attributed). Re-add GB_MODULE + the basic
-  // caps here, and the Enterprise extras below, when it's ready to ship.
 ];
 const ENTERPRISE: FeatureKey[] = [
   ...PRO,
@@ -144,9 +157,11 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.MARKETING_AUTOMATION,
   FEATURES.INTEGRATIONS,
   FEATURES.NOTIFY_TELEGRAM,
-  // Group Buy Enterprise extras (scheduling, parallel runs, supplier reports +
-  // the GB_REPORT_* controls) are also held back until the module ships — see
-  // the note in PRO above.
+  // Group Buy Enterprise extras — the advanced controls beyond the basics every
+  // plan ceiling carries. All still gated behind the operator-granted GB_MODULE.
+  FEATURES.GB_SCHEDULED,
+  FEATURES.GB_MULTIPLE_ACTIVE,
+  FEATURES.GB_REPORT_AUTO_ON_CLOSE,
 ];
 
 export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
@@ -167,6 +182,11 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_CARD_STUDIO,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
+  // Group Buy: both the management module (GB_MODULE) and the order-rules engine
+  // (GB_RULES, gated independently of the module) are off for every tenant until
+  // the operator grants them per tenant from admin → Features.
+  FEATURES.GB_MODULE,
+  FEATURES.GB_RULES,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */

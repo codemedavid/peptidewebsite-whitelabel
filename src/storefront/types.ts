@@ -124,6 +124,12 @@ export type Order = {
    *  rewrites what an existing order was charged. Absent on legacy orders and
    *  when the tenant's fee is off. Total = items + shipping.fee + adminFee. */
   adminFee?: { label: string; amount: number };
+  /** Discount code applied at checkout, snapshotted SERVER-SIDE at placement
+   *  from the tenant's branding.config.promoCodes (re-derived, never trusted from
+   *  the client) so the saved amount can't be inflated and a later code change
+   *  never rewrites what an existing order received. Absent when no code was used.
+   *  It REDUCES the total: Total = items − discount.amount + shipping.fee + adminFee. */
+  discount?: { code: string; label: string; amount: number };
   /** Group buy this order was placed under, stamped SERVER-SIDE at placement
    *  (id + name snapshot — see lib/storefront/group-buy). Null/absent = placed
    *  outside any group buy or before the module existed. */
@@ -156,6 +162,12 @@ export type Courier = {
   /** Optional tracking page URL shared with customers (e.g. LBC's tracker). */
   trackingUrl: string;
   active: boolean;
+  /** When true, this courier needs NO shipping location or fee — the customer
+   *  just pays cash on delivery (e.g. Lalamove, Maxim, same-day riders). It's
+   *  offered at checkout WITHOUT a location selector, adds 0 to the total, and
+   *  doesn't trigger the "no shipping location" warning in admin. Absent/false →
+   *  the courier behaves normally (requires an active linked location). */
+  noLocation?: boolean;
 };
 
 export type CoaReport = {
@@ -322,6 +334,11 @@ export type Brand = {
   // delivery ETA). Set by the platform operator on the tenant's Features page;
   // persisted in branding.config.groupBuySettings.
   groupBuySettings?: GroupBuySettings;
+  // Group buy slice of the Sales Analytics view. Derived server-side from
+  // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
+  // meaningful while the Sales Analytics module itself is on). Absent/false =
+  // the per-group-buy breakdown card is hidden.
+  showAnalyticsGroupBuys?: boolean;
 
   headerShowBrand: boolean;
   headerShowCart: boolean;
@@ -501,6 +518,14 @@ export type Brand = {
   // every device/customer sees the same set — not the editing browser's
   // localStorage. Absent until the owner saves once → falls back to the seeds.
   shippingLocations?: ShippingLocation[];
+
+  // Discount / promo codes the store offers. Created in the storefront #admin
+  // (Promo Codes) and persisted server-side in branding.config (same mechanism
+  // as couriers) so the owner's codes are honored for every customer on every
+  // device — not only the editing browser. The customer enters a code at
+  // checkout; placeStorefrontOrderAction re-derives the discount from this same
+  // stored set. Absent until the owner saves once → falls back to the seeds.
+  promoCodes?: PromoCode[];
 
   // Storefront product categories (the tabs customers filter by, and the
   // dropdown the admin's product form offers). Edited in the storefront #admin
