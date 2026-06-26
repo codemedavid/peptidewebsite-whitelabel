@@ -300,14 +300,17 @@ export function channelUrl(channel: ContactChannel, message: string): string {
       // Viber deep links are phone-number based: viber://chat?number=<digits>.
       return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;
     case "gmail":
-      // Use Gmail's web compose URL (a normal https navigation) rather than a
-      // mailto: link. mailto: launches an external mail handler, which browsers
-      // block when it's navigated to programmatically after async work — the
-      // user-gesture activation has expired by then ("blocked from
-      // automatically composing an email"). The https compose URL is never
-      // blocked and matches the channel's name; it carries the order as the
-      // subject + body just like the other prefilled channels.
-      return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(dest)}&su=${encodeURIComponent("New order")}&body=${encodeURIComponent(message)}`;
+      // A mailto: link opens the customer's own mail app (Gmail app, Apple Mail,
+      // Outlook, …) with To/Subject/Body fully prefilled, and works reliably on
+      // both mobile and desktop regardless of which Google account is signed in.
+      // We previously used Gmail's https web-compose URL, but a same-tab
+      // top-level navigation to it races Gmail's login/account redirect, which
+      // drops the compose params (customer lands on the inbox, nothing
+      // prefilled), and on mobile Safari it never opens the composer at all.
+      // mailto: must be fired from a fresh user gesture (the checkout shows an
+      // explicit "Email your order" button for this — see CartCheckout), because
+      // browsers block a mail handler invoked programmatically after async work.
+      return `mailto:${dest}?subject=${encodeURIComponent("New order")}&body=${encodeURIComponent(message)}`;
   }
 }
 

@@ -35,7 +35,7 @@ import {
   type CheckoutCustomer,
 } from "../checkout";
 
-type Step = "cart" | "details" | "payment";
+type Step = "cart" | "details" | "payment" | "sent";
 
 const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; type?: string }[] = [
   { key: "name", label: "Full name", required: true },
@@ -51,6 +51,11 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { brand, cart, products, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
+  // After an email ("gmail") order is placed we land on the "sent" step, which
+  // shows an explicit "Email your order" button. The mailto: link must fire from
+  // that button's own tap — a fresh user gesture — because browsers block a mail
+  // handler invoked programmatically after the awaited order save.
+  const [handoff, setHandoff] = useState<{ url: string; message: string; orderNum: string } | null>(null);
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
   // Courier + shipping location the customer picks at checkout. The customer
@@ -174,6 +179,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (open) {
       setStep("cart");
+      setHandoff(null);
       setTouched(false);
       setCourierId("");
       setLocationId("");
@@ -433,17 +439,30 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     if (!channelPrefills(channel.type)) {
       try { await navigator.clipboard?.writeText(message); } catch { /* clipboard denied — link still opens */ }
     }
-    toast(
-      channelPrefills(channel.type)
-        ? `Order ${orderNum} placed — opening ${CHANNEL_LABELS[channel.type]}…`
-        : `Order ${orderNum} — copied, paste it in ${CHANNEL_LABELS[channel.type]}`,
-    );
     clearCart();
     // Success: release the lock and retire this order's idempotency key so the
     // next checkout starts a fresh logical order.
     draftIdRef.current = null;
     placingRef.current = false;
     setPlacing(false);
+
+    // Email handoff (mailto:) can't be auto-fired here — the user-gesture
+    // activation is spent by the time the awaited save returns, so browsers
+    // block the mail handler. Keep the drawer open on a "sent" step whose button
+    // fires the mailto from a fresh tap. The message is also stashed so that
+    // screen can offer a copy-to-clipboard fallback.
+    if (channel.type === "gmail") {
+      toast(`Order ${orderNum} placed — tap to email it`);
+      setHandoff({ url, message, orderNum });
+      setStep("sent");
+      return;
+    }
+
+    toast(
+      channelPrefills(channel.type)
+        ? `Order ${orderNum} placed — opening ${CHANNEL_LABELS[channel.type]}…`
+        : `Order ${orderNum} — copied, paste it in ${CHANNEL_LABELS[channel.type]}`,
+    );
     onClose();
 
     // Top-level navigation to the chat channel. Unlike window.open() this is
@@ -476,7 +495,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         </header>
 
         <div className="sf-cart__body">
-          {lines.length === 0 ? (
+          {step === "sent" ? (
+            <div className="sf-cart__sent">
+              <p className="sf-cart__sent-title">Order {handoff?.orderNum} placed 🎉</p>
+              <p className="sf-cart__sent-text">
+                Tap <strong>Email your order</strong> below to open your mail app with the
+                order details already filled in — just press send to confirm with us.
+              </p>
+            </div>
+          ) : lines.length === 0 ? (
             <p className="sf-cart__empty">Your cart is empty.</p>
           ) : step === "cart" ? (
             <>
@@ -788,8 +815,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
           )}
         </div>
 
-        {lines.length > 0 && (
+        {(lines.length > 0 || step === "sent") && (
           <footer className="sf-cart__foot">
+            {step !== "sent" && (
             <div className="sf-cart__totals">
               {(adminFee || shippingFee > 0 || discountAmount > 0) && (
                 <>
@@ -840,8 +868,39 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </strong>
               </div>
             </div>
+            )}
 
-            {step === "cart" ? (
+            {step === "sent" ? (
+              <>
+                <button
+                  className="btn btn-primary sf-cart__cta"
+                  onClick={() => {
+                    // Fired from this tap (a fresh user gesture) so the browser
+                    // doesn't block the mail handler.
+                    if (handoff && typeof window !== "undefined") window.location.href = handoff.url;
+                  }}
+                >
+                  Email your order
+                </button>
+                <button
+                  className="sf-cart__back"
+                  onClick={async () => {
+                    if (!handoff) return;
+                    try {
+                      await navigator.clipboard?.writeText(handoff.message);
+                      toast("Order details copied — paste them into an email");
+                    } catch {
+                      toast("Couldn't copy — please email us your order number");
+                    }
+                  }}
+                >
+                  Copy order details instead
+                </button>
+                <button className="sf-cart__back" onClick={onClose}>
+                  Done
+                </button>
+              </>
+            ) : step === "cart" ? (
               <>
                 {violations.length > 0 && (
                   <div className="sf-cart__rules">

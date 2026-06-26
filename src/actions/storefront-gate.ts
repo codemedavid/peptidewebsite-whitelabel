@@ -152,7 +152,10 @@ export async function setGateSettingsAction(input: unknown): Promise<ActionResul
 /**
  * Rotate the visitor access code (admin-guarded). Hashes the new code and bumps
  * accessCodeVersion in one update — the bump invalidates every live visitor
- * cookie, so all current visitors fall back to the gate immediately.
+ * cookie, so all current visitors fall back to the gate immediately. Saving a code
+ * also turns the gate ON (preserving the heading): setting a code is how you make
+ * the store private, so it shouldn't take a second step. Turn it off again with
+ * setGateSettingsAction without losing the code.
  */
 export async function rotateAccessCodeAction(
   newCode: string,
@@ -172,6 +175,25 @@ export async function rotateAccessCodeAction(
         accessCodeVersion: { increment: 1 },
       },
       select: { accessCodeVersion: true },
+    });
+
+    // Auto-enable the gate (keep the existing heading). Setting a code = "make my
+    // store private", so the gate goes live without a separate toggle.
+    const branding = await prisma.branding.findUnique({
+      where: { tenantId },
+      select: { config: true },
+    });
+    const current = (branding?.config ?? {}) as Record<string, unknown>;
+    const prevGate = (current.accessGate ?? {}) as { heading?: string };
+    const heading =
+      typeof prevGate.heading === "string" && prevGate.heading.trim()
+        ? prevGate.heading.trim()
+        : "Enter access code";
+    const config = { ...current, accessGate: { enabled: true, heading } };
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
     });
 
     const slug = await getTenantSlug();

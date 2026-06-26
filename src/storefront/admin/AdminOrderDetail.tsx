@@ -15,6 +15,96 @@ function formatPHP(n: number): string {
   );
 }
 
+// One-click copy with transient "Copied!" feedback. Falls back to a hidden
+// textarea + execCommand on browsers/contexts where the async clipboard API
+// is unavailable (e.g. non-HTTPS or older WebViews).
+function CopyButton({
+  value,
+  label = "Copy",
+  className = "",
+}: {
+  value: string;
+  label?: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    const text = (value || "").trim();
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore — nothing else we can do if the clipboard is blocked
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className={`admin-copy-btn${copied ? " admin-copy-btn--done" : ""} ${className}`.trim()}
+      title="Copy to clipboard"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 10px",
+        borderRadius: 8,
+        border: "1px solid var(--brand-border, #e5e7eb)",
+        background: copied ? "var(--brand-accent, #16a34a)" : "#fff",
+        color: copied ? "#fff" : "var(--brand-text, #111)",
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: "pointer",
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {copied ? (
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+      {copied ? "Copied!" : label}
+    </button>
+  );
+}
+
 function OrderStatusPill({ status }: { status: Order["status"] }) {
   const labels: Record<Order["status"], string> = {
     new: "🕐 New",
@@ -116,6 +206,29 @@ export function AdminOrderDetail({
     return true;
   };
 
+  // Full shipping address as a single line for quick paste into a courier form.
+  const addressLine = [
+    o.shipping?.address,
+    o.shipping?.barangay ? `Brgy. ${o.shipping.barangay}` : "",
+    o.shipping?.city,
+    o.shipping?.province,
+    o.shipping?.postal,
+    o.shipping?.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  // One block holding everything a courier booking form needs, so the whole
+  // parcel can be booked with a single copy → paste.
+  const bookingText = [
+    `Name: ${o.customer?.name || ""}`,
+    `Phone: ${o.customer?.phone || ""}`,
+    `Address: ${addressLine}`,
+    o.shipping?.region ? `Region: ${o.shipping.region}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const confirmOrder = () => void persist({ status: "confirmed" });
 
   const changeStatus = (status: Order["status"]) => void persist({ status });
@@ -214,19 +327,44 @@ export function AdminOrderDetail({
             </div>
           </div>
 
-          <h2 className="admin-detail__section-title">Customer Information</h2>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h2 className="admin-detail__section-title" style={{ margin: 0 }}>
+              Customer Information
+            </h2>
+            <CopyButton
+              value={bookingText}
+              label="Copy details for booking"
+            />
+          </div>
           <div className="admin-detail__block">
             <div className="admin-detail__block-row">
               <strong>Name:</strong>
-              {o.customer?.name}
+              <span>{o.customer?.name}</span>
+              {o.customer?.name && (
+                <CopyButton value={o.customer.name} className="admin-detail__copy-inline" />
+              )}
             </div>
             <div className="admin-detail__block-row">
               <strong>Email:</strong>
-              {o.customer?.email}
+              <span>{o.customer?.email}</span>
+              {o.customer?.email && (
+                <CopyButton value={o.customer.email} className="admin-detail__copy-inline" />
+              )}
             </div>
             <div className="admin-detail__block-row">
               <strong>Phone:</strong>
-              {o.customer?.phone}
+              <span>{o.customer?.phone}</span>
+              {o.customer?.phone && (
+                <CopyButton value={o.customer.phone} className="admin-detail__copy-inline" />
+              )}
             </div>
             <div className="admin-detail__block-row">
               <strong>Contact Method:</strong>
@@ -243,12 +381,23 @@ export function AdminOrderDetail({
             </div>
           </div>
 
-          <h2
-            className="admin-detail__section-title"
-            style={{ marginTop: 26 }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              marginTop: 26,
+            }}
           >
-            Shipping Address
-          </h2>
+            <h2 className="admin-detail__section-title" style={{ margin: 0 }}>
+              Shipping Address
+            </h2>
+            {addressLine && (
+              <CopyButton value={addressLine} label="Copy address" />
+            )}
+          </div>
           <div className="admin-detail__block">
             <div>{o.shipping?.address}</div>
             <div>Barangay: {o.shipping?.barangay}</div>

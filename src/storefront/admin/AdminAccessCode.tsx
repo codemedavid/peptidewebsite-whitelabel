@@ -78,9 +78,11 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
         toast(res.error);
         return;
       }
+      // Saving a code auto-enables the gate (server-side) — reflect that here.
       setHasCode(true);
+      setEnabled(true);
       setNewCode("");
-      toast("Code updated — all current visitors have been signed out.");
+      toast("Code saved — the gate is now ON. Visitors need the code, and anyone already in was signed out.");
     } catch {
       toast("Couldn't update the code — please sign in again and retry.");
     } finally {
@@ -123,7 +125,7 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
             </div>
           ) : (
             <div className="admin-field__hint" style={{ marginBottom: 14 }}>
-              No code set yet. Set one below, then turn the gate on.
+              No code set yet. Set a code below — that turns the gate on automatically.
             </div>
           )}
 
@@ -148,7 +150,9 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
         <div className="admin-form__card">
           <h2 className="admin-form__section">🔑 {hasCode ? "Rotate Access Code" : "Set Access Code"}</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            The code is stored hashed and never shown again. {hasCode ? "Setting a new one immediately invalidates the old one." : ""}
+            Saving a code turns the gate <strong>on</strong> and makes your store private right away.
+            The code is stored hashed and never shown again.{" "}
+            {hasCode ? "Setting a new one immediately invalidates the old one." : ""}
           </div>
           <div className="admin-form__row">
             <div className="admin-field">
