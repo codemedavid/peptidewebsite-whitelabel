@@ -23,7 +23,8 @@
     "test:themes": "tsx scripts/check-theme-contrast.ts",
     "test:gate": "tsx scripts/test-access-gate.ts",
     "test:posthog": "tsx scripts/test-posthog.ts",
-    "test:plan-status": "tsx scripts/test-plan-options.ts"
+    "test:plan-status": "tsx scripts/test-plan-options.ts",
+    "test:staff": "tsx scripts/test-staff-permissions.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
