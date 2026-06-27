@@ -22,6 +22,7 @@ import {
   isValidPlanKey,
   isValidStatus,
   canonicalPlanKey,
+  statusLabel,
 } from "../src/lib/admin/plan-options";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -80,6 +81,13 @@ check("Trial is a selectable status with a human label", () => {
   assert.equal(trial!.label, "Trial");
 });
 
+check("statusLabel humanizes known + system statuses, falls back to raw value", () => {
+  assert.equal(statusLabel("active"), "Active");
+  assert.equal(statusLabel("past_due"), "Past due");
+  assert.equal(statusLabel("pending_setup"), "Pending setup");
+  assert.equal(statusLabel("weird_thing"), "weird_thing");
+});
+
 // ───────────────────────────── plan-key validation ──────────────────────────
 console.log("\nisValidPlanKey (server-action guard)");
 
@@ -94,14 +102,18 @@ check("rejects aliases, empty, and unknown keys (the select only emits canonical
 });
 
 // ───────────────────────────── status validation ────────────────────────────
-console.log("\nisValidStatus (server-action guard)");
+console.log("\nisValidStatus (server-action guard — full known-status domain)");
 
-check("accepts the three known statuses", () => {
-  for (const s of ["active", "trial", "suspended"]) assert.equal(isValidStatus(s), true, s);
+check("accepts every status the app legitimately stores (incl. system statuses)", () => {
+  // Broader than the pickable dropdown so a plan-only edit round-trips a
+  // system status (e.g. pending_setup) instead of being rejected.
+  for (const s of ["active", "trial", "suspended", "past_due", "pending", "canceled", "pending_setup"]) {
+    assert.equal(isValidStatus(s), true, s);
+  }
 });
 
-check("rejects unknown / empty statuses", () => {
-  for (const s of ["deleted", "past_due", "", "Active"]) assert.equal(isValidStatus(s), false, s);
+check("rejects unknown / empty / mis-cased statuses", () => {
+  for (const s of ["deleted", "", "Active", "bogus"]) assert.equal(isValidStatus(s), false, s);
 });
 
 // ─────────────────────── alias → canonical normalization ─────────────────────

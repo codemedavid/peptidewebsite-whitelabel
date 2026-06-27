@@ -12,9 +12,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ic } from "@/components/admin/shell/primitives";
+import { Ic, StatusBadge } from "@/components/admin/shell/primitives";
 import { setTenantPlanAction } from "@/actions/admin";
-import { PLAN_OPTIONS, STATUS_OPTIONS, canonicalPlanKey } from "@/lib/admin/plan-options";
+import { PLAN_OPTIONS, STATUS_OPTIONS, canonicalPlanKey, statusLabel } from "@/lib/admin/plan-options";
 
 type Props = {
   slug: string;
@@ -22,12 +22,6 @@ type Props = {
   planKey: string;
   /** Current Tenant.status (active | trial | suspended). */
   status: string;
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  active: "badge-success",
-  trial: "badge-info",
-  suspended: "badge-danger",
 };
 
 export function PlanStatusManager({ slug, planKey, status }: Props) {
@@ -45,19 +39,29 @@ export function PlanStatusManager({ slug, planKey, status }: Props) {
 
   const dirty = plan !== baseline.plan || stat !== baseline.status;
   const planLabel = PLAN_OPTIONS.find((o) => o.key === plan)?.label ?? plan;
-  const statusLabel = STATUS_OPTIONS.find((o) => o.value === stat)?.label ?? stat;
+  const statLabel = statusLabel(stat);
+  // Operator-pickable statuses, plus the tenant's current status if it isn't one
+  // of them (e.g. pending_setup) — so the select reflects reality and a plan-only
+  // save round-trips the real status instead of clobbering it to "active".
+  const statusChoices = STATUS_OPTIONS.some((o) => o.value === status)
+    ? STATUS_OPTIONS
+    : [{ value: status, label: statusLabel(status) }, ...STATUS_OPTIONS];
 
   function save() {
     setError(null);
     startTransition(async () => {
-      const res = await setTenantPlanAction(slug, plan, stat);
-      if ("error" in res) {
-        setError(res.error);
-        return;
+      try {
+        const res = await setTenantPlanAction(slug, plan, stat);
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        setBaseline({ plan, status: stat });
+        setSaved(true);
+        router.refresh();
+      } catch {
+        setError("Something went wrong saving. Please try again.");
       }
-      setBaseline({ plan, status: stat });
-      setSaved(true);
-      router.refresh();
     });
   }
 
@@ -79,7 +83,10 @@ export function PlanStatusManager({ slug, planKey, status }: Props) {
             offline immediately.
           </p>
         </div>
-        <span className={"badge " + (STATUS_BADGE[stat] ?? "badge-neutral")}>{planLabel}</span>
+        <div className="row" style={{ gap: 6 }}>
+          <span className="badge badge-neutral">{planLabel}</span>
+          <StatusBadge status={stat} />
+        </div>
       </div>
 
       <div className="set-card-body">
@@ -137,7 +144,7 @@ export function PlanStatusManager({ slug, planKey, status }: Props) {
                     setError(null);
                   }}
                 >
-                  {STATUS_OPTIONS.map((o) => (
+                  {statusChoices.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
@@ -152,7 +159,7 @@ export function PlanStatusManager({ slug, planKey, status }: Props) {
       <div className="set-foot">
         <span className="hint">
           <Ic.AlertCircle />
-          This tenant will be on the <b>{planLabel}</b> plan · {statusLabel}.
+          This tenant will be on the <b>{planLabel}</b> plan · {statLabel}.
         </span>
         <div className="set-foot-actions">
           {error && (

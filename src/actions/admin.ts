@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { isValidPlanKey, isValidStatus } from "@/lib/admin/plan-options";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
@@ -34,8 +35,10 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
  * Reassign a tenant's package plan and lifecycle status (Super Admin → tenant
  * settings). `planKey` must be a canonical key (starter | pro | enterprise) —
  * it's resolved to the Plan row's id before writing Tenant.planId. Changing the
- * plan automatically re-gates the tenant's features (the storefront derives
- * entitlements from the plan's feature set) and updates MRR/plan distribution.
+ * plan re-gates the tenant's features (the storefront derives entitlements from
+ * the plan's feature set) and updates MRR/plan distribution — revalidateTenant
+ * busts the entitlement + host-resolver caches so the change takes effect on the
+ * next storefront request (a status flip to "suspended" really goes offline).
  */
 export async function setTenantPlanAction(
   slug: string,
@@ -49,11 +52,17 @@ export async function setTenantPlanAction(
     // Built-in demo tenants are immutable fixtures; report success without persisting.
     return { ok: true, status };
   }
-  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  // Independent reads — resolve the tenant and the target plan row in parallel.
+  const [tenant, plan] = await Promise.all([
+    prisma.tenant.findUnique({ where: { slug }, select: { id: true } }),
+    prisma.plan.findUnique({ where: { key: planKey }, select: { id: true } }),
+  ]);
   if (!tenant) return { error: "Tenant not found." };
-  const plan = await prisma.plan.findUnique({ where: { key: planKey }, select: { id: true } });
   if (!plan) return { error: `The "${planKey}" plan isn't set up in the database yet.` };
   await prisma.tenant.update({ where: { id: tenant.id }, data: { planId: plan.id, status } });
+  // Bust the storefront caches (entitlements re-gate, host resolver picks up a
+  // suspend) in addition to the admin surface.
+  revalidateTenant(tenant.id, slug);
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
