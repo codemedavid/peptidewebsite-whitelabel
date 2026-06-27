@@ -3,25 +3,26 @@
 import { useState } from "react";
 import type { Brand } from "../types";
 import { ADMIN_AUTH_KEY } from "./authKey";
-import { signInStorefrontAdminAction } from "@/actions/storefront-admin";
+import { signInStoreAdminAction } from "@/actions/storefront-staff";
 
 export { ADMIN_AUTH_KEY };
 
 export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () => void }) {
+  const [username, setUsername] = useState("");
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // The password is verified server-side (against branding.config) and, on
-  // success, the server issues a signed session cookie. Without it, the save
-  // actions reject writes — so the sessionStorage flag below is now only a UI
-  // hint for which screen to show, not the actual security boundary.
+  // Credentials are verified server-side (owner against branding.config, staff
+  // against their scrypt hash) and, on success, the server issues a signed session
+  // cookie carrying who you are. The sessionStorage flag below is only a UI hint
+  // for which screen to show, not the security boundary.
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError("");
-    const result = await signInStorefrontAdminAction(pw);
+    const result = await signInStoreAdminAction(username, pw);
     setBusy(false);
     if ("ok" in result) {
       try {
@@ -31,8 +32,8 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
       }
       onSuccess();
     } else {
-      setError(result.error || "Incorrect password.");
-      setTimeout(() => setError(""), 2200);
+      setError(result.error || "Incorrect username or password.");
+      setTimeout(() => setError(""), 2600);
     }
   };
 
@@ -51,14 +52,26 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
         </div>
         <h1 className="admin-login__title">{brand.adminLoginTitle || "Admin Access"}</h1>
         <p className="admin-login__sub">
-          {brand.adminLoginSub || `Enter the admin password for ${brand.name || "this tenant"}`}
+          {brand.adminLoginSub || `Sign in to manage ${brand.name || "this store"}`}
         </p>
+        <input
+          type="text"
+          className={`admin-login__input ${error ? "is-error" : ""}`}
+          value={username}
+          placeholder="Username"
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect="off"
+          onChange={(e) => {
+            setUsername(e.target.value);
+            setError("");
+          }}
+        />
         <input
           type="password"
           className={`admin-login__input ${error ? "is-error" : ""}`}
           value={pw}
-          placeholder="••••••"
-          autoFocus
+          placeholder="Password"
           onChange={(e) => {
             setPw(e.target.value);
             setError("");
@@ -69,9 +82,11 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
           {busy ? "Checking…" : "Enter Dashboard"}
         </button>
         <div className="admin-login__hint">
-          Default password is{" "}
-          <code style={{ background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: 4 }}>admin</code>
-          .
+          Store owners sign in with username{" "}
+          <code style={{ background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: 4 }}>
+            owner
+          </code>{" "}
+          and their admin password. Staff use the username their owner gave them.
         </div>
       </form>
     </div>

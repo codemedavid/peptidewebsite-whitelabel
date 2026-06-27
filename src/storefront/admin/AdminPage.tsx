@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Brand, Order, Product } from "../types";
 import { useStore } from "../store";
 import { AdminIcon, tintStyle } from "./shared";
@@ -28,6 +28,10 @@ import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
 import { AdminHeroSettings } from "./AdminHeroSettings";
 import { isAdminViewVisible } from "../visibility";
+import { AdminStaffList } from "./AdminStaffList";
+import { AdminStaffForm } from "./AdminStaffForm";
+import { isViewAllowed, quickActionToView, type StaffActor } from "./staff-permissions";
+import { getStorefrontAdminSessionAction, type StaffListItem } from "@/actions/storefront-staff";
 
 type View =
   | "dashboard"
@@ -53,7 +57,9 @@ type View =
   | "fee"
   | "groupbuys"
   | "hero"
-  | "account";
+  | "account"
+  | "staff"
+  | "staff-form";
 
 export function AdminPage({
   brand,
@@ -68,10 +74,53 @@ export function AdminPage({
   const [view, setView] = useState<View>("dashboard");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+  const [editingStaff, setEditingStaff] = useState<StaffListItem | null>(null);
 
-  // A view whose storefront page was just turned off in the super admin should
-  // not stay visible — bounce back to the dashboard.
-  const activeView: View = isAdminViewVisible(brand, view) ? view : "dashboard";
+  // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
+  // suspended/removed staff session resolves to "none" and is logged out.
+  const [actor, setActor] = useState<StaffActor | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStorefrontAdminSessionAction().then((info) => {
+      if (cancelled) return;
+      if (info.kind === "none") {
+        onLogout();
+        return;
+      }
+      setActor(
+        info.kind === "owner"
+          ? { kind: "owner" }
+          : { kind: "staff", id: info.id, permissions: info.permissions },
+      );
+      setSessionLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout]);
+
+  const isOwner = actor?.kind === "owner";
+
+  // Don't flash the full menu before we know who the actor is — a staff member
+  // must never momentarily see modules they aren't permitted.
+  if (!sessionLoaded || !actor) {
+    return (
+      <div className="admin">
+        <div className="admin__inner">
+          <div className="admin-field__hint" style={{ padding: 48, textAlign: "center" }}>
+            Loading…
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A view that's turned off in the super admin, or that this actor isn't
+  // permitted, must not stay visible — bounce back to the dashboard.
+  const activeView: View =
+    isAdminViewVisible(brand, view) && isViewAllowed(actor, view) ? view : "dashboard";
 
   // Sub-view routing
   if (activeView === "add-product") {
@@ -165,6 +214,39 @@ export function AdminPage({
     );
   }
 
+  if (activeView === "staff") {
+    return (
+      <AdminStaffList
+        brand={brand}
+        onBack={() => setView("dashboard")}
+        onAdd={() => {
+          setEditingStaff(null);
+          setView("staff-form");
+        }}
+        onEdit={(s) => {
+          setEditingStaff(s);
+          setView("staff-form");
+        }}
+      />
+    );
+  }
+  if (activeView === "staff-form") {
+    return (
+      <AdminStaffForm
+        brand={brand}
+        staff={editingStaff}
+        onBack={() => {
+          setEditingStaff(null);
+          setView("staff");
+        }}
+        onSaved={() => {
+          setEditingStaff(null);
+          setView("staff");
+        }}
+      />
+    );
+  }
+
   const stats = [
     { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
     { label: "Available Stock", value: products.reduce((sum, p) => sum + (p.stock ?? 0), 0), icon: "trend", tint: "green" },
@@ -195,7 +277,12 @@ export function AdminPage({
     { id: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan" },
     { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
     { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
-  ].filter((q) => isAdminViewVisible(brand, q.id));
+    ...(isOwner
+      ? [{ id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" }]
+      : []),
+  ].filter(
+    (q) => isAdminViewVisible(brand, q.id) && isViewAllowed(actor, quickActionToView(q.id)),
+  );
 
   const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
   const catCounts = categories
@@ -297,6 +384,7 @@ export function AdminPage({
                     if (q.id === "checkout") return setView("checkout");
                     if (q.id === "groupbuys") return setView("groupbuys");
                     if (q.id === "account") return setView("account");
+                    if (q.id === "staff") return setView("staff");
                     toast(`"${q.label}" — wire to your backend`);
                   }}
                 >
