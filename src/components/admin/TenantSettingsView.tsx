@@ -90,6 +90,8 @@ type Props = {
   /** Storefront-admin password override; blank means the default ("admin"). */
   initialAdminPassword: string;
   lastSaved?: string;
+  /** Plan & status card, rendered first in the sections column (its own save flow). */
+  planStatus?: React.ReactNode;
   /** Custom-domain card, rendered in the sections column (its own save flow). */
   domains?: React.ReactNode;
 };
@@ -118,6 +120,7 @@ export function TenantSettingsView({
   adminFeeEntitled,
   initialAdminPassword,
   lastSaved,
+  planStatus,
   domains,
 }: Props) {
   /* ---------- order-number format ---------- */
@@ -446,6 +449,9 @@ export function TenantSettingsView({
 
         {/* sections */}
         <div className="set-sections">
+          {/* ---------- plan & status (self-contained card) ---------- */}
+          {planStatus}
+
           {/* ---------- order numbers ---------- */}
           <section className="set-card" ref={refs.orders} data-section="orders">
             <div className="set-card-head">

@@ -273,6 +273,25 @@ export async function getTenantOrderFormat(
   return { name: t.name, format: normalizeOrderNumberFormat(t.orderNumberFormat, t.name) };
 }
 
+/** Tenant's current package-plan key + lifecycle status, for the settings
+ *  "Plan & status" editor. planKey is the raw stored key (canonical for DB and
+ *  demo tenants); the editor normalizes it for its <select>. Demo tenants are
+ *  immutable fixtures and report as active. */
+export async function getTenantPlanStatus(
+  slug: string,
+): Promise<{ planKey: string; status: string } | null> {
+  if (isDemoMode()) {
+    if (!listDemoTenants().some((t) => t.slug === slug)) return null;
+    return { planKey: getDemoTenant(slug).plan, status: "active" };
+  }
+  const t = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { status: true, plan: { select: { key: true } } },
+  });
+  if (!t) return null;
+  return { planKey: t.plan.key, status: t.status };
+}
+
 export type TenantContactChannels = {
   name: string;
   contactChannels: ContactChannel[];
