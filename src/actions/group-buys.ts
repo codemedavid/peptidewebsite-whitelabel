@@ -20,7 +20,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPlatformUser } from "@/lib/auth/session";
 import { getTenantSlug } from "@/lib/tenant/headers";
-import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
+import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
@@ -72,8 +72,9 @@ const NOT_SIGNED_IN = "Not signed in to the store admin.";
 async function requireGroupBuyAdmin(): Promise<
   { tenantId: string; slug: string; caps: GroupBuyCapabilities } | { error: string }
 > {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: NOT_SIGNED_IN };
+  const ctx = await requireStaffPermission("groupbuys");
+  if (!ctx) return { error: NOT_SIGNED_IN };
+  const tenantId = ctx.tenantId;
   const caps = await resolveGroupBuyCaps(tenantId);
   if (!caps.enabled) return { error: "Group buys aren't enabled for this store." };
   const slug = (await getTenantSlug()) ?? tenantId;

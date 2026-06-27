@@ -10,6 +10,8 @@ import {
   clearStorefrontAdminCookie,
   requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
+import { requireStaffPermission, getStorefrontAdminActor } from "@/lib/auth/staff-guard";
+import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
@@ -19,6 +21,10 @@ import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
 export type ActionResult = { ok: true } | { error: string };
+
+/** Returned when a store-admin action is called without a valid session OR
+ *  without the per-module permission that gates it (staff enforcement). */
+const NO_ACCESS = "You don't have permission to do that.";
 
 const DEFAULT_PASSWORD = "admin";
 
@@ -88,26 +94,44 @@ export async function changeStorefrontAdminPasswordAction(
   currentPassword: string,
   newPassword: string,
 ): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
-
-  const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-
-  if ((currentPassword ?? "").trim() !== resolvePassword(current)) {
-    return { error: "Current password is incorrect." };
-  }
+  const ctx = await getStorefrontAdminActor();
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
 
   const next = (newPassword ?? "").trim();
   if (next.length < 6) {
     return { error: "New password must be at least 6 characters." };
+  }
+
+  // Staff change their OWN credential (StorefrontStaff.passwordHash); the owner
+  // changes the shared owner password in branding.config. Account Settings →
+  // "change password" routes here for both.
+  if (ctx.actor.kind === "staff") {
+    const staff = await prisma.storefrontStaff.findFirst({
+      where: { id: ctx.actor.id, tenantId },
+      select: { passwordHash: true },
+    });
+    if (!staff) return { error: "Staff member not found." };
+    if (!verifyPassword((currentPassword ?? "").trim(), staff.passwordHash)) {
+      return { error: "Current password is incorrect." };
+    }
+    await prisma.storefrontStaff.update({
+      where: { id: ctx.actor.id },
+      data: { passwordHash: hashPassword(next) },
+    });
+    return { ok: true };
+  }
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  if ((currentPassword ?? "").trim() !== resolvePassword(current)) {
+    return { error: "Current password is incorrect." };
   }
   if (next === resolvePassword(current)) {
     return { error: "New password must be different from the current one." };
   }
 
   const config = { ...current, adminPassword: next };
-
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
   } else {
@@ -148,8 +172,9 @@ function normalizeMethods(input: unknown): PaymentMethod[] {
  * where checkout fell back to the seed defaults on phones.
  */
 export async function savePaymentMethodsAction(methods: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("pay");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const paymentMethods = normalizeMethods(methods);
@@ -200,8 +225,9 @@ function normalizeCategories(input: unknown): Category[] {
  * where categories lived only in the editing browser's localStorage.
  */
 export async function saveCategoriesAction(categories: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("categories");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const normalized = normalizeCategories(categories);
@@ -255,8 +281,9 @@ function normalizeCouriers(input: unknown): Courier[] {
  * browser.
  */
 export async function saveCouriersAction(couriers: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("couriers");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const normalized = normalizeCouriers(couriers);
@@ -316,8 +343,9 @@ function normalizeShippingLocations(input: unknown): ShippingLocation[] {
  * selectors on every device, not only the editing browser.
  */
 export async function saveShippingLocationsAction(locations: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("shipping");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const normalized = normalizeShippingLocations(locations);
@@ -347,8 +375,9 @@ export async function saveShippingLocationsAction(locations: unknown): Promise<A
  * placeStorefrontOrderAction re-derives each discount from this same stored set.
  */
 export async function savePromoCodesAction(codes: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("promo");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const promoCodes = normalizePromoCodes(codes);
@@ -406,8 +435,9 @@ function normalizeHeroContent(input: unknown): Record<string, string> {
  * on every device/customer — not only the editing browser.
  */
 export async function saveHeroContentAction(input: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("hero");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const hero = normalizeHeroContent(input);
@@ -439,8 +469,9 @@ export async function saveHeroContentAction(input: unknown): Promise<ActionResul
  * server enforces exactly what the owner configured.
  */
 export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("checkout");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const checkoutRules = normalizeCheckoutRules(rules);
@@ -474,8 +505,9 @@ export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionRes
  * value, so the server charges exactly what the owner configured.
  */
 export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("fee");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const adminFee = normalizeAdminFee(input);
@@ -516,8 +548,9 @@ export type ResellerSettings = {
  * owner can see whether their provider has enabled the feature.
  */
 export async function getResellerSettingsAction(): Promise<ResellerSettings | { error: string }> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("reseller");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
   const config = await readConfig(tenantId);
   return {
     available: await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
@@ -532,8 +565,9 @@ export async function getResellerSettingsAction(): Promise<ResellerSettings | { 
  * here; the storefront goes live once this code is set AND the tenant is entitled.
  */
 export async function saveResellerSettingsAction(input: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("reseller");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const o = (input ?? {}) as Record<string, unknown>;
   const code = String(o.code ?? "").slice(0, 120).trim();
@@ -642,8 +676,9 @@ function normalizeCardDesign(input: unknown): CardDesign {
  * storefront's "absent → classic" fallback applies).
  */
 export async function saveCardDesignAction(design: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("design");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
@@ -688,8 +723,9 @@ function normalizeCardTemplates(input: unknown): CardTemplate[] {
  * other or the rest of the Brand config.
  */
 export async function saveCardTemplatesAction(templates: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("design");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
@@ -740,8 +776,9 @@ function normalizeProtocols(input: unknown): Protocol[] {
  * protocol page fell back to the seed samples on other devices.
  */
 export async function saveProtocolsAction(protocols: unknown): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("proto");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
   const normalized = normalizeProtocols(protocols);

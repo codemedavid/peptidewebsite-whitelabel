@@ -64,6 +64,20 @@ export async function requireStaffPermission(moduleKey: string): Promise<AdminAc
 }
 
 /**
+ * Like requireStaffPermission, but passes when the actor holds ANY of the given
+ * module keys. Used where one action serves two grants — e.g. saving a product is
+ * allowed for either "add-product" (create) or "products" (manage).
+ */
+export async function requireAnyStaffPermission(
+  moduleKeys: string[],
+): Promise<AdminActorContext | null> {
+  const ctx = await getStorefrontAdminActor();
+  if (!ctx) return null;
+  if (moduleKeys.some((k) => isModuleAllowed(ctx.actor, k))) return ctx;
+  return null;
+}
+
+/**
  * Require an OWNER session for the current tenant (staff never qualify, even with
  * every module granted). Used by the Staff Accounts management actions so a staff
  * member can never create staff or escalate their own grants. Returns the

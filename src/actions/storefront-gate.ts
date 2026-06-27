@@ -6,7 +6,7 @@ import { isDemoMode } from "@/lib/demo/fixtures";
 import { prisma } from "@/lib/db/prisma";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
-import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
+import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { saveGateSession, clearGateSession } from "@/lib/auth/storefront-gate";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 import { hasFeature } from "@/lib/features/entitlements";
@@ -95,8 +95,9 @@ export type GateSettings = { enabled: boolean; heading: string; hasCode: boolean
 /** Read the gate settings for the store admin panel (admin-guarded). */
 export async function getGateSettingsAction(): Promise<GateSettings | { error: string }> {
   try {
-    const tenantId = await requireStorefrontAdmin();
-    if (!tenantId) return { error: "Not signed in to the store admin." };
+    const ctx = await requireStaffPermission("access-code");
+    if (!ctx) return { error: "Not signed in to the store admin." };
+    const tenantId = ctx.tenantId;
     if (isDemoMode()) return { enabled: false, heading: "Enter access code", hasCode: false };
     if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
@@ -115,8 +116,9 @@ export async function getGateSettingsAction(): Promise<GateSettings | { error: s
 /** Toggle the gate on/off and set its heading (admin-guarded). */
 export async function setGateSettingsAction(input: unknown): Promise<ActionResult> {
   try {
-    const tenantId = await requireStorefrontAdmin();
-    if (!tenantId) return { error: "Not signed in to the store admin." };
+    const ctx = await requireStaffPermission("access-code");
+    if (!ctx) return { error: "Not signed in to the store admin." };
+    const tenantId = ctx.tenantId;
     if (isDemoMode()) return { error: "Access gate isn't available in demo mode." };
     if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
@@ -169,8 +171,9 @@ export async function rotateAccessCodeAction(
   newCode: string,
 ): Promise<{ ok: true; codeVersion: number } | { error: string }> {
   try {
-    const tenantId = await requireStorefrontAdmin();
-    if (!tenantId) return { error: "Not signed in to the store admin." };
+    const ctx = await requireStaffPermission("access-code");
+    if (!ctx) return { error: "Not signed in to the store admin." };
+    const tenantId = ctx.tenantId;
     if (isDemoMode()) return { error: "Access gate isn't available in demo mode." };
     if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
