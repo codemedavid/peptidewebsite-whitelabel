@@ -38,6 +38,11 @@ import {
 
 import { hashPassword } from "../src/lib/auth/password-hash";
 import { resolveStoreAdminLogin } from "../src/lib/auth/store-admin-login";
+import {
+  parseStaffCreate,
+  parseStaffUpdate,
+  isReservedUsername,
+} from "../src/lib/storefront/staff-input";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
 let passed = 0;
@@ -373,6 +378,99 @@ check("owner reserved name wins even if a staff row shares it (defensive)", () =
 
 check("password is trimmed (matches existing owner-login behavior)", () => {
   assert.deepEqual(resolveStoreAdminLogin("owner", "  hunter2 ", ownerCred, staffRows), { kind: "owner" });
+});
+
+// ───────────────────── staff create/update input validation ──────────────────
+console.log("\nparseStaffCreate (owner adds a staff member)");
+
+const validCreate = {
+  fullName: "  Maria Santos ",
+  email: "Maria@Example.com",
+  username: "  Maria ",
+  password: "secret123",
+  confirmPassword: "secret123",
+  status: "active",
+  permissions: ["orders", "inv", "bogus", "orders"],
+};
+
+check("accepts a valid payload and normalizes it", () => {
+  const r = parseStaffCreate(validCreate);
+  assert.ok(r.ok, r.ok ? "" : r.error);
+  if (!r.ok) return;
+  assert.equal(r.value.fullName, "Maria Santos");
+  assert.equal(r.value.email, "maria@example.com"); // lowercased + trimmed
+  assert.equal(r.value.username, "maria"); // lowercased + trimmed
+  assert.equal(r.value.password, "secret123");
+  assert.equal(r.value.status, "active");
+  assert.deepEqual([...r.value.permissions].sort(), ["inv", "orders"]); // sanitized + deduped
+});
+
+check("status defaults to active when omitted", () => {
+  const r = parseStaffCreate({ ...validCreate, status: undefined });
+  assert.ok(r.ok && r.value.status === "active");
+});
+
+check("rejects a missing full name", () => {
+  const r = parseStaffCreate({ ...validCreate, fullName: "   " });
+  assert.equal(r.ok, false);
+});
+
+check("rejects an invalid email", () => {
+  const r = parseStaffCreate({ ...validCreate, email: "not-an-email" });
+  assert.equal(r.ok, false);
+});
+
+check("rejects a username with spaces or too short", () => {
+  assert.equal(parseStaffCreate({ ...validCreate, username: "ma ria" }).ok, false);
+  assert.equal(parseStaffCreate({ ...validCreate, username: "ab" }).ok, false);
+});
+
+check("rejects a password shorter than 6", () => {
+  const r = parseStaffCreate({ ...validCreate, password: "x1", confirmPassword: "x1" });
+  assert.equal(r.ok, false);
+});
+
+check("rejects mismatched password confirmation", () => {
+  const r = parseStaffCreate({ ...validCreate, confirmPassword: "different" });
+  assert.equal(r.ok, false);
+});
+
+check("rejects an unknown status value", () => {
+  const r = parseStaffCreate({ ...validCreate, status: "deleted" });
+  assert.equal(r.ok, false);
+});
+
+console.log("\nparseStaffUpdate (owner edits a staff member)");
+
+check("blank password means keep-existing (no password in the result)", () => {
+  const r = parseStaffUpdate({ ...validCreate, password: "", confirmPassword: "" });
+  assert.ok(r.ok, r.ok ? "" : r.error);
+  if (!r.ok) return;
+  assert.equal("password" in r.value, false);
+  assert.equal(r.value.username, "maria");
+});
+
+check("a provided new password still must be ≥6 and confirmed", () => {
+  assert.equal(parseStaffUpdate({ ...validCreate, password: "x1", confirmPassword: "x1" }).ok, false);
+  assert.equal(parseStaffUpdate({ ...validCreate, password: "newpass1", confirmPassword: "nope" }).ok, false);
+  const r = parseStaffUpdate({ ...validCreate, password: "newpass1", confirmPassword: "newpass1" });
+  assert.ok(r.ok && r.value.password === "newpass1");
+});
+
+console.log("\nisReservedUsername (can't shadow the owner)");
+
+check("the literal 'owner' is always reserved", () => {
+  assert.equal(isReservedUsername("owner", "shopkeeper"), true);
+  assert.equal(isReservedUsername("OWNER", "shopkeeper"), true);
+});
+
+check("the configured owner username is reserved (case-insensitive)", () => {
+  assert.equal(isReservedUsername("ShopKeeper", "shopkeeper"), true);
+  assert.equal(isReservedUsername("  shopkeeper ", "shopkeeper"), true);
+});
+
+check("any other username is allowed", () => {
+  assert.equal(isReservedUsername("maria", "shopkeeper"), false);
 });
 
 // ────────────────────────────────── summary ─────────────────────────────────
