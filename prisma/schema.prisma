@@ -57,6 +57,7 @@ model Tenant {
 
   // ── Storefront / white-label layer (added) ──
   members  TenantUser[]
+  staff    StorefrontStaff[]
   branding Branding?
   settings TenantSettings?
   pages    Page[]
@@ -627,4 +628,31 @@ model PlatformSetting {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@map("platform_settings")
+}
+
+// ──────────────────────────── Store-admin staff ────────────────────────────
+// Per-tenant staff sub-accounts for the storefront admin (slug.<root>/#admin).
+// The store OWNER creates these; each staff member signs in with their own
+// username + password (scrypt hash, same `scrypt$<salt>$<hash>` format as
+// adminPasswordHash) and sees only the admin modules granted in `permissions`
+// (string[] of keys from storefront/admin/staff-permissions.ts). Suspending a
+// row blocks login immediately because the session guard re-loads it on every
+// request. SERVER-ONLY: unlike branding.config it is never shipped to the
+// client, so staff credentials cannot leak to the browser.
+model StorefrontStaff {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fullName     String
+  email        String
+  username     String
+  passwordHash String // scrypt$<salt-hex>$<hash-hex>
+  status       String   @default("active") // active | suspended
+  permissions  Json     @default("[]") // string[] of staff-permission module keys
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@unique([tenantId, username]) // one username per store; also the scoped lookup key
+  @@index([tenantId])
+  @@map("storefront_staff")
 }
