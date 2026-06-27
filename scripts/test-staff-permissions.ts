@@ -36,6 +36,9 @@ import {
   type SessionSubject,
 } from "../src/lib/auth/storefront-session-token";
 
+import { hashPassword } from "../src/lib/auth/password-hash";
+import { resolveStoreAdminLogin } from "../src/lib/auth/store-admin-login";
+
 // ──────────────────────────── tiny assertion harness ────────────────────────
 let passed = 0;
 let failed = 0;
@@ -304,6 +307,72 @@ check("an unknown subject tag is rejected", () => {
   const payload = `tnt_abc.robot.${expiresAt}`;
   const sig = createHmac("sha256", Buffer.from(SECRET, "utf8")).update(payload).digest("base64url");
   assert.equal(decodeSessionToken(SECRET, `${payload}.${sig}`, NOW), null);
+});
+
+// ─────────────────── unified login (owner reserved username + staff) ─────────
+console.log("\nresolveStoreAdminLogin (unified username + password)");
+
+const ownerCred = { username: "owner", password: "hunter2" };
+const STAFF_HASH = hashPassword("secret123");
+const staffRows = [
+  { id: "stf_a", username: "maria", passwordHash: STAFF_HASH, status: "active" },
+  { id: "stf_b", username: "suspended-sam", passwordHash: STAFF_HASH, status: "suspended" },
+];
+
+check("owner username + correct password → owner", () => {
+  assert.deepEqual(resolveStoreAdminLogin("owner", "hunter2", ownerCred, staffRows), { kind: "owner" });
+});
+
+check("owner username is case-insensitive and trimmed", () => {
+  assert.deepEqual(resolveStoreAdminLogin("  OWNER ", "hunter2", ownerCred, staffRows), { kind: "owner" });
+});
+
+check("owner username + wrong password → invalid", () => {
+  assert.deepEqual(resolveStoreAdminLogin("owner", "nope", ownerCred, staffRows), { kind: "invalid" });
+});
+
+check("active staff + correct password → staff:id", () => {
+  assert.deepEqual(resolveStoreAdminLogin("maria", "secret123", ownerCred, staffRows), {
+    kind: "staff",
+    id: "stf_a",
+  });
+});
+
+check("staff username is case-insensitive", () => {
+  assert.deepEqual(resolveStoreAdminLogin("MARIA", "secret123", ownerCred, staffRows), {
+    kind: "staff",
+    id: "stf_a",
+  });
+});
+
+check("active staff + wrong password → invalid", () => {
+  assert.deepEqual(resolveStoreAdminLogin("maria", "wrong", ownerCred, staffRows), { kind: "invalid" });
+});
+
+check("suspended staff (even with correct password) → suspended", () => {
+  assert.deepEqual(resolveStoreAdminLogin("suspended-sam", "secret123", ownerCred, staffRows), {
+    kind: "suspended",
+  });
+});
+
+check("unknown username → invalid", () => {
+  assert.deepEqual(resolveStoreAdminLogin("ghost", "secret123", ownerCred, staffRows), { kind: "invalid" });
+});
+
+check("empty username → invalid", () => {
+  assert.deepEqual(resolveStoreAdminLogin("", "secret123", ownerCred, staffRows), { kind: "invalid" });
+});
+
+check("owner reserved name wins even if a staff row shares it (defensive)", () => {
+  const collide = [{ id: "stf_x", username: "owner", passwordHash: STAFF_HASH, status: "active" }];
+  // The owner credential resolves as owner …
+  assert.deepEqual(resolveStoreAdminLogin("owner", "hunter2", ownerCred, collide), { kind: "owner" });
+  // … and the colliding staff's password must NOT grant entry under the owner name.
+  assert.deepEqual(resolveStoreAdminLogin("owner", "secret123", ownerCred, collide), { kind: "invalid" });
+});
+
+check("password is trimmed (matches existing owner-login behavior)", () => {
+  assert.deepEqual(resolveStoreAdminLogin("owner", "  hunter2 ", ownerCred, staffRows), { kind: "owner" });
 });
 
 // ────────────────────────────────── summary ─────────────────────────────────
