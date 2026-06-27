@@ -2421,6 +2421,15 @@
   gap: 18px;
   margin-bottom: 24px;
 }
+@media (max-width: 640px) {
+  .sf-root .admin__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .sf-root .admin-stat {
+    padding: 16px 16px 18px;
+  }
+}
 .sf-root .admin-stat {
   position: relative;
   background: var(--brand-surface);
@@ -2527,7 +2536,28 @@
   color: var(--brand-text-muted);
   margin-top: 2px;
 }
-@media (max-width: 560px) { .sf-root .admin-quick { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .sf-root .admin-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .sf-root .admin-quick__btn {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+  .sf-root .admin-quick__icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+  }
+  .sf-root .admin-quick__icon svg { width: 20px; height: 20px; }
+  .sf-root .admin-quick__label { font-size: 14.5px; }
+  .sf-root .admin-quick__hint { font-size: 11.5px; }
+}
+@media (max-width: 380px) {
+  .sf-root .admin-quick { grid-template-columns: 1fr; }
+}
 
 /* Dashboard top bar — phone layout. brand · "ADMIN DASHBOARD" pill · View
    Website · Logout sat in a non-wrapping flex row and ran past the screen edge

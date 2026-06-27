@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 import { cardDesignAttrs, type CardDesign } from "../cardDesign";
+import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 
 /**
  * The storefront product card. Also rendered by the admin Card Studio for its
@@ -15,6 +16,7 @@ export function ProductCard({
   onAdd,
   design,
   rating,
+  gbBlocked,
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
@@ -22,6 +24,10 @@ export function ProductCard({
   /** Sample rating shown by Card Studio previews. The public catalog passes
    *  nothing — products carry no rating data, so none is invented. */
   rating?: { value: number; count: number };
+  /** True when a group buy is live and this on-hand (non-group-buy) product is
+   *  blocked from the cart by the owner's on-hand setting. Shows but disables
+   *  buying — the store.addToCart gate and the server both re-check it. */
+  gbBlocked?: boolean;
 }) {
   const [qty, setQty] = useState(1);
   // Per-product variations (e.g. 5mg / 10mg), each with its own price. When a
@@ -62,6 +68,8 @@ export function ProductCard({
       {outOfStock ? (
         <span className="product-card__badge badge badge-soft">Out of stock</span>
       ) : poa ? (
+        <span className="product-card__badge badge badge-soft">On hand</span>
+      ) : gbBlocked ? (
         <span className="product-card__badge badge badge-soft">On hand</span>
       ) : (
         product.featured && (
@@ -155,6 +163,16 @@ export function ProductCard({
           <div className="product-card__buy">
             <button className="btn btn-primary product-card__cta" disabled>
               Message to order
+            </button>
+          </div>
+        ) : gbBlocked ? (
+          <div className="product-card__buy">
+            <button
+              className="btn btn-primary product-card__cta"
+              disabled
+              title="On-hand products are paused while a group buy is open."
+            >
+              Available after group buy
             </button>
           </div>
         ) : (
@@ -291,6 +309,7 @@ export function Catalog({
               key={p.id}
               product={p}
               design={brand.cardDesign}
+              gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
             />
           ))}

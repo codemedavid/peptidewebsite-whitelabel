@@ -184,6 +184,44 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
   }
 }
 
+// ── Storefront on-hand toggle (store admin) ─────────────────────────────────
+
+/**
+ * Persist the store owner's choice of whether on-hand (non-group-buy) products
+ * stay buyable while a group buy is live, into branding.config.groupBuyAllowOnHand
+ * (read-modify-write so the rest of the storefront config is untouched). Store-
+ * admin gated + module entitlement; revalidates the tenant so the storefront
+ * gate recomputes. Only meaningful with product assignment — without it every
+ * live run covers the whole catalog, so there are no on-hand products to gate.
+ */
+export async function saveGroupBuyAllowOnHandAction(
+  allowOnHand: unknown,
+): Promise<{ ok: true; allowOnHand: boolean } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const value = allowOnHand !== false;
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: { ...current, groupBuyAllowOnHand: value } });
+    } else {
+      const current = await readTenantConfig(tenantId);
+      const config = { ...current, groupBuyAllowOnHand: value } as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId },
+        update: { config },
+        create: { tenantId, config },
+      });
+    }
+    revalidateTenant(tenantId, slug);
+    return { ok: true, allowOnHand: value };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the setting." };
+  }
+}
+
 // ── Duplicate ─────────────────────────────────────────────────────────────────
 
 /** Copy an existing group buy as a fresh draft ("Copy of …") with no window —

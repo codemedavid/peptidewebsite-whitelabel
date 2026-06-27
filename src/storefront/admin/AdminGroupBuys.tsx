@@ -25,6 +25,7 @@ import {
   duplicateGroupBuyAction,
   setGroupBuyArchivedAction,
   getGroupBuySupplierReportAction,
+  saveGroupBuyAllowOnHandAction,
   type GroupBuyCustomerLine,
 } from "@/actions/group-buys";
 
@@ -538,6 +539,13 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
+  // Store-owner toggle: while a run is live, may customers still buy on-hand
+  // (non-group-buy) products? Persisted in branding.config.groupBuyAllowOnHand
+  // (default on). Only meaningful with product assignment — otherwise every live
+  // run covers the whole catalog, so there are no on-hand products to gate.
+  const [allowOnHand, setAllowOnHand] = useState(brand.groupBuyAllowOnHand !== false);
+  const [savingOnHand, setSavingOnHand] = useState(false);
+
   const [editing, setEditing] = useState<GroupBuy | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -618,6 +626,22 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
     toast(`Created "${res.groupBuy.name}"`);
   };
 
+  const toggleOnHand = async (next: boolean) => {
+    setAllowOnHand(next); // optimistic
+    setSavingOnHand(true);
+    const res = await saveGroupBuyAllowOnHandAction(next);
+    setSavingOnHand(false);
+    if ("error" in res) {
+      setAllowOnHand(!next); // revert
+      return toast(res.error);
+    }
+    toast(
+      next
+        ? "On-hand products stay buyable during group buys."
+        : "On-hand products are paused while a group buy is live.",
+    );
+  };
+
   const setArchived = async (gb: GroupBuy, archived: boolean) => {
     if (archived && !confirm(`Archive "${gb.name}"? Its orders and reports are kept.`)) return;
     const res = await setGroupBuyArchivedAction(gb.id, archived);
@@ -680,6 +704,39 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
             )}
           </span>
         </div>
+
+        {caps.productAssignment && (
+          <label
+            className="admin-check"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              margin: "4px 0 14px",
+              padding: "12px 14px",
+              border: "1px solid var(--brand-border, rgba(0,0,0,.12))",
+              borderRadius: 10,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={allowOnHand}
+              disabled={savingOnHand}
+              onChange={(e) => toggleOnHand(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              <span style={{ fontWeight: 600 }}>
+                Allow on-hand purchases during an active group buy
+              </span>
+              <span className="admin-field__hint" style={{ display: "block", marginTop: 2 }}>
+                When a group buy is live, products that aren’t assigned to it stay on the
+                storefront. With this off, customers can only buy the group-buy products —
+                everything else shows “Available after group buy” and can’t be added to cart.
+              </span>
+            </span>
+          </label>
+        )}
 
         {!loaded && <div className="admin-empty-set">Loading group buys…</div>}
         {loadError && (

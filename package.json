@@ -21,7 +21,8 @@
     "db:rls:check": "tsx prisma/rls-check.ts",
     "test:isolation": "tsx scripts/test-isolation.ts",
     "test:themes": "tsx scripts/check-theme-contrast.ts",
-    "test:gate": "tsx scripts/test-access-gate.ts"
+    "test:gate": "tsx scripts/test-access-gate.ts",
+    "test:posthog": "tsx scripts/test-posthog.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

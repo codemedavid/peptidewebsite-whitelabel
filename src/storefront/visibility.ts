@@ -38,6 +38,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Features toggle (FEATURES.STORE_SMART_CHECKOUT). Default OFF —
   // operator-grantable, outside every plan ceiling.
   checkout: (b) => b.showAdminCheckout === true,
+  // Access Code manager. Server-derived from the platform Features toggle
+  // (FEATURES.STORE_ACCESS_CODE). Default OFF — operator-grantable. When off the
+  // manager is hidden entirely (none), matching the gate being unavailable.
+  "access-code": (b) => b.showAdminAccessCode === true,
   // Group Buy MANAGEMENT (the "Group Buys" manager view). Server-derived from
   // the groupbuy.module entitlement via brand.groupBuyCaps. Default OFF.
   groupbuys: (b) => b.groupBuyCaps?.enabled === true,

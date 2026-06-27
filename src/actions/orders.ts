@@ -46,7 +46,7 @@ import {
   checkoutRuleViolations,
   normalizeCheckoutRules,
 } from "@/lib/storefront/checkout-rules";
-import { groupBuyForOrder } from "@/lib/storefront/group-buy";
+import { groupBuyForOrder, buildGroupBuyGate, isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import {
   groupBuyViolations,
@@ -62,6 +62,9 @@ import {
   promoLabel,
 } from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
+import { after } from "next/server";
+import { capturePostHogEvent } from "@/lib/analytics/capture";
+import { buildOrderPlacedPayload, buildStatusChangedPayload } from "@/lib/analytics/events";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -337,6 +340,38 @@ async function stampGroupBuy(p: Order, tenantId: string, demoSlug: string): Prom
     }
   } catch {
     /* attribution is best-effort — never block checkout on it */
+  }
+}
+
+/**
+ * Block on-hand (non-group-buy) products at checkout when a run is live and the
+ * owner has turned on-hand sales off (branding.config.groupBuyAllowOnHand ===
+ * false). Mirrors the storefront cart gate (store.tsx → isOnHandBlocked) so a
+ * stale or tampered client can't sneak a paused product through. Returns the
+ * first offending product's message, or null when the order is allowed.
+ */
+async function groupBuyOnHandViolation(
+  config: Record<string, unknown>,
+  tenantId: string,
+  demoSlug: string,
+  items: OrderItem[],
+): Promise<string | null> {
+  try {
+    const caps = await resolveGroupBuyCaps(tenantId);
+    if (!caps.enabled || !caps.productAssignment) return null;
+    const allowOnHand = config.groupBuyAllowOnHand !== false;
+    if (allowOnHand) return null;
+    const groupBuys = await loadGroupBuys(tenantId, demoSlug);
+    const gate = buildGroupBuyGate(groupBuys, caps, allowOnHand);
+    if (!gate.active || gate.allowOnHand || gate.coversAll) return null;
+    const blocked = items.find(
+      (it) => it.productId && isOnHandBlocked(it.productId, gate),
+    );
+    return blocked
+      ? `${blocked.name} isn't part of the current group buy. Remove it to check out.`
+      : null;
+  } catch {
+    return null; // never wall checkout on an attribution-side error
   }
 }
 
@@ -708,6 +743,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the one they saw.
     const demoDiscountError = stampDiscount(config, p);
     if (demoDiscountError) return { error: demoDiscountError };
+    // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
+    const demoGbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
+    if (demoGbOnHand) return { error: demoGbOnHand };
     // Group-buy attribution — same server-authoritative stamp as the fee.
     await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
@@ -763,15 +801,25 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       : null;
     if (ruleError) return { error: ruleError };
 
-    // Group-buy attribution — same server-authoritative stamp as the fee.
+    // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
     const slug = (await getTenantSlug()) ?? tenantId;
+    const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
+    if (gbOnHand) return { error: gbOnHand };
+    // Group-buy attribution — same server-authoritative stamp as the fee.
     await stampGroupBuy(p, tenantId, slug);
 
     const { row, created } = await createStorefrontOrder(tenantId, p);
+    const placed = dbOrderToStorefront(row as DbOrderRow);
     // Only count the code on a genuinely-new row — an idempotent retry that
     // returned the already-stored order must not double-count.
-    if (created) await incrementPromoUsage(tenantId, slug, p.discount?.code);
-    return { ok: true, order: dbOrderToStorefront(row as DbOrderRow) };
+    if (created) {
+      await incrementPromoUsage(tenantId, slug, p.discount?.code);
+      // Emit order_placed to the tenant's PostHog (entitled + connected only) so
+      // their checkout workflow can email the customer. Fire-and-forget after the
+      // response — never blocks or breaks checkout.
+      after(() => capturePostHogEvent(tenantId, buildOrderPlacedPayload(placed), placed.date));
+    }
+    return { ok: true, order: placed };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't place the order." };
   }
@@ -1034,12 +1082,29 @@ export async function updateStorefrontOrderAction(
           }
         }
       }
-      return { row: await db.storefrontOrder.findFirst({ where: { id: orderId } }), moved: !!move };
+      return {
+        row: await db.storefrontOrder.findFirst({ where: { id: orderId } }),
+        moved: !!move,
+        prevStatus: current.status,
+        statusChanged: !!(newStatus && newStatus !== current.status),
+      };
     });
     if (!result?.row) return { error: "Order not found." };
+    const updatedOrder = dbOrderToStorefront(result.row as DbOrderRow);
+    // Fulfillment moved (e.g. shipped/delivered) → emit order_status_changed so the
+    // tenant's PostHog workflow can email the customer. Fire-and-forget after the
+    // response; capture no-ops unless the tenant is entitled and connected.
+    if (result.statusChanged) {
+      after(() =>
+        capturePostHogEvent(
+          tenantId,
+          buildStatusChangedPayload(updatedOrder, result.prevStatus, updatedOrder.status),
+        ),
+      );
+    }
     // Stock changed → refresh the cached storefront so the catalog shows it.
     if (result.moved) revalidateTenant(tenantId, await getTenantSlug());
-    return { ok: true, order: dbOrderToStorefront(result.row as DbOrderRow) };
+    return { ok: true, order: updatedOrder };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't update the order." };
   }

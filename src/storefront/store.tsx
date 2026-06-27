@@ -42,6 +42,7 @@ import {
   saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
+import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { baseProductId, makeVariationEntry } from "./checkout";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
@@ -373,6 +374,13 @@ export function StoreProvider({
         toast(`${product.name} is on hand — message us for the price.`);
         return;
       }
+      // Group buy gate: while a run is live and the owner has on-hand sales
+      // turned off, on-hand (non-group-buy) products can't be added — only the
+      // group-buy products. placeStorefrontOrderAction re-checks this server-side.
+      if (isOnHandBlocked(baseProductId(product), brand.groupBuyGate)) {
+        toast(`${product.name} isn't part of the current group buy.`);
+        return;
+      }
       // Smart Checkout cart restriction: with mixed-cart prevention on, a
       // product from a second category is rejected here (the friendliest spot —
       // before it's in the cart). Checkout re-validates server-side regardless.
@@ -400,7 +408,7 @@ export function StoreProvider({
       if (room <= 0) return;
       setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
     },
-    [cart, toast, brand.checkoutRules],
+    [cart, toast, brand.checkoutRules, brand.groupBuyGate],
   );
 
   const decrementCart = useCallback((productId: string) => {
