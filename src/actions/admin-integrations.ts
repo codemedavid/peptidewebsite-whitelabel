@@ -16,7 +16,12 @@ import {
   getPostHogCredentials,
   recordPostHogHealth,
 } from "@/lib/integrations/store";
-import { postHogHealthCheck, normalizeHost } from "@/lib/integrations/posthog";
+import { postHogHealthCheck, postHogCapture, normalizeHost } from "@/lib/integrations/posthog";
+import {
+  buildSampleOrder,
+  buildOrderPlacedPayload,
+  buildStatusChangedPayload,
+} from "@/lib/analytics/events";
 
 export type IntegrationResult = { ok: true } | { error: string };
 export type TestResult = { ok: true; healthy: boolean } | { error: string };
@@ -82,4 +87,48 @@ export async function testPostHogConnectionAction(slug: string): Promise<TestRes
   await recordPostHogHealth(g.tenantId, healthy);
   revalidatePath(`/admin/tenants/${slug}/integrations`);
   return { ok: true, healthy };
+}
+
+/**
+ * Fire one of EACH real event into the tenant's PostHog project from a sample
+ * order — `order_placed`, then `order_status_changed` for shipped and delivered —
+ * so the operator can verify their PostHog workflows/emails in one click without
+ * placing a real order. Events are flagged `test: true`. The optional email is
+ * set on the sample person so PostHog Messaging routes the test emails there.
+ */
+export async function sendPostHogTestEventsAction(
+  slug: string,
+  email?: string,
+): Promise<{ ok: true; sent: number } | { error: string }> {
+  const g = await guard(slug);
+  if ("error" in g) return g;
+  const creds = await getPostHogCredentials(g.tenantId);
+  if (!creds) return { error: "Save a PostHog key first." };
+
+  const e = (email ?? "").trim();
+  if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) {
+    return { error: "Enter a valid test email, or leave it blank." };
+  }
+
+  const order = buildSampleOrder(e);
+  const events = [
+    buildOrderPlacedPayload(order),
+    buildStatusChangedPayload(order, "processing", "shipped"),
+    buildStatusChangedPayload(order, "shipped", "delivered"),
+  ];
+
+  let sent = 0;
+  try {
+    for (const ev of events) {
+      await postHogCapture(creds, { ...ev, properties: { ...ev.properties, test: true } });
+      sent++;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Couldn't send test events.";
+    return { error: sent > 0 ? `Sent ${sent}/${events.length}, then failed: ${msg}` : msg };
+  }
+
+  await recordPostHogHealth(g.tenantId, true);
+  revalidatePath(`/admin/tenants/${slug}/integrations`);
+  return { ok: true, sent };
 }

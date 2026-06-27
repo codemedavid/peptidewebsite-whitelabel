@@ -32,6 +32,7 @@ import {
   orderTotal,
   buildOrderPlacedPayload,
   buildStatusChangedPayload,
+  buildSampleOrder,
 } from "../src/lib/analytics/events";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -213,6 +214,32 @@ check("buildStatusChangedPayload carries from/to status and tracking", () => {
   assert.equal(p.properties.toStatus, "shipped");
   assert.equal(p.properties.trackingNumber, "TRK99");
   assert.equal(p.properties.orderNumber, "ABC-1001");
+});
+
+// ──────────────────────── sample order (super-admin test tool) ───────────────
+console.log("\nsample order (send-test-events tool)");
+
+check("buildSampleOrder carries the given email (→ lowercased distinctId)", () => {
+  const o = buildSampleOrder("Owner@Store.COM");
+  assert.equal(resolveDistinctId(o), "owner@store.com");
+  assert.ok(o.items.length >= 1, "has at least one line item");
+});
+
+check("buildSampleOrder with no email is still a valid order", () => {
+  const o = buildSampleOrder();
+  assert.ok(orderTotal(o) > 0, "non-zero total");
+  assert.equal(resolveDistinctId(o), o.orderNumber); // falls back to order number
+});
+
+check("sample order feeds the real builders (placed + shipped/delivered)", () => {
+  const o = buildSampleOrder("t@e.com");
+  const placed = buildOrderPlacedPayload(o);
+  assert.equal(placed.event, POSTHOG_EVENTS.ORDER_PLACED);
+  assert.equal(placed.distinctId, "t@e.com");
+  const shipped = buildStatusChangedPayload(o, "processing", "shipped");
+  assert.equal(shipped.properties.toStatus, "shipped");
+  const delivered = buildStatusChangedPayload(o, "shipped", "delivered");
+  assert.equal(delivered.properties.toStatus, "delivered");
 });
 
 // ────────────────────────────────── summary ─────────────────────────────────

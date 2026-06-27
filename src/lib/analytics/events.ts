@@ -116,3 +116,41 @@ export function buildStatusChangedPayload(
     personProperties: personProps(order),
   };
 }
+
+/**
+ * A representative TEST order for the super-admin "send sample events" tool. It
+ * feeds the SAME payload builders as real checkout, so a one-click test exercises
+ * exactly what production emits. The given email (optional) becomes the person's
+ * email so PostHog Messaging routes the test workflow emails somewhere checkable.
+ */
+export function buildSampleOrder(email?: string): Order {
+  const e = (email ?? "").trim();
+  return {
+    id: "sample-order",
+    orderNumber: "TEST-0001",
+    status: "new",
+    paymentStatus: "paid",
+    paymentMethod: "Test payment",
+    date: new Date().toISOString(),
+    customer: { name: "Test Customer", email: e, phone: "", contactMethod: "" },
+    shipping: {
+      address: "123 Sample St",
+      barangay: "",
+      city: "Sampleville",
+      province: "Test Province",
+      postal: "",
+      country: "",
+      region: "",
+      fee: 50,
+    },
+    courier: "Test Courier",
+    trackingNumber: "TEST-TRACK-0001",
+    shippingNote: "",
+    items: [
+      { name: "Sample Product A", qty: 1, price: 100 },
+      { name: "Sample Product B", qty: 2, price: 75 },
+    ],
+    statusHistory: [],
+    paymentProof: null,
+  };
+}

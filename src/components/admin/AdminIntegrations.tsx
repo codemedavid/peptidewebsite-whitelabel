@@ -12,6 +12,7 @@ import {
   savePostHogKeyAction,
   setPostHogEnabledAction,
   testPostHogConnectionAction,
+  sendPostHogTestEventsAction,
 } from "@/actions/admin-integrations";
 
 export interface PostHogStatusView {
@@ -39,13 +40,14 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
   const [pending, startTransition] = useTransition();
   const [keyInput, setKeyInput] = useState("");
   const [host, setHost] = useState(status?.host || DEFAULT_HOST);
+  const [testEmail, setTestEmail] = useState("");
   const [note, setNote] = useState<Note>(null);
 
   const configured = !!status?.configured;
   const enabled = !!status?.enabled;
 
   function run(
-    fn: () => Promise<{ ok?: true; error?: string; healthy?: boolean }>,
+    fn: () => Promise<{ ok?: true; error?: string; healthy?: boolean; sent?: number }>,
     okText: string,
   ) {
     setNote(null);
@@ -56,12 +58,19 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
         return;
       }
       const failedTest = "healthy" in res && res.healthy === false;
-      const text =
-        "healthy" in res
-          ? res.healthy
-            ? "Connection OK — events are reaching PostHog."
-            : "Connected, but PostHog rejected the test event. Check the key/host."
-          : okText;
+      let text: string;
+      if ("healthy" in res) {
+        text = res.healthy
+          ? "Connection OK — events are reaching PostHog."
+          : "Connected, but PostHog rejected the test event. Check the key/host.";
+      } else if ("sent" in res) {
+        const where = testEmail.trim()
+          ? `check ${testEmail.trim()}'s inbox once your workflows run`
+          : "check the project's Activity feed";
+        text = `Sent ${res.sent} test event(s) — ${where}.`;
+      } else {
+        text = okText;
+      }
       setNote({ kind: failedTest ? "err" : "ok", text });
       router.refresh();
     });
@@ -169,6 +178,45 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
                 >
                   {enabled ? "Disable" : "Enable"}
                 </button>
+              </div>
+
+              <div
+                style={{
+                  borderTop: "1px solid var(--border-soft)",
+                  paddingTop: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>Verify end-to-end</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
+                    Fires a sample <code>order_placed</code> + <code>order_status_changed</code>{" "}
+                    (shipped &amp; delivered) into this project in one click — so your workflows and
+                    emails run without a real order.
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <input
+                    className="input"
+                    type="email"
+                    autoComplete="off"
+                    placeholder="test email (optional — to receive the emails)"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    style={{ maxWidth: 300 }}
+                  />
+                  <button
+                    className="btn"
+                    disabled={pending || !configured}
+                    onClick={() =>
+                      run(() => sendPostHogTestEventsAction(slug, testEmail), "Test events sent.")
+                    }
+                  >
+                    Send test events
+                  </button>
+                </div>
               </div>
 
               {note && (
