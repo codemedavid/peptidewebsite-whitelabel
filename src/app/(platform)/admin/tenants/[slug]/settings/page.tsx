@@ -4,10 +4,12 @@ import {
   getTenantContactChannels,
   getTenantAdminFee,
   getTenantAdminPassword,
+  getTenantPlanStatus,
   listTenantDomains,
 } from "@/lib/admin/data";
 import { TenantSettingsView } from "@/components/admin/TenantSettingsView";
 import { DomainManager } from "@/components/admin/DomainManager";
+import { PlanStatusManager } from "@/components/admin/PlanStatusManager";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +22,12 @@ export default async function TenantSettingsPage({
 }) {
   const { slug } = await params;
 
-  const [tenant, contact, adminFee, adminPassword, domains] = await Promise.all([
+  const [tenant, contact, adminFee, adminPassword, planStatus, domains] = await Promise.all([
     getTenantOrderFormat(slug),
     getTenantContactChannels(slug),
     getTenantAdminFee(slug),
     getTenantAdminPassword(slug),
+    getTenantPlanStatus(slug),
     listTenantDomains(slug),
   ]);
   if (!tenant || !contact || !adminFee) notFound();
@@ -35,6 +38,11 @@ export default async function TenantSettingsPage({
       name={tenant.name}
       domain={`${slug}.${ROOT}`}
       format={tenant.format}
+      planStatus={
+        planStatus ? (
+          <PlanStatusManager slug={slug} planKey={planStatus.planKey} status={planStatus.status} />
+        ) : null
+      }
       initialChannels={contact.contactChannels}
       initialCheckoutTitle={contact.checkoutTitle}
       initialCheckoutNote={contact.checkoutNote}
