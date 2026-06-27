@@ -81,12 +81,17 @@ export async function signInStoreAdminAction(
   const config = await readConfig(tenantId);
   const owner = resolveOwnerCredential(config);
 
-  const staff = isDemoMode()
-    ? []
-    : await prisma.storefrontStaff.findMany({
-        where: { tenantId },
-        select: { id: true, username: true, passwordHash: true, status: true },
-      });
+  // Owner login must not depend on the staff table existing — only query staff
+  // when the username isn't the owner's reserved name.
+  const isOwnerLogin =
+    (username ?? "").trim().toLowerCase() === owner.username.trim().toLowerCase();
+  const staff =
+    isOwnerLogin || isDemoMode()
+      ? []
+      : await prisma.storefrontStaff.findMany({
+          where: { tenantId },
+          select: { id: true, username: true, passwordHash: true, status: true },
+        });
 
   const result = resolveStoreAdminLogin(username, password, owner, staff);
   if (result.kind === "suspended") {
