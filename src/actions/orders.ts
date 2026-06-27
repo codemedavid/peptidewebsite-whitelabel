@@ -19,7 +19,7 @@ import type { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { prisma } from "@/lib/db/prisma";
-import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
+import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
@@ -957,8 +957,9 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
 
 /** The tenant's storefront orders, newest first, for the admin Orders screen. */
 export async function listStorefrontOrdersAction(): Promise<ListOrdersResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
@@ -1001,8 +1002,9 @@ export async function updateStorefrontOrderAction(
   id: unknown,
   patch: unknown,
 ): Promise<UpdateOrderResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
 
   const orderId = str(id, 64);
   if (!orderId) return { error: "Missing order id." };
@@ -1114,8 +1116,9 @@ export async function updateStorefrontOrderAction(
 
 /** Delete one or more of the tenant's storefront orders by id (store admin only). */
 export async function deleteStorefrontOrdersAction(ids: unknown): Promise<DeleteOrdersResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
 
   const list = Array.isArray(ids)
     ? ids.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 1000)

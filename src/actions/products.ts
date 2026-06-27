@@ -10,7 +10,7 @@
 
 import { Prisma } from "@prisma/client";
 import { getTenantSlug } from "@/lib/tenant/headers";
-import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
+import { requireStaffPermission, requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
@@ -119,8 +119,9 @@ function demoEffectiveProducts(slug: string, displaySymbol: string): Product[] {
  * the admin "Refresh" without a full reload.
  */
 export async function listProductsAction(displaySymbol = "₱"): Promise<ListProductsResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("products");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
   const symbol = str(displaySymbol, 8) || "₱";
 
   if (isDemoMode()) {
@@ -151,8 +152,9 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
  * stable across edits so product URLs don't churn.
  */
 export async function saveProductAction(input: unknown): Promise<SaveProductResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireAnyStaffPermission(["add-product", "products"]);
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
   const slug = await getTenantSlug();
 
   const p = normalizeProductInput(input);
@@ -244,8 +246,9 @@ export async function deleteProductsAction(
   ids: unknown,
   displaySymbol = "₱",
 ): Promise<ActionResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireStaffPermission("products");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
   const slug = await getTenantSlug();
 
   const list = Array.isArray(ids)
@@ -300,8 +303,9 @@ function imageKitConfigured(): boolean {
  * actionable error (and can still paste an image URL).
  */
 export async function uploadProductImageAction(formData: FormData): Promise<UploadImageResult> {
-  const tenantId = await requireStorefrontAdmin();
-  if (!tenantId) return { error: "Not signed in to the store admin." };
+  const ctx = await requireAnyStaffPermission(["add-product", "products"]);
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };

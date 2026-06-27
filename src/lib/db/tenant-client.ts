@@ -45,6 +45,7 @@ const TENANT_MODELS = new Set<string>([
   "automationRun",
   "automationMetric",
   "tenantUser",
+  "storefrontStaff",
   "branding",
   "tenantSettings",
   "page",
