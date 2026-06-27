@@ -212,6 +212,62 @@ export function groupBuyForOrder(
   return null;
 }
 
+// ── Storefront gate (on-hand products during a live run) ────────────────────
+// When a group buy is live AND product assignment is in use, products that
+// aren't assigned to any live run are "on-hand" (regular stock). The owner can
+// choose (branding.config.groupBuyAllowOnHand) whether customers may still buy
+// those on-hand products while the run is open, or only the group-buy products.
+// Computed server-side and shipped to the storefront so the cart can disable
+// blocked add-to-cart; placeStorefrontOrderAction re-checks the same gate.
+
+export type GroupBuyStorefrontGate = {
+  active: boolean; // a group buy is currently live
+  allowOnHand: boolean; // may on-hand (non-group-buy) products be added while active
+  coversAll: boolean; // a live run covers the whole catalog → no on-hand distinction
+  productIds: string[]; // products covered by a live run (meaningful only when !coversAll)
+};
+
+export const GROUP_BUY_GATE_OPEN: GroupBuyStorefrontGate = {
+  active: false,
+  allowOnHand: true,
+  coversAll: true,
+  productIds: [],
+};
+
+export function buildGroupBuyGate(
+  list: GroupBuy[],
+  caps: Pick<GroupBuyCapabilities, "scheduled" | "multipleActive" | "productAssignment">,
+  allowOnHand: boolean,
+  now: Date = new Date(),
+): GroupBuyStorefrontGate {
+  const live = liveGroupBuys(list, caps, now);
+  if (live.length === 0) return GROUP_BUY_GATE_OPEN;
+  // Without product assignment every live run covers the whole catalog, so there
+  // is no on-hand vs group-buy split to gate.
+  if (!caps.productAssignment) {
+    return { active: true, allowOnHand: true, coversAll: true, productIds: [] };
+  }
+  const ids = new Set<string>();
+  for (const gb of live) {
+    if (gb.productIds.length === 0) {
+      return { active: true, allowOnHand: true, coversAll: true, productIds: [] };
+    }
+    gb.productIds.forEach((id) => ids.add(id));
+  }
+  return { active: true, allowOnHand, coversAll: false, productIds: [...ids] };
+}
+
+/** True when `productId` is an on-hand (non-group-buy) product that the owner has
+ *  chosen to block while a group buy is live. Anything covered by a live run, or
+ *  when on-hand sales are allowed / no run is live, is never blocked. */
+export function isOnHandBlocked(
+  productId: string,
+  gate: GroupBuyStorefrontGate | undefined,
+): boolean {
+  if (!gate || !gate.active || gate.allowOnHand || gate.coversAll) return false;
+  return !gate.productIds.includes(productId);
+}
+
 // ── DB row mapping (group_buys table ↔ storefront type) ─────────────────────
 
 export type DbGroupBuyRow = {

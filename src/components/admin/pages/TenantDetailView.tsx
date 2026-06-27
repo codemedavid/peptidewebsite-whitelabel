@@ -254,6 +254,7 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
           <div className="card-body" style={{ display: "grid", gap: 6 }}>
             <ActionRow icon="External" label="Open storefront" sub={`${tenant.slug}.${ROOT}`} href={storefront} external />
             <ActionRow icon="Layers" label="Manage features" sub={`${tenant.enabledFeatures} modules active`} href={`/tenants/${tenant.slug}/features`} />
+            <ActionRow icon="Zap" label="Integrations" sub="PostHog analytics & email" href={`/tenants/${tenant.slug}/integrations`} />
             <ActionRow icon="Image" label="Edit branding" sub="Theme, colors, logo" href={`/tenants/${tenant.slug}/branding`} />
             <ActionRow icon="Settings" label="Settings" sub="Store, order numbers" href={`/tenants/${tenant.slug}/settings`} />
           </div>

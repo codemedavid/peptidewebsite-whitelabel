@@ -9,8 +9,8 @@ import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
-import { normalizeGroupBuySettings } from "@/lib/storefront/group-buy";
-import { resolveGroupBuyCaps } from "@/lib/storefront/group-buy-server";
+import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
+import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -98,6 +98,12 @@ export default async function HomePage() {
   brand.showAdminCheckout = smartCheckoutEntitled;
   if (!smartCheckoutEntitled) delete (brand as Record<string, unknown>).checkoutRules;
 
+  // Access Code gate: operator-grantable, default OFF for every tenant. When off
+  // the store-admin Access Code manager is hidden (none) and the gate is not
+  // enforced — the storefront layout re-checks this same entitlement before
+  // walling the store, so revoking it also reopens a currently-gated store.
+  brand.showAdminAccessCode = await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE);
+
   // Checkout admin fee: operator-revocable per tenant (admin → Features),
   // default ON. Revoking drops the fee line from checkout — orders.ts re-applies
   // the same gate at placement so a stale client can't reinstate it.
@@ -110,6 +116,22 @@ export default async function HomePage() {
   // defaults. The server actions re-check every capability on call.
   brand.groupBuyCaps = await resolveGroupBuyCaps(tenantId);
   brand.groupBuySettings = normalizeGroupBuySettings(config.groupBuySettings);
+
+  // Storefront group-buy gate: while a run is live, the owner can choose whether
+  // on-hand (non-group-buy) products stay buyable (branding.config.groupBuyAllowOnHand,
+  // default on). Resolve the gate server-side so the cart can disable blocked
+  // add-to-cart and placeStorefrontOrderAction can re-check it. Only the GB
+  // module needs the extra group-buys read; it's operator-grant, default OFF.
+  brand.groupBuyAllowOnHand = config.groupBuyAllowOnHand !== false;
+  if (brand.groupBuyCaps.enabled) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const groupBuys = await loadGroupBuys(tenantId, slug);
+    brand.groupBuyGate = buildGroupBuyGate(
+      groupBuys,
+      brand.groupBuyCaps,
+      brand.groupBuyAllowOnHand,
+    );
+  }
 
   // Products are the source of truth in the DB. Load the tenant's catalog
   // server-side (demo: file-backed store, seeded from the builtin fixtures) and

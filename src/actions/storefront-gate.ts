@@ -9,6 +9,11 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { saveGateSession, clearGateSession } from "@/lib/auth/storefront-gate";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
+
+/** The access-code gate is an operator-grantable feature, default OFF. */
+const UNAVAILABLE = "Access code isn't available for this store.";
 
 /**
  * Server actions for the per-tenant VISITOR access-code gate. Companion to the
@@ -49,6 +54,7 @@ export async function verifyAccessCodeAction(code: string): Promise<ActionResult
     const tenantId = await getTenantIdOrNull();
     if (!tenantId) return { error: "Could not resolve this store." };
     if (isDemoMode()) return { error: "Access gate isn't available in demo mode." };
+    if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: "invalid_code" };
 
     // ~10 attempts / 15 min / IP — blunts brute-forcing the code.
     const ip = await clientIp();
@@ -92,6 +98,7 @@ export async function getGateSettingsAction(): Promise<GateSettings | { error: s
     const tenantId = await requireStorefrontAdmin();
     if (!tenantId) return { error: "Not signed in to the store admin." };
     if (isDemoMode()) return { enabled: false, heading: "Enter access code", hasCode: false };
+    if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
     const [branding, tenant] = await Promise.all([
       prisma.branding.findUnique({ where: { tenantId }, select: { config: true } }),
@@ -111,6 +118,7 @@ export async function setGateSettingsAction(input: unknown): Promise<ActionResul
     const tenantId = await requireStorefrontAdmin();
     if (!tenantId) return { error: "Not signed in to the store admin." };
     if (isDemoMode()) return { error: "Access gate isn't available in demo mode." };
+    if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
     const o = (input ?? {}) as Record<string, unknown>;
     const enabled = o.enabled === true;
@@ -164,6 +172,7 @@ export async function rotateAccessCodeAction(
     const tenantId = await requireStorefrontAdmin();
     if (!tenantId) return { error: "Not signed in to the store admin." };
     if (isDemoMode()) return { error: "Access gate isn't available in demo mode." };
+    if (!(await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) return { error: UNAVAILABLE };
 
     const code = (newCode ?? "").trim();
     if (code.length < 6) return { error: "Access code must be at least 6 characters." };

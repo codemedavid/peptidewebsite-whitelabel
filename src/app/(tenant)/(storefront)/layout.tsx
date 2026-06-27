@@ -10,6 +10,7 @@ import { Monogram } from "@/components/Monogram";
 import { Gate } from "@/components/Gate";
 import { FEATURES } from "@/lib/features/catalog";
 import { isDemoMode } from "@/lib/demo/fixtures";
+import { hasFeature } from "@/lib/features/entitlements";
 import { getTenantGateState } from "@/lib/tenant/gate-state";
 import { isGateUnlocked } from "@/lib/auth/storefront-gate";
 import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
@@ -57,8 +58,10 @@ export default async function StorefrontLayout({
   // reaches an unauthenticated browser. The gate STATE is read fresh (see
   // getTenantGateState — uncached on purpose, it's a security boundary); the
   // cookie check is read-only (Server Components can't write cookies, so the
-  // cookie is minted by verifyAccessCodeAction). Skipped in demo mode.
-  if (!isDemoMode()) {
+  // cookie is minted by verifyAccessCodeAction). Skipped in demo mode, and gated
+  // on the platform entitlement (FEATURES.STORE_ACCESS_CODE) — operator-grantable,
+  // default OFF — so revoking it reopens a currently-gated store.
+  if (!isDemoMode() && (await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) {
     const gate = await getTenantGateState(tenantId);
     if (
       gate.enabled &&

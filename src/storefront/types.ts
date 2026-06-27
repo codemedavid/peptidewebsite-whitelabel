@@ -4,7 +4,11 @@
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
-import type { GroupBuyCapabilities, GroupBuySettings } from "@/lib/storefront/group-buy";
+import type {
+  GroupBuyCapabilities,
+  GroupBuySettings,
+  GroupBuyStorefrontGate,
+} from "@/lib/storefront/group-buy";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
@@ -321,6 +325,10 @@ export type Brand = {
   // entitlement (FEATURES.STORE_SMART_CHECKOUT, admin → Features). Operator-
   // grantable, so default OFF for every tenant.
   showAdminCheckout?: boolean;
+  // Store-admin Access Code manager. Derived server-side from the platform
+  // entitlement (FEATURES.STORE_ACCESS_CODE, admin → Features). Operator-
+  // grantable, so default OFF — hidden until the operator turns it on.
+  showAdminAccessCode?: boolean;
   // Store-admin Reseller Portal manager. Derived server-side from the platform
   // entitlement (FEATURES.STORE_RESELLER_PORTAL, admin → Features). In every
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
@@ -334,6 +342,14 @@ export type Brand = {
   // delivery ETA). Set by the platform operator on the tenant's Features page;
   // persisted in branding.config.groupBuySettings.
   groupBuySettings?: GroupBuySettings;
+  // While a group buy is live, may customers still add on-hand (non-group-buy)
+  // products to the cart? Store-admin choice, persisted in
+  // branding.config.groupBuyAllowOnHand. Absent = true (on-hand stays buyable).
+  groupBuyAllowOnHand?: boolean;
+  // The resolved storefront gate for the live run(s): which products are covered
+  // and whether on-hand products are blocked. Computed server-side in page.tsx
+  // so a stale client can't bypass it; absent = no live run / module off.
+  groupBuyGate?: GroupBuyStorefrontGate;
   // Group buy slice of the Sales Analytics view. Derived server-side from
   // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
   // meaningful while the Sales Analytics module itself is on). Absent/false =
