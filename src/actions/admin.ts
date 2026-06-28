@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { isValidPlanKey, isValidStatus } from "@/lib/admin/plan-options";
+import { validateWhatsapp } from "@/lib/admin/whatsapp";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
@@ -69,6 +70,35 @@ export async function setTenantPlanAction(
   revalidatePath(`/admin/tenants/${slug}`);
   revalidatePath(`/admin/tenants/${slug}/settings`);
   return { ok: true, status };
+}
+
+/**
+ * Connect (or update / clear) the tenant owner's WhatsApp number for one-tap
+ * follow-up from the Super Admin tenants console. The number is normalized to a
+ * bare dial string before persisting; an empty input clears it. Operator-only —
+ * tenants can't see or edit this.
+ */
+export async function setTenantWhatsappAction(slug: string, raw: string): Promise<AdminActionResult> {
+  await requirePlatformUser();
+  if (isDemoMode()) {
+    // Built-in demo tenants are immutable fixtures; report success without persisting.
+    return { ok: true };
+  }
+  const trimmed = raw.trim();
+  let digits: string | null = null;
+  if (trimmed) {
+    const v = validateWhatsapp(trimmed);
+    if ("error" in v) return { error: v.error };
+    digits = v.digits;
+  }
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  if (!tenant) return { error: "Tenant not found." };
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { ownerWhatsapp: digits } });
+  revalidateTag("admin:data");
+  revalidatePath("/admin");
+  revalidatePath("/admin/tenants");
+  revalidatePath(`/admin/tenants/${slug}`);
+  return { ok: true };
 }
 
 /** Permanently delete a tenant and all its data (cascades via FK). */

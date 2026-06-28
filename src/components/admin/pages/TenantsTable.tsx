@@ -7,6 +7,7 @@ import { Ic, StatusBadge, TenantAvatar } from "@/components/admin/shell/primitiv
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, formatPesosCompact } from "@/lib/admin/plans";
 import { suspendTenantAction, deleteTenantAction } from "@/actions/admin";
+import { buildWaLink } from "@/lib/admin/whatsapp";
 import type { AdminTenantRow } from "@/lib/admin/data";
 
 const STATUS_FILTERS = [
@@ -187,9 +188,23 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                     {t.createdAt}
                   </td>
                   <td onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-                    <button className="icon-btn" style={{ width: 24, height: 24 }} onClick={() => setMenu(menu === t.id ? null : t.id)}>
-                      <Ic.Dots />
-                    </button>
+                    <div className="row" style={{ gap: 2, justifyContent: "flex-end" }}>
+                      {t.ownerWhatsapp && (
+                        <a
+                          className="icon-btn"
+                          style={{ width: 24, height: 24, color: "var(--accent)" }}
+                          href={buildWaLink(t.ownerWhatsapp, `Hi ${t.name}, `)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Message on WhatsApp"
+                        >
+                          <Ic.Send style={{ width: 14, height: 14 }} />
+                        </a>
+                      )}
+                      <button className="icon-btn" style={{ width: 24, height: 24 }} onClick={() => setMenu(menu === t.id ? null : t.id)}>
+                        <Ic.Dots />
+                      </button>
+                    </div>
                     {menu === t.id && (
                       <>
                         <div style={{ position: "fixed", inset: 0, zIndex: 9 }} onClick={() => setMenu(null)} />

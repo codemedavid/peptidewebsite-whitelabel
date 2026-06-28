@@ -41,6 +41,12 @@ model Tenant {
   accessCodeHash    String?
   accessCodeVersion Int     @default(1)
 
+  // Super-admin quick-contact: the tenant owner's WhatsApp as a bare dial string
+  // (digits only, see lib/admin/whatsapp.ts). Operator-set, not tenant-editable.
+  // Null = not connected. Powers the one-tap "Message on WhatsApp" link in the
+  // platform tenants console.
+  ownerWhatsapp     String?
+
   domains           Domain[]
   groupBuys         GroupBuy[]
   integrations      TenantIntegration[]

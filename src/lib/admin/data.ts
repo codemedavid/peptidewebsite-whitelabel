@@ -37,6 +37,7 @@ export type AdminTenantRow = {
   logoUrl?: string;
   owner: string;
   email: string;
+  ownerWhatsapp?: string; // bare dial digits (see lib/admin/whatsapp.ts); undefined = not connected
   createdAt: string; // ISO date (YYYY-MM-DD)
   revenueCents: number;
   orders: number;
@@ -427,6 +428,7 @@ const _cachedAdminTenants = unstable_cache(
           slug: true,
           status: true,
           createdAt: true,
+          ownerWhatsapp: true,
           plan: { select: { key: true } },
           branding: { select: { themeId: true, logoUrl: true } },
           members: { where: { role: "owner" }, select: { email: true }, take: 1 },
@@ -461,6 +463,7 @@ const _cachedAdminTenants = unstable_cache(
           logoUrl: t.branding?.logoUrl ?? undefined,
           owner: nameFromEmail(email),
           email: email ?? "—",
+          ownerWhatsapp: t.ownerWhatsapp ?? undefined,
           createdAt: isoDate(t.createdAt),
           revenueCents: (revByTenant.get(t.id) ?? 0) + (sfRevByTenant.get(t.id) ?? 0),
           orders: t._count.orders + (sfCountByTenant.get(t.id) ?? 0),
@@ -675,6 +678,7 @@ const _cachedTenantDetail = unstable_cache(
         slug: true,
         status: true,
         createdAt: true,
+        ownerWhatsapp: true,
         plan: { select: { key: true } },
         branding: { select: { themeId: true } },
         members: { where: { role: "owner" }, select: { email: true }, take: 1 },
@@ -765,6 +769,7 @@ const _cachedTenantDetail = unstable_cache(
       themeId: t.branding?.themeId ?? "clinical-white",
       owner: nameFromEmail(email),
       email: email ?? "—",
+      ownerWhatsapp: t.ownerWhatsapp ?? undefined,
       createdAt: isoDate(t.createdAt),
       revenueCents: lifetime,
       orders: t._count.orders + sfOrders.length,

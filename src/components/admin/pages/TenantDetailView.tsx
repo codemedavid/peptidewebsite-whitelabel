@@ -7,8 +7,9 @@ import { Ic, StatusBadge, TenantAvatar, FeedText, tenantColor } from "@/componen
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, planLimits, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
-import { suspendTenantAction } from "@/actions/admin";
+import { suspendTenantAction, setTenantWhatsappAction } from "@/actions/admin";
 import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
+import { buildWaLink } from "@/lib/admin/whatsapp";
 import type { TenantDetail } from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
@@ -83,6 +84,17 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
             </div>
           </div>
           <div className="row">
+            {tenant.ownerWhatsapp && (
+              <a
+                className="btn btn-sm btn-accent"
+                href={buildWaLink(tenant.ownerWhatsapp, `Hi ${tenant.name}, `)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Message this tenant on WhatsApp"
+              >
+                <Ic.Send /> WhatsApp
+              </a>
+            )}
             <a className="btn btn-sm" href={storefront} target="_blank" rel="noreferrer">
               <Ic.External /> Login as tenant
             </a>
@@ -262,6 +274,8 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
 
         <AdminPasswordCard slug={tenant.slug} />
 
+        <TenantWhatsappCard slug={tenant.slug} tenantName={tenant.name} current={tenant.ownerWhatsapp} />
+
         <div className="card">
           <div className="card-head">
             <h3 className="card-title">Plan &amp; limits</h3>
@@ -357,6 +371,76 @@ function AdminPasswordCard({ slug }: { slug: string }) {
           style={{ justifySelf: "start" }}
         >
           {pending ? "Saving…" : "Set password"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TenantWhatsappCard({ slug, tenantName, current }: { slug: string; tenantName: string; current?: string }) {
+  const { showToast } = useAdminUI();
+  const [pending, startTransition] = useTransition();
+  const [num, setNum] = useState(current ?? "");
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+
+  const save = () => {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setTenantWhatsappAction(slug, num);
+      if ("error" in res) {
+        setErr(res.error);
+      } else {
+        showToast(num.trim() ? "WhatsApp number connected." : "WhatsApp number cleared.");
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h3 className="card-title">WhatsApp follow-up</h3>
+          <div className="card-sub">One-tap chat with the tenant owner. International format, digits only.</div>
+        </div>
+        {current && (
+          <a
+            className="btn btn-sm btn-accent"
+            href={buildWaLink(current, `Hi ${tenantName}, `)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Ic.Send /> Message
+          </a>
+        )}
+      </div>
+      <div className="card-body" style={{ display: "grid", gap: 8, padding: 16 }}>
+        <input
+          type="tel"
+          value={num}
+          onChange={(e) => setNum(e.target.value)}
+          placeholder="e.g. 639171234567"
+          inputMode="tel"
+          autoComplete="off"
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--bg-canvas)",
+            fontSize: 13,
+          }}
+        />
+        {err && <div style={{ fontSize: 12, color: "var(--danger)" }}>{err}</div>}
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={save}
+          disabled={pending || num.trim() === (current ?? "")}
+          style={{ justifySelf: "start" }}
+        >
+          {pending ? "Saving…" : current ? "Update number" : "Connect WhatsApp"}
         </button>
       </div>
     </div>
