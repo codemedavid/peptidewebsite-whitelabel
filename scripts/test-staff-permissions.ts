@@ -36,6 +36,14 @@ import {
   type SessionSubject,
 } from "../src/lib/auth/storefront-session-token";
 
+import {
+  FEATURES,
+  OPERATOR_GRANTABLE,
+  planFeatureSet,
+} from "../src/lib/features/catalog";
+import { isAdminViewVisible } from "../src/storefront/visibility";
+import type { Brand } from "../src/storefront/types";
+
 import { hashPassword } from "../src/lib/auth/password-hash";
 import { resolveStoreAdminLogin } from "../src/lib/auth/store-admin-login";
 import {
@@ -471,6 +479,53 @@ check("the configured owner username is reserved (case-insensitive)", () => {
 
 check("any other username is allowed", () => {
   assert.equal(isReservedUsername("maria", "shopkeeper"), false);
+});
+
+// ─────────────────── Staff Accounts feature gate (catalog) ───────────────────
+console.log("\nStaff Accounts feature gate (plan ceilings + operator-grantable)");
+
+const staffKey = FEATURES.STORE_STAFF_ACCOUNTS;
+
+check("Business (pro) and Automated (enterprise) include Staff Accounts by default", () => {
+  assert.ok(planFeatureSet("pro").has(staffKey), "pro ceiling missing staff");
+  assert.ok(planFeatureSet("enterprise").has(staffKey), "enterprise ceiling missing staff");
+});
+
+check("Starter does NOT include Staff Accounts in its ceiling", () => {
+  assert.equal(planFeatureSet("starter").has(staffKey), false);
+});
+
+check("legacy catalog plan aliases resolve the same (ecommerce→pro, growth→enterprise)", () => {
+  // catalog.ts aliases are basic→starter, ecommerce→pro, growth→enterprise.
+  // The Business/Automated display names map to pro/enterprise in plans.ts; the
+  // real plan keys reaching planFeatureSet are starter | pro | enterprise.
+  assert.ok(planFeatureSet("ecommerce").has(staffKey), "ecommerce alias = pro");
+  assert.ok(planFeatureSet("growth").has(staffKey), "growth alias = enterprise");
+  assert.equal(planFeatureSet("basic").has(staffKey), false, "basic alias = starter");
+});
+
+check("Staff Accounts is operator-grantable (so Starter can be switched on per tenant)", () => {
+  assert.ok(OPERATOR_GRANTABLE.has(staffKey));
+});
+
+// ─────────────────── Staff Accounts view visibility (storefront) ─────────────
+console.log("\nStaff Accounts view visibility (brand.showAdminStaff)");
+
+const brandWith = (v: boolean | undefined): Brand => ({ showAdminStaff: v }) as unknown as Brand;
+
+check("staff + staff-form views are hidden when showAdminStaff is unset (default OFF)", () => {
+  assert.equal(isAdminViewVisible(brandWith(undefined), "staff"), false);
+  assert.equal(isAdminViewVisible(brandWith(undefined), "staff-form"), false);
+});
+
+check("staff + staff-form views are hidden when showAdminStaff is false", () => {
+  assert.equal(isAdminViewVisible(brandWith(false), "staff"), false);
+  assert.equal(isAdminViewVisible(brandWith(false), "staff-form"), false);
+});
+
+check("staff + staff-form views are visible only when showAdminStaff is true", () => {
+  assert.equal(isAdminViewVisible(brandWith(true), "staff"), true);
+  assert.equal(isAdminViewVisible(brandWith(true), "staff-form"), true);
 });
 
 // ────────────────────────────────── summary ─────────────────────────────────

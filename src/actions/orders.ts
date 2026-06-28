@@ -62,6 +62,7 @@ import {
   promoLabel,
 } from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
+import { authoritativeItemPrice } from "@/storefront/checkout";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { buildOrderPlacedPayload, buildStatusChangedPayload } from "@/lib/analytics/events";
@@ -228,6 +229,23 @@ function checkoutRulesViolation(
  *  (same prices the order stores and every total surface sums). */
 function itemsSubtotal(items: OrderItem[]): number {
   return items.reduce((s, it) => s + it.price * it.qty, 0);
+}
+
+/**
+ * Re-price every line from the live catalog so the order is STORED — and every
+ * percentage fee/discount is charged — at the CURRENT price, never a stale or
+ * tampered client value. Mirrors the same server-authoritative re-derive the
+ * shipping fee, admin fee and discount already do. A line that matches no
+ * catalog product (or whose variation was removed) keeps its sent price — the
+ * same skip rule as the stock and Smart Checkout checks. Mutates in place; the
+ * order object is local to this request. Must run BEFORE the fee/discount stamps
+ * so they compute against the authoritative subtotal.
+ */
+function repriceItems(items: OrderItem[], catalog: Product[]): void {
+  for (const it of items) {
+    const live = authoritativeItemPrice(it, catalog);
+    if (live != null) it.price = live;
+  }
 }
 
 /**
@@ -714,6 +732,10 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       getDemoProducts(slug).map((dp) =>
         dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
       );
+    // Server-authoritative item prices: re-read each line from the live catalog
+    // so a price the owner changed (or a tampered client) can't be stored. Runs
+    // before the fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, demoProducts);
     const demoViolation = stockViolation(demoProducts, p.items);
     if (demoViolation) return { error: demoViolation };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
@@ -763,6 +785,21 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // storefront (which renders from the same cache) displayed.
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
+
+    // Load the live catalog FIRST (full rows — the stock guard, Smart Checkout
+    // rules and re-pricing below all key off it). Reading through the same
+    // tag-invalidated tenant cache the storefront renders from.
+    const rows = await withTenant(tenantId, (db) =>
+      db.product.findMany({ where: { status: { not: "archived" } } }),
+    );
+    const catalog = rows.map((r) =>
+      dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
+    );
+    // Server-authoritative item prices: re-read each line from the live catalog
+    // so a price the owner changed (or a tampered client) can't be stored. Runs
+    // before the fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, catalog);
+
     // Admin fee is operator-revocable per tenant (admin → Features); when the
     // tenant isn't entitled it's neither stamped nor validated, matching the
     // storefront which drops the line.
@@ -782,15 +819,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
-    // order the inventory can't cover. Full rows (not just id/name/stock)
-    // because the Smart Checkout rules below need categories, reseller tiers
-    // and names to classify the cart.
-    const rows = await withTenant(tenantId, (db) =>
-      db.product.findMany({ where: { status: { not: "archived" } } }),
-    );
-    const catalog = rows.map((r) =>
-      dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
-    );
+    // order the inventory can't cover.
     const violation = stockViolation(catalog, p.items);
     if (violation) return { error: violation };
 

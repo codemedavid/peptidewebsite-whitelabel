@@ -165,6 +165,60 @@ export function cartTotal(lines: CartLine[]): number {
   return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty) * l.qty, 0);
 }
 
+// ── Always-live pricing ───────────────────────────────────────────────────────
+// A cart entry is a SNAPSHOT taken at add-time (price, discount, reseller tier,
+// or — for a variation clone — the option's price). The catalog is the DB's
+// source of truth and can change while a customer shops, so before pricing the
+// cart we re-hydrate each entry from the CURRENT catalog. The customer is never
+// charged a price they can't see in the live store, and the server re-applies
+// the same resolution at placement (authoritativeItemPrice) so a stale or
+// tampered client can't undercut it.
+
+/**
+ * Re-hydrate a cart entry with the current catalog data, keyed by its underlying
+ * product id. For a variation entry the matching option's live price is re-read
+ * and re-cloned (composite id + label preserved, so cart grouping is stable).
+ * Falls back to the original snapshot when the product was archived/deleted or
+ * the chosen variation no longer exists — never crash, never re-price to the
+ * wrong option, never silently drop the line.
+ */
+export function resolveLiveProduct(entry: Product, catalog: Product[]): Product {
+  const live = catalog.find((p) => p.id === baseProductId(entry));
+  if (!live) return entry;
+  if (entry.variantName) {
+    const variation = (live.variations ?? []).find((v) => v.name === entry.variantName);
+    return variation ? makeVariationEntry(live, variation) : entry;
+  }
+  return live;
+}
+
+/** Grouped cart lines priced from the live catalog (see resolveLiveProduct). */
+export function liveCartLines(cart: Product[], catalog: Product[]): CartLine[] {
+  return cartLines(cart.map((entry) => resolveLiveProduct(entry, catalog)));
+}
+
+/**
+ * The SERVER-authoritative per-unit price for a stored order line, recomputed
+ * from the catalog exactly as the cart resolves it. The line is matched the same
+ * way as the stock/rules checks — by `productId` (the client stamps the base
+ * product id) else exact name. A variation's price comes straight from the live
+ * option (variations carry no discount/reseller). Returns null when the line
+ * matches no live product or its variation is gone, so the caller keeps the
+ * client-sent price rather than zeroing or mispricing an unknown line.
+ */
+export function authoritativeItemPrice(
+  item: { productId?: string; name: string; qty: number; variation?: string },
+  catalog: Product[],
+): number | null {
+  const live = catalog.find((p) => (item.productId ? p.id === item.productId : p.name === item.name));
+  if (!live) return null;
+  if (item.variation) {
+    const variation = (live.variations ?? []).find((v) => v.name === item.variation);
+    return variation ? Math.max(0, Number(variation.price) || 0) : null;
+  }
+  return unitPrice(live, item.qty);
+}
+
 /** The channels that are enabled AND have a destination set. */
 export function activeChannels(brand: Brand): ContactChannel[] {
   return (brand.contactChannels ?? []).filter((c) => c.enabled && c.destination.trim());

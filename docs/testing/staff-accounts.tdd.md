@@ -61,6 +61,17 @@ The security-critical decision logic is extracted into pure modules and unit-tes
 - **`npm run db:push` REQUIRED before runtime use** — the `storefront_staff` table must be created on the live DB. Owner login was made independent of this table (it short-circuits before querying staff), but staff create/list/login need it. Until pushed, staff features return DB errors by design (drift, per project workflow).
 - **Manual/E2E** (owner creates staff → staff logs in → sees only granted menu → suspended staff locked out → direct ungated action rejected) pending a migrated tenant.
 
+## Feature gating — `FEATURES.STORE_STAFF_ACCOUNTS` (added 2026-06-28)
+
+Staff Accounts is no longer open to every tenant. It is now an entitlement:
+
+- **Catalog** (`src/lib/features/catalog.ts`): new key `storefront.staff_accounts`, added to the **PRO** ceiling (so Business + Automated/`enterprise` are **default ON**), **not** in STARTER, and also in **`OPERATOR_GRANTABLE`** so the operator can switch it on for an individual Starter tenant from admin → Features. The panel surfaces it automatically (derived from `ALL_FEATURES` + `FEATURE_META` + `OPERATOR_GRANTABLE`).
+- **Storefront resolution** (`(storefront)/page.tsx`): `brand.showAdminStaff = await hasFeature(tenantId, STORE_STAFF_ACCOUNTS)`.
+- **View visibility** (`storefront/visibility.ts`): `staff` **and** `staff-form` gated on `brand.showAdminStaff === true` — `staff-form` included so a deep-link can't bypass the hidden menu (AdminPage's `activeView` guard runs `isAdminViewVisible`).
+- **Server enforcement** (`actions/storefront-staff.ts`, `staffFeatureOn`): re-checks the entitlement in all 5 owner-only CRUD actions (returns `{ error: FEATURE_OFF }`), **staff sign-in** (off → generic invalid; owner login unaffected), and **session resolution** (`getStorefrontAdminSessionAction` → `{ kind: "none" }` for a staff actor once revoked, so a downgrade locks staff out immediately).
+
+Gate coverage added to `npm run test:staff` (now **62/0**): pro/enterprise ceilings include the key, starter does not, catalog aliases (`ecommerce`→pro, `growth`→enterprise) resolve, key is operator-grantable, and `isAdminViewVisible` returns false for unset/false and true only when `showAdminStaff === true`.
+
 ## Merge evidence (RED/GREEN summary for squash)
 
 RED was observed for each pure module via "Cannot find module" before implementation; GREEN is `npm run test:staff` = 55/0. Wiring/UI GREEN is `npx tsc --noEmit` = 0 errors and a passing `npm run build`. Checkpoint commits: `8da2597`, `6eb2b22`, `16132d9`, `ab1e554`, `3b781a8`, `c7db3d6`, + UI/robustness commits on `feat/staff-accounts`.

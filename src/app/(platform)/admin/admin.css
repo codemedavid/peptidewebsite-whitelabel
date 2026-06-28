@@ -825,13 +825,21 @@
 
 /* group card */
 .sa .ftr-gcard { background: var(--bg); border: 1px solid var(--border-c); border-radius: 14px; box-shadow: var(--shadow-sm); margin-bottom: 18px; overflow: hidden; }
-.sa .ftr-ghead { display: flex; align-items: center; gap: 13px; padding: 15px 20px; border-bottom: 1px solid var(--border-c); }
+.sa .ftr-ghead { display: flex; align-items: center; border-bottom: 1px solid var(--border-c); padding-right: 20px; }
+/* disclosure trigger — the clickable left portion of the module header */
+.sa .ftr-gtoggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 13px; padding: 15px 20px; background: none; border: 0; cursor: pointer; font: inherit; color: inherit; text-align: left; border-radius: 14px 0 0 0; transition: background 0.12s; }
+.sa .ftr-gtoggle:hover { background: var(--bg-subtle); }
+.sa .ftr-gtoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sa .ftr-gchevron { margin-left: auto; flex: 0 0 auto; color: var(--ink-400); transition: transform 0.2s ease; }
+.sa .ftr-gchevron[data-open="true"] { transform: rotate(180deg); }
+/* collapsed module: drop the header rule so closed cards read as a clean list */
+.sa .ftr-ghead:has(.ftr-gtoggle[aria-expanded="false"]) { border-bottom: 0; }
 .sa .ftr-gicon { width: 30px; height: 30px; border-radius: 8px; background: var(--bg-active); color: var(--ink-700); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .sa .ftr-gtitle { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-900); margin: 0; }
 .sa .ftr-count-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--ink-700); background: var(--bg-hover); padding: 3px 9px 3px 8px; border-radius: 7px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sa .ftr-mini { width: 30px; height: 5px; border-radius: 99px; background: var(--bg-active); overflow: hidden; }
 .sa .ftr-mini i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.25s; }
-.sa .ftr-enable-all { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--ink-400); white-space: nowrap; }
+.sa .ftr-enable-all { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--ink-400); white-space: nowrap; padding-left: 13px; }
 
 /* feature row */
 .sa .ftr-row { display: flex; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid var(--border-c); transition: background 0.12s; }

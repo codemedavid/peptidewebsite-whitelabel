@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PlansBillingPage() {
   await requirePlatformUser();
-  const [{ rows, mrrCents, arrCents, activeCount }, config] = await Promise.all([
+  const [{ rows, revenueCents, activeCount }, config] = await Promise.all([
     getPlanDistribution(),
     getPlanConfig(),
   ]);
@@ -16,8 +16,7 @@ export default async function PlansBillingPage() {
     <PlansManager
       initial={config}
       rows={rows}
-      mrrCents={mrrCents}
-      arrCents={arrCents}
+      revenueCents={revenueCents}
       activeCount={activeCount}
     />
   );

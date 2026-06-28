@@ -104,6 +104,12 @@ export default async function HomePage() {
   // walling the store, so revoking it also reopens a currently-gated store.
   brand.showAdminAccessCode = await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE);
 
+  // Staff Accounts manager: Business/Automated plan feature (default ON there),
+  // operator-grantable on Starter. When off the store-admin Staff Accounts view
+  // is hidden (visibility.ts) and the staff server actions / staff sign-in are
+  // blocked (storefront-staff.ts re-checks this same entitlement).
+  brand.showAdminStaff = await hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
+
   // Checkout admin fee: operator-revocable per tenant (admin → Features),
   // default ON. Revoking drops the fee line from checkout — orders.ts re-applies
   // the same gate at placement so a stale client can't reinstate it.

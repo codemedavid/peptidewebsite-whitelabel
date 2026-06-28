@@ -16,6 +16,7 @@ import {
   normalizePlanConfig,
   type PlanConfig,
 } from "@/lib/platform/plan-config";
+import { syncPlanCatalog } from "@/lib/features/catalog-sync";
 
 export type PlanConfigResult = { ok: true } | { error: string };
 
@@ -60,6 +61,29 @@ export async function savePlanConfigAction(input: PlanConfig): Promise<PlanConfi
     });
   } catch {
     return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
+  }
+
+  bust();
+  return { ok: true };
+}
+
+/**
+ * Reconcile the DB plan→feature ceiling (plan_features) to catalog.ts so new
+ * tenants on a plan get exactly that plan's features. Demo mode resolves from
+ * the hardcoded catalog, so it's already in sync — no-op there.
+ */
+export async function syncPlanFeaturesAction(): Promise<PlanConfigResult> {
+  await requirePlatformUser();
+
+  if (isDemoMode()) {
+    bust();
+    return { ok: true };
+  }
+
+  try {
+    await syncPlanCatalog(prisma);
+  } catch {
+    return { error: "Could not sync — has the schema been pushed? (npm run db:push)" };
   }
 
   bust();

@@ -14,6 +14,7 @@ import {
 } from "@/lib/demo/fixtures";
 import { planMeta } from "@/lib/admin/plans";
 import { planConfigPriceCents } from "@/lib/platform/plan-config";
+import { aggregatePlanDistribution, type PlanDistribution } from "@/lib/admin/plan-distribution";
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
@@ -851,26 +852,14 @@ export async function getFeatureModules(): Promise<{ totalTenants: number; group
   return { totalTenants: planKeys.length, groups };
 }
 
-export type PlanRow = { key: string; label: string; priceCents: number; count: number; mrrCents: number };
+export type { PlanRow, PlanDistribution } from "@/lib/admin/plan-distribution";
 
-/** Plan distribution + MRR/ARR for the Plans & Billing page. */
-export async function getPlanDistribution(): Promise<{ rows: PlanRow[]; mrrCents: number; arrCents: number; activeCount: number }> {
+/** Plan distribution + one-time revenue collected for the Plans & Billing page.
+ *  The platform sells a one-time website build, not a subscription — there is no
+ *  recurring/annualized figure here (see lib/admin/plan-distribution.ts). */
+export async function getPlanDistribution(): Promise<PlanDistribution> {
   const [rows, planConfig] = await Promise.all([listAdminTenants(), getPlanConfig()]);
-  const byKey = new Map<string, { count: number; mrrCents: number }>();
-  for (const r of rows) {
-    const pm = planMeta(r.planKey);
-    const cur = byKey.get(pm.key) ?? { count: 0, mrrCents: 0 };
-    cur.count += 1;
-    if (r.status === "active") cur.mrrCents += planConfigPriceCents(planConfig, pm.key);
-    byKey.set(pm.key, cur);
-  }
-  const planRows: PlanRow[] = ["starter", "pro", "enterprise"].map((key) => {
-    const pm = planMeta(key);
-    const agg = byKey.get(key) ?? { count: 0, mrrCents: 0 };
-    return { key, label: pm.label, priceCents: planConfigPriceCents(planConfig, key), count: agg.count, mrrCents: agg.mrrCents };
-  });
-  const mrrCents = planRows.reduce((s, r) => s + r.mrrCents, 0);
-  return { rows: planRows, mrrCents, arrCents: mrrCents * 12, activeCount: rows.filter((r) => r.status === "active").length };
+  return aggregatePlanDistribution(rows, planConfig);
 }
 
 /** Recent platform-wide Events as an audit timeline (empty-safe). */

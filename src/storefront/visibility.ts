@@ -45,6 +45,15 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Group Buy MANAGEMENT (the "Group Buys" manager view). Server-derived from
   // the groupbuy.module entitlement via brand.groupBuyCaps. Default OFF.
   groupbuys: (b) => b.groupBuyCaps?.enabled === true,
+  // Staff Accounts manager (+ its staff-form editor sub-view). Server-derived
+  // from the platform Features toggle (FEATURES.STORE_STAFF_ACCOUNTS) into
+  // brand.showAdminStaff. ON for Business/Automated, operator-grantable on
+  // Starter. Both view ids are gated so a #staff-form deep-link can't bypass the
+  // hidden menu (AdminPage's activeView guard runs isAdminViewVisible). The view
+  // is additionally owner-only (the staff quick-action is owner-gated and the
+  // server actions enforce requireStoreOwner).
+  staff: (b) => b.showAdminStaff === true,
+  "staff-form": (b) => b.showAdminStaff === true,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

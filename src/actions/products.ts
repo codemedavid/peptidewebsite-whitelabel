@@ -9,7 +9,8 @@
 // the same operations round-trip against the file-backed demo store instead.
 
 import { Prisma } from "@prisma/client";
-import { getTenantSlug } from "@/lib/tenant/headers";
+import { getTenantSlug, getTenantIdOrNull } from "@/lib/tenant/headers";
+import { getTenantContext } from "@/lib/tenant/context";
 import { requireStaffPermission, requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
@@ -130,6 +131,39 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
   }
 
   try {
+    const rows = await withTenant(tenantId, (db) =>
+      db.product.findMany({
+        where: { status: { not: "archived" } },
+        orderBy: { createdAt: "asc" },
+      }),
+    );
+    return { ok: true, products: rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't load products." };
+  }
+}
+
+/**
+ * The tenant's PUBLIC storefront catalog (archived excluded) — the exact set the
+ * storefront page server-loads on first paint, exposed as an action so a
+ * long-lived storefront session can refresh prices without a full reload. No
+ * admin session required: it returns only what any visitor already sees, scoped
+ * to the request's tenant (resolved from the host, never the client). The
+ * display currency mirrors the storefront page (branding.config.currency).
+ */
+export async function getStorefrontProductsAction(): Promise<ListProductsResult> {
+  const tenantId = await getTenantIdOrNull();
+  if (!tenantId) return { error: "Store not found." };
+
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    return { ok: true, products: demoEffectiveProducts(slug, "₱") };
+  }
+
+  try {
+    const { branding } = await getTenantContext(tenantId);
+    const config = (branding?.config ?? {}) as Record<string, unknown>;
+    const symbol = String(config.currency ?? "") || "₱";
     const rows = await withTenant(tenantId, (db) =>
       db.product.findMany({
         where: { status: { not: "archived" } },

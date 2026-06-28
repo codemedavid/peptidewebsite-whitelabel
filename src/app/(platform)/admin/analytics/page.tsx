@@ -44,7 +44,7 @@ export default async function AnalyticsPage() {
   const max = Math.max(...data.tenantGrowth, 1);
 
   const kpis = [
-    { label: "Monthly revenue", value: "$" + Math.round(k.monthlyRevenueCents / 100 / 1000) + "k", icon: DollarSign },
+    { label: "Total revenue", value: "₱" + Math.round(k.monthlyRevenueCents / 100 / 1000) + "k", icon: DollarSign },
     { label: "Total orders", value: k.totalOrders.toLocaleString(), icon: Box },
     { label: "Total tenants", value: k.totalTenants.toLocaleString(), icon: Building2 },
     { label: "Total customers", value: k.totalCustomers.toLocaleString(), icon: Users },

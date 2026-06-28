@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Check,
+  ChevronDown,
   ExternalLink,
   Globe,
   Layers,
@@ -22,6 +23,12 @@ import {
   type FeatureGroup,
   type FeatureKey,
 } from "@/lib/features/catalog";
+import {
+  groupBodyId,
+  isGroupOpen,
+  toggleGroupOpen,
+  type OpenGroups,
+} from "@/components/admin/feature-disclosure";
 import { saveFeaturesAction } from "@/actions/onboarding";
 
 // `*.lvh.me` resolves in every browser (incl. Safari); `*.localhost` doesn't.
@@ -94,6 +101,9 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
   );
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [filter, setFilter] = useState<Filter>("all");
+  // Modules collapse by default; the All/On/Off filter force-opens them so a
+  // collapsed group never hides a matching row (see feature-disclosure.ts).
+  const [openGroups, setOpenGroups] = useState<OpenGroups>({});
 
   // Autosave: every toggle schedules a debounced full-map save; the generation
   // counter keeps a slow stale response from overwriting a newer one's status.
@@ -128,6 +138,10 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
   function toggle(key: string) {
     setState((s) => ({ ...s, [key]: !s[key] }));
     scheduleSave();
+  }
+
+  function toggleOpen(group: FeatureGroup) {
+    setOpenGroups((g) => toggleGroupOpen(g, group));
   }
 
   function setGroup(list: FeatureItem[], value: boolean) {
@@ -243,17 +257,28 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
         const allOn = groupUnlocked.length > 0 && groupOn === groupUnlocked.length;
         const visible = list.filter(matches);
         if (visible.length === 0) return null;
+        const open = isGroupOpen({ group, openGroups, filter });
+        const bodyId = groupBodyId(group);
         return (
           <section key={group} className="ftr-gcard">
             <header className="ftr-ghead">
-              <span className="ftr-gicon">{GROUP_ICONS[group]}</span>
-              <h2 className="ftr-gtitle">{group}</h2>
-              <span className="ftr-count-pill">
-                <span className="ftr-mini" aria-hidden>
-                  <i style={{ width: groupUnlocked.length ? `${(groupOn / groupUnlocked.length) * 100}%` : 0 }} />
+              <button
+                type="button"
+                className="ftr-gtoggle"
+                aria-expanded={open}
+                aria-controls={bodyId}
+                onClick={() => toggleOpen(group)}
+              >
+                <span className="ftr-gicon">{GROUP_ICONS[group]}</span>
+                <h2 className="ftr-gtitle">{group}</h2>
+                <span className="ftr-count-pill">
+                  <span className="ftr-mini" aria-hidden>
+                    <i style={{ width: groupUnlocked.length ? `${(groupOn / groupUnlocked.length) * 100}%` : 0 }} />
+                  </span>
+                  {groupOn} of {groupUnlocked.length} on
                 </span>
-                {groupOn} of {groupUnlocked.length} on
-              </span>
+                <ChevronDown className="ftr-gchevron" data-open={open} size={18} aria-hidden />
+              </button>
               {groupUnlocked.length > 0 && (
                 <span className="ftr-enable-all">
                   Enable all
@@ -266,6 +291,7 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
                 </span>
               )}
             </header>
+            <div id={bodyId} role="region" aria-label={group} hidden={!open} className="ftr-gbody">
             {visible.map((item) => {
               const on = !item.lockedByPlan && state[item.key];
               return (
@@ -290,6 +316,7 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
                 </div>
               );
             })}
+            </div>
           </section>
         );
       })}

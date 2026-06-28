@@ -10,6 +10,8 @@ import { setStorefrontAdminCookie } from "@/lib/auth/storefront-admin";
 import { getStorefrontAdminActor, requireStoreOwner } from "@/lib/auth/staff-guard";
 import { resolveStoreAdminLogin } from "@/lib/auth/store-admin-login";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
 import { sanitizePermissions } from "@/storefront/admin/staff-permissions";
 import { parseStaffCreate, parseStaffUpdate, isReservedUsername } from "@/lib/storefront/staff-input";
 
@@ -30,6 +32,17 @@ export type ActionResult = { ok: true } | { error: string };
 const FIFTEEN_MIN = 15 * 60 * 1000;
 const DEMO_UNAVAILABLE = "Staff accounts aren't available in demo mode.";
 const OWNER_ONLY = "Only the store owner can manage staff.";
+const FEATURE_OFF = "Staff Accounts isn't enabled for this store.";
+
+/**
+ * Is the Staff Accounts feature entitled for this tenant? Owner-only management,
+ * staff sign-in and staff session resolution all re-check this so revoking the
+ * feature (or a Starter tenant never granted it) makes staff inert — the same
+ * downgrade-safety pattern the storefront page uses to derive brand.showAdminStaff.
+ */
+async function staffFeatureOn(tenantId: string): Promise<boolean> {
+  return hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
+}
 
 const DEFAULT_OWNER_USERNAME = "owner";
 const DEFAULT_OWNER_PASSWORD = "admin";
@@ -101,6 +114,12 @@ export async function signInStoreAdminAction(
     return { error: "Incorrect username or password." };
   }
 
+  // Staff sign-in requires the Staff Accounts feature; owner login never does.
+  // Use the generic invalid message so the gate doesn't leak the feature state.
+  if (result.kind === "staff" && !(await staffFeatureOn(tenantId))) {
+    return { error: "Incorrect username or password." };
+  }
+
   const subject =
     result.kind === "owner" ? ({ kind: "owner" } as const) : ({ kind: "staff", id: result.id } as const);
   await setStorefrontAdminCookie(tenantId, subject);
@@ -124,6 +143,10 @@ export async function getStorefrontAdminSessionAction(): Promise<AdminSessionInf
     const config = await readConfig(ctx.tenantId);
     return { kind: "owner", displayName: resolveOwnerCredential(config).username };
   }
+
+  // Staff actor but the feature was revoked (or never granted) → treat as signed
+  // out, so the admin menu/views collapse to "none" the moment entitlement drops.
+  if (!(await staffFeatureOn(ctx.tenantId))) return { kind: "none" };
 
   const staff = isDemoMode()
     ? null
@@ -154,6 +177,7 @@ export type StaffListItem = {
 export async function listStaffAction(): Promise<{ ok: true; items: StaffListItem[] } | { error: string }> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: OWNER_ONLY };
+  if (!(await staffFeatureOn(tenantId))) return { error: FEATURE_OFF };
   if (isDemoMode()) return { ok: true, items: [] };
 
   const rows = await prisma.storefrontStaff.findMany({
@@ -187,6 +211,7 @@ export async function listStaffAction(): Promise<{ ok: true; items: StaffListIte
 export async function createStaffAction(input: unknown): Promise<ActionResult> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: OWNER_ONLY };
+  if (!(await staffFeatureOn(tenantId))) return { error: FEATURE_OFF };
   if (isDemoMode()) return { error: DEMO_UNAVAILABLE };
 
   const parsed = parseStaffCreate(input);
@@ -229,6 +254,7 @@ export async function createStaffAction(input: unknown): Promise<ActionResult> {
 export async function updateStaffAction(id: string, input: unknown): Promise<ActionResult> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: OWNER_ONLY };
+  if (!(await staffFeatureOn(tenantId))) return { error: FEATURE_OFF };
   if (isDemoMode()) return { error: DEMO_UNAVAILABLE };
 
   const staffId = String(id ?? "").trim();
@@ -273,6 +299,7 @@ export async function updateStaffAction(id: string, input: unknown): Promise<Act
 export async function setStaffStatusAction(id: string, status: string): Promise<ActionResult> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: OWNER_ONLY };
+  if (!(await staffFeatureOn(tenantId))) return { error: FEATURE_OFF };
   if (isDemoMode()) return { error: DEMO_UNAVAILABLE };
 
   const staffId = String(id ?? "").trim();
@@ -292,6 +319,7 @@ export async function setStaffStatusAction(id: string, status: string): Promise<
 export async function deleteStaffAction(id: string): Promise<ActionResult> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: OWNER_ONLY };
+  if (!(await staffFeatureOn(tenantId))) return { error: FEATURE_OFF };
   if (isDemoMode()) return { error: DEMO_UNAVAILABLE };
 
   const staffId = String(id ?? "").trim();

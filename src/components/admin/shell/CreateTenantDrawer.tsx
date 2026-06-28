@@ -225,7 +225,7 @@ export function CreateTenantDrawer({
                     <div className="plan-name">{p.name}</div>
                     <div className="plan-price">
                       {formatPesos(p.priceCents)}
-                      <small>/mo</small>
+                      <small>one-time</small>
                     </div>
                     <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 6, lineHeight: 1.4 }}>{p.blurb}</div>
                     <div className="plan-feats">
@@ -323,7 +323,7 @@ export function CreateTenantDrawer({
                       <span className="row" style={{ gap: 6 }}>
                         <span className="badge badge-accent">{planMeta(plan).label}</span>
                         <span className="muted">
-                          {formatPesos(cards.find((c) => c.key === plan)?.priceCents ?? planMeta(plan).priceCents)}/mo
+                          {formatPesos(cards.find((c) => c.key === plan)?.priceCents ?? planMeta(plan).priceCents)} · one-time
                         </span>
                       </span>
                     }

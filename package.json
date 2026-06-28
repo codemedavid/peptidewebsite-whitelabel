@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:owner": "tsx prisma/seed-owner.ts",
+    "db:sync-features": "tsx scripts/sync-plan-features.ts",
     "db:roles": "prisma db execute --file prisma/roles.sql --schema prisma/schema.prisma",
     "db:rls": "prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma",
     "db:rls:check": "tsx prisma/rls-check.ts",
@@ -26,7 +27,11 @@
     "test:plan-status": "tsx scripts/test-plan-options.ts",
     "test:staff": "tsx scripts/test-staff-permissions.ts",
     "test:cart": "tsx scripts/test-cart-pricing.ts",
-    "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts"
+    "test:plan-scope": "tsx scripts/test-plan-scope.ts",
+    "test:plan-distribution": "tsx scripts/test-plan-distribution.ts",
+    "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts",
+    "test:feature-disclosure": "tsx scripts/test-feature-disclosure.ts",
+    "test:order-detail": "tsx scripts/test-order-detail.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

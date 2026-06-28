@@ -111,7 +111,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           {[
             { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
             { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
-            { label: "MRR", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.planPriceCents), sub: `${pm.label} plan` },
+            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.planPriceCents), sub: `${pm.label} · one-time` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
             <div key={i} style={{ padding: "14px 24px", borderRight: i < 3 ? "1px solid var(--border-soft)" : "none" }}>
@@ -717,7 +717,7 @@ function BillingPanel({ tenant }: { tenant: TenantDetail }) {
               <div>
                 <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em" }}>{pm.label}</div>
                 <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                  {tenant.status === "trial" ? "Free trial · 14 days" : `${formatPesos(priceCents)}/mo · billed monthly`}
+                  {tenant.status === "trial" ? "Free trial · 14 days" : `${formatPesos(priceCents)} · one-time`}
                 </div>
               </div>
               <Link className="btn" href={`/tenants/${tenant.slug}/settings`}>

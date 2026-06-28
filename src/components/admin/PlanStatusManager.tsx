@@ -4,7 +4,7 @@
 // tenant Settings page (the "Change plan" links across the admin land here).
 // A self-contained card with its own save flow, mirroring DomainManager:
 // two selects (plan, status) → setTenantPlanAction → router.refresh() so the
-// tenant header badge, MRR tile, and plan distribution reflect the change.
+// tenant header badge, plan-fee tile, and plan distribution reflect the change.
 //
 // Changing the plan re-gates the tenant's features (storefront entitlements are
 // derived from the plan's feature set); changing status to Suspended takes the

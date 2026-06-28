@@ -4,16 +4,18 @@
 // Plans & Billing page. Edits are local until "Save changes"; saving persists
 // via savePlanConfigAction (demo file / platform_settings row) and flows to the
 // marketing pricing section, the get-started wizard, the create-tenant drawer,
-// and the MRR/ARR math. Plan names stay fixed — they're identity keys.
+// and the one-time revenue totals. Plan names stay fixed — they're identity keys.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
-import { savePlanConfigAction } from "@/actions/admin-plan-config";
+import { savePlanConfigAction, syncPlanFeaturesAction } from "@/actions/admin-plan-config";
 import { defaultPlanConfig, type PlanConfig } from "@/lib/platform/plan-config";
 import { formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import type { PlanRow } from "@/lib/admin/data";
+import { getPlanScope, bulletsFromScope } from "@/lib/features/plan-scope";
+import { PlanScopePanel } from "@/components/admin/pages/PlanScopePanel";
 
 const money = formatPesosCompact;
 const MAX_FEATS = 12;
@@ -57,19 +59,18 @@ function draftDiscountCents(d: PlanDraft): number {
 export function PlansManager({
   initial,
   rows,
-  mrrCents,
-  arrCents,
+  revenueCents,
   activeCount,
 }: {
   initial: PlanConfig;
   rows: PlanRow[];
-  mrrCents: number;
-  arrCents: number;
+  revenueCents: number;
   activeCount: number;
 }) {
   const router = useRouter();
   const { showToast } = useAdminUI();
   const [pending, startTransition] = useTransition();
+  const [syncing, startSync] = useTransition();
   const [plans, setPlans] = useState<PlanDraft[]>(() => toDrafts(initial));
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +120,29 @@ export function PlansManager({
       ),
     );
     setDirty(true);
+  }
+
+  // Fill the marketing bullets from the plan's real functional scope (honest by
+  // construction — only default-active features). One-way helper: nothing saves
+  // until the operator clicks "Save changes".
+  function generateBullets(key: string) {
+    const plan = plans.find((p) => p.key === key);
+    const hasCopy = plan?.feats.some((f) => f.text.trim());
+    if (hasCopy && !window.confirm("Replace this plan's feature bullets with ones generated from its functional scope?")) {
+      return;
+    }
+    const bullets = bulletsFromScope(key).map((text) => ({ id: ++nextId, text }));
+    setPlans((ps) => ps.map((p) => (p.key === key ? { ...p, feats: bullets } : p)));
+    setDirty(true);
+  }
+
+  // Reconcile the DB plan→feature ceiling to the catalog so new tenants on each
+  // plan light up the right features. Independent of the pricing/bullets save.
+  function syncFeatures() {
+    startSync(async () => {
+      const res = await syncPlanFeaturesAction();
+      showToast("error" in res ? res.error : "Plan features synced to the catalog.");
+    });
   }
 
   function reset() {
@@ -171,15 +195,14 @@ export function PlansManager({
       } else {
         setDirty(false);
         showToast("Plan pricing saved.");
-        router.refresh(); // re-pull MRR/ARR + distribution with the new prices
+        router.refresh(); // re-pull revenue + distribution with the new prices
       }
     });
   }
 
   const kpis = [
-    { label: "MRR", value: money(mrrCents), icon: Ic.DollarSign },
-    { label: "ARR", value: money(arrCents), icon: Ic.TrendUp },
-    { label: "Active subscriptions", value: activeCount.toLocaleString(), icon: Ic.Card },
+    { label: "Total revenue", value: money(revenueCents), icon: Ic.DollarSign },
+    { label: "Active sites", value: activeCount.toLocaleString(), icon: Ic.Card },
   ];
 
   return (
@@ -188,12 +211,20 @@ export function PlansManager({
         <div>
           <h1 className="page-title">Plans &amp; Billing</h1>
           <p className="page-sub">
-            Subscription mix and recurring revenue across {totalTenants} tenants. Prices and
+            Plan mix and one-time revenue across {totalTenants} tenants. Prices and
             features here drive the marketing pricing, the get-started wizard, and new-tenant billing.
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
           {dirty && <span className="badge badge-warn">Unsaved changes</span>}
+          <button
+            className="btn"
+            onClick={syncFeatures}
+            disabled={syncing}
+            title="Reconcile each plan's feature ceiling in the database to the catalog"
+          >
+            <Ic.Refresh /> {syncing ? "Syncing…" : "Sync plan features"}
+          </button>
           <button className="btn" onClick={reset} disabled={pending}>
             Reset to defaults
           </button>
@@ -212,7 +243,7 @@ export function PlansManager({
         </div>
       )}
 
-      <div className="grid-3 mb-4">
+      <div className="grid-2-eq mb-4">
         {kpis.map((k) => (
           <div key={k.label} className="kpi">
             <div className="kpi-label">
@@ -257,11 +288,11 @@ export function PlansManager({
                   ) : (
                     cents > 0 ? formatPesos(cents) : "₱—"
                   )}
-                  <small>/mo</small>
+                  <small>one-time</small>
                 </div>
 
                 <div style={{ marginTop: 10 }}>
-                  <label className="field-label">Monthly price (₱)</label>
+                  <label className="field-label">Price (₱)</label>
                   <input
                     className="input"
                     style={{ width: "100%", marginTop: 4 }}
@@ -300,7 +331,7 @@ export function PlansManager({
                 <div className="divider" />
                 <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
                   <span className="muted" style={{ fontSize: 12.5 }}>
-                    {row?.count ?? 0} tenants · {money(row?.mrrCents ?? 0)} MRR
+                    {row?.count ?? 0} tenants · {money(row?.revenueCents ?? 0)} collected
                   </span>
                   <span className="tnum muted" style={{ fontSize: 12.5 }}>
                     {share}%
@@ -312,13 +343,22 @@ export function PlansManager({
 
                 <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
                   <label className="field-label">Features</label>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => addFeat(p.key)}
-                    disabled={p.feats.length >= MAX_FEATS}
-                  >
-                    <Ic.Plus /> Add
-                  </button>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => generateBullets(p.key)}
+                      title="Fill bullets from this plan's functional scope"
+                    >
+                      <Ic.Wand /> Generate
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => addFeat(p.key)}
+                      disabled={p.feats.length >= MAX_FEATS}
+                    >
+                      <Ic.Plus /> Add
+                    </button>
+                  </div>
                 </div>
                 <div className="col" style={{ gap: 6 }}>
                   {p.feats.map((f, i) => (
@@ -357,6 +397,8 @@ export function PlansManager({
                     </div>
                   ))}
                 </div>
+
+                <PlanScopePanel scope={getPlanScope(p.key)} />
               </div>
             </div>
           );

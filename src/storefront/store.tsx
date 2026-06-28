@@ -44,6 +44,7 @@ import {
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { baseProductId, makeVariationEntry } from "./checkout";
+import { getStorefrontProductsAction } from "@/actions/products";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
   Brand,
@@ -77,6 +78,10 @@ export type Store = {
 
   products: Product[];
   setProducts: (next: Updater<Product[]>) => void;
+  /** Re-fetch the catalog from the DB without a full reload, so a price the
+   *  owner changes mid-session shows up in the storefront and the cart (which
+   *  prices from this list). Fire-and-forget; safe to call on focus/open. */
+  refreshProducts: () => void;
   categories: Category[];
   setCategories: (next: Updater<Category[]>) => void;
   orders: Order[];
@@ -327,6 +332,40 @@ export function StoreProvider({
       }),
     [],
   );
+  // Refresh the catalog from the DB without a full reload. Guards against
+  // overlapping fetches and skips while the tab is hidden. The server stays
+  // authoritative regardless — placeStorefrontOrderAction re-prices at checkout —
+  // so a missed refresh only delays the visible update, never mischarges.
+  const refreshingProducts = useRef(false);
+  const refreshProducts = useCallback(() => {
+    if (refreshingProducts.current) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    refreshingProducts.current = true;
+    getStorefrontProductsAction()
+      .then((res) => {
+        if ("ok" in res && res.ok) setProducts(res.products);
+      })
+      .catch(() => {
+        /* transient — keep the current catalog, retry on the next trigger */
+      })
+      .finally(() => {
+        refreshingProducts.current = false;
+      });
+  }, [setProducts]);
+
+  // Re-fetch when the tab regains focus / becomes visible, so a long-lived
+  // storefront session never shows stale prices. No interval polling — focus is
+  // the cheap signal that catches a customer returning after the owner edited
+  // prices in another tab.
+  useEffect(() => {
+    window.addEventListener("focus", refreshProducts);
+    document.addEventListener("visibilitychange", refreshProducts);
+    return () => {
+      window.removeEventListener("focus", refreshProducts);
+      document.removeEventListener("visibilitychange", refreshProducts);
+    };
+  }, [refreshProducts]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- makeSetter closes over the stable per-mount NS
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -620,7 +659,7 @@ export function StoreProvider({
   const value: Store = {
     brand, setTweak,
     setCardDesign, setCardTemplates,
-    products, setProducts,
+    products, setProducts, refreshProducts,
     categories, setCategories,
     orders, setOrders,
     myOrders, setMyOrders,

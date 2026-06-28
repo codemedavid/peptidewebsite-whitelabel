@@ -329,6 +329,11 @@ export type Brand = {
   // entitlement (FEATURES.STORE_ACCESS_CODE, admin → Features). Operator-
   // grantable, so default OFF — hidden until the operator turns it on.
   showAdminAccessCode?: boolean;
+  // Store-admin Staff Accounts manager. Derived server-side from the platform
+  // entitlement (FEATURES.STORE_STAFF_ACCOUNTS, admin → Features). In the
+  // Business/Automated plan ceilings (default ON there) and operator-grantable on
+  // Starter — so OFF for Starter until the operator turns it on.
+  showAdminStaff?: boolean;
   // Store-admin Reseller Portal manager. Derived server-side from the platform
   // entitlement (FEATURES.STORE_RESELLER_PORTAL, admin → Features). In every
   // plan ceiling so it defaults ON; the #merchant page additionally needs an

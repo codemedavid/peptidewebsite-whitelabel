@@ -138,8 +138,8 @@ export function DashboardView({ data }: { data: OverviewData }) {
 
   const kpis = [
     { label: "Total tenants", value: <CounterValue value={k.totalTenants} />, delta: `+${k.newTenants30d} vs 30d`, deltaDir: "up" as const, icon: "Buildings", spark: data.sparks.tenants },
-    { label: "Active subscriptions", value: <CounterValue value={k.activeSubscriptions} />, delta: "Live", deltaDir: "flat" as const, icon: "Card", spark: data.sparks.subscriptions },
-    { label: "Monthly revenue", value: <CounterValue value={Math.round(k.monthlyRevenueCents / 100 / 1000)} prefix="₱" suffix="k" />, delta: "MRR + 30d", deltaDir: "up" as const, icon: "DollarSign", spark: data.sparks.revenue },
+    { label: "Active sites", value: <CounterValue value={k.activeSubscriptions} />, delta: "Live", deltaDir: "flat" as const, icon: "Card", spark: data.sparks.subscriptions },
+    { label: "Total revenue", value: <CounterValue value={Math.round(k.monthlyRevenueCents / 100 / 1000)} prefix="₱" suffix="k" />, delta: "Plans + 30d", deltaDir: "up" as const, icon: "DollarSign", spark: data.sparks.revenue },
     { label: "Total orders", value: <CounterValue value={k.totalOrders} />, delta: `+${k.newOrders30d} vs 30d`, deltaDir: "up" as const, icon: "Box", spark: data.sparks.orders },
     { label: "Total customers", value: <CounterValue value={k.totalCustomers} />, delta: "Lifetime", deltaDir: "flat" as const, icon: "Users", spark: data.sparks.customers, sparkColor: "var(--success)" },
     { label: "Active trials", value: <CounterValue value={k.activeTrials} />, delta: "In trial", deltaDir: "flat" as const, icon: "Sparkles", spark: data.sparks.trials, sparkColor: "var(--warn)" },

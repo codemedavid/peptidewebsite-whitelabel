@@ -5,39 +5,14 @@
  * Run: npm run db:seed  (needs DATABASE_URL / DIRECT_URL set)
  */
 import { PrismaClient } from "@prisma/client";
-import { ALL_FEATURES, PLAN_FEATURES } from "../src/lib/features/catalog";
+import { syncPlanCatalog } from "../src/lib/features/catalog-sync";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Features
-  for (const key of ALL_FEATURES) {
-    await prisma.feature.upsert({ where: { key }, update: {}, create: { key } });
-  }
-  const features = await prisma.feature.findMany();
-  const byKey = new Map(features.map((f) => [f.key, f.id]));
-
-  // 2. Plans + plan_features
-  const planNames: Record<string, string> = {
-    starter: "Starter",
-    pro: "Pro",
-    enterprise: "Enterprise",
-  };
-  for (const [planKey, featureKeys] of Object.entries(PLAN_FEATURES)) {
-    const plan = await prisma.plan.upsert({
-      where: { key: planKey },
-      update: { name: planNames[planKey] },
-      create: { key: planKey, name: planNames[planKey] },
-    });
-    for (const fk of featureKeys) {
-      const featureId = byKey.get(fk)!;
-      await prisma.planFeature.upsert({
-        where: { planId_featureId: { planId: plan.id, featureId } },
-        update: {},
-        create: { planId: plan.id, featureId },
-      });
-    }
-  }
+  // 1 + 2. Features, plans, and plan_features — reconciled to catalog.ts.
+  const sync = await syncPlanCatalog(prisma);
+  console.log(`Synced ${sync.featuresUpserted} features across ${sync.plans.length} plans.`);
 
   // 3. Demo tenant on the enterprise plan → acme.localhost:3000
   const enterprise = await prisma.plan.findUniqueOrThrow({ where: { key: "enterprise" } });

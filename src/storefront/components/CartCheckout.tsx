@@ -23,6 +23,7 @@ import {
   buildOrderMessage,
   cartLines,
   cartTotal,
+  liveCartLines,
   channelPrefills,
   channelUrl,
   CHANNEL_LABELS,
@@ -49,7 +50,7 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, products, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   // After an email ("gmail") order is placed we land on the "sent" step, which
   // shows an explicit "Email your order" button. The mailto: link must fire from
@@ -96,8 +97,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const [paymentTouched, setPaymentTouched] = useState(false);
   const proofRef = useRef<HTMLInputElement>(null);
 
-  const lines = useMemo(() => cartLines(cart), [cart]);
+  // Price the cart from the LIVE catalog, not the add-time snapshot, so an owner
+  // price change is reflected the moment the catalog refreshes (the server
+  // re-applies the same resolution at placement). The snapshot total is kept
+  // only to detect — and gently flag — that a price moved since the item was
+  // added.
+  const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
   const subtotal = useMemo(() => cartTotal(lines), [lines]);
+  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart)), [cart]);
+  const pricesUpdated = cart.length > 0 && snapshotSubtotal !== subtotal;
   const channels = useMemo(() => activeChannels(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
   const currency = brand.currency || lines[0]?.product.currency || "";
@@ -178,6 +186,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // new logical order, so clear the idempotency key and the in-flight lock.
   useEffect(() => {
     if (open) {
+      // Pull the latest prices the moment the cart opens, so the customer
+      // reviews and pays against the current catalog, not the add-time snapshot.
+      refreshProducts();
       setStep("cart");
       setHandoff(null);
       setTouched(false);
@@ -196,7 +207,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       placingRef.current = false;
       draftIdRef.current = null;
     }
-  }, [open]);
+  }, [open, refreshProducts]);
 
   // Lock background scroll + close on Escape while open.
   useEffect(() => {
@@ -508,6 +519,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
           ) : step === "cart" ? (
             <>
             {rules.cartWarning && <p className="sf-cart__notice">{rules.cartWarning}</p>}
+            {pricesUpdated && (
+              <p className="sf-cart__notice" role="status">
+                Prices updated since you added these — your total reflects the
+                latest store prices.
+              </p>
+            )}
             <ul className="sf-cart__lines">
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
