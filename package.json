@@ -24,7 +24,9 @@
     "test:gate": "tsx scripts/test-access-gate.ts",
     "test:posthog": "tsx scripts/test-posthog.ts",
     "test:plan-status": "tsx scripts/test-plan-options.ts",
-    "test:staff": "tsx scripts/test-staff-permissions.ts"
+    "test:staff": "tsx scripts/test-staff-permissions.ts",
+    "test:cart": "tsx scripts/test-cart-pricing.ts",
+    "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
