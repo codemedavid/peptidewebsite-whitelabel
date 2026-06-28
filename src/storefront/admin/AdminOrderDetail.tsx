@@ -4,16 +4,16 @@ import { useState } from "react";
 import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
-
-function formatPHP(n: number): string {
-  return (
-    "₱" +
-    (n || 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
-}
+import {
+  formatPHP,
+  formatOrderDate,
+  orEmDash,
+  buildAddressLine,
+  cityProvinceLine,
+  buildBookingText,
+  computeOrderTotals,
+  itemCount,
+} from "./order-detail";
 
 // One-click copy with transient "Copied!" feedback. Falls back to a hidden
 // textarea + execCommand on browsers/contexts where the async clipboard API
@@ -54,28 +54,11 @@ function CopyButton({
     <button
       type="button"
       onClick={() => void copy()}
-      className={`admin-copy-btn${copied ? " admin-copy-btn--done" : ""} ${className}`.trim()}
+      className={`od-copy${copied ? " od-copy--done" : ""} ${className}`.trim()}
       title="Copy to clipboard"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: 8,
-        border: "1px solid var(--brand-border, #e5e7eb)",
-        background: copied ? "var(--brand-accent, #16a34a)" : "#fff",
-        color: copied ? "#fff" : "var(--brand-text, #111)",
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
     >
       {copied ? (
         <svg
-          width="13"
-          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -87,8 +70,6 @@ function CopyButton({
         </svg>
       ) : (
         <svg
-          width="13"
-          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -107,9 +88,9 @@ function CopyButton({
 
 function OrderStatusPill({ status }: { status: Order["status"] }) {
   const labels: Record<Order["status"], string> = {
-    new: "🕐 New",
+    new: "New",
     confirmed: "Confirmed",
-    processing: "📦 Processing",
+    processing: "Processing",
     shipped: "Shipped",
     delivered: "Delivered",
     cancelled: "Cancelled",
@@ -152,14 +133,11 @@ export function AdminOrderDetail({
 
   void brand;
 
-  const sub = (o.items || []).reduce(
-    (s, i) => s + (i.price || 0) * (i.qty || 1),
-    0,
-  );
-  const ship = o.shipping?.fee || 0;
-  const fee = o.adminFee?.amount || 0;
-  const discount = o.discount?.amount || 0;
-  const total = Math.max(0, sub - discount + ship + fee);
+  const totals = computeOrderTotals(o);
+  const addressLine = buildAddressLine(o.shipping);
+  const bookingText = buildBookingText(o);
+  const cityProvince = cityProvinceLine(o.shipping);
+  const placed = formatOrderDate(o.date);
 
   // Persist a patch to the DB (store admin gated). Optimistically apply locally,
   // roll back + surface the error if the write fails.
@@ -206,31 +184,7 @@ export function AdminOrderDetail({
     return true;
   };
 
-  // Full shipping address as a single line for quick paste into a courier form.
-  const addressLine = [
-    o.shipping?.address,
-    o.shipping?.barangay ? `Brgy. ${o.shipping.barangay}` : "",
-    o.shipping?.city,
-    o.shipping?.province,
-    o.shipping?.postal,
-    o.shipping?.country,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  // One block holding everything a courier booking form needs, so the whole
-  // parcel can be booked with a single copy → paste.
-  const bookingText = [
-    `Name: ${o.customer?.name || ""}`,
-    `Phone: ${o.customer?.phone || ""}`,
-    `Address: ${addressLine}`,
-    o.shipping?.region ? `Region: ${o.shipping.region}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
   const confirmOrder = () => void persist({ status: "confirmed" });
-
   const changeStatus = (status: Order["status"]) => void persist({ status });
 
   const saveTracking = async () => {
@@ -245,19 +199,11 @@ export function AdminOrderDetail({
 
   return (
     <div className="admin">
-      <main className="admin__inner">
-        <div className="admin-detail__top">
-          <a
-            className="admin-table__title-back"
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              onBack();
-            }}
-          >
+      <main className="admin__inner od-page">
+        {/* Top bar */}
+        <div className="od-topbar">
+          <button type="button" className="od-back" onClick={onBack}>
             <svg
-              width="18"
-              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -268,293 +214,308 @@ export function AdminOrderDetail({
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back to Orders
-          </a>
-          <h1 className="admin-detail__id">Order {o.orderNumber || `#${o.id.slice(0, 8)}`}</h1>
+          </button>
+          <div className="od-heading">
+            <h1 className="od-title">
+              Order {o.orderNumber || `#${o.id.slice(0, 8)}`}
+            </h1>
+            {placed && <span className="od-placed">Placed {placed}</span>}
+          </div>
         </div>
 
-        <div className="admin-detail__card">
-          <div className="admin-detail__status-row">
-            <OrderStatusPill status={o.status} />
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <label
-                className="admin-field__label"
-                htmlFor="order-status-select"
-                style={{ margin: 0 }}
-              >
-                Order Status
-              </label>
-              <select
-                id="order-status-select"
-                className="admin-select"
-                value={o.status}
-                onChange={(e) =>
-                  changeStatus(e.target.value as Order["status"])
-                }
-              >
-                <option value="new">🕐 New</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="processing">📦 Processing</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              {o.status === "new" && (
-                <button
-                  className="admin-btn admin-btn--green"
-                  onClick={confirmOrder}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <polyline points="22 4 12 14.01 9 11.01" />
-                  </svg>
-                  Confirm Order &amp; Deduct Stock
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <h2 className="admin-detail__section-title" style={{ margin: 0 }}>
-              Customer Information
-            </h2>
-            <CopyButton
-              value={bookingText}
-              label="Copy details for booking"
-            />
-          </div>
-          <div className="admin-detail__block">
-            <div className="admin-detail__block-row">
-              <strong>Name:</strong>
-              <span>{o.customer?.name}</span>
-              {o.customer?.name && (
-                <CopyButton value={o.customer.name} className="admin-detail__copy-inline" />
-              )}
-            </div>
-            <div className="admin-detail__block-row">
-              <strong>Email:</strong>
-              <span>{o.customer?.email}</span>
-              {o.customer?.email && (
-                <CopyButton value={o.customer.email} className="admin-detail__copy-inline" />
-              )}
-            </div>
-            <div className="admin-detail__block-row">
-              <strong>Phone:</strong>
-              <span>{o.customer?.phone}</span>
-              {o.customer?.phone && (
-                <CopyButton value={o.customer.phone} className="admin-detail__copy-inline" />
-              )}
-            </div>
-            <div className="admin-detail__block-row">
-              <strong>Contact Method:</strong>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "var(--brand-accent)",
-                }}
-              >
-                💬 {o.customer?.contactMethod}
-              </span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-              marginTop: 26,
-            }}
-          >
-            <h2 className="admin-detail__section-title" style={{ margin: 0 }}>
-              Shipping Address
-            </h2>
-            {addressLine && (
-              <CopyButton value={addressLine} label="Copy address" />
-            )}
-          </div>
-          <div className="admin-detail__block">
-            <div>{o.shipping?.address}</div>
-            <div>Barangay: {o.shipping?.barangay}</div>
-            <div>
-              {o.shipping?.city}, {o.shipping?.province} {o.shipping?.postal}
-            </div>
-            <div>{o.shipping?.country}</div>
-            <div style={{ marginTop: 8 }}>
-              <strong>Region:</strong> {o.shipping?.region}
-            </div>
-          </div>
-
-          <div className="admin-detail__pink-card">
-            <div className="admin-detail__pink-head">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="1" y="3" width="15" height="13" />
-                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                <circle cx="5.5" cy="18.5" r="2.5" />
-                <circle cx="18.5" cy="18.5" r="2.5" />
-              </svg>
-              Shipping &amp; Tracking Details
-            </div>
-            <label
-              className="admin-field__label"
-              style={{ display: "block", marginBottom: 8 }}
-            >
-              Tracking Number
-            </label>
-            <div className="admin-detail__tracking-row">
-              <select
-                className="admin-select"
-                value={courier}
-                onChange={(e) => setCourier(e.target.value)}
-              >
-                {courierOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="admin-input"
-                placeholder="Enter tracking number"
-                value={tracking}
-                onChange={(e) => setTracking(e.target.value)}
-              />
-            </div>
-            <label
-              className="admin-field__label"
-              style={{ display: "block", marginBottom: 8 }}
-            >
-              Shipping Note (Optional)
-            </label>
-            <input
-              className="admin-input"
-              placeholder={`e.g., Shipped via ${courier}…`}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <button
-              className="admin-detail__save-tracking"
-              onClick={() => void saveTracking()}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save Tracking Info"}
-            </button>
-          </div>
-
-          <h2
-            className="admin-detail__section-title"
-            style={{ marginTop: 28 }}
-          >
-            Order Items (
-            {(o.items || []).reduce((s, i) => s + (i.qty || 1), 0)} items)
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(o.items || []).map((it, i) => (
-              <div key={i} className="admin-detail__item">
-                <div>
-                  <div className="admin-detail__item-name">{it.name}</div>
-                  <div className="admin-detail__item-qty">
-                    Quantity: {it.qty} × {formatPHP(it.price)}
+        <div className="od-grid">
+          {/* ============ LEFT / MAIN ============ */}
+          <div className="od-main">
+            {/* Customer */}
+            <section className="od-card">
+              <div className="od-section-head">
+                <h2 className="od-h2">
+                  <span className="od-h2-ico">👤</span>
+                  Customer Information
+                </h2>
+                <CopyButton value={bookingText} label="Copy all for booking" />
+              </div>
+              <div className="od-fields">
+                <div className="od-field">
+                  <div className="od-field-label">Name</div>
+                  <div className="od-field-value-row">
+                    <span className="od-field-value">{orEmDash(o.customer?.name)}</span>
+                    {o.customer?.name && <CopyButton value={o.customer.name} />}
                   </div>
                 </div>
-                <div style={{ fontWeight: 600 }}>
-                  {formatPHP(it.price * it.qty)}
+                <div className="od-field">
+                  <div className="od-field-label">Email</div>
+                  <div className="od-field-value-row">
+                    <span className="od-field-value">{orEmDash(o.customer?.email)}</span>
+                    {o.customer?.email && <CopyButton value={o.customer.email} />}
+                  </div>
+                </div>
+                <div className="od-field">
+                  <div className="od-field-label">Phone</div>
+                  <div className="od-field-value-row">
+                    <span className="od-field-value">{orEmDash(o.customer?.phone)}</span>
+                    {o.customer?.phone && <CopyButton value={o.customer.phone} />}
+                  </div>
+                </div>
+                <div className="od-field">
+                  <div className="od-field-label">Contact Method</div>
+                  <div className="od-field-value-row">
+                    <span className="od-contact">
+                      <span className="od-contact-dot">✓</span>
+                      {orEmDash(o.customer?.contactMethod)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
+            </section>
+
+            {/* Shipping address */}
+            <section className="od-card">
+              <div className="od-section-head">
+                <h2 className="od-h2">
+                  <span className="od-h2-ico">📍</span>
+                  Shipping Address
+                </h2>
+                {addressLine && (
+                  <CopyButton value={addressLine} label="Copy address" />
+                )}
+              </div>
+              <div className="od-addr">
+                <div className="od-addr-row">
+                  <span className="od-addr-key">Street</span>
+                  <span className="od-addr-val">{orEmDash(o.shipping?.address)}</span>
+                  {o.shipping?.address && <CopyButton value={o.shipping.address} />}
+                </div>
+                <div className="od-addr-row">
+                  <span className="od-addr-key">Barangay</span>
+                  <span
+                    className={`od-addr-val${o.shipping?.barangay ? "" : " od-addr-val--empty"}`}
+                  >
+                    {orEmDash(o.shipping?.barangay)}
+                  </span>
+                </div>
+                <div className="od-addr-row">
+                  <span className="od-addr-key">City / Province</span>
+                  <span
+                    className={`od-addr-val${cityProvince ? "" : " od-addr-val--empty"}`}
+                  >
+                    {orEmDash(cityProvince)}
+                  </span>
+                  {cityProvince && <CopyButton value={cityProvince} />}
+                </div>
+                <div className="od-addr-row">
+                  <span className="od-addr-key">Country</span>
+                  <span
+                    className={`od-addr-val${o.shipping?.country ? "" : " od-addr-val--empty"}`}
+                  >
+                    {orEmDash(o.shipping?.country)}
+                  </span>
+                </div>
+                <div className="od-addr-row">
+                  <span className="od-addr-key">Region</span>
+                  <span
+                    className={`od-addr-val${o.shipping?.region ? "" : " od-addr-val--empty"}`}
+                  >
+                    {orEmDash(o.shipping?.region)}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {/* Shipping & tracking */}
+            <section className="od-card">
+              <h2 className="od-h2" style={{ marginBottom: 18 }}>
+                <span className="od-h2-ico od-h2-ico--green">🚚</span>
+                Shipping &amp; Tracking
+              </h2>
+              <div className="od-track-grid">
+                <div>
+                  <label className="od-label" htmlFor="od-courier">
+                    Courier
+                  </label>
+                  <select
+                    id="od-courier"
+                    className="admin-select od-control"
+                    value={courier}
+                    onChange={(e) => setCourier(e.target.value)}
+                  >
+                    {courierOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="od-label" htmlFor="od-tracking">
+                    Tracking Number
+                  </label>
+                  <input
+                    id="od-tracking"
+                    className="admin-input od-control"
+                    placeholder="Enter tracking number"
+                    value={tracking}
+                    onChange={(e) => setTracking(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="od-field-block">
+                <label className="od-label" htmlFor="od-note">
+                  Shipping Note <span className="od-label-opt">(optional)</span>
+                </label>
+                <input
+                  id="od-note"
+                  className="admin-input od-control"
+                  placeholder={`e.g., Shipped via ${courier || "courier"}…`}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="od-save"
+                onClick={() => void saveTracking()}
+                disabled={saving}
+              >
+                {saving ? "Saving…" : "Save Tracking Info"}
+              </button>
+            </section>
+
+            {/* Order items */}
+            <section className="od-card">
+              <h2 className="od-h2" style={{ marginBottom: 18 }}>
+                Order Items <span className="od-count">{itemCount(o)}</span>
+              </h2>
+              <div className="od-items">
+                {(o.items || []).map((it, i) => (
+                  <div key={i} className="od-item">
+                    <div className="od-item-thumb">💊</div>
+                    <div className="od-item-main">
+                      <div className="od-item-name">{it.name}</div>
+                      <div className="od-item-meta">
+                        Qty {it.qty} · {formatPHP(it.price)} each
+                      </div>
+                    </div>
+                    <div className="od-item-total">
+                      {formatPHP(it.price * it.qty)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Payment proof */}
+            <section className="od-card">
+              <h2 className="od-h2" style={{ marginBottom: 18 }}>
+                <span className="od-h2-ico">🧾</span>
+                Payment Proof
+              </h2>
+              <div className="od-proof">
+                {o.paymentProof ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={o.paymentProof} alt="Payment proof" />
+                ) : (
+                  <div className="od-proof-empty">
+                    No payment proof uploaded yet.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
 
-          <h2
-            className="admin-detail__section-title"
-            style={{ marginTop: 28 }}
-          >
-            🖼️ Payment Proof
-          </h2>
-          <div className="admin-detail__proof">
-            {o.paymentProof ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={o.paymentProof} alt="Payment proof" />
-            ) : (
-              <div style={{ padding: 40, color: "var(--brand-text-muted)" }}>
-                No payment proof uploaded yet.
+          {/* ============ RIGHT / SIDEBAR ============ */}
+          <div className="od-side">
+            {/* Status + action */}
+            <section className="od-card od-card--pad-sm">
+              <div className="od-status-head">
+                <span className="od-status-label">Order Status</span>
+                <OrderStatusPill status={o.status} />
               </div>
-            )}
-          </div>
+              <div className="od-select-full">
+                <label htmlFor="od-status-select" className="od-sr-only">
+                  Change order status
+                </label>
+                <select
+                  id="od-status-select"
+                  className="admin-select od-control"
+                  value={o.status}
+                  onChange={(e) => changeStatus(e.target.value as Order["status"])}
+                >
+                  <option value="new">New</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="processing">Processing</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              {o.status === "new" && (
+                <>
+                  <button
+                    type="button"
+                    className="od-confirm"
+                    onClick={confirmOrder}
+                    disabled={saving}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    Confirm &amp; Deduct Stock
+                  </button>
+                  <p className="od-hint">
+                    Confirming reduces inventory for these items.
+                  </p>
+                </>
+              )}
+            </section>
 
-          <h2
-            className="admin-detail__section-title"
-            style={{ marginTop: 28 }}
-          >
-            Payment Information
-          </h2>
-          <div className="admin-detail__block">
-            <div className="admin-detail__block-row">
-              <strong>Method:</strong>
-              {o.paymentMethod}
-            </div>
-            <div className="admin-detail__block-row">
-              <strong>Status:</strong>
-              <PaymentStatusPill status={o.paymentStatus} />
-            </div>
-          </div>
-
-          <div className="admin-detail__totals" style={{ marginTop: 28 }}>
-            <div className="admin-detail__totals-row">
-              <span>Subtotal:</span>
-              <span>{formatPHP(sub)}</span>
-            </div>
-            {discount > 0 && (
-              <div className="admin-detail__totals-row">
-                <span>{o.discount?.label || "Discount"}:</span>
-                <span>−{formatPHP(discount)}</span>
+            {/* Payment summary */}
+            <section className="od-card od-card--pad-sm">
+              <h2 className="od-h2" style={{ marginBottom: 16 }}>
+                Payment
+              </h2>
+              <div className="od-pay-row">
+                <div>
+                  <div className="od-pay-method-label">Method</div>
+                  <div className="od-pay-method">{o.paymentMethod || "—"}</div>
+                </div>
+                <PaymentStatusPill status={o.paymentStatus} />
               </div>
-            )}
-            <div className="admin-detail__totals-row">
-              <span>Shipping Fee:</span>
-              <span>{formatPHP(ship)}</span>
-            </div>
-            {fee > 0 && (
-              <div className="admin-detail__totals-row">
-                <span>{o.adminFee?.label || "Admin fee"}:</span>
-                <span>{formatPHP(fee)}</span>
+              <div className="od-totals">
+                <div className="od-totals-row">
+                  <span>Subtotal</span>
+                  <span>{formatPHP(totals.subtotal)}</span>
+                </div>
+                {totals.discount > 0 && (
+                  <div className="od-totals-row">
+                    <span>{o.discount?.label || "Discount"}</span>
+                    <span>−{formatPHP(totals.discount)}</span>
+                  </div>
+                )}
+                <div className="od-totals-row">
+                  <span>Shipping Fee</span>
+                  <span>{formatPHP(totals.shipping)}</span>
+                </div>
+                {totals.fee > 0 && (
+                  <div className="od-totals-row">
+                    <span>{o.adminFee?.label || "Admin fee"}</span>
+                    <span>{formatPHP(totals.fee)}</span>
+                  </div>
+                )}
               </div>
-            )}
-            <div className="admin-detail__totals-row admin-detail__totals-row--final">
-              <span>Total:</span>
-              <span>{formatPHP(total)}</span>
-            </div>
+              <div className="od-total">
+                <span className="od-total-label">Total</span>
+                <span className="od-total-value">{formatPHP(totals.total)}</span>
+              </div>
+            </section>
           </div>
         </div>
       </main>

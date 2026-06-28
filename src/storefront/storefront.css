@@ -3544,115 +3544,276 @@
 /* =========================================================
    ADMIN — Order Detail
    ========================================================= */
-.sf-root .admin-detail__top {
-  display: flex; align-items: center; gap: 16px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
+/* Two-column order detail (redesign): main column + sticky summary sidebar.
+   Brand-aware — the design's primary blue maps to --brand-accent; success
+   green / warning amber stay semantic. Local --od-* tokens are scoped to
+   .od-page so they never leak into the rest of the admin. */
+.sf-root .od-page {
+  --od-success: #1F8A5B;
+  --od-success-bg: color-mix(in srgb, #22B07D 16%, transparent);
+  --od-field-bg: color-mix(in srgb, var(--brand-text) 3%, var(--brand-surface));
+  --od-radius: 16px;
+  --od-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
 }
-.sf-root .admin-detail__id {
-  font-family: var(--brand-heading-font);
-  font-size: 32px;
-  color: var(--brand-text);
-  margin: 0;
-  letter-spacing: -0.01em;
+
+/* ── top bar ── */
+.sf-root .od-topbar {
+  display: flex; align-items: center; gap: 18px;
+  margin-bottom: 24px; flex-wrap: wrap;
 }
-.sf-root .admin-detail__card {
+.sf-root .od-back {
+  display: inline-flex; align-items: center; gap: 8px;
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);
-  border-radius: var(--radius-lg);
-  padding: 28px;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 13.5px; font-weight: 600;
+  color: var(--brand-text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: background 0.15s, transform 0.15s;
 }
-.sf-root .admin-detail__status-row {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 16px;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-}
-.sf-root .admin-detail__section-title {
+.sf-root .od-back:hover { background: var(--brand-background); }
+.sf-root .od-back:active { transform: translateY(1px); }
+.sf-root .od-back svg { width: 16px; height: 16px; }
+.sf-root .od-heading { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.sf-root .od-title {
   font-family: var(--brand-heading-font);
-  font-size: 22px;
+  font-size: 26px; font-weight: 800;
   color: var(--brand-text);
-  margin: 0 0 14px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em; margin: 0;
 }
-.sf-root .admin-detail__block {
-  background: var(--brand-background);
-  border-radius: var(--radius-md);
-  padding: 20px 22px;
-  font-size: 15px;
-  color: var(--brand-text);
-  line-height: 1.65;
+.sf-root .od-placed { font-size: 13px; color: var(--brand-text-muted); font-weight: 500; }
+
+/* ── layout grid ── */
+.sf-root .od-grid {
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 24px; align-items: start;
 }
-.sf-root .admin-detail__block strong { font-weight: 600; }
-.sf-root .admin-detail__block-row {
-  display: flex; gap: 8px;
-  align-items: baseline;
-  margin-bottom: 4px;
+.sf-root .od-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.sf-root .od-side { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 20px; }
+@media (max-width: 900px) {
+  .sf-root .od-grid { grid-template-columns: 1fr; }
+  .sf-root .od-side { position: static; }
 }
-.sf-root .admin-detail__pink-card {
-  background: color-mix(in srgb, var(--brand-accent) 5%, var(--brand-background));
-  border: 1px solid color-mix(in srgb, var(--brand-accent) 20%, transparent);
-  border-radius: var(--radius-md);
+
+/* ── card + section heading ── */
+.sf-root .od-card {
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--od-radius);
   padding: 24px;
-  margin-top: 20px;
+  box-shadow: var(--od-shadow);
 }
-.sf-root .admin-detail__pink-head {
-  display: flex; align-items: center; gap: 8px;
-  font-family: var(--brand-heading-font);
-  color: var(--brand-accent);
-  font-size: 18px;
-  margin-bottom: 18px;
-}
-.sf-root .admin-detail__pink-head svg { width: 22px; height: 22px; }
-.sf-root .admin-detail__tracking-row {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-@media (max-width: 600px) { .sf-root .admin-detail__tracking-row { grid-template-columns: 1fr; } }
-.sf-root .admin-detail__save-tracking {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, var(--brand-button), var(--brand-button-2));
-  color: var(--brand-button-text);
-  border: 0;
-  border-radius: var(--radius-pill);
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.sf-root .admin-detail__item {
-  background: var(--brand-background);
-  border-radius: var(--radius-md);
-  padding: 16px 20px;
+.sf-root .od-card--pad-sm { padding: 22px; }
+.sf-root .od-section-head {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 16px;
+  gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
 }
-.sf-root .admin-detail__item-name { font-weight: 600; color: var(--brand-text); }
-.sf-root .admin-detail__item-qty { font-size: 13px; color: var(--brand-text-muted); margin-top: 2px; }
-.sf-root .admin-detail__proof {
-  background: var(--brand-background);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  text-align: center;
-}
-.sf-root .admin-detail__proof img { max-width: 100%; max-height: 480px; border-radius: 8px; }
-.sf-root .admin-detail__totals { display: flex; flex-direction: column; gap: 8px; }
-.sf-root .admin-detail__totals-row {
-  display: flex; justify-content: space-between;
-  font-size: 15px;
-}
-.sf-root .admin-detail__totals-row--final {
+.sf-root .od-h2 {
+  display: flex; align-items: center; gap: 9px;
   font-family: var(--brand-heading-font);
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 16px; font-weight: 700;
+  color: var(--brand-text); margin: 0;
+}
+.sf-root .od-h2-ico {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-accent) 12%, transparent);
+  color: var(--brand-accent); font-size: 15px;
+}
+.sf-root .od-h2-ico--green { background: var(--od-success-bg); color: var(--od-success); }
+
+/* ── copy button (matches the design's compact pill) ── */
+.sf-root .od-copy {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px; font-weight: 600; line-height: 1;
   color: var(--brand-text);
-  padding-top: 14px;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sf-root .od-copy:hover { background: var(--brand-background); }
+.sf-root .od-copy svg { width: 13px; height: 13px; }
+.sf-root .od-copy--done {
+  background: var(--od-success); border-color: var(--od-success); color: #fff;
+}
+
+/* ── customer field cards ── */
+.sf-root .od-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .sf-root .od-fields { grid-template-columns: 1fr; } }
+.sf-root .od-field {
+  background: var(--od-field-bg);
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.sf-root .od-field-label {
+  font-size: 12px; color: var(--brand-text-muted);
+  font-weight: 600; margin-bottom: 5px;
+}
+.sf-root .od-field-value-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.sf-root .od-field-value {
+  font-size: 14px; font-weight: 700; color: var(--brand-text);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sf-root .od-contact {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 700; color: var(--od-success);
+  text-transform: capitalize;
+}
+.sf-root .od-contact-dot {
+  display: grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #25d366; color: #fff; font-size: 10px; flex-shrink: 0;
+}
+
+/* ── address table ── */
+.sf-root .od-addr {
+  border: 1px solid var(--brand-border);
+  background: var(--od-field-bg);
+  border-radius: 12px; overflow: hidden;
+}
+.sf-root .od-addr-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--brand-border);
+}
+.sf-root .od-addr-row:last-child { border-bottom: 0; }
+.sf-root .od-addr-key {
+  width: 110px; flex-shrink: 0;
+  color: var(--brand-text-muted); font-weight: 500; font-size: 13px;
+}
+.sf-root .od-addr-val {
+  flex: 1; min-width: 0;
+  color: var(--brand-text); font-weight: 600; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sf-root .od-addr-val--empty { color: var(--brand-text-muted); font-weight: 400; }
+
+/* ── tracking form ── */
+.sf-root .od-track-grid {
+  display: grid; grid-template-columns: 200px 1fr;
+  gap: 14px; margin-bottom: 16px;
+}
+@media (max-width: 560px) { .sf-root .od-track-grid { grid-template-columns: 1fr; } }
+.sf-root .od-label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--brand-text); margin-bottom: 7px;
+}
+.sf-root .od-label-opt { color: var(--brand-text-muted); font-weight: 500; }
+.sf-root .od-field-block { margin-bottom: 18px; }
+.sf-root .od-control { width: 100%; }
+.sf-root .od-save {
+  width: 100%;
+  background: var(--brand-accent); color: #fff;
+  border: 0; border-radius: 11px; padding: 13px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 30%, transparent);
+  transition: filter 0.15s;
+}
+.sf-root .od-save:hover { filter: brightness(0.94); }
+.sf-root .od-save:disabled { opacity: 0.6; cursor: default; filter: none; }
+
+/* ── order items ── */
+.sf-root .od-count {
+  font-size: 12px; font-weight: 600;
+  color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 12%, transparent);
+  padding: 3px 9px; border-radius: 20px;
+}
+.sf-root .od-items { display: flex; flex-direction: column; gap: 10px; }
+.sf-root .od-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--brand-border); border-radius: 12px;
+}
+.sf-root .od-item-thumb {
+  width: 52px; height: 52px; border-radius: 10px;
+  background: var(--od-field-bg);
+  display: grid; place-items: center; font-size: 22px; flex-shrink: 0;
+}
+.sf-root .od-item-main { flex: 1; min-width: 0; }
+.sf-root .od-item-name { font-size: 14.5px; font-weight: 700; color: var(--brand-text); }
+.sf-root .od-item-meta { font-size: 13px; color: var(--brand-text-muted); margin-top: 2px; }
+.sf-root .od-item-total { font-size: 15px; font-weight: 700; color: var(--brand-text); flex-shrink: 0; }
+
+/* ── payment proof ── */
+.sf-root .od-proof {
+  width: 240px; max-width: 100%; height: 200px;
+  border-radius: 12px; border: 1px solid var(--brand-border);
+  background: var(--brand-background);
+  display: grid; place-items: center; overflow: hidden;
+}
+.sf-root .od-proof img { width: 100%; height: 100%; object-fit: cover; }
+.sf-root .od-proof-empty {
+  padding: 24px; text-align: center;
+  color: var(--brand-text-muted); font-size: 13px;
+}
+
+/* ── sidebar: status + action ── */
+.sf-root .od-status-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.sf-root .od-status-label {
+  font-size: 13px; font-weight: 700; color: var(--brand-text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.sf-root .od-select-full { margin-bottom: 14px; }
+.sf-root .od-confirm {
+  width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  background: var(--od-success); color: #fff;
+  border: 0; border-radius: 11px; padding: 13px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 2px 10px color-mix(in srgb, #1F8A5B 32%, transparent);
+  transition: filter 0.15s;
+}
+.sf-root .od-confirm:hover { filter: brightness(0.95); }
+.sf-root .od-confirm:disabled { opacity: 0.6; cursor: default; filter: none; }
+.sf-root .od-confirm svg { width: 16px; height: 16px; }
+.sf-root .od-hint {
+  font-size: 12px; color: var(--brand-text-muted);
+  text-align: center; margin-top: 10px; line-height: 1.5;
+}
+
+/* ── sidebar: payment summary ── */
+.sf-root .od-pay-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 14px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--brand-border);
+}
+.sf-root .od-pay-method-label { font-size: 12.5px; color: var(--brand-text-muted); font-weight: 500; }
+.sf-root .od-pay-method {
+  font-size: 14px; font-weight: 700; color: var(--brand-text);
+  margin-top: 3px; text-transform: capitalize;
+}
+.sf-root .od-totals { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.sf-root .od-totals-row { display: flex; justify-content: space-between; color: var(--brand-text-muted); }
+.sf-root .od-totals-row span:last-child { font-weight: 600; color: var(--brand-text); }
+.sf-root .od-total {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; padding-top: 14px;
   border-top: 1px solid var(--brand-border);
+}
+.sf-root .od-total-label { font-size: 15px; font-weight: 700; color: var(--brand-text); }
+.sf-root .od-total-value {
+  font-family: var(--brand-heading-font);
+  font-size: 20px; font-weight: 800; color: var(--brand-text);
+  letter-spacing: -0.02em;
+}
+
+/* visually-hidden label kept for screen readers */
+.sf-root .od-sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
 /* =========================================================
