@@ -32,7 +32,8 @@
     "test:plan-distribution": "tsx scripts/test-plan-distribution.ts",
     "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts",
     "test:feature-disclosure": "tsx scripts/test-feature-disclosure.ts",
-    "test:order-detail": "tsx scripts/test-order-detail.ts"
+    "test:order-detail": "tsx scripts/test-order-detail.ts",
+    "test:hero-links": "tsx scripts/test-hero-links.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
