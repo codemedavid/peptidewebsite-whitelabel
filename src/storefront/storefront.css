@@ -2022,7 +2022,81 @@
   color: var(--brand-text);
 }
 .sf-root .protocols__storage strong { color: #C25E1A; }
-@media (max-width: 700px) { .sf-root .protocols__pills { grid-template-columns: 1fr; } }
+
+/* Responsive image gallery — several protocol images side by side. Used in
+   "image" mode (the gallery IS the protocol) and as an optional supplement
+   below the typed fields in "details" mode. */
+.sf-root .protocols__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.sf-root .protocols__gallery-img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 12px;
+  display: block;
+  background: color-mix(in srgb, var(--brand-text) 4%, transparent);
+}
+@media (max-width: 700px) {
+  .sf-root .protocols__pills { grid-template-columns: 1fr; }
+  .sf-root .protocols__gallery { grid-template-columns: 1fr; }
+}
+
+/* Admin: protocol gallery thumbnail editor (thumbnails + remove + add tile). */
+.sf-root .protocols-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.sf-root .protocols-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--brand-surface, #e5e7eb);
+}
+.sf-root .protocols-thumb__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sf-root .protocols-thumb__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background var(--duration-fast, 150ms) ease;
+}
+.sf-root .protocols-thumb__remove:hover { background: rgba(190, 30, 30, 0.9); }
+.sf-root .protocols-thumb--add {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--brand-text) 3%, transparent);
+  transition: border-color var(--duration-fast, 150ms) ease, background var(--duration-fast, 150ms) ease;
+}
+.sf-root .protocols-thumb--add:hover {
+  border-color: var(--brand-accent, #C25E1A);
+  background: color-mix(in srgb, var(--brand-accent, #C25E1A) 8%, transparent);
+}
 
 /* ---- Reconstitution / dosing calculator ---- */
 .sf-root .recon__grid {

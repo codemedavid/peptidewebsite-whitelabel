@@ -33,7 +33,8 @@
     "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts",
     "test:feature-disclosure": "tsx scripts/test-feature-disclosure.ts",
     "test:order-detail": "tsx scripts/test-order-detail.ts",
-    "test:hero-links": "tsx scripts/test-hero-links.ts"
+    "test:hero-links": "tsx scripts/test-hero-links.ts",
+    "test:protocol-images": "tsx scripts/test-protocol-images.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -217,10 +217,15 @@ export type Protocol = {
   duration: string;
   notes: string[];
   storage: string;
-  /** Optional protocol image (hosted on the tenant's ImageKit folder, or a
-   *  data URL in demo mode). When `mode` is "image" this image *is* the
-   *  protocol (e.g. a dosing chart / infographic) and the written fields are
-   *  hidden; in "details" mode it's an optional supplement. */
+  /** Multiple protocol images (hosted on the tenant's ImageKit folder, or data
+   *  URLs in demo mode). When `mode` is "image" these images *are* the protocol
+   *  (e.g. dosing charts / infographics) and the written fields are hidden; in
+   *  "details" mode they're an optional supplement rendered below the fields.
+   *  Resolve via `resolveProtocolImages()` — never read this field directly. */
+  images?: string[];
+  /** @deprecated Legacy single image, kept so protocols saved before the
+   *  multi-image change still render. New writes set `images` and mirror its
+   *  first entry here. Readers must go through `resolveProtocolImages()`. */
   image?: string;
   /** How the owner chose to present this protocol: type the structured fields
    *  ("details", the default) or upload a single image ("image"). Left optional

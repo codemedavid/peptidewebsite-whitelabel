@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 
 export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { protocols: all } = useStore();
@@ -90,9 +91,12 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
             </div>
 
             {filtered.map((p, i) => {
-              // "image" mode → the uploaded image *is* the protocol; otherwise
-              // render the typed fields. Legacy rows (no mode) default to details.
-              const imageOnly = (p.mode ?? "details") === "image" && !!p.image;
+              // "image" mode → the uploaded image(s) *are* the protocol;
+              // otherwise render the typed fields. Legacy rows (no mode) default
+              // to details. Images resolve through the shared helper so a legacy
+              // single `image` and the new `images[]` both render.
+              const images = resolveProtocolImages(p);
+              const imageOnly = (p.mode ?? "details") === "image" && images.length > 0;
               return (
               <details key={i} className="protocols__item" open={i === 0}>
                 <summary className="protocols__item-head">
@@ -106,19 +110,16 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                 </summary>
                 <div className="protocols__item-body">
                   {imageOnly ? (
-                    <div className="protocols__image">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.image}
-                        alt={`${p.name} protocol`}
-                        style={{
-                          width: "100%",
-                          maxHeight: 420,
-                          objectFit: "contain",
-                          borderRadius: 12,
-                          display: "block",
-                        }}
-                      />
+                    <div className="protocols__gallery">
+                      {images.map((src, k) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={k}
+                          src={src}
+                          alt={`${p.name} protocol ${k + 1}`}
+                          className="protocols__gallery-img"
+                        />
+                      ))}
                     </div>
                   ) : (
                   <>
@@ -153,6 +154,20 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                   {p.storage && (
                     <div className="protocols__storage">
                       <strong>Storage:</strong> {p.storage}
+                    </div>
+                  )}
+                  {/* Optional supplementary images below the typed fields. */}
+                  {images.length > 0 && (
+                    <div className="protocols__gallery">
+                      {images.map((src, k) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={k}
+                          src={src}
+                          alt={`${p.name} protocol ${k + 1}`}
+                          className="protocols__gallery-img"
+                        />
+                      ))}
                     </div>
                   )}
                   </>

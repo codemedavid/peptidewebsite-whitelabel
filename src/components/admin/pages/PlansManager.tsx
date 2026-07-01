@@ -2,7 +2,8 @@
 
 // Super Admin editor for plan pricing + feature bullets, rendered on the
 // Plans & Billing page. Edits are local until "Save changes"; saving persists
-// via savePlanConfigAction (demo file / platform_settings row) and flows to the
+// via savePlanConfigAction (demo file / platform_settings row) — which also
+// reconciles the DB plan→feature ceiling to the catalog — and flows to the
 // marketing pricing section, the get-started wizard, the create-tenant drawer,
 // and the one-time revenue totals. Plan names stay fixed — they're identity keys.
 
@@ -10,7 +11,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
-import { savePlanConfigAction, syncPlanFeaturesAction } from "@/actions/admin-plan-config";
+import { savePlanConfigAction } from "@/actions/admin-plan-config";
 import { defaultPlanConfig, type PlanConfig } from "@/lib/platform/plan-config";
 import { formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import type { PlanRow } from "@/lib/admin/data";
@@ -70,7 +71,6 @@ export function PlansManager({
   const router = useRouter();
   const { showToast } = useAdminUI();
   const [pending, startTransition] = useTransition();
-  const [syncing, startSync] = useTransition();
   const [plans, setPlans] = useState<PlanDraft[]>(() => toDrafts(initial));
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,15 +136,6 @@ export function PlansManager({
     setDirty(true);
   }
 
-  // Reconcile the DB plan→feature ceiling to the catalog so new tenants on each
-  // plan light up the right features. Independent of the pricing/bullets save.
-  function syncFeatures() {
-    startSync(async () => {
-      const res = await syncPlanFeaturesAction();
-      showToast("error" in res ? res.error : "Plan features synced to the catalog.");
-    });
-  }
-
   function reset() {
     setPlans(toDrafts(defaultPlanConfig()));
     setDirty(true);
@@ -194,7 +185,7 @@ export function PlansManager({
         showToast(res.error);
       } else {
         setDirty(false);
-        showToast("Plan pricing saved.");
+        showToast("Plans saved & feature scope synced.");
         router.refresh(); // re-pull revenue + distribution with the new prices
       }
     });
@@ -217,14 +208,6 @@ export function PlansManager({
         </div>
         <div className="row" style={{ gap: 8 }}>
           {dirty && <span className="badge badge-warn">Unsaved changes</span>}
-          <button
-            className="btn"
-            onClick={syncFeatures}
-            disabled={syncing}
-            title="Reconcile each plan's feature ceiling in the database to the catalog"
-          >
-            <Ic.Refresh /> {syncing ? "Syncing…" : "Sync plan features"}
-          </button>
           <button className="btn" onClick={reset} disabled={pending}>
             Reset to defaults
           </button>

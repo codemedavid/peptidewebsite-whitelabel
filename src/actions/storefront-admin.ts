@@ -15,6 +15,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
+import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
@@ -759,6 +760,10 @@ function normalizeProtocols(input: unknown): Protocol[] {
     const notes = Array.isArray(o.notes)
       ? o.notes.map((n) => String(n ?? "").slice(0, 500)).filter(Boolean).slice(0, 50)
       : [];
+    // Canonicalize to a clean, capped image list (drops blanks, falls back to
+    // the legacy single `image`); `image` mirrors the first entry so any legacy
+    // reader still resolves a value.
+    const images = resolveProtocolImages({ images: o.images, image: o.image } as Protocol);
     return {
       category: String(o.category ?? "").slice(0, 120),
       name: String(o.name ?? "").slice(0, 200),
@@ -767,7 +772,8 @@ function normalizeProtocols(input: unknown): Protocol[] {
       duration: String(o.duration ?? "").slice(0, 200),
       notes,
       storage: String(o.storage ?? "").slice(0, 500),
-      image: typeof o.image === "string" ? o.image : "",
+      images,
+      image: images[0] ?? "",
       mode: o.mode === "image" ? "image" : "details",
     };
   });

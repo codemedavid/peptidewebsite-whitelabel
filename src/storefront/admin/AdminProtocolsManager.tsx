@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand, Protocol } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
+import { resolveProtocolImages, MAX_PROTOCOL_IMAGES } from "@/lib/storefront/protocol-images";
 
 export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { protocols, setProtocols, categories, toast } = useStore();
@@ -32,7 +33,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
         duration: "",
         notes: [""],
         storage: "",
-        image: "",
+        images: [],
         mode: "details",
       },
       ...list,
@@ -46,26 +47,81 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
     edit(list.filter((_, j) => j !== i));
   };
 
-  // Upload a protocol image to the tenant's ImageKit folder; store the hosted URL.
-  const handleImage = async (i: number, file: File | undefined) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Please pick an image file.");
+  // Upload one or more protocol images to the tenant's ImageKit folder and
+  // append the hosted URLs to this protocol's gallery. Uploads run
+  // sequentially so a partial failure still keeps the images that succeeded.
+  const handleImages = async (i: number, files: FileList | null) => {
+    const picked = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (picked.length === 0) {
+      if (files && files.length > 0) alert("Please pick image files.");
+      return;
+    }
+    const current = resolveProtocolImages(list[i]);
+    const room = MAX_PROTOCOL_IMAGES - current.length;
+    if (room <= 0) {
+      alert(`Up to ${MAX_PROTOCOL_IMAGES} images per protocol.`);
       return;
     }
     setUploadingIdx(i);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("kind", "protocol-image");
-      const res = await uploadStorefrontImageAction(fd);
-      if ("url" in res) update(i, { image: res.url });
-      else alert(res.error);
+      const uploaded: string[] = [];
+      for (const file of picked.slice(0, room)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("kind", "protocol-image");
+        const res = await uploadStorefrontImageAction(fd);
+        if ("url" in res) uploaded.push(res.url);
+        else alert(res.error);
+      }
+      if (uploaded.length > 0) update(i, { images: [...current, ...uploaded] });
     } catch {
       alert("Image upload failed — please try again.");
     } finally {
       setUploadingIdx(null);
     }
+  };
+
+  // Remove a single image from this protocol's gallery by position.
+  const removeImage = (i: number, k: number) =>
+    update(i, { images: resolveProtocolImages(list[i]).filter((_, idx) => idx !== k) });
+
+  // Shared thumbnail-grid editor: existing images with a remove button, plus an
+  // "add" tile (hidden once the per-protocol cap is reached). Used by both the
+  // image-only mode and the optional gallery under the details fields.
+  const galleryEditor = (i: number, p: Protocol) => {
+    const imgs = resolveProtocolImages(p);
+    const atMax = imgs.length >= MAX_PROTOCOL_IMAGES;
+    return (
+      <div className="protocols-thumb-grid">
+        {imgs.map((src, k) => (
+          <div key={k} className="protocols-thumb">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={`${p.name} protocol ${k + 1}`} className="protocols-thumb__img" />
+            <button
+              type="button"
+              className="protocols-thumb__remove"
+              aria-label="Remove image"
+              onClick={() => removeImage(i, k)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {!atMax && (
+          <label className="protocols-thumb protocols-thumb--add" style={{ cursor: "pointer" }}>
+            <span>{uploadingIdx === i ? "Uploading…" : "+ Add images"}</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              disabled={uploadingIdx === i}
+              onChange={(e) => void handleImages(i, e.target.files)}
+            />
+          </label>
+        )}
+      </div>
+    );
   };
 
   // Persist the whole list to the DB (branding.config) in one shot. Done on an
@@ -275,83 +331,13 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
 
                   {mode === "image" && (
                   <div>
-                    <div className="small">Protocol image</div>
+                    <div className="small">Protocol images</div>
                     <div className="admin-field__hint" style={{ marginBottom: 10 }}>
-                      Upload one image (e.g. a dosing chart or infographic). It
-                      replaces the typed details on the public page.
+                      Upload one or more images (e.g. dosing charts or
+                      infographics). They replace the typed details on the public
+                      page. Up to {MAX_PROTOCOL_IMAGES} — JPG, PNG, WebP, max 10 MB each.
                     </div>
-                    {p.image ? (
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={p.image}
-                          alt={`${p.name} protocol`}
-                          style={{
-                            maxWidth: 220,
-                            maxHeight: 160,
-                            borderRadius: 8,
-                            objectFit: "cover",
-                            border: "1px solid var(--brand-surface, #e5e7eb)",
-                          }}
-                        />
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          <label className="admin-image-btn" style={{ cursor: "pointer" }}>
-                            {uploadingIdx === i ? "Uploading…" : "Replace image"}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              disabled={uploadingIdx === i}
-                              onChange={(e) => void handleImage(i, e.target.files?.[0])}
-                            />
-                          </label>
-                          <button
-                            className="admin-image-btn admin-image-btn--secondary"
-                            type="button"
-                            onClick={() => update(i, { image: "" })}
-                          >
-                            Remove image
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label
-                        className="admin-image-drop"
-                        style={{ cursor: "pointer", display: "block" }}
-                      >
-                        {uploadingIdx === i ? (
-                          <div className="admin-image-drop__title">Uploading…</div>
-                        ) : (
-                          <>
-                            <div className="admin-image-drop__icon">
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                                <circle cx="9" cy="9" r="2" />
-                                <path d="m21 15-3.1-3.1a2 2 0 0 0-2.81.01L6 21" />
-                              </svg>
-                            </div>
-                            <div className="admin-image-drop__title">Click to upload protocol image</div>
-                            <div className="admin-image-drop__formats">
-                              JPG, PNG, WebP… — max 10 MB
-                            </div>
-                          </>
-                        )}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          disabled={uploadingIdx === i}
-                          onChange={(e) => void handleImage(i, e.target.files?.[0])}
-                        />
-                      </label>
-                    )}
+                    {galleryEditor(i, p)}
                   </div>
                   )}
 
@@ -378,6 +364,17 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                       placeholder="e.g. Refrigerate at 2-8°C…"
                       onChange={(e) => update(i, { storage: e.target.value })}
                     />
+                  </div>
+                  )}
+
+                  {mode === "details" && (
+                  <div>
+                    <div className="small">Images (optional)</div>
+                    <div className="admin-field__hint" style={{ marginBottom: 10 }}>
+                      Add supporting images shown below the details on the public
+                      page. Up to {MAX_PROTOCOL_IMAGES}.
+                    </div>
+                    {galleryEditor(i, p)}
                   </div>
                   )}
                 </div>
