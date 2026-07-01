@@ -14,6 +14,7 @@ import { requireStaffPermission, getStorefrontAdminActor } from "@/lib/auth/staf
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
+import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
@@ -427,6 +428,10 @@ function normalizeHeroContent(input: unknown): Record<string, string> {
   return out;
 }
 
+// Hero CTA link normalization (whitelist + http(s)-only URL sanitizing) lives in
+// the shared pure core so the storefront resolves the same config it was saved
+// with. See @/lib/storefront/hero-links (covered by npm run test:hero-links).
+
 /**
  * Persist the storefront's hero copy into the shared `branding.config` blob
  * (read-modify-write, mirroring savePaymentMethodsAction so it never clobbers
@@ -441,8 +446,9 @@ export async function saveHeroContentAction(input: unknown): Promise<ActionResul
 
   const slug = await getTenantSlug();
   const hero = normalizeHeroContent(input);
+  const links = normalizeHeroLinks(input);
   const current = await readConfig(tenantId);
-  const config = { ...current, ...hero };
+  const config = { ...current, ...hero, ...links };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

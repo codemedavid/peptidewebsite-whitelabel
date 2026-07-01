@@ -17,6 +17,7 @@ import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { ADMIN_AUTH_KEY } from "./admin/authKey";
 import { isPageVisible } from "./visibility";
+import { resolveHeroCtaLink } from "@/lib/storefront/hero-links";
 import { hasStorefrontAdminSessionAction } from "@/actions/storefront-admin";
 
 // Spinner shown while any lazy page chunk is downloading for the first time.
@@ -132,6 +133,37 @@ function Shell() {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // Resolve a hero CTA (primary = 1, secondary = 2) into its click handler from
+  // the owner-configured link target. Custom URLs open in a new tab; page links
+  // route through the hash router (the catalog link scrolls to the catalog on
+  // home). Defaults mirror the store-admin editor: primary → catalog, secondary
+  // → reviews, so legacy tenants keep a sensible primary "shop" action.
+  const heroCtaHandler = (n: 1 | 2): (() => void) => {
+    const cfg =
+      n === 1
+        ? { type: brand.heroCta1LinkType, page: brand.heroCta1LinkPage, url: brand.heroCta1LinkUrl }
+        : { type: brand.heroCta2LinkType, page: brand.heroCta2LinkPage, url: brand.heroCta2LinkUrl };
+    const target = resolveHeroCtaLink(cfg, n);
+    switch (target.kind) {
+      case "external":
+        return () => window.open(target.url, "_blank", "noopener,noreferrer");
+      case "catalog":
+        return () => {
+          if (page !== "home") goHome();
+          setTimeout(scrollToCatalog, 50);
+        };
+      case "home":
+        return goHome;
+      case "route":
+        return () => {
+          window.location.hash = target.route;
+        };
+      case "none":
+      default:
+        return () => {};
+    }
+  };
+
   // Admin — password-gated, no site chrome (branding editor still available).
   if (activePage === "admin") {
     return (
@@ -171,7 +203,7 @@ function Shell() {
 
       {(activePage === "home" || activePage === "catalog") && (
         <>
-          {brand.showHero !== false && <Hero brand={brand} onPrimary={scrollToCatalog} onSecondary={() => {}} />}
+          {brand.showHero !== false && <Hero brand={brand} onPrimary={heroCtaHandler(1)} onSecondary={heroCtaHandler(2)} />}
           {brand.showCategories !== false && (
             <Categories categories={categories} active={category} onChange={setCategory} />
           )}

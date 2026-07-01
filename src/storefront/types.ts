@@ -383,6 +383,17 @@ export type Brand = {
   heroCta1: string;
   heroCta2: string;
 
+  // Hero CTA link targets (edited in the store-admin Hero editor). Each button
+  // links to either a page on this storefront (a route key resolved by the
+  // hash router) or a custom URL. Unset = the legacy default (primary scrolls
+  // to the catalog, secondary is inert), so existing tenants are unaffected.
+  heroCta1LinkType?: "page" | "custom";
+  heroCta1LinkPage?: string; // "home" | "catalog" | "reviews" | "faq" | "coa" | "protocols" | "calculator" | "track" | "merchant"
+  heroCta1LinkUrl?: string;
+  heroCta2LinkType?: "page" | "custom";
+  heroCta2LinkPage?: string;
+  heroCta2LinkUrl?: string;
+
   // Hero typography (edited in the admin "Hero" tab). All optional — anything
   // unset inherits from the theme/brand fonts and the storefront.css defaults.
   // Fonts are family names ("" / undefined = inherit); sizes are friendly keys
