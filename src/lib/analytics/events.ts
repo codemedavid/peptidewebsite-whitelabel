@@ -26,6 +26,107 @@ export interface CapturePayload {
   personProperties?: Record<string, unknown>;
 }
 
+/**
+ * Tenant branding stamped onto every capture so PostHog Messaging templates can
+ * render the store's own name/logo/colors via Liquid ({{ event.properties.brandName }})
+ * — one generic email template then serves every tenant. Only keys the tenant
+ * actually configured are present, so templates can `| default:` the rest.
+ */
+export interface EmailBrand {
+  brandName?: string;
+  brandLogoUrl?: string;
+  /** The storefront CTA color — used for email buttons/badges. */
+  brandAccent?: string;
+  /** Text color that sits on brandAccent (the storefront's buttonText). */
+  brandAccentText?: string;
+  brandCurrency?: string;
+  /** Absolute storefront origin, e.g. https://shop.jonina.store (no trailing slash). */
+  storeUrl?: string;
+  /** Where "Questions?" in emails points: the tenant's first enabled contact
+   *  channel (WhatsApp/Telegram/Messenger/email), else the storefront itself. */
+  supportUrl?: string;
+  /** Human name for that channel ("WhatsApp", "email", "our website"). */
+  supportLabel?: string;
+}
+
+function strOf(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * The tenant's support link for email footers — the first enabled
+ * branding.config.contactChannels entry that yields a link Gmail will honor
+ * (https/mailto; viber:// is skipped because Gmail strips custom schemes).
+ * URL rules mirror the storefront's checkout hand-off (storefront/checkout.ts
+ * channelUrl), minus the prefilled message.
+ */
+function supportLink(
+  channels: unknown,
+): { supportUrl: string; supportLabel: string } | undefined {
+  if (!Array.isArray(channels)) return undefined;
+  for (const c of channels as Array<Record<string, unknown>>) {
+    if (!c || c.enabled !== true) continue;
+    const dest = strOf(c.destination);
+    if (!dest) continue;
+    switch (c.type) {
+      case "whatsapp":
+        return { supportUrl: `https://wa.me/${dest.replace(/[^\d]/g, "")}`, supportLabel: "WhatsApp" };
+      case "telegram": {
+        const handle = dest.replace(/^@/, "");
+        const url = /^\+?[\d\s().-]+$/.test(handle)
+          ? `https://t.me/+${handle.replace(/[^\d]/g, "")}`
+          : `https://t.me/${handle}`;
+        return { supportUrl: url, supportLabel: "Telegram" };
+      }
+      case "messenger":
+        return { supportUrl: `https://m.me/${dest.replace(/^@/, "")}`, supportLabel: "Messenger" };
+      case "gmail":
+        return { supportUrl: `mailto:${dest}`, supportLabel: "email" };
+      default:
+        continue; // viber (no https link) or unknown → try the next channel
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract the email-relevant slice of a tenant's branding.config (a Partial<Brand>).
+ * Pure — callers derive storeUrl (slug + root domain) themselves. Returns
+ * undefined when there is nothing brandable at all, so payload builders can
+ * skip the merge entirely.
+ */
+export function buildEmailBrand(
+  config: Record<string, unknown>,
+  storeUrl?: string,
+): EmailBrand | undefined {
+  const brand: EmailBrand = {};
+  const name = strOf(config.name);
+  if (name) brand.brandName = name;
+  const logo = strOf(config.logoUrl);
+  if (logo) brand.brandLogoUrl = logo;
+  // The storefront renders CTAs with `button`; fall back through the palette so
+  // an older config still yields a usable accent.
+  const accent = strOf(config.button) || strOf(config.accent) || strOf(config.main);
+  if (accent) brand.brandAccent = accent;
+  const accentText = strOf(config.buttonText);
+  if (accentText) brand.brandAccentText = accentText;
+  const currency = strOf(config.currency);
+  if (currency) brand.brandCurrency = currency;
+  const url = strOf(storeUrl);
+  if (url) brand.storeUrl = url.replace(/\/+$/, "");
+  // Support link: first usable contact channel, else the storefront itself so
+  // "Questions?" always lands somewhere the tenant actually answers.
+  const support = supportLink(config.contactChannels);
+  if (support) {
+    brand.supportUrl = support.supportUrl;
+    brand.supportLabel = support.supportLabel;
+  } else if (brand.storeUrl) {
+    brand.supportUrl = brand.storeUrl;
+    brand.supportLabel = "our website";
+  }
+  return Object.keys(brand).length ? brand : undefined;
+}
+
 /** The buyer's email, trimmed + lowercased ("" when none was given). */
 function emailOf(order: Order): string {
   return (order.customer?.email ?? "").trim().toLowerCase();
@@ -71,12 +172,13 @@ function personProps(order: Order): Record<string, unknown> | undefined {
 }
 
 /** `order_placed` — the authoritative checkout event PostHog workflows trigger on. */
-export function buildOrderPlacedPayload(order: Order): CapturePayload {
+export function buildOrderPlacedPayload(order: Order, brand?: EmailBrand): CapturePayload {
   const items = order.items ?? [];
   return {
     event: POSTHOG_EVENTS.ORDER_PLACED,
     distinctId: resolveDistinctId(order),
     properties: {
+      ...brand,
       orderNumber: order.orderNumber ?? order.id,
       total: orderTotal(order),
       itemsCount: items.reduce((s, it) => s + (it.qty || 0), 0),
@@ -102,11 +204,13 @@ export function buildStatusChangedPayload(
   order: Order,
   fromStatus: string,
   toStatus: string,
+  brand?: EmailBrand,
 ): CapturePayload {
   return {
     event: POSTHOG_EVENTS.ORDER_STATUS_CHANGED,
     distinctId: resolveDistinctId(order),
     properties: {
+      ...brand,
       orderNumber: order.orderNumber ?? order.id,
       fromStatus,
       toStatus,

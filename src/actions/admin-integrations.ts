@@ -18,10 +18,12 @@ import {
 } from "@/lib/integrations/store";
 import { postHogHealthCheck, postHogCapture, normalizeHost } from "@/lib/integrations/posthog";
 import {
+  buildEmailBrand,
   buildSampleOrder,
   buildOrderPlacedPayload,
   buildStatusChangedPayload,
 } from "@/lib/analytics/events";
+import { storefrontOrigin } from "@/lib/tenant/resolve";
 
 export type IntegrationResult = { ok: true } | { error: string };
 export type TestResult = { ok: true; healthy: boolean } | { error: string };
@@ -110,11 +112,22 @@ export async function sendPostHogTestEventsAction(
     return { error: "Enter a valid test email, or leave it blank." };
   }
 
+  // Stamp the tenant's real branding onto the sample events so the operator's
+  // PostHog email templates preview with this store's actual identity.
+  const branding = await prisma.branding.findUnique({
+    where: { tenantId: g.tenantId },
+    select: { config: true },
+  });
+  const emailBrand = buildEmailBrand(
+    (branding?.config ?? {}) as Record<string, unknown>,
+    storefrontOrigin(slug),
+  );
+
   const order = buildSampleOrder(e);
   const events = [
-    buildOrderPlacedPayload(order),
-    buildStatusChangedPayload(order, "processing", "shipped"),
-    buildStatusChangedPayload(order, "shipped", "delivered"),
+    buildOrderPlacedPayload(order, emailBrand),
+    buildStatusChangedPayload(order, "processing", "shipped", emailBrand),
+    buildStatusChangedPayload(order, "shipped", "delivered", emailBrand),
   ];
 
   let sent = 0;

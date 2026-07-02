@@ -65,7 +65,12 @@ import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/t
 import { authoritativeItemPrice } from "@/storefront/checkout";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
-import { buildOrderPlacedPayload, buildStatusChangedPayload } from "@/lib/analytics/events";
+import {
+  buildEmailBrand,
+  buildOrderPlacedPayload,
+  buildStatusChangedPayload,
+} from "@/lib/analytics/events";
+import { storefrontOrigin } from "@/lib/tenant/resolve";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -845,8 +850,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       await incrementPromoUsage(tenantId, slug, p.discount?.code);
       // Emit order_placed to the tenant's PostHog (entitled + connected only) so
       // their checkout workflow can email the customer. Fire-and-forget after the
-      // response — never blocks or breaks checkout.
-      after(() => capturePostHogEvent(tenantId, buildOrderPlacedPayload(placed), placed.date));
+      // response — never blocks or breaks checkout. Stamped with the tenant's
+      // branding so one PostHog email template renders every store's identity.
+      const emailBrand = buildEmailBrand(config, storefrontOrigin(slug));
+      after(() =>
+        capturePostHogEvent(tenantId, buildOrderPlacedPayload(placed, emailBrand), placed.date),
+      );
     }
     return { ok: true, order: placed };
   } catch (e) {
@@ -1125,16 +1134,24 @@ export async function updateStorefrontOrderAction(
     // Fulfillment moved (e.g. shipped/delivered) → emit order_status_changed so the
     // tenant's PostHog workflow can email the customer. Fire-and-forget after the
     // response; capture no-ops unless the tenant is entitled and connected.
+    // Branding is resolved BEFORE after() (getTenantContext is request-scoped)
+    // and stamped onto the event so the email renders this store's identity.
+    const slug = await getTenantSlug();
     if (result.statusChanged) {
+      const { branding } = await getTenantContext(tenantId);
+      const emailBrand = buildEmailBrand(
+        (branding?.config ?? {}) as Record<string, unknown>,
+        storefrontOrigin(slug),
+      );
       after(() =>
         capturePostHogEvent(
           tenantId,
-          buildStatusChangedPayload(updatedOrder, result.prevStatus, updatedOrder.status),
+          buildStatusChangedPayload(updatedOrder, result.prevStatus, updatedOrder.status, emailBrand),
         ),
       );
     }
     // Stock changed → refresh the cached storefront so the catalog shows it.
-    if (result.moved) revalidateTenant(tenantId, await getTenantSlug());
+    if (result.moved) revalidateTenant(tenantId, slug);
     return { ok: true, order: updatedOrder };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't update the order." };

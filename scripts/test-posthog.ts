@@ -30,6 +30,7 @@ import {
   POSTHOG_EVENTS,
   resolveDistinctId,
   orderTotal,
+  buildEmailBrand,
   buildOrderPlacedPayload,
   buildStatusChangedPayload,
   buildSampleOrder,
@@ -214,6 +215,121 @@ check("buildStatusChangedPayload carries from/to status and tracking", () => {
   assert.equal(p.properties.toStatus, "shipped");
   assert.equal(p.properties.trackingNumber, "TRK99");
   assert.equal(p.properties.orderNumber, "ABC-1001");
+});
+
+// ───────────────────── email brand (tenant-branded messaging) ────────────────
+console.log("\nemail brand (branding.config → event properties)");
+
+/** A branding.config shaped like the storefront's Partial<Brand>. */
+const BRAND_CONFIG = {
+  name: "Peptide Palace",
+  logoUrl: "https://ik.imagekit.io/demo/logo.png",
+  main: "#112233",
+  accent: "#445566",
+  button: "#0F766E",
+  buttonText: "#FFFFFF",
+  currency: "₱",
+};
+
+check("buildEmailBrand extracts name/logo/accent/currency and carries storeUrl", () => {
+  const b = buildEmailBrand(BRAND_CONFIG, "https://shop.jonina.store");
+  assert.ok(b, "brand present");
+  assert.equal(b!.brandName, "Peptide Palace");
+  assert.equal(b!.brandLogoUrl, "https://ik.imagekit.io/demo/logo.png");
+  assert.equal(b!.brandAccent, "#0F766E"); // button is the storefront CTA color
+  assert.equal(b!.brandAccentText, "#FFFFFF");
+  assert.equal(b!.brandCurrency, "₱");
+  assert.equal(b!.storeUrl, "https://shop.jonina.store");
+});
+
+check("buildEmailBrand accent falls back button → accent → main", () => {
+  const noButton = buildEmailBrand({ ...BRAND_CONFIG, button: "" });
+  assert.equal(noButton!.brandAccent, "#445566");
+  const mainOnly = buildEmailBrand({ name: "X", main: "#112233" });
+  assert.equal(mainOnly!.brandAccent, "#112233");
+});
+
+check("buildEmailBrand returns undefined when nothing brandable exists", () => {
+  assert.equal(buildEmailBrand({}), undefined);
+  assert.equal(buildEmailBrand({ name: "  ", logoUrl: "" }), undefined);
+});
+
+check("buildEmailBrand picks the first enabled contact channel as support link", () => {
+  const b = buildEmailBrand({
+    ...BRAND_CONFIG,
+    contactChannels: [
+      { type: "whatsapp", destination: "+63 917 123 4567", enabled: true },
+      { type: "gmail", destination: "help@store.com", enabled: true },
+    ],
+  });
+  assert.equal(b!.supportUrl, "https://wa.me/639171234567");
+  assert.equal(b!.supportLabel, "WhatsApp");
+});
+
+check("buildEmailBrand skips disabled channels and viber (no https link)", () => {
+  const b = buildEmailBrand({
+    ...BRAND_CONFIG,
+    contactChannels: [
+      { type: "whatsapp", destination: "+639171234567", enabled: false },
+      { type: "viber", destination: "+639171234567", enabled: true },
+      { type: "gmail", destination: "Help@Store.com", enabled: true },
+    ],
+  });
+  assert.equal(b!.supportUrl, "mailto:Help@Store.com");
+  assert.equal(b!.supportLabel, "email");
+});
+
+check("buildEmailBrand builds telegram links for usernames and phone numbers", () => {
+  const user = buildEmailBrand({
+    ...BRAND_CONFIG,
+    contactChannels: [{ type: "telegram", destination: "@peptide_store", enabled: true }],
+  });
+  assert.equal(user!.supportUrl, "https://t.me/peptide_store");
+  assert.equal(user!.supportLabel, "Telegram");
+  const phone = buildEmailBrand({
+    ...BRAND_CONFIG,
+    contactChannels: [{ type: "telegram", destination: "+63 917 123 4567", enabled: true }],
+  });
+  assert.equal(phone!.supportUrl, "https://t.me/+639171234567");
+});
+
+check("buildEmailBrand falls back to the store website when no channel is usable", () => {
+  const b = buildEmailBrand(BRAND_CONFIG, "https://shop.jonina.store");
+  assert.equal(b!.supportUrl, "https://shop.jonina.store");
+  assert.equal(b!.supportLabel, "our website");
+  const bare = buildEmailBrand(BRAND_CONFIG);
+  assert.ok(!("supportUrl" in bare!), "no support keys without channels or storeUrl");
+});
+
+check("buildEmailBrand with only a storeUrl still yields the url", () => {
+  const b = buildEmailBrand({}, "https://shop.example.com");
+  assert.equal(b!.storeUrl, "https://shop.example.com");
+  assert.ok(!("brandName" in b!), "no blank brandName key");
+});
+
+check("order_placed payload carries brand properties when a brand is given", () => {
+  const brand = buildEmailBrand(BRAND_CONFIG, "https://shop.jonina.store");
+  const p = buildOrderPlacedPayload(makeOrder(), brand);
+  assert.equal(p.properties.brandName, "Peptide Palace");
+  assert.equal(p.properties.brandAccent, "#0F766E");
+  assert.equal(p.properties.storeUrl, "https://shop.jonina.store");
+  assert.equal(p.properties.orderNumber, "ABC-1001"); // order props intact
+});
+
+check("order_status_changed payload carries brand properties when given", () => {
+  const brand = buildEmailBrand(BRAND_CONFIG, "https://shop.jonina.store");
+  const p = buildStatusChangedPayload(makeOrder(), "processing", "shipped", brand);
+  assert.equal(p.properties.brandName, "Peptide Palace");
+  assert.equal(p.properties.storeUrl, "https://shop.jonina.store");
+  assert.equal(p.properties.toStatus, "shipped");
+});
+
+check("payloads omit brand keys entirely when no brand is given", () => {
+  const placed = buildOrderPlacedPayload(makeOrder());
+  assert.ok(!("brandName" in placed.properties));
+  assert.ok(!("storeUrl" in placed.properties));
+  const changed = buildStatusChangedPayload(makeOrder(), "new", "confirmed");
+  assert.ok(!("brandName" in changed.properties));
 });
 
 // ──────────────────────── sample order (super-admin test tool) ───────────────

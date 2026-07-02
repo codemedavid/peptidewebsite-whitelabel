@@ -2040,9 +2040,79 @@
   display: block;
   background: color-mix(in srgb, var(--brand-text) 4%, transparent);
 }
+/* Each gallery image is a button that opens the full-size viewer. */
+.sf-root .protocols__gallery-btn {
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: 12px;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.sf-root .protocols__gallery-btn:hover { opacity: 0.92; transform: scale(1.01); }
+.sf-root .protocols__gallery-btn:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 3px;
+}
 @media (max-width: 700px) {
   .sf-root .protocols__pills { grid-template-columns: 1fr; }
   .sf-root .protocols__gallery { grid-template-columns: 1fr; }
+}
+
+/* Full-screen protocol image viewer (lightbox). */
+.sf-root .protocols__viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: rgba(10, 12, 16, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: zoom-out;
+  animation: sf-viewer-in 160ms ease;
+}
+.sf-root .protocols__viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  cursor: default;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.sf-root .protocols__viewer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.sf-root .protocols__viewer-close:hover { background: rgba(255, 255, 255, 0.22); }
+.sf-root .protocols__viewer-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+@keyframes sf-viewer-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .protocols__viewer { animation: none; }
+  .sf-root .protocols__gallery-btn { transition: none; }
+  .sf-root .protocols__gallery-btn:hover { transform: none; }
 }
 
 /* Admin: protocol gallery thumbnail editor (thumbnails + remove + add tile). */

@@ -12,6 +12,17 @@ const RESERVED_SUBDOMAINS = new Set(["www", "admin", "app"]);
 
 export type ResolvedTenant = { id: string; slug: string; status: string };
 
+/**
+ * Absolute public origin for a tenant's storefront on the platform subdomain —
+ * where transactional-email CTAs point (e.g. https://<slug>.<root>/#track).
+ * Undefined when the slug is unknown. Tenants on a custom domain still reach
+ * the same storefront via their subdomain, so this is always a safe link.
+ */
+export function storefrontOrigin(slug: string | null | undefined): string | undefined {
+  const s = (slug ?? "").trim().toLowerCase();
+  return s ? `https://${s}.${normalizeHost(ROOT)}` : undefined;
+}
+
 function normalizeHost(host: string) {
   return host.replace(/:\d+$/, "").toLowerCase();
 }

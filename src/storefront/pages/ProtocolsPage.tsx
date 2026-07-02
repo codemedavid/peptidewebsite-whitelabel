@@ -1,16 +1,101 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
+import {
+  PROTOCOL_SORT_OPTIONS,
+  normalizeProtocolSort,
+  sortProtocolsByName,
+  type ProtocolSort,
+} from "@/lib/storefront/protocol-sort";
+
+type ViewerImage = { src: string; alt: string };
+
+function ProtocolGallery({
+  images,
+  name,
+  onView,
+}: {
+  images: string[];
+  name: string;
+  onView: (image: ViewerImage) => void;
+}) {
+  return (
+    <div className="protocols__gallery">
+      {images.map((src, k) => {
+        const alt = `${name} protocol ${k + 1}`;
+        return (
+          <button
+            key={k}
+            type="button"
+            className="protocols__gallery-btn"
+            onClick={() => onView({ src, alt })}
+            aria-label={`View ${alt} full size`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={alt} className="protocols__gallery-img" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProtocolImageViewer({ image, onClose }: { image: ViewerImage; onClose: () => void }) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="protocols__viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label={image.alt}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        className="protocols__viewer-close"
+        onClick={onClose}
+        aria-label="Close full view"
+      >
+        <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
+        </svg>
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={image.src}
+        alt={image.alt}
+        className="protocols__viewer-img"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
 
 export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { protocols: all } = useStore();
   const cats = Array.from(new Set(all.map((p) => p.category))).filter(Boolean);
   const [cat, setCat] = useState("all");
+  const [sort, setSort] = useState<ProtocolSort>("default");
+  const [viewer, setViewer] = useState<ViewerImage | null>(null);
   const filtered = cat === "all" ? all : all.filter((p) => p.category === cat);
+  const sorted = sortProtocolsByName(filtered, sort);
 
   return (
     <section className="page" id="protocols">
@@ -76,8 +161,8 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
         {all.length > 0 && (
           <>
             <div className="protocols__filter">
-              <label>Filter by Category</label>
-              <select value={cat} onChange={(e) => setCat(e.target.value)}>
+              <label htmlFor="protocols-cat">Filter by Category</label>
+              <select id="protocols-cat" value={cat} onChange={(e) => setCat(e.target.value)}>
                 <option value="all">All Categories</option>
                 {cats.map((c) => (
                   <option key={c} value={c}>
@@ -85,12 +170,24 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                   </option>
                 ))}
               </select>
+              <label htmlFor="protocols-sort">Sort</label>
+              <select
+                id="protocols-sort"
+                value={sort}
+                onChange={(e) => setSort(normalizeProtocolSort(e.target.value))}
+              >
+                {PROTOCOL_SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="protocols__count">
-              {filtered.length} protocol{filtered.length === 1 ? "" : "s"} found
+              {sorted.length} protocol{sorted.length === 1 ? "" : "s"} found
             </div>
 
-            {filtered.map((p, i) => {
+            {sorted.map((p, i) => {
               // "image" mode → the uploaded image(s) *are* the protocol;
               // otherwise render the typed fields. Legacy rows (no mode) default
               // to details. Images resolve through the shared helper so a legacy
@@ -98,7 +195,9 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
               const images = resolveProtocolImages(p);
               const imageOnly = (p.mode ?? "details") === "image" && images.length > 0;
               return (
-              <details key={i} className="protocols__item" open={i === 0}>
+              // Key by position in the source list (stable across sort/filter)
+              // so each <details>' open state stays with its protocol.
+              <details key={all.indexOf(p)} className="protocols__item" open={i === 0}>
                 <summary className="protocols__item-head">
                   <div>
                     <div className="eyebrow">{p.category}</div>
@@ -110,17 +209,7 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                 </summary>
                 <div className="protocols__item-body">
                   {imageOnly ? (
-                    <div className="protocols__gallery">
-                      {images.map((src, k) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={k}
-                          src={src}
-                          alt={`${p.name} protocol ${k + 1}`}
-                          className="protocols__gallery-img"
-                        />
-                      ))}
-                    </div>
+                    <ProtocolGallery images={images} name={p.name} onView={setViewer} />
                   ) : (
                   <>
                   <div className="protocols__pills">
@@ -158,17 +247,7 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
                   )}
                   {/* Optional supplementary images below the typed fields. */}
                   {images.length > 0 && (
-                    <div className="protocols__gallery">
-                      {images.map((src, k) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={k}
-                          src={src}
-                          alt={`${p.name} protocol ${k + 1}`}
-                          className="protocols__gallery-img"
-                        />
-                      ))}
-                    </div>
+                    <ProtocolGallery images={images} name={p.name} onView={setViewer} />
                   )}
                   </>
                   )}
@@ -179,6 +258,8 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
           </>
         )}
       </div>
+
+      {viewer && <ProtocolImageViewer image={viewer} onClose={() => setViewer(null)} />}
     </section>
   );
 }

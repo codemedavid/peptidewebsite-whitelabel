@@ -1,0 +1,138 @@
+<!-- PostHog HTML-block fragment: paste into a full-width HTML block (no <html>/<body> —
+     the editor supplies those). Put this line in PostHog's "Preheader" field:
+     We received order {{ event.properties.orderNumber }} — here's your summary. -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding:24px 8px;background-color:#EFEDE7;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+
+          <!-- Wordmark -->
+          <tr>
+            <td style="padding:0 6px 16px;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:18px;letter-spacing:0.01em;color:#1C1B18;">{{ event.properties.brandName | default: "Our store" }}</span>
+              <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#9B968A;">&nbsp;&nbsp;·&nbsp;&nbsp;Order updates</span>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td style="background-color:#FFFFFF;border:1px solid #E3E0D7;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(28,27,24,0.05), 0 14px 34px rgba(28,27,24,0.07);">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                <!-- Brand keyline -->
+                <tr>
+                  <td style="height:4px;font-size:0;line-height:0;background-color:{{ event.properties.brandAccent | default: '#1C1B18' }};">&nbsp;</td>
+                </tr>
+
+                <!-- Header band -->
+                <tr>
+                  <td style="background-color:#1C1B18;padding:30px 18px 28px;">
+                    <div style="padding-bottom:12px;">
+                      <span style="display:inline-block;width:22px;height:2px;font-size:0;line-height:0;vertical-align:middle;background-color:{{ event.properties.brandAccent | default: '#8A8578' }};">&nbsp;</span>
+                      <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.14em;color:#B8B4A8;text-transform:uppercase;vertical-align:middle;">&nbsp;&nbsp;Order received</span>
+                    </div>
+                    <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#FFFFFF;">
+                      Thanks, {{ person.properties.name | default: "friend" }} — <span style="font-style:italic;">we've got your order.</span>
+                    </div>
+                    <div style="padding-top:16px;">
+                      <span style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:12px;letter-spacing:0.03em;color:#F1F0EC;background-color:#33312B;border:1px solid #4A473F;border-radius:6px;padding:6px 10px;">
+                        {{ event.properties.orderNumber }}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Body -->
+                <tr>
+                  <td style="padding:28px 18px 6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#3B3830;">
+                    Your order is in and our team is reviewing it now. We'll email you the moment it's confirmed, and again once it ships.
+                  </td>
+                </tr>
+
+                <!-- Order summary: tinted panel with brand spine -->
+                <tr>
+                  <td style="padding:22px 18px 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FAF9F5;border-left:3px solid {{ event.properties.brandAccent | default: '#1C1B18' }};border-radius:0 12px 12px 0;">
+                      <tr>
+                        <td style="padding:18px 22px 4px;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#9B968A;">
+                          Order summary
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:8px 22px 14px;font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:1.65;color:#1C1B18;">
+                          {{ event.properties.itemNames | join: ", " }}
+                          <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#9B968A;">&nbsp;·&nbsp;{{ event.properties.itemsCount }} item(s)</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:0 22px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6E6A5F;border-top:1px solid #ECE9E0;">
+                            <tr>
+                              <td style="padding:12px 0 3px;">Shipping</td>
+                              <td align="right" style="padding:12px 0 3px;color:#3B3830;">{{ event.properties.brandCurrency | default: "₱" }}{{ event.properties.shippingFee }}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding:3px 0 14px;">Payment method</td>
+                              <td align="right" style="padding:3px 0 14px;color:#3B3830;">{{ event.properties.paymentMethod }}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:0 22px 18px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:2px solid #1C1B18;">
+                            <tr>
+                              <td style="padding-top:12px;font-family:Georgia,'Times New Roman',serif;font-size:16px;color:#1C1B18;">Total</td>
+                              <td align="right" style="padding-top:12px;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1C1B18;">{{ event.properties.brandCurrency | default: "₱" }}{{ event.properties.total }}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- CTA -->
+                <tr>
+                  <td align="center" style="padding:30px 18px 10px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="background-color:{{ event.properties.brandAccent | default: '#1C1B18' }};border-radius:999px;border-bottom:3px solid rgba(0,0,0,0.22);">
+                          <a href="{{ event.properties.storeUrl | default: 'https://YOUR_STORE_URL' }}/#track" style="display:inline-block;padding:12px 32px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:{{ event.properties.brandAccentText | default: '#FFFFFF' }};text-decoration:none;font-weight:bold;letter-spacing:0.01em;">
+                            Track your order
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="padding-top:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#9B968A;">
+                      Use order number {{ event.properties.orderNumber }} on the tracking page.
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Signature -->
+                <tr>
+                  <td style="padding:18px 18px 28px;font-family:Georgia,'Times New Roman',serif;font-size:14px;font-style:italic;color:#8A8578;">
+                    — the {{ event.properties.brandName | default: "store" }} team
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding:24px 12px 0;">
+              <div style="border-top:1px solid #E3E0D7;font-size:0;line-height:0;">&nbsp;</div>
+              <div style="padding-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#9B968A;">
+                You're receiving this because you placed an order at {{ event.properties.brandName | default: "our store" }}.<br>
+                Questions? <a href="{{ event.properties.supportUrl | default: '#' }}" style="color:#6E6A5F;font-weight:bold;text-decoration:underline;">Reach us via {{ event.properties.supportLabel | default: "our website" }}</a>.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
