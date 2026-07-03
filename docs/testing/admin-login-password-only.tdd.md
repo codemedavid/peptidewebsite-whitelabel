@@ -35,18 +35,27 @@ staff credentials that don't exist yet on a fresh store. Requirement: show a
   staff **through `withTenant()`** and sets
   `brand.staffLoginActive = resolveAdminLoginMode(staffEntitled, staffCount) === "unified"`.
   The count is read only when the feature is on and is wrapped in try/catch → 0.
-- **RLS correctness (caught in verification):** `storefront_staff` is under Postgres
-  RLS; a bare `prisma.storefrontStaff.count` resolves to **0 rows** because
-  `app.tenant_id` is unset outside a tenant transaction. First implementation used raw
-  prisma and never flipped to unified. Fixed by routing the count through
-  `withTenant()` (commit `a89472d`).
+- **Data-access choice:** the count runs through `withTenant()` to match this file's
+  existing tenant-scoped access (its product load) and to stay correct if `app_user`
+  RLS is ever adopted. NOTE: the live DB currently connects as `postgres` with
+  `rolbypassrls = true` (verified: `select current_user, rolbypassrls …`), so RLS is
+  **not** enforced and a raw `prisma.storefrontStaff.count({where:{tenantId}})` also
+  returns the right rows. `withTenant` is the convention-consistent, future-proof form,
+  not a strict requirement on today's DB.
 - **Command / evidence (fresh client):**
   `withTenant(tenantId, db => db.storefrontStaff.count({where:{tenantId}}))` = **1**
   for a tenant with one staff row → `resolveAdminLoginMode(true, 1)` = `"unified"`.
-- **Resilience:** the try/catch degrades to password-only if the staff table/delegate
-  is unavailable (DB drift, or a stale generated client), so the **public storefront
-  render never crashes** — confirmed live: feature-on tenant rendered `HTTP 200` and
-  fell back to password-only when the running dev server held a stale Prisma client.
+- **Root cause of the initial live `false` (corrected):** the long-running dev server
+  held a **stale in-memory generated Prisma client** predating the `storefront_staff`
+  model, so its `storefrontStaff` delegate was `undefined` and the count threw. My
+  `try/catch` caught it → 0 → password-only. This is a stale-process artifact, **not**
+  an RLS effect (my earlier commit message `a89472d` mis-attributed it to RLS). A
+  dev-server restart / `prisma generate` reloads the delegate and the unified path
+  renders live.
+- **Resilience:** the try/catch degrades to password-only if the staff table or the
+  generated delegate is unavailable (DB drift, stale client), so the **public
+  storefront render never crashes** — confirmed live: feature-on tenant rendered
+  `HTTP 200` and fell back to password-only under the stale client.
 
 ### Task 3 — Client wiring (`AdminLogin.tsx`, `Brand`)
 - **Summary:** `AdminLogin` reads `brand.staffLoginActive`. When false: hides the
@@ -65,7 +74,7 @@ staff credentials that don't exist yet on a fresh store. Requirement: show a
 | 3 | Feature on + ≥1 staff → unified (username + password) | `test:admin-login-mode` | unit | PASS |
 | 4 | Negative / NaN staff count → password-only, never throws | `test:admin-login-mode` | unit | PASS |
 | 5 | Existing staff-permission gate unaffected | `npm run test:staff` | unit | PASS (62/62) |
-| 6 | Server derives unified only inside RLS tenant context | `withTenant storefrontStaff.count = 1` (fresh tsx) | integration | PASS |
+| 6 | Server derives unified from a real staff count (via withTenant) | `withTenant storefrontStaff.count = 1` (fresh tsx) | integration | PASS |
 | 7 | Public storefront renders (feature off / on) without crash | `curl` peppertones & fit-n-glow → HTTP 200 | integration | PASS |
 | 8 | Whole project type-checks | `npx tsc --noEmit --pretty false` | typecheck | PASS (0 errors) |
 
@@ -94,4 +103,6 @@ staff credentials that don't exist yet on a fresh store. Requirement: show a
 - `44f4846` test: RED reproducer (module missing)
 - `f18cfea` feat: pure core GREEN (5/5)
 - `6fe45da` feat: password-only login wiring (page/type/AdminLogin), tsc clean, staff 62/62
-- `a89472d` fix: count staff via `withTenant` (RLS) so unified resolves correctly
+- `a89472d` fix: count staff via `withTenant` — **commit message mis-attributes the
+  live `false` to RLS; the real cause was a stale in-memory Prisma client. `withTenant`
+  is kept as the convention-consistent form. See the corrected root-cause note above.**
