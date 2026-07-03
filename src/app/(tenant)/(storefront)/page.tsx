@@ -1,7 +1,6 @@
 import { getTenantId, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
-import { prisma } from "@/lib/db/prisma";
 import { resolveAdminLoginMode } from "@/lib/storefront/admin-login-mode";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
@@ -117,14 +116,18 @@ export default async function HomePage() {
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
   // least one staff account exists. Until then the login is password-only (the
   // owner password), so a brand-new store is never asked for a phantom staff
-  // username that doesn't exist yet. The staff-row count is only read when the
-  // feature is on, and is wrapped so a missing/absent staff table (DB drift, or
-  // demo mode) resolves to "no staff" — the public storefront render must never
-  // fail on this. Decision lives in the pure core (test:admin-login-mode).
+  // username that doesn't exist yet. The count MUST go through withTenant() —
+  // storefront_staff is under RLS, so a bare prisma read returns 0 rows outside
+  // the tenant transaction context. Only read when the feature is on, and wrap it
+  // so a missing/absent staff table (DB drift, demo mode) resolves to "no staff"
+  // — the public storefront render must never fail on this. Decision lives in the
+  // pure core (test:admin-login-mode).
   let staffCount = 0;
   if (staffEntitled && !isDemoMode()) {
     try {
-      staffCount = await prisma.storefrontStaff.count({ where: { tenantId } });
+      staffCount = await withTenant(tenantId, (db) =>
+        db.storefrontStaff.count({ where: { tenantId } }),
+      );
     } catch {
       staffCount = 0;
     }
