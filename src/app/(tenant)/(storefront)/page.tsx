@@ -1,6 +1,8 @@
 import { getTenantId, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
+import { prisma } from "@/lib/db/prisma";
+import { resolveAdminLoginMode } from "@/lib/storefront/admin-login-mode";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
@@ -108,7 +110,26 @@ export default async function HomePage() {
   // operator-grantable on Starter. When off the store-admin Staff Accounts view
   // is hidden (visibility.ts) and the staff server actions / staff sign-in are
   // blocked (storefront-staff.ts re-checks this same entitlement).
-  brand.showAdminStaff = await hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
+  const staffEntitled = await hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
+  brand.showAdminStaff = staffEntitled;
+
+  // The `#admin` login only asks for a USERNAME once the store actually has
+  // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
+  // least one staff account exists. Until then the login is password-only (the
+  // owner password), so a brand-new store is never asked for a phantom staff
+  // username that doesn't exist yet. The staff-row count is only read when the
+  // feature is on, and is wrapped so a missing/absent staff table (DB drift, or
+  // demo mode) resolves to "no staff" — the public storefront render must never
+  // fail on this. Decision lives in the pure core (test:admin-login-mode).
+  let staffCount = 0;
+  if (staffEntitled && !isDemoMode()) {
+    try {
+      staffCount = await prisma.storefrontStaff.count({ where: { tenantId } });
+    } catch {
+      staffCount = 0;
+    }
+  }
+  brand.staffLoginActive = resolveAdminLoginMode(staffEntitled, staffCount) === "unified";
 
   // Checkout admin fee: operator-revocable per tenant (admin → Features),
   // default ON. Revoking drops the fee line from checkout — orders.ts re-applies

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand } from "../types";
 import { ADMIN_AUTH_KEY } from "./authKey";
 import { signInStoreAdminAction } from "@/actions/storefront-staff";
+import { signInStorefrontAdminAction } from "@/actions/storefront-admin";
 
 export { ADMIN_AUTH_KEY };
 
@@ -12,6 +13,13 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Until the store has per-user logins (Staff Accounts enabled AND ≥1 staff),
+  // there's no username to disambiguate — so we ask for the owner password only,
+  // never a phantom staff username. `staffLoginActive` is derived server-side
+  // (resolveAdminLoginMode); it flips on once the owner creates their first staff
+  // account, bringing the username field back.
+  const usernameRequired = brand.staffLoginActive === true;
 
   // Credentials are verified server-side (owner against branding.config, staff
   // against their scrypt hash) and, on success, the server issues a signed session
@@ -22,7 +30,11 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
     if (busy) return;
     setBusy(true);
     setError("");
-    const result = await signInStoreAdminAction(username, pw);
+    // Password-only mode signs in as the owner (owner password); the unified
+    // form resolves owner-or-staff by username. Both mint the same signed cookie.
+    const result = usernameRequired
+      ? await signInStoreAdminAction(username, pw)
+      : await signInStorefrontAdminAction(pw);
     setBusy(false);
     if ("ok" in result) {
       try {
@@ -54,24 +66,27 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
         <p className="admin-login__sub">
           {brand.adminLoginSub || `Sign in to manage ${brand.name || "this store"}`}
         </p>
-        <input
-          type="text"
-          className={`admin-login__input ${error ? "is-error" : ""}`}
-          value={username}
-          placeholder="Username"
-          autoFocus
-          autoCapitalize="none"
-          autoCorrect="off"
-          onChange={(e) => {
-            setUsername(e.target.value);
-            setError("");
-          }}
-        />
+        {usernameRequired && (
+          <input
+            type="text"
+            className={`admin-login__input ${error ? "is-error" : ""}`}
+            value={username}
+            placeholder="Username"
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setError("");
+            }}
+          />
+        )}
         <input
           type="password"
           className={`admin-login__input ${error ? "is-error" : ""}`}
           value={pw}
           placeholder="Password"
+          autoFocus={!usernameRequired}
           onChange={(e) => {
             setPw(e.target.value);
             setError("");
@@ -82,11 +97,17 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
           {busy ? "Checking…" : "Enter Dashboard"}
         </button>
         <div className="admin-login__hint">
-          Store owners sign in with username{" "}
-          <code style={{ background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: 4 }}>
-            owner
-          </code>{" "}
-          and their admin password. Staff use the username their owner gave them.
+          {usernameRequired ? (
+            <>
+              Store owners sign in with username{" "}
+              <code style={{ background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: 4 }}>
+                owner
+              </code>{" "}
+              and their admin password. Staff use the username their owner gave them.
+            </>
+          ) : (
+            "Enter your store admin password to manage this store."
+          )}
         </div>
       </form>
     </div>

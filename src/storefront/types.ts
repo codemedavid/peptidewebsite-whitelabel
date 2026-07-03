@@ -339,6 +339,12 @@ export type Brand = {
   // Business/Automated plan ceilings (default ON there) and operator-grantable on
   // Starter — so OFF for Starter until the operator turns it on.
   showAdminStaff?: boolean;
+  // Whether the `#admin` login shows the unified username + password form. True
+  // only when Staff Accounts are enabled AND ≥1 staff account exists; otherwise
+  // the login is password-only (owner password), so a fresh store is never asked
+  // for a staff username that doesn't exist yet. Derived server-side via
+  // resolveAdminLoginMode (see admin-login-mode.ts, test:admin-login-mode).
+  staffLoginActive?: boolean;
   // Store-admin Reseller Portal manager. Derived server-side from the platform
   // entitlement (FEATURES.STORE_RESELLER_PORTAL, admin → Features). In every
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
