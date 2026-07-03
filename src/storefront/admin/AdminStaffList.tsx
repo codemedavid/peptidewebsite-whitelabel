@@ -106,6 +106,13 @@ export function AdminStaffList({ brand, onBack, onAdd, onEdit }: Props) {
       </header>
 
       <div className="admin-form__body">
+        <div className="admin__tip" style={{ marginTop: 0, textAlign: "left" }}>
+          <strong>How admin sign-in works:</strong> with no staff, the admin login asks
+          for your password only. As soon as you add your first staff member below, the
+          login also asks for a <strong>username</strong> — you sign in as{" "}
+          <code>owner</code> with your admin password, and each staff member signs in
+          with the username you give them.
+        </div>
         <div className="admin-form__card">
           {loading ? (
             <div className="admin-field__hint">Loading staff…</div>
