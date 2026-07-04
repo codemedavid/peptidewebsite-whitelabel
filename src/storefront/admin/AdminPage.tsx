@@ -28,6 +28,7 @@ import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
 import { AdminHeroSettings } from "./AdminHeroSettings";
+import { AdminBannerSettings } from "./AdminBannerSettings";
 import { isAdminViewVisible } from "../visibility";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminStaffForm } from "./AdminStaffForm";
@@ -58,6 +59,7 @@ type View =
   | "fee"
   | "groupbuys"
   | "hero"
+  | "banner"
   | "account"
   | "staff"
   | "staff-form"
@@ -202,6 +204,7 @@ export function AdminPage({
   if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
@@ -262,6 +265,7 @@ export function AdminPage({
     { id: "manage", label: "Manage Products", hint: "Edit existing items", icon: "box", tint: "green" },
     { id: "cats", label: "Categories", hint: "Organize items", icon: "folder", tint: "orange" },
     { id: "hero", label: "Hero Section", hint: "Homepage headline & tagline", icon: "sparkle", tint: "yellow" },
+    { id: "banner", label: "Announcement Banner", hint: "Promo bar under the header", icon: "bell", tint: "orange" },
     { id: "design", label: "Card Studio", hint: "Product card designs", icon: "palette", tint: "purple" },
     { id: "orders", label: "Orders", hint: "View transactions", icon: "cart", tint: "yellow" },
     { id: "analytics", label: "Sales Analytics", hint: "Revenue & insights", icon: "trend", tint: "cyan" },

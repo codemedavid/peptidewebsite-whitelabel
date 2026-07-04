@@ -6309,3 +6309,130 @@
     justify-content: flex-start;
   }
 }
+
+/* ── Announcement banner (under the header) ──────────────────────────────────
+   Owner-managed promo bar. Three layouts (single / carousel / marquee) share
+   the same shell; motion is transform/opacity only and freezes under
+   prefers-reduced-motion. Defaults to the brand accent; the owner can override
+   bg/text per store (values are sanitized server-side before they land here). */
+.sf-root .sf-banner {
+  background: var(--brand-accent);
+  color: var(--brand-on-accent, #fff);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand-on-accent, #fff) 18%, transparent);
+  overflow: hidden;
+}
+.sf-root .sf-banner__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.sf-root .sf-banner__link,
+.sf-root .sf-banner__text {
+  color: inherit;
+}
+.sf-root .sf-banner__link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-banner__link:hover {
+  opacity: 0.82;
+}
+
+/* Single + carousel share a centered single-line slide. */
+.sf-root .sf-banner--single .sf-banner__inner,
+.sf-root .sf-banner--carousel .sf-banner__inner {
+  justify-content: center;
+  text-align: center;
+}
+.sf-root .sf-banner__slide {
+  width: 100%;
+  padding: 9px 0;
+  animation: sf-banner-fade var(--duration-normal, 300ms) ease;
+}
+@keyframes sf-banner-fade {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Carousel dots. */
+.sf-root .sf-banner__carousel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.sf-root .sf-banner__dots {
+  display: inline-flex;
+  gap: 6px;
+  flex: none;
+}
+.sf-root .sf-banner__dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--brand-on-accent, #fff) 40%, transparent);
+  transition: background var(--duration-fast, 150ms) ease, transform var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-banner__dot:hover { transform: scale(1.2); }
+.sf-root .sf-banner__dot.is-active {
+  background: var(--brand-on-accent, #fff);
+}
+
+/* Marquee — a duplicated track translated left for a seamless loop. */
+.sf-root .sf-banner--marquee .sf-banner__inner {
+  padding-inline: 0;
+}
+.sf-root .sf-banner__marquee {
+  width: 100%;
+  overflow: hidden;
+}
+.sf-root .sf-banner__marquee-track {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  will-change: transform;
+  animation: sf-banner-scroll linear infinite;
+}
+.sf-root .sf-banner__marquee--pausable:hover .sf-banner__marquee-track {
+  animation-play-state: paused;
+}
+.sf-root .sf-banner__item {
+  padding: 9px 0;
+  margin-right: 3rem;
+  flex: none;
+}
+@keyframes sf-banner-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+/* Reduced-motion marquee fallback: wrap statically, no scroll. */
+.sf-root .sf-banner__static-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 2rem;
+  justify-content: center;
+  padding: 9px 0;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-banner__marquee-track {
+    animation: none;
+    transform: none;
+  }
+  .sf-root .sf-banner__slide {
+    animation: none;
+  }
+}

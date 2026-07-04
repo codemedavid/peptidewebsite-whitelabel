@@ -3,6 +3,7 @@
 
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
+import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type {
   GroupBuyCapabilities,
@@ -293,6 +294,11 @@ export type Brand = {
   adminPassword: string;
   adminLoginTitle: string;
   adminLoginSub: string;
+
+  // Announcement banner under the header (owner-managed, default off). Absent
+  // until the owner configures it; normalized through @/lib/storefront/banner
+  // both on save (server) and at render (client).
+  banner?: StorefrontBanner;
 
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;

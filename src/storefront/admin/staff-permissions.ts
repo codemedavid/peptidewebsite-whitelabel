@@ -30,6 +30,7 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "products", label: "Manage Products" },
   { key: "categories", label: "Categories" },
   { key: "hero", label: "Hero Section" },
+  { key: "banner", label: "Announcement Banner" },
   { key: "orders", label: "Orders" },
   { key: "inv", label: "Inventory" },
   { key: "shipping", label: "Shipping" },

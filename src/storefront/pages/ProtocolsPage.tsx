@@ -92,7 +92,7 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
   const { protocols: all } = useStore();
   const cats = Array.from(new Set(all.map((p) => p.category))).filter(Boolean);
   const [cat, setCat] = useState("all");
-  const [sort, setSort] = useState<ProtocolSort>("default");
+  const [sort, setSort] = useState<ProtocolSort>("az");
   const [viewer, setViewer] = useState<ViewerImage | null>(null);
   const filtered = cat === "all" ? all : all.filter((p) => p.category === cat);
   const sorted = sortProtocolsByName(filtered, sort);

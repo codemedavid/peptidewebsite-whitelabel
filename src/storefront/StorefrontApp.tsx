@@ -10,6 +10,7 @@ import { StoreProvider, useStore } from "./store";
 import type { Brand, Product } from "./types";
 import { BRAND } from "./data";
 import { Header } from "./components/Header";
+import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
@@ -132,6 +133,17 @@ function Shell() {
   const scrollToCatalog = () => {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  // Navigate a banner slide's page link through the same hash router the hero
+  // CTAs use (catalog scrolls on home; home clears the hash; else set the route).
+  const goToRoute = (route: string) => {
+    if (route === "home") return goHome();
+    if (route === "catalog") {
+      if (page !== "home") goHome();
+      setTimeout(scrollToCatalog, 50);
+      return;
+    }
+    window.location.hash = route;
+  };
 
   // Resolve a hero CTA (primary = 1, secondary = 2) into its click handler from
   // the owner-configured link target. Custom URLs open in a new tab; page links
@@ -192,6 +204,8 @@ function Shell() {
           }}
         />
       )}
+
+      <AnnouncementBanner brand={brand} onRoute={goToRoute} />
 
       {activePage === "track" && <TrackOrderPage brand={brand} onBack={goHome} />}
       {activePage === "faq" && <FAQPage brand={brand} onBack={goHome} />}

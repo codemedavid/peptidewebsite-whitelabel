@@ -16,6 +16,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
+import { normalizeBanner } from "@/lib/storefront/banner";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -498,6 +499,42 @@ export async function saveHeroContentAction(input: unknown): Promise<ActionResul
   const links = normalizeHeroLinks(input);
   const current = await readConfig(tenantId);
   const config = { ...current, ...hero, ...links };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+// ── Announcement Banner ──────────────────────────────────────────────────────
+
+/**
+ * Persist the storefront's announcement banner (the promo bar under the header)
+ * into the shared `branding.config` blob (read-modify-write, mirroring
+ * saveHeroContentAction so it never clobbers the rest of the storefront Brand
+ * config). The untrusted input is coerced through normalizeBanner FIRST, so a
+ * stored slide can never carry a javascript:/data: link or a color that breaks
+ * out of an inline style. The storefront reads `config.banner` server-side on
+ * every render, so the owner's edits show on every device — not only the
+ * editing browser.
+ */
+export async function saveBannerAction(input: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("banner");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const banner = normalizeBanner(input);
+  const current = await readConfig(tenantId);
+  const config = { ...current, banner };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
