@@ -15,6 +15,7 @@ import { AdminInventory } from "./AdminInventory";
 import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
+import { AdminOrderNotifications } from "./AdminOrderNotifications";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
@@ -59,7 +60,8 @@ type View =
   | "hero"
   | "account"
   | "staff"
-  | "staff-form";
+  | "staff-form"
+  | "notify";
 
 export function AdminPage({
   brand,
@@ -192,6 +194,7 @@ export function AdminPage({
   if (activeView === "lab") return <AdminLabResults brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
@@ -278,7 +281,10 @@ export function AdminPage({
     { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
     { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
     ...(isOwner
-      ? [{ id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" }]
+      ? [
+          { id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" },
+          { id: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan" },
+        ]
       : []),
   ].filter(
     (q) => isAdminViewVisible(brand, q.id) && isViewAllowed(actor, quickActionToView(q.id)),

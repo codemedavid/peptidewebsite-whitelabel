@@ -36,7 +36,8 @@
     "test:hero-links": "tsx scripts/test-hero-links.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
-    "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts"
+    "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
+    "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

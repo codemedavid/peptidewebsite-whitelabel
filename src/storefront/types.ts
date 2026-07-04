@@ -339,6 +339,11 @@ export type Brand = {
   // Business/Automated plan ceilings (default ON there) and operator-grantable on
   // Starter — so OFF for Starter until the operator turns it on.
   showAdminStaff?: boolean;
+  // Server-projected from FEATURES.NOTIFY_ADMIN_ORDER: shows the store-admin
+  // "Order Notifications" view (owner-only). Off → the view and its dashboard
+  // tile are hidden and the order-alert email is never sent (admin-notify.ts
+  // re-checks the same entitlement). See page.tsx projection + visibility.ts.
+  showAdminOrderNotify?: boolean;
   // Whether the `#admin` login shows the unified username + password form. True
   // only when Staff Accounts are enabled AND ≥1 staff account exists; otherwise
   // the login is password-only (owner password), so a fresh store is never asked
@@ -569,6 +574,14 @@ export type Brand = {
   // checkout; placeStorefrontOrderAction re-derives the discount from this same
   // stored set. Absent until the owner saves once → falls back to the seeds.
   promoCodes?: PromoCode[];
+
+  // Store-owner "you received an order" email alert. The owner toggles it on and
+  // sets the recipient in the storefront #admin (Order Notifications); persisted
+  // server-side in branding.config. On every new order, placeStorefrontOrderAction
+  // emits admin_order_placed to the tenant's PostHog so Messaging emails this
+  // address (see lib/analytics/admin-notify). Gated on FEATURES.NOTIFY_ADMIN_ORDER;
+  // absent/disabled → no alert. See resolveAdminNotifyEmail for the read gate.
+  orderNotifications?: { enabled: boolean; email: string };
 
   // Storefront product categories (the tabs customers filter by, and the
   // dropdown the admin's product form offers). Edited in the storefront #admin

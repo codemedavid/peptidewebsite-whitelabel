@@ -24,10 +24,21 @@ tenant has its own PostHog project, paste the same templates into every project.
 | `03-order-shipped.html` | event `order_status_changed` | `toStatus = shipped` |
 | `04-order-delivered.html` | event `order_status_changed` | `toStatus = delivered` |
 | `05-order-cancelled.html` | event `order_status_changed` | `toStatus = cancelled` |
+| `06-admin-order-alert.html` | event `admin_order_placed` | — (goes to the **store owner**, not the buyer) |
 
 Workflow shape in PostHog: one workflow per event → for `order_status_changed`
 add a branch/condition step on `event.properties.toStatus` → attach the matching
 email. The buyer is reachable because capture `$set`s `email` on the person.
+
+**Admin order alert (`admin_order_placed`).** This one emails the **store owner**,
+not the buyer. Add a workflow: trigger = event `admin_order_placed` → send email
+to the person → attach `06-admin-order-alert.html`, using the project's **default
+sender**. It reaches the owner because `buildAdminOrderPayload` `$set`s the
+owner's own address (the one they entered in store admin → Order Notifications)
+as the person's `email`. Nothing fires until the tenant has the **Automated
+package** feature `notify.admin_order`, PostHog connected, and the owner has
+turned the alert on with a valid address — all three are re-checked server-side
+in `src/lib/analytics/admin-notify.ts`, so an unconfigured store sends nothing.
 
 Test end-to-end from Super Admin → tenant → Integrations → "Send test events"
 (events are flagged `test: true` and now carry the tenant's real branding).

@@ -13,6 +13,10 @@ import type { Order } from "@/storefront/types";
 export const POSTHOG_EVENTS = {
   ORDER_PLACED: "order_placed",
   ORDER_STATUS_CHANGED: "order_status_changed",
+  // Admin-targeted "you received an order" alert. Same checkout moment as
+  // ORDER_PLACED, but the PERSON is the store owner (see buildAdminOrderPayload),
+  // so the tenant's PostHog Messaging workflow emails the ADMIN, not the buyer.
+  ORDER_PLACED_ADMIN: "admin_order_placed",
 } as const;
 
 export type PostHogEventName = (typeof POSTHOG_EVENTS)[keyof typeof POSTHOG_EVENTS];
@@ -133,6 +137,32 @@ function emailOf(order: Order): string {
 }
 
 /**
+ * A pragmatic email check: one local part, one @, and a dotted domain with a
+ * ≥2-char TLD (so "a@b" and "owner@" are rejected). Deliberately not RFC-5322
+ * exhaustive — it guards against typos/blanks, the real proof is the admin
+ * receiving the test alert.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export function isValidEmail(value: unknown): boolean {
+  return typeof value === "string" && EMAIL_RE.test(value.trim());
+}
+
+/**
+ * The admin's order-notification recipient, read from
+ * `branding.config.orderNotifications = { enabled, email }`. Returns the trimmed
+ * address (case preserved for display) ONLY when the toggle is on AND the email
+ * is valid; otherwise null so the notify orchestrator cleanly no-ops. Defensive
+ * against any shape — the config blob is untrusted JSON.
+ */
+export function resolveAdminNotifyEmail(config: Record<string, unknown>): string | null {
+  const slice = (config?.orderNotifications ?? null) as Record<string, unknown> | null;
+  if (!slice || typeof slice !== "object") return null;
+  if (slice.enabled !== true) return null;
+  const email = typeof slice.email === "string" ? slice.email.trim() : "";
+  return isValidEmail(email) ? email : null;
+}
+
+/**
  * The PostHog distinctId for this order's buyer. Prefer the email (so the same
  * person is recognised across orders and is reachable by PostHog Messaging),
  * then the order number, then the draft id — never empty (PostHog requires one).
@@ -195,6 +225,53 @@ export function buildOrderPlacedPayload(order: Order, brand?: EmailBrand): Captu
       groupBuyName: order.groupBuyName ?? null,
     },
     personProperties: personProps(order),
+  };
+}
+
+/**
+ * `admin_order_placed` — the store owner's "you received an order" alert.
+ *
+ * Critically, the PERSON here is the ADMIN, not the buyer: distinctId and the
+ * `$set` email are the admin's own address, so the tenant's PostHog Messaging
+ * workflow delivers the email to the store owner. The buyer's details ride in
+ * event `properties` (buyerName/buyerEmail) purely so the admin can read who
+ * ordered — they never identify the messaged person. `adminEmail` is trimmed +
+ * lowercased to match the buyer distinctId convention (stable person key).
+ */
+export function buildAdminOrderPayload(
+  order: Order,
+  brand: EmailBrand | undefined,
+  adminEmail: string,
+): CapturePayload {
+  const admin = (adminEmail ?? "").trim().toLowerCase();
+  const items = order.items ?? [];
+  const buyerName = (order.customer?.name ?? "").trim();
+  const buyerEmail = emailOf(order);
+  return {
+    event: POSTHOG_EVENTS.ORDER_PLACED_ADMIN,
+    distinctId: admin,
+    properties: {
+      ...brand,
+      orderNumber: order.orderNumber ?? order.id,
+      total: orderTotal(order),
+      itemsCount: items.reduce((s, it) => s + (it.qty || 0), 0),
+      itemNames: items.map((it) => it.name),
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      shippingFee: order.shipping?.fee ?? 0,
+      adminFee: order.adminFee?.amount ?? 0,
+      discountCode: order.discount?.code ?? null,
+      discountAmount: order.discount?.amount ?? 0,
+      courier: order.courier,
+      city: order.shipping?.city ?? "",
+      province: order.shipping?.province ?? "",
+      groupBuyName: order.groupBuyName ?? null,
+      // Buyer identity for the admin to READ — never $set as the person.
+      buyerName,
+      buyerEmail,
+    },
+    // $set the ADMIN as the person so Messaging can reach the store owner.
+    personProperties: { email: admin },
   };
 }
 

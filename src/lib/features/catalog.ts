@@ -60,6 +60,10 @@ export const FEATURES = {
   // Transactional notifications
   NOTIFY_EMAIL: "notify.email",
   NOTIFY_TELEGRAM: "notify.telegram",
+  // Merchant "you received an order" alert emailed to the store owner (the email
+  // sibling of NOTIFY_TELEGRAM). Delivered via the tenant's PostHog Messaging —
+  // Automated-package feature. See lib/analytics/admin-notify.ts.
+  NOTIFY_ADMIN_ORDER: "notify.admin_order",
   // Group Buy Management Module
   GB_MODULE: "groupbuy.module",
   GB_CREATE: "groupbuy.create",
@@ -164,6 +168,8 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.MARKETING_AUTOMATION,
   FEATURES.INTEGRATIONS,
   FEATURES.NOTIFY_TELEGRAM,
+  // Admin order-alert email — Automated package, alongside the Telegram alert.
+  FEATURES.NOTIFY_ADMIN_ORDER,
   // Group Buy Enterprise extras — the advanced controls beyond the basics every
   // plan ceiling carries. All still gated behind the operator-granted GB_MODULE.
   FEATURES.GB_SCHEDULED,
@@ -292,6 +298,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
 
   [FEATURES.NOTIFY_EMAIL]: { label: "Email notifications", description: "Transactional order emails to customers.", group: "Notifications" },
   [FEATURES.NOTIFY_TELEGRAM]: { label: "Telegram notifications", description: "Order alerts pushed to a Telegram channel.", group: "Notifications" },
+  [FEATURES.NOTIFY_ADMIN_ORDER]: { label: "Admin order-alert email", description: "Emails the store owner “you received an order” on every new order, via the tenant's PostHog Messaging. The recipient address is set by the store owner in the store admin. Off hides the setting and stops the alert.", group: "Notifications" },
 
   [FEATURES.ANALYTICS_POSTHOG]: { label: "PostHog analytics", description: "Per-tenant PostHog product analytics.", group: "Growth & Automation" },
   [FEATURES.ANALYTICS_DASHBOARD]: { label: "Analytics dashboard", description: "In-app analytics dashboard.", group: "Growth & Automation" },

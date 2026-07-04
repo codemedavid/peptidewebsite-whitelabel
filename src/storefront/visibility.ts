@@ -54,6 +54,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // server actions enforce requireStoreOwner).
   staff: (b) => b.showAdminStaff === true,
   "staff-form": (b) => b.showAdminStaff === true,
+
+  // Order-alert email view — owner-only, gated on FEATURES.NOTIFY_ADMIN_ORDER
+  // (projected to showAdminOrderNotify in page.tsx). Default OFF.
+  notify: (b) => b.showAdminOrderNotify === true,
 };
 
 // Is the given route ("track", "faq", …) currently shown on the site?

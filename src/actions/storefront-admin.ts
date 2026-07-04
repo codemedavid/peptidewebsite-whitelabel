@@ -10,7 +10,8 @@ import {
   clearStorefrontAdminCookie,
   requireStorefrontAdmin,
 } from "@/lib/auth/storefront-admin";
-import { requireStaffPermission, getStorefrontAdminActor } from "@/lib/auth/staff-guard";
+import { requireStaffPermission, getStorefrontAdminActor, requireStoreOwner } from "@/lib/auth/staff-guard";
+import { isValidEmail } from "@/lib/analytics/events";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
@@ -385,6 +386,53 @@ export async function savePromoCodesAction(codes: unknown): Promise<ActionResult
   const promoCodes = normalizePromoCodes(codes);
   const current = await readConfig(tenantId);
   const config = { ...current, promoCodes };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+// ── Order notifications (store-owner "you received an order" email) ───────────
+
+/** Coerce untrusted client input into a clean orderNotifications slice. A blank
+ *  email is only allowed while disabled; enabling requires a valid address so we
+ *  never persist an "on but unreachable" state that silently drops alerts. */
+function normalizeOrderNotifications(input: unknown): { enabled: boolean; email: string } | { error: string } {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const enabled = o.enabled === true;
+  const email = typeof o.email === "string" ? o.email.trim() : "";
+  if (enabled && !isValidEmail(email)) {
+    return { error: "Enter a valid email address to receive order alerts." };
+  }
+  return { enabled, email };
+}
+
+/**
+ * Persist the store owner's order-alert recipient into branding.config
+ * (read-modify-write, mirroring savePromoCodesAction). OWNER-ONLY — the alert
+ * routes order emails to a chosen inbox, so staff (even with grants) can't
+ * redirect it. The storefront never reads this; only placeStorefrontOrderAction
+ * does, server-side, when a new order is created.
+ */
+export async function saveOrderNotificationsAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStoreOwner();
+  if (!tenantId) return { error: NO_ACCESS };
+
+  const normalized = normalizeOrderNotifications(input);
+  if ("error" in normalized) return normalized;
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, orderNotifications: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

@@ -65,6 +65,7 @@ import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/t
 import { authoritativeItemPrice } from "@/storefront/checkout";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
+import { sendAdminOrderNotification } from "@/lib/analytics/admin-notify";
 import {
   buildEmailBrand,
   buildOrderPlacedPayload,
@@ -856,6 +857,10 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       after(() =>
         capturePostHogEvent(tenantId, buildOrderPlacedPayload(placed, emailBrand), placed.date),
       );
+      // Same fire-and-forget hand-off, but the store OWNER's "you received an
+      // order" alert: entitlement + owner-toggle gated inside, delivered via the
+      // same PostHog Messaging so the admin's email carries the store's branding.
+      after(() => sendAdminOrderNotification(tenantId, placed, emailBrand, config));
     }
     return { ok: true, order: placed };
   } catch (e) {

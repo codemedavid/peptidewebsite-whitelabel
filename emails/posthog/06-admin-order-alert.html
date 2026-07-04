@@ -1,0 +1,73 @@
+<!--
+  ADMIN ORDER ALERT — trigger: event `admin_order_placed`
+  Preheader: New order {{ event.properties.orderNumber }} — {{ event.properties.brandCurrency | default: "₱" }}{{ event.properties.total }}
+
+  Unlike 01–05 this email goes to the STORE OWNER, not the buyer. The person on
+  `admin_order_placed` is the owner (buildAdminOrderPayload $sets the owner's
+  configured email), so PostHog Messaging delivers here to whoever the owner set
+  in the store admin → Order Notifications. The buyer's details are read-only
+  fields below (event.properties.buyerName / buyerEmail).
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EFEDE7;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="max-width:520px;background:#FFFFFF;border-radius:14px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr>
+          <td style="background:{{ event.properties.brandAccent | default: '#1C1B18' }};padding:22px 28px;">
+            <div style="color:{{ event.properties.brandAccentText | default: '#FFFFFF' }};font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.85;">
+              {{ event.properties.brandName | default: "Your store" }}
+            </div>
+            <div style="color:{{ event.properties.brandAccentText | default: '#FFFFFF' }};font-size:22px;font-weight:700;margin-top:4px;">
+              🔔 New order received
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px;">
+            <p style="margin:0 0 18px;color:#1C1B18;font-size:15px;line-height:1.5;">
+              You just got a new order. Here are the details:
+            </p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                   style="border:1px solid #E7E3DB;border-radius:10px;">
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#8A8578;font-size:13px;">Order</td>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#1C1B18;font-size:14px;font-weight:600;text-align:right;">#{{ event.properties.orderNumber }}</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#8A8578;font-size:13px;">Total</td>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#1C1B18;font-size:14px;font-weight:700;text-align:right;">{{ event.properties.brandCurrency | default: "₱" }}{{ event.properties.total }}</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#8A8578;font-size:13px;">Items</td>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#1C1B18;font-size:14px;text-align:right;">{{ event.properties.itemsCount }} × — {{ event.properties.itemNames | join: ", " }}</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#8A8578;font-size:13px;">Payment</td>
+                <td style="padding:14px 16px;border-bottom:1px solid #F0EDE6;color:#1C1B18;font-size:14px;text-align:right;">{{ event.properties.paymentMethod | default: "—" }}</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;color:#8A8578;font-size:13px;">Customer</td>
+                <td style="padding:14px 16px;color:#1C1B18;font-size:14px;text-align:right;">{{ event.properties.buyerName | default: "—" }}<br><span style="color:#8A8578;font-size:12px;">{{ event.properties.buyerEmail }}</span></td>
+              </tr>
+            </table>
+
+            <div style="text-align:center;margin-top:24px;">
+              <a href="{{ event.properties.storeUrl | default: '#' }}/#admin"
+                 style="display:inline-block;background:{{ event.properties.brandAccent | default: '#1C1B18' }};color:{{ event.properties.brandAccentText | default: '#FFFFFF' }};text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;">
+                Open the store admin
+              </a>
+            </div>
+
+            <p style="margin:22px 0 0;color:#A8A296;font-size:12px;line-height:1.5;text-align:center;">
+              You're receiving this because order alerts are on for
+              {{ event.properties.brandName | default: "your store" }}. Turn them
+              off any time in the store admin → Order Notifications.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

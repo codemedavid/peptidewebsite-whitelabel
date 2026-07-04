@@ -112,6 +112,11 @@ export default async function HomePage() {
   const staffEntitled = await hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
   brand.showAdminStaff = staffEntitled;
 
+  // Order-alert email (Automated package): gates the owner-only "Order
+  // Notifications" store-admin view. When off the view/tile hide and no alert
+  // fires — sendAdminOrderNotification re-checks this same entitlement server-side.
+  brand.showAdminOrderNotify = await hasFeature(tenantId, FEATURES.NOTIFY_ADMIN_ORDER);
+
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
   // least one staff account exists. Until then the login is password-only (the
