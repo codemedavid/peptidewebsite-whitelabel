@@ -317,6 +317,11 @@ export type Brand = {
   // render (treated as entitled there).
   calculatorEntitled?: boolean;
   showPageReviews: boolean;
+  // Server-derived: is the Reviews page (FEATURES.STORE_REVIEWS) entitled for
+  // this tenant? Operator-grantable, default OFF. Drives whether the store-admin
+  // even offers the "Reviews page" toggle. Undefined outside the entitlement-
+  // aware storefront render (treated as entitled there).
+  reviewsEntitled?: boolean;
   // Reseller / merchant wholesale price list (#merchant). Default OFF — only
   // tenants that sell wholesale enable it from the store admin. Gated behind an
   // access code so the wholesale list isn't shown to regular shoppers.

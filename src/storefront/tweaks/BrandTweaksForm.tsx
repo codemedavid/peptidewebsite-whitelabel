@@ -392,7 +392,13 @@ export function BrandTweaksForm({
       {t.calculatorEntitled !== false && (
         <TweakToggle label="Calculator page" value={t.showPageCalculator !== false} onChange={(v) => setTweak("showPageCalculator", v)} />
       )}
-      <TweakToggle label="Reviews page" value={t.showPageReviews !== false} onChange={(v) => setTweak("showPageReviews", v)} />
+      {/* Hidden when the platform operator hasn't granted the reviews feature
+          (admin → Features). Operator-grantable / default-OFF, so an unentitled
+          tenant offers no toggle. Undefined entitlement (platform branding
+          editor) is treated as available. */}
+      {t.reviewsEntitled !== false && (
+        <TweakToggle label="Reviews page" value={t.showPageReviews !== false} onChange={(v) => setTweak("showPageReviews", v)} />
+      )}
       <TweakButton label="Open: Home" onClick={goHome} secondary />
       <TweakButton label="Open: Track Order" onClick={() => goPage("track")} secondary />
       <TweakButton label="Open: FAQ" onClick={() => goPage("faq")} secondary />

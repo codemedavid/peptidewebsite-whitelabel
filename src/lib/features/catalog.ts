@@ -29,6 +29,7 @@ export const FEATURES = {
   INTEGRATIONS: "integrations.enabled",
   // Granular storefront/catalog toggles (the SlimDose list — see docs §6)
   STORE_CALCULATOR: "storefront.calculator",
+  STORE_REVIEWS: "storefront.reviews",
   STORE_PRODUCT_SPECS: "storefront.product_specs",
   STORE_SEARCH: "storefront.search",
   STORE_CATEGORIES: "storefront.categories",
@@ -193,6 +194,12 @@ export const ALL_FEATURES = Object.values(FEATURES);
  */
 export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_CARD_STUDIO,
+  // Reviews / testimonials page. Outside every plan ceiling (default OFF) so no
+  // tenant surfaces the Reviews page or its store-admin manager until the
+  // operator grants it per tenant. Once granted, the store owner still controls
+  // the page via the "Reviews page" branding toggle (resolveShowReviews ANDs the
+  // two). Revoking hides the storefront page/nav AND the store-admin manager.
+  FEATURES.STORE_REVIEWS,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
   // Group Buy: both the management module (GB_MODULE) and the order-rules engine
@@ -251,6 +258,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_CATEGORIES]: { label: "Categories", description: "Browse products by category.", group: "Catalog" },
   [FEATURES.STORE_CALCULATOR]: { label: "Dosage calculator", description: "Reconstitution / dosage calculator tool.", group: "Catalog" },
   [FEATURES.STORE_CARD_STUDIO]: { label: "Card Studio", description: "Product card design studio in the store admin (presets, templates, per-card styling).", group: "Catalog" },
+  [FEATURES.STORE_REVIEWS]: { label: "Product reviews", description: "Customer reviews / testimonials page on the storefront and its Reviews manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor.", group: "Catalog" },
 
   [FEATURES.ECOM_CART]: { label: "Shopping cart", description: "Add-to-cart and cart page.", group: "Ecommerce" },
   [FEATURES.ECOM_CHECKOUT]: { label: "Checkout", description: "Order placement and payment.", group: "Ecommerce" },

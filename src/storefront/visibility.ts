@@ -60,6 +60,16 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   notify: (b) => b.showAdminOrderNotify === true,
 };
 
+// The Reviews page is a two-layer gate: the platform entitlement
+// (FEATURES.STORE_REVIEWS — operator-grantable, default OFF) AND the store
+// owner's "Reviews page" branding toggle must both be on. The storefront render
+// resolves this into brand.showPageReviews, from which the nav, the page and the
+// store-admin Reviews manager (ADMIN_VIEW_TOGGLE.reviews) all derive. The owner
+// toggle is default-on, so it only hides Reviews when explicitly set to false.
+export function resolveShowReviews(entitled: boolean, ownerToggle: boolean | undefined): boolean {
+  return entitled && ownerToggle !== false;
+}
+
 // Is the given route ("track", "faq", …) currently shown on the site?
 // Routes without a toggle (home, catalog, admin) are always visible.
 export function isPageVisible(brand: Brand, route: string): boolean {

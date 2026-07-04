@@ -7,6 +7,7 @@ import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
+import { resolveShowReviews } from "@/storefront/visibility";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
@@ -84,6 +85,16 @@ export default async function HomePage() {
   const calculatorEntitled = await hasFeature(tenantId, FEATURES.STORE_CALCULATOR);
   brand.calculatorEntitled = calculatorEntitled;
   brand.showPageCalculator = calculatorEntitled && config.showPageCalculator !== false;
+
+  // Reviews page: gated on the platform entitlement (admin → Features,
+  // FEATURES.STORE_REVIEWS — operator-grantable, default OFF) AND the branding-
+  // editor "Reviews page" toggle. Revoking the feature hides the storefront
+  // page/nav AND the store-admin Reviews manager (both derive from
+  // showPageReviews via visibility.ts) AND the store-admin toggle for it (the
+  // form keys off `reviewsEntitled`).
+  const reviewsEntitled = await hasFeature(tenantId, FEATURES.STORE_REVIEWS);
+  brand.reviewsEntitled = reviewsEntitled;
+  brand.showPageReviews = resolveShowReviews(reviewsEntitled, config.showPageReviews);
 
   // Group Buy Rules engine: the store-admin view AND rule enforcement are gated
   // on the platform entitlement alone. Revoking the feature both hides the
