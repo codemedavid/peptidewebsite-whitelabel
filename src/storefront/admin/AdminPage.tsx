@@ -376,6 +376,7 @@ export function AdminPage({
                     if (q.id === "manage") return setView("products");
                     if (q.id === "cats") return setView("categories");
                     if (q.id === "hero") return setView("hero");
+                    if (q.id === "banner") return setView("banner");
                     if (q.id === "design") return setView("design");
                     if (q.id === "orders") return setView("orders");
                     if (q.id === "analytics") return setView("analytics");
