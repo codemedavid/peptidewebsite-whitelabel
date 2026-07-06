@@ -91,6 +91,7 @@ function OrderStatusPill({ status }: { status: Order["status"] }) {
     new: "New",
     confirmed: "Confirmed",
     processing: "Processing",
+    ready: "Ready",
     shipped: "Shipped",
     delivered: "Delivered",
     cancelled: "Cancelled",
@@ -444,6 +445,7 @@ export function AdminOrderDetail({
                   <option value="new">New</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="processing">Processing</option>
+                  <option value="ready">Ready</option>
                   <option value="shipped">Shipped</option>
                   <option value="delivered">Delivered</option>
                   <option value="cancelled">Cancelled</option>

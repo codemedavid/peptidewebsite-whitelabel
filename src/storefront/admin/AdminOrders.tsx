@@ -12,6 +12,7 @@ const STATUS_OPTIONS: { value: Order["status"]; label: string }[] = [
   { value: "new", label: "New" },
   { value: "confirmed", label: "Confirmed" },
   { value: "processing", label: "Processing" },
+  { value: "ready", label: "Ready" },
   { value: "shipped", label: "Shipped" },
   { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
@@ -55,6 +56,7 @@ function OrderStatusPill({ status }: { status: Order["status"] }) {
     new: "🕐 New",
     confirmed: "Confirmed",
     processing: "📦 Processing",
+    ready: "✅ Ready",
     shipped: "Shipped",
     delivered: "Delivered",
     cancelled: "Cancelled",
@@ -119,6 +121,7 @@ export function AdminOrders({
     (stats.new || 0) +
     (stats.confirmed || 0) +
     (stats.processing || 0) +
+    (stats.ready || 0) +
     (stats.shipped || 0) +
     (stats.delivered || 0) +
     (stats.cancelled || 0);
@@ -169,6 +172,12 @@ export function AdminOrders({
       label: "Processing",
       value: stats.processing ?? 0,
       tint: "processing",
+    },
+    {
+      id: "ready",
+      label: "Ready",
+      value: stats.ready ?? 0,
+      tint: "ready",
     },
     {
       id: "shipped",

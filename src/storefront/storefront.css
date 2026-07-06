@@ -3550,6 +3550,7 @@
 .sf-root .admin-pill--new { background: #FFF6BF; color: #8A6B0B; }
 .sf-root .admin-pill--confirmed { background: color-mix(in srgb, #2A6FDB 18%, transparent); color: #1F4E91; }
 .sf-root .admin-pill--processing { background: color-mix(in srgb, var(--brand-accent) 14%, transparent); color: var(--brand-accent); }
+.sf-root .admin-pill--ready { background: color-mix(in srgb, #0EA5A3 18%, transparent); color: #0B7C7A; }
 .sf-root .admin-pill--shipped { background: color-mix(in srgb, #9D6BE3 18%, transparent); color: #7A4FCF; }
 .sf-root .admin-pill--delivered { background: color-mix(in srgb, #22B07D 18%, transparent); color: #1F8A5B; }
 .sf-root .admin-pill--cancelled { background: color-mix(in srgb, #F23E5C 14%, transparent); color: #C82846; }
@@ -3762,6 +3763,7 @@
 .sf-root .admin-stat-mini[data-tint="new"]      .admin-stat-mini__value { color: #8A6B0B; }
 .sf-root .admin-stat-mini[data-tint="confirmed"].admin-stat-mini__value { color: #1F4E91; }
 .sf-root .admin-stat-mini[data-tint="processing"] .admin-stat-mini__value { color: var(--brand-accent); }
+.sf-root .admin-stat-mini[data-tint="ready"]    .admin-stat-mini__value { color: #0B7C7A; }
 .sf-root .admin-stat-mini[data-tint="shipped"]  .admin-stat-mini__value { color: #7A4FCF; }
 .sf-root .admin-stat-mini[data-tint="delivered"] .admin-stat-mini__value { color: #1F8A5B; }
 .sf-root .admin-stat-mini[data-tint="cancelled"] .admin-stat-mini__value { color: #C82846; }
@@ -4115,6 +4117,62 @@
 .sf-root .od-proof-empty {
   padding: 24px; text-align: center;
   color: var(--brand-text-muted); font-size: 13px;
+}
+
+/* Clickable thumbnail — the receipt is cropped here (object-fit: cover); the
+   whole image opens in the viewer on click. */
+.sf-root button.od-proof--clickable {
+  position: relative; padding: 0; cursor: zoom-in;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.sf-root button.od-proof--clickable:hover {
+  border-color: var(--brand-accent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+.sf-root button.od-proof--clickable:focus-visible {
+  outline: 2px solid var(--brand-accent); outline-offset: 2px;
+}
+/* Zoom affordance badge, bottom-right of the thumbnail. */
+.sf-root .od-proof-zoom {
+  position: absolute; right: 8px; bottom: 8px;
+  display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  background: rgba(10, 12, 16, 0.72); color: #fff;
+  font-size: 14px; line-height: 1; pointer-events: none;
+}
+.sf-root button.od-proof--clickable:hover .od-proof-zoom {
+  background: var(--brand-accent);
+}
+
+/* Full-screen payment-proof viewer (lightbox). Reuses @keyframes sf-viewer-in. */
+.sf-root .od-proof-viewer {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: rgba(10, 12, 16, 0.88);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  cursor: zoom-out; animation: sf-viewer-in 160ms ease;
+}
+.sf-root .od-proof-viewer__img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: 10px; cursor: default;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.sf-root .od-proof-viewer__close {
+  position: absolute; top: 16px; right: 16px;
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1); color: #fff;
+  font-size: 18px; cursor: pointer; transition: background 150ms ease;
+}
+.sf-root .od-proof-viewer__close:hover { background: rgba(255, 255, 255, 0.22); }
+.sf-root .od-proof-viewer__close:focus-visible {
+  outline: 2px solid #fff; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .od-proof-viewer { animation: none; }
+  .sf-root button.od-proof--clickable { transition: none; }
 }
 
 /* ── sidebar: status + action ── */

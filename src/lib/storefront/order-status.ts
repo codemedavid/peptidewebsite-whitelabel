@@ -9,11 +9,15 @@
 
 import type { Order, OrderStatus, OrderStatusEvent } from "../../storefront/types";
 
-/** The six order statuses, in fulfillment order. */
+/** The seven order statuses, in fulfillment order. "ready" (packed / ready to
+ *  ship or collect) sits between processing and shipped and is a neutral status:
+ *  like processing/shipped/delivered it moves no stock (see inventoryMove — only
+ *  confirmed deducts and cancelled restocks). */
 export const ORDER_STATUSES: readonly OrderStatus[] = [
   "new",
   "confirmed",
   "processing",
+  "ready",
   "shipped",
   "delivered",
   "cancelled",
