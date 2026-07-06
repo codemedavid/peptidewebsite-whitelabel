@@ -33,6 +33,7 @@
     "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts",
     "test:feature-disclosure": "tsx scripts/test-feature-disclosure.ts",
     "test:order-detail": "tsx scripts/test-order-detail.ts",
+    "test:bulk-order-status": "tsx scripts/test-bulk-order-status.ts",
     "test:hero-links": "tsx scripts/test-hero-links.ts",
     "test:banner": "tsx scripts/test-banner.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
