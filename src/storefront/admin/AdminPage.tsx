@@ -16,6 +16,7 @@ import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
+import { AdminNoticeModal } from "./AdminNoticeModal";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
@@ -63,7 +64,8 @@ type View =
   | "account"
   | "staff"
   | "staff-form"
-  | "notify";
+  | "notify"
+  | "notice";
 
 export function AdminPage({
   brand,
@@ -197,6 +199,7 @@ export function AdminPage({
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
@@ -288,6 +291,7 @@ export function AdminPage({
       ? [
           { id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" },
           { id: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan" },
+          { id: "notice", label: "Notice Modal", hint: "Storefront pop-up notice", icon: "shield", tint: "orange" },
         ]
       : []),
   ].filter(

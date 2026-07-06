@@ -58,6 +58,11 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Order-alert email view — owner-only, gated on FEATURES.NOTIFY_ADMIN_ORDER
   // (projected to showAdminOrderNotify in page.tsx). Default OFF.
   notify: (b) => b.showAdminOrderNotify === true,
+
+  // Notice Modal editor — owner-only, gated on the super-admin per-tenant grant
+  // (branding.config.noticeModal.operatorEnabled, projected to showAdminNotice in
+  // page.tsx). Default OFF — hidden until the operator turns the feature on.
+  notice: (b) => b.showAdminNotice === true,
 };
 
 // The Reviews page is a two-layer gate: the platform entitlement

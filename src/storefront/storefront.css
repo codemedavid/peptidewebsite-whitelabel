@@ -6515,3 +6515,210 @@
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Notice / disclaimer modal — the per-tenant pop-up shown on every storefront
+   visit (see components/NoticeModal.tsx). Chrome is themed entirely from the
+   tenant's --brand-* tokens so every store adopts its own palette. Motion is
+   compositor-friendly (transform/opacity only). The same card styles drive the
+   store-admin editor's live preview.
+   ========================================================================== */
+.sf-root .sf-notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 15, 28, 0.55);
+  backdrop-filter: blur(3px);
+  animation: sf-notice-overlay-in 0.25s ease;
+}
+
+.sf-root .sf-notice {
+  width: 560px;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  animation: sf-notice-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.sf-root .sf-notice__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  background: var(--brand-surface-2, #f6f2fb);
+  border-bottom: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  border-radius: 16px 16px 0 0;
+}
+
+.sf-root .sf-notice__icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--brand-surface, #fff);
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--brand-main, #7c5ca8);
+}
+
+.sf-root .sf-notice__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--brand-text, #241d2e);
+  font-family: var(--brand-heading-font, inherit);
+}
+
+.sf-root .sf-notice__sub {
+  font-size: 13px;
+  color: var(--brand-text-muted, #6b6474);
+  margin-top: 2px;
+}
+
+.sf-root .sf-notice__body {
+  padding: 20px 24px 22px;
+}
+
+.sf-root .sf-notice__p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--brand-text, #3d3745);
+}
+
+.sf-root .sf-notice__warn {
+  background: color-mix(in srgb, #d5294a 8%, var(--brand-surface, #fff));
+  border: 1px solid color-mix(in srgb, #d5294a 22%, var(--brand-surface, #fff));
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.sf-root .sf-notice__warn-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #d5294a;
+}
+
+.sf-root .sf-notice__warn-body {
+  font-size: 13px;
+  color: var(--brand-text-muted, #7a5a60);
+  margin-top: 5px;
+}
+
+.sf-root .sf-notice__delivery {
+  background: var(--brand-surface-2, #f6f5f8);
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.07));
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.sf-root .sf-notice__delivery-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--brand-text, #332d3c);
+}
+
+.sf-root .sf-notice__delivery-line {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--brand-text, #4b4553);
+}
+
+.sf-root .sf-notice__agree {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 14px;
+  border: none;
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--brand-button, #7c5ca8), var(--brand-button-2, #5f4386));
+  color: var(--brand-button-text, #fff);
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--brand-button-font, inherit);
+  cursor: pointer;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--brand-button, #7c5ca8) 34%, transparent);
+  transition: filter var(--duration-fast, 150ms) ease;
+}
+
+.sf-root .sf-notice__agree:hover {
+  filter: brightness(1.07);
+}
+
+.sf-root .sf-notice__agree:focus-visible {
+  outline: 2px solid var(--brand-accent, #e94b7d);
+  outline-offset: 2px;
+}
+
+.sf-root .sf-notice__footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--brand-text-muted, #8b8494);
+  margin-top: 12px;
+}
+
+@keyframes sf-notice-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sf-notice-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-notice-overlay,
+  .sf-root .sf-notice {
+    animation: none;
+  }
+}
+
+/* Inline preview variant used by the store-admin editor — same card, no fixed
+   overlay, constrained width so it sits inside the two-column workspace. */
+.sf-root .sf-notice-preview .sf-notice {
+  animation: none;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+/* Store-admin Notice Modal editor — two columns (form + sticky live preview),
+   collapsing to a single column on narrow screens. */
+.sf-root .sf-notice-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.sf-root .sf-notice-editor__preview {
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 900px) {
+  .sf-root .sf-notice-editor {
+    grid-template-columns: 1fr;
+  }
+  .sf-root .sf-notice-editor__preview {
+    position: static;
+  }
+}

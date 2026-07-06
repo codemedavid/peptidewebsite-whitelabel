@@ -17,6 +17,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
 import { normalizeBanner } from "@/lib/storefront/banner";
+import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -434,6 +435,48 @@ export async function saveOrderNotificationsAction(input: unknown): Promise<Acti
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
   const config = { ...current, orderNotifications: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the store owner's notice-modal config (the per-tenant disclaimer that
+ * pops up on every storefront visit) into branding.config.noticeModal
+ * (read-modify-write, mirroring saveOrderNotificationsAction). OWNER-ONLY.
+ *
+ * The super-admin grant (operatorEnabled) is NEVER writable here: it is re-read
+ * from the stored config and forced back onto the payload, so the owner can only
+ * flip their own `enabled` toggle and edit copy. When the operator has not
+ * granted the feature the action refuses outright — matching the hidden view.
+ */
+export async function saveNoticeModalAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStoreOwner();
+  if (!tenantId) return { error: NO_ACCESS };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+
+  // The operator grant is the source of truth for availability. Read it from the
+  // stored config; the owner can neither set nor bypass it from the client.
+  const storedNotice = (current.noticeModal ?? {}) as Record<string, unknown>;
+  const operatorEnabled = storedNotice.operatorEnabled === true;
+  if (!operatorEnabled) return { error: NO_ACCESS };
+
+  const owned = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  // Force the server-held grant on top of whatever the client sent.
+  const normalized = normalizeNoticeModal({ ...owned, operatorEnabled });
+  const config = { ...current, noticeModal: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

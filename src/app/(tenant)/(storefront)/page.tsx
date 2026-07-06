@@ -12,6 +12,7 @@ import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
+import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -127,6 +128,16 @@ export default async function HomePage() {
   // Notifications" store-admin view. When off the view/tile hide and no alert
   // fires — sendAdminOrderNotification re-checks this same entitlement server-side.
   brand.showAdminOrderNotify = await hasFeature(tenantId, FEATURES.NOTIFY_ADMIN_ORDER);
+
+  // Storefront Notice Modal: sanitize the stored config so a legacy/absent blob
+  // is always safe, then derive the owner-editor visibility from the super-admin
+  // grant (branding.config.noticeModal.operatorEnabled). The modal itself
+  // additionally needs the owner's own `enabled` flag — both live in the
+  // normalized blob and are re-checked client-side (isNoticeModalVisible). No
+  // platform FEATURES entry: the grant is a per-tenant switch on the settings page.
+  const noticeModal = normalizeNoticeModal(config.noticeModal);
+  brand.noticeModal = noticeModal;
+  brand.showAdminNotice = noticeModal.operatorEnabled;
 
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
