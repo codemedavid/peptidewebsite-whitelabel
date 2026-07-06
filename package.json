@@ -41,7 +41,8 @@
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
-    "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts"
+    "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts",
+    "test:notice-modal": "tsx scripts/test-notice-modal.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
