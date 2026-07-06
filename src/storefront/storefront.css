@@ -3788,6 +3788,20 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Bulk "change status" group (select + apply), sits left of the delete buttons. */
+.sf-root .admin-orders__bulkstatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  margin-right: 4px;
+  border-right: 1px solid var(--brand-border);
+}
+.sf-root .admin-orders__bulkstatus .admin-select {
+  min-width: 150px;
+  width: auto;
+}
+
 .sf-root .admin-order-card {
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);
@@ -3875,10 +3889,17 @@
     font-size: 14px;
     margin-top: 4px;
   }
-  /* bulk-action bar: let the two delete buttons stack full-width */
+  /* bulk-action bar: let the status group + delete buttons stack full-width */
   .sf-root .admin-orders__bulkbar { padding: 14px 16px; }
   .sf-root .admin-orders__bulkbar > div { width: 100%; }
   .sf-root .admin-orders__bulkbar > div .admin-btn { flex: 1; justify-content: center; }
+  .sf-root .admin-orders__bulkstatus {
+    width: 100%;
+    padding-right: 0;
+    margin-right: 0;
+    border-right: none;
+  }
+  .sf-root .admin-orders__bulkstatus .admin-select { flex: 1; min-width: 0; }
 }
 
 /* =========================================================

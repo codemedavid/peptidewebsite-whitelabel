@@ -20,7 +20,7 @@ import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { prisma } from "@/lib/db/prisma";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
-import { withTenant } from "@/lib/db/tenant-client";
+import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
@@ -55,6 +55,12 @@ import {
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import {
+  isOrderStatus,
+  cleanIdList,
+  planStatusChange,
+  type InventoryMove,
+} from "@/lib/storefront/order-status";
+import {
   findPromoCode,
   normalizePromoCodes,
   promoCodeError,
@@ -78,6 +84,7 @@ export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
 export type ListOrdersResult = { ok: true; orders: Order[] } | { error: string };
 export type UpdateOrderResult = { ok: true; order: Order } | { error: string };
 export type DeleteOrdersResult = { ok: true } | { error: string };
+export type BulkUpdateStatusResult = { ok: true; changed: number } | { error: string };
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -92,15 +99,6 @@ function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-
-const STATUSES: Order["status"][] = [
-  "new",
-  "confirmed",
-  "processing",
-  "shipped",
-  "delivered",
-  "cancelled",
-];
 
 /** Whether real ImageKit credentials are present (not blank / not placeholders). */
 function imageKitConfigured(): boolean {
@@ -127,40 +125,8 @@ function normalizeItems(input: unknown): OrderItem[] {
   });
 }
 
-// ── Inventory sync on status change ──────────────────────────────────────────
-//
-// Entering `confirmed` deducts the order's items from stock; entering
-// `cancelled` puts them back — but ONLY if they are currently deducted.
-// Whether they are deducted is derived by replaying the status journey, so a
-// confirmed → cancelled → confirmed bounce deducts, restocks, then deducts
-// again — never twice in a row. Legacy orders confirmed before this feature
-// shipped have no `confirmed` event in their journey (or no journey at all),
-// so replaying yields "not deducted" and cancelling them never invents stock.
-
-type InventoryMove = "deduct" | "restock" | null;
-
-/** Replay the journey to learn whether the order's items are deducted now. */
-function stockCurrentlyDeducted(history: OrderStatusEvent[]): boolean {
-  let deducted = false;
-  for (const e of history) {
-    if (e.status === "confirmed") deducted = true;
-    else if (e.status === "cancelled") deducted = false;
-  }
-  return deducted;
-}
-
-/** Which stock movement (if any) this status change triggers. */
-function inventoryMove(
-  currentStatus: string,
-  history: OrderStatusEvent[],
-  newStatus: Order["status"] | undefined,
-): InventoryMove {
-  if (!newStatus || newStatus === currentStatus) return null;
-  const deducted = stockCurrentlyDeducted(history);
-  if (newStatus === "confirmed" && !deducted) return "deduct";
-  if (newStatus === "cancelled" && deducted) return "restock";
-  return null;
-}
+// Inventory sync on status change (deduct on confirm / restock on cancel, never
+// twice) is decided by inventoryMove/planStatusChange in lib/storefront/order-status.
 
 /** The first line in the cart that asks for more than the product has in
  *  stock, as a customer-facing error — or null when the whole cart fits.
@@ -342,6 +308,33 @@ function adjustProductStock(
 }
 
 /**
+ * Apply an order's line items to the tenant's DB inventory (− on deduct, + on
+ * restock), clamping at zero. The DB analogue of adjustProductStock: lines match
+ * by productId when present, by exact name for legacy orders. Shared by the
+ * single-order update and the bulk status action so both move stock identically.
+ * Runs inside a withTenant() transaction (the passed `db` is already scoped).
+ */
+async function applyOrderStockMove(
+  db: TenantTx,
+  items: OrderItem[],
+  move: Exclude<InventoryMove, null>,
+): Promise<void> {
+  const dir = move === "deduct" ? -1 : 1;
+  for (const it of items) {
+    const prod = await db.product.findFirst({
+      where: it.productId ? { id: it.productId } : { name: it.name },
+      select: { id: true, stock: true },
+    });
+    if (prod) {
+      await db.product.updateMany({
+        where: { id: prod.id },
+        data: { stock: Math.max(0, (prod.stock ?? 0) + dir * it.qty) },
+      });
+    }
+  }
+}
+
+/**
  * Stamp the order with the group buy it belongs to (or null) — SERVER-SIDE,
  * from the tenant's live group buys at the moment of placement, never from the
  * client. The name is snapshotted alongside the id so supplier reports survive
@@ -500,9 +493,7 @@ function normalizeStatusHistory(input: unknown): OrderStatusEvent[] {
     .slice(0, 50)
     .map((e) => {
       const x = (e ?? {}) as Record<string, unknown>;
-      const status = STATUSES.includes(x.status as Order["status"])
-        ? (x.status as Order["status"])
-        : null;
+      const status = isOrderStatus(x.status) ? x.status : null;
       const at = str(x.at, 40);
       return status && at ? { status, at } : null;
     })
@@ -514,9 +505,7 @@ function normalizeOrderInput(input: unknown): Order {
   const o = (input ?? {}) as Record<string, unknown>;
   const c = (o.customer ?? {}) as Record<string, unknown>;
   const s = (o.shipping ?? {}) as Record<string, unknown>;
-  const status = STATUSES.includes(o.status as Order["status"])
-    ? (o.status as Order["status"])
-    : "new";
+  const status = isOrderStatus(o.status) ? o.status : "new";
   return {
     id: str(o.id, 64),
     orderNumber: str(o.orderNumber, 64) || undefined,
@@ -1032,7 +1021,7 @@ type OrderPatch = {
 function cleanPatch(input: unknown): Prisma.StorefrontOrderUpdateInput {
   const o = (input ?? {}) as OrderPatch;
   const data: Prisma.StorefrontOrderUpdateInput = {};
-  if (o.status && STATUSES.includes(o.status)) data.status = o.status;
+  if (isOrderStatus(o.status)) data.status = o.status;
   if (o.paymentStatus === "paid" || o.paymentStatus === "pending") data.paymentStatus = o.paymentStatus;
   if (typeof o.courier === "string") data.courier = o.courier.slice(0, 120);
   if (typeof o.trackingNumber === "string") data.trackingNumber = o.trackingNumber.slice(0, 120);
@@ -1059,8 +1048,15 @@ export async function updateStorefrontOrderAction(
     const i = list.findIndex((x) => x.id === orderId);
     if (i < 0) return { error: "Order not found." };
     const newStatus = data.status as Order["status"] | undefined;
-    const statusChanged = !!newStatus && newStatus !== list[i].status;
-    const history = normalizeStatusHistory(list[i].statusHistory);
+    // Same per-order decision the DB path and the bulk action use: append a
+    // journey event only on a real change, and learn the inventory move.
+    const plan = newStatus
+      ? planStatusChange(
+          { status: list[i].status, statusHistory: normalizeStatusHistory(list[i].statusHistory) },
+          newStatus,
+          new Date().toISOString(),
+        )
+      : null;
     const next: Order = {
       ...list[i],
       ...(data.status ? { status: data.status as Order["status"] } : {}),
@@ -1068,15 +1064,13 @@ export async function updateStorefrontOrderAction(
       ...(data.courier !== undefined ? { courier: data.courier as string } : {}),
       ...(data.trackingNumber !== undefined ? { trackingNumber: data.trackingNumber as string } : {}),
       ...(data.shippingNote !== undefined ? { shippingNote: data.shippingNote as string } : {}),
-      statusHistory: statusChanged
-        ? [...history, { status: newStatus, at: new Date().toISOString() }]
-        : history,
+      statusHistory: plan ? plan.statusHistory : normalizeStatusHistory(list[i].statusHistory),
     };
     const updated = list.map((x, j) => (j === i ? next : x));
     saveDemoStoreOrders(slug, updated);
     // Confirmed → deduct the line items from the demo product set;
     // cancelled after a deduction → put them back.
-    const move = inventoryMove(list[i].status, history, newStatus);
+    const move = plan?.move ?? null;
     if (move) {
       const products =
         getDemoStoreProducts(slug) ??
@@ -1095,14 +1089,21 @@ export async function updateStorefrontOrderAction(
       // status actually changes (and never lose earlier events).
       const current = await db.storefrontOrder.findFirst({ where: { id: orderId } });
       if (!current) return null;
-      const history = normalizeStatusHistory(current.statusHistory);
       const next: Prisma.StorefrontOrderUpdateInput = { ...data };
       const newStatus = data.status as Order["status"] | undefined;
-      if (newStatus && newStatus !== current.status) {
-        next.statusHistory = [
-          ...history,
-          { status: newStatus, at: new Date().toISOString() },
-        ] as unknown as Prisma.InputJsonValue;
+      // Same per-order decision the demo path and the bulk action use.
+      const plan = newStatus
+        ? planStatusChange(
+            {
+              status: current.status as Order["status"],
+              statusHistory: normalizeStatusHistory(current.statusHistory),
+            },
+            newStatus,
+            new Date().toISOString(),
+          )
+        : null;
+      if (plan?.changed) {
+        next.statusHistory = plan.statusHistory as unknown as Prisma.InputJsonValue;
       }
       // updateMany is tenant-scoped by the extension; the bare-id update isn't.
       await db.storefrontOrder.updateMany({ where: { id: orderId }, data: next });
@@ -1111,27 +1112,15 @@ export async function updateStorefrontOrderAction(
       // cancelled after a deduction → put it back. Lines match by productId
       // (stamped at checkout) or by exact name for legacy orders; quantities
       // clamp at zero so stock never goes negative.
-      const move = inventoryMove(current.status, history, newStatus);
+      const move = plan?.move ?? null;
       if (move) {
-        const dir = move === "deduct" ? -1 : 1;
-        for (const it of normalizeItems(current.items)) {
-          const prod = await db.product.findFirst({
-            where: it.productId ? { id: it.productId } : { name: it.name },
-            select: { id: true, stock: true },
-          });
-          if (prod) {
-            await db.product.updateMany({
-              where: { id: prod.id },
-              data: { stock: Math.max(0, (prod.stock ?? 0) + dir * it.qty) },
-            });
-          }
-        }
+        await applyOrderStockMove(db, normalizeItems(current.items), move);
       }
       return {
         row: await db.storefrontOrder.findFirst({ where: { id: orderId } }),
         moved: !!move,
         prevStatus: current.status,
-        statusChanged: !!(newStatus && newStatus !== current.status),
+        statusChanged: !!plan?.changed,
       };
     });
     if (!result?.row) return { error: "Order not found." };
@@ -1190,5 +1179,123 @@ export async function deleteStorefrontOrdersAction(ids: unknown): Promise<Delete
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't delete the orders." };
+  }
+}
+
+// ── Admin: bulk status change ─────────────────────────────────────────────────
+
+/**
+ * Move many of the tenant's orders to one status in a single action (store admin
+ * only). Reuses the SAME per-order decision as updateStorefrontOrderAction
+ * (planStatusChange): a journey event is appended only on a real change, and
+ * inventory deducts on confirm / restocks on cancel — never twice. Orders already
+ * at the target status are skipped, so the count reflects genuine changes only.
+ */
+export async function bulkUpdateStorefrontOrderStatusAction(
+  ids: unknown,
+  status: unknown,
+): Promise<BulkUpdateStatusResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
+
+  if (!isOrderStatus(status)) return { error: "Invalid status." };
+  const list = cleanIdList(ids);
+  if (!list.length) return { ok: true, changed: 0 };
+
+  const now = new Date().toISOString();
+
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const target = new Set(list);
+    let products =
+      getDemoStoreProducts(slug) ??
+      getDemoProducts(slug).map((dp) => dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"));
+    let changed = 0;
+    let stockMoved = false;
+    const nextOrders = getDemoStoreOrders(slug).map((o) => {
+      if (!target.has(o.id)) return o;
+      const plan = planStatusChange(
+        { status: o.status, statusHistory: normalizeStatusHistory(o.statusHistory) },
+        status,
+        now,
+      );
+      if (!plan.changed) return o;
+      changed++;
+      if (plan.move) {
+        products = adjustProductStock(products, o.items, plan.move);
+        stockMoved = true;
+      }
+      return { ...o, status: plan.status, statusHistory: plan.statusHistory };
+    });
+    if (changed > 0) saveDemoStoreOrders(slug, nextOrders);
+    if (stockMoved) {
+      saveDemoStoreProducts(slug, products);
+      revalidateTenant(slug, slug);
+    }
+    return { ok: true, changed };
+  }
+
+  try {
+    const result = await withTenant(tenantId, async (db) => {
+      const rows = await db.storefrontOrder.findMany({ where: { id: { in: list } } });
+      const changedOrders: { order: Order; prevStatus: string }[] = [];
+      let moved = false;
+      for (const current of rows) {
+        const plan = planStatusChange(
+          {
+            status: current.status as Order["status"],
+            statusHistory: normalizeStatusHistory(current.statusHistory),
+          },
+          status,
+          now,
+        );
+        if (!plan.changed) continue;
+        await db.storefrontOrder.updateMany({
+          where: { id: current.id },
+          data: {
+            status: plan.status,
+            statusHistory: plan.statusHistory as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (plan.move) {
+          await applyOrderStockMove(db, normalizeItems(current.items), plan.move);
+          moved = true;
+        }
+        const updatedRow = await db.storefrontOrder.findFirst({ where: { id: current.id } });
+        if (updatedRow) {
+          changedOrders.push({
+            order: dbOrderToStorefront(updatedRow as DbOrderRow),
+            prevStatus: current.status,
+          });
+        }
+      }
+      return { changedOrders, moved };
+    });
+
+    const slug = await getTenantSlug();
+    if (result.changedOrders.length > 0) {
+      // Resolve branding once, then emit one order_status_changed per genuinely
+      // changed order (fire-and-forget) so the tenant's PostHog workflow can email
+      // each customer — same event the single-order update emits.
+      const { branding } = await getTenantContext(tenantId);
+      const emailBrand = buildEmailBrand(
+        (branding?.config ?? {}) as Record<string, unknown>,
+        storefrontOrigin(slug),
+      );
+      for (const { order, prevStatus } of result.changedOrders) {
+        after(() =>
+          capturePostHogEvent(
+            tenantId,
+            buildStatusChangedPayload(order, prevStatus, order.status, emailBrand),
+          ),
+        );
+      }
+    }
+    // Any stock movement → refresh the cached storefront so the catalog shows it.
+    if (result.moved) revalidateTenant(tenantId, slug);
+    return { ok: true, changed: result.changedOrders.length };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't update the orders." };
   }
 }

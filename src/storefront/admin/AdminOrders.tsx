@@ -5,7 +5,17 @@ import type { Brand, Order } from "../types";
 import {
   listStorefrontOrdersAction,
   deleteStorefrontOrdersAction,
+  bulkUpdateStorefrontOrderStatusAction,
 } from "@/actions/orders";
+
+const STATUS_OPTIONS: { value: Order["status"]; label: string }[] = [
+  { value: "new", label: "New" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "processing", label: "Processing" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 function totalOf(o: Order): number {
   return Math.max(
@@ -80,6 +90,8 @@ export function AdminOrders({
   const [filter, setFilter] = useState<string>("all");
   const [query, setQuery] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<Order["status"]>("confirmed");
+  const [busy, setBusy] = useState<boolean>(false);
 
   void brand;
 
@@ -201,6 +213,21 @@ export function AdminOrders({
     await refresh();
   };
 
+  const bulkChangeStatus = async () => {
+    if (!selected.size || busy) return;
+    const label = STATUS_OPTIONS.find((s) => s.value === bulkStatus)?.label ?? bulkStatus;
+    if (!confirm(`Change ${selected.size} order(s) to "${label}"?`)) return;
+    setBusy(true);
+    const res = await bulkUpdateStorefrontOrderStatusAction([...selected], bulkStatus);
+    setBusy(false);
+    if ("error" in res) {
+      alert(res.error);
+      return;
+    }
+    setSelected(new Set());
+    await refresh();
+  };
+
   const deleteAll = async () => {
     if (!confirm(`Delete ALL ${orders.length} orders? This cannot be undone.`))
       return;
@@ -312,10 +339,35 @@ export function AdminOrders({
             />
             <span>Select All ({filtered.length})</span>
           </label>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div className="admin-orders__bulkstatus">
+              <label className="od-sr-only" htmlFor="bulk-status-select">
+                Change status of selected orders
+              </label>
+              <select
+                id="bulk-status-select"
+                className="admin-select"
+                value={bulkStatus}
+                disabled={!selected.size || busy}
+                onChange={(e) => setBulkStatus(e.target.value as Order["status"])}
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="admin-btn"
+                disabled={!selected.size || busy}
+                onClick={bulkChangeStatus}
+              >
+                {busy ? "Updating…" : "Change Status"}
+              </button>
+            </div>
             <button
               className="admin-btn admin-btn--danger-soft"
-              disabled={!selected.size}
+              disabled={!selected.size || busy}
               onClick={deleteSelected}
             >
               <svg
@@ -333,6 +385,7 @@ export function AdminOrders({
             </button>
             <button
               className="admin-btn admin-btn--danger"
+              disabled={busy}
               onClick={deleteAll}
             >
               <svg
