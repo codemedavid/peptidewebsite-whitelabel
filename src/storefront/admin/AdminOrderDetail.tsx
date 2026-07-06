@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
@@ -13,6 +13,7 @@ import {
   buildBookingText,
   computeOrderTotals,
   itemCount,
+  hasPaymentProof,
 } from "./order-detail";
 
 // One-click copy with transient "Copied!" feedback. Falls back to a hidden
@@ -131,6 +132,20 @@ export function AdminOrderDetail({
   if (courier && !courierOptions.includes(courier)) courierOptions.unshift(courier);
   const [note, setNote] = useState<string>(o.shippingNote || "");
   const [saving, setSaving] = useState<boolean>(false);
+  // Full-screen payment-proof viewer: the thumbnail crops the receipt, so
+  // clicking it opens the whole image. Only openable when a real proof exists.
+  const [isProofOpen, setIsProofOpen] = useState<boolean>(false);
+  const proofUrl = hasPaymentProof(o.paymentProof) ? (o.paymentProof as string) : "";
+
+  // Close the proof viewer on Escape while it is open.
+  useEffect(() => {
+    if (!isProofOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsProofOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isProofOpen]);
 
   void brand;
 
@@ -411,16 +426,27 @@ export function AdminOrderDetail({
                 <span className="od-h2-ico">🧾</span>
                 Payment Proof
               </h2>
-              <div className="od-proof">
-                {o.paymentProof ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={o.paymentProof} alt="Payment proof" />
-                ) : (
+              {proofUrl ? (
+                <button
+                  type="button"
+                  className="od-proof od-proof--clickable"
+                  onClick={() => setIsProofOpen(true)}
+                  aria-label="View full payment proof"
+                  title="Click to view the full image"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={proofUrl} alt="Payment proof" />
+                  <span className="od-proof-zoom" aria-hidden="true">
+                    ⤢
+                  </span>
+                </button>
+              ) : (
+                <div className="od-proof">
                   <div className="od-proof-empty">
                     No payment proof uploaded yet.
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           </div>
 
@@ -521,6 +547,35 @@ export function AdminOrderDetail({
           </div>
         </div>
       </main>
+
+      {/* Full-screen payment-proof viewer — the thumbnail crops the receipt,
+          so this shows the whole uploaded image. Click the backdrop, the close
+          button, or press Escape to dismiss. */}
+      {isProofOpen && proofUrl ? (
+        <div
+          className="od-proof-viewer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Payment proof"
+          onClick={() => setIsProofOpen(false)}
+        >
+          <button
+            type="button"
+            className="od-proof-viewer__close"
+            aria-label="Close payment proof"
+            onClick={() => setIsProofOpen(false)}
+          >
+            ✕
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="od-proof-viewer__img"
+            src={proofUrl}
+            alt="Payment proof"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
