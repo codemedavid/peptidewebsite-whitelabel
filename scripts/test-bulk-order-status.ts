@@ -6,7 +6,7 @@
  * apply whether one order or fifty are updated at once:
  *
  *   src/lib/storefront/order-status.ts
- *     ORDER_STATUSES            — the six statuses, in fulfillment order.
+ *     ORDER_STATUSES            — the seven statuses, in fulfillment order.
  *     isOrderStatus(v)          — narrow untrusted input to a valid status.
  *     cleanIdList(ids, cap)     — coerce an untrusted id array (dedupe + cap).
  *     stockCurrentlyDeducted(h) — replay a journey → are the items deducted now?
@@ -50,11 +50,16 @@ console.log("\nOrder-status transition core — pure\n");
 
 // ── ORDER_STATUSES ────────────────────────────────────────────────────────────
 console.log("ORDER_STATUSES");
-check("lists the six statuses in fulfillment order", () => {
+check("lists the seven statuses in fulfillment order", () => {
   assert.deepEqual(
     [...ORDER_STATUSES],
-    ["new", "confirmed", "processing", "shipped", "delivered", "cancelled"],
+    ["new", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled"],
   );
+});
+check("'ready' sits between processing and shipped", () => {
+  const i = ORDER_STATUSES.indexOf("ready");
+  assert.equal(ORDER_STATUSES[i - 1], "processing");
+  assert.equal(ORDER_STATUSES[i + 1], "shipped");
 });
 
 // ── isOrderStatus ─────────────────────────────────────────────────────────────
@@ -118,6 +123,9 @@ check("no-op when the status does not change", () => {
 check("non-inventory transitions move nothing (confirmed → shipped)", () => {
   assert.equal(inventoryMove("confirmed", [ev("confirmed")], "shipped"), null);
 });
+check("'ready' is neutral — moves no stock (processing → ready)", () => {
+  assert.equal(inventoryMove("processing", [ev("confirmed")], "ready"), null);
+});
 check("cancelling a never-confirmed order invents no stock", () => {
   assert.equal(inventoryMove("new", [ev("new")], "cancelled"), null);
 });
@@ -173,6 +181,28 @@ check("confirmed → shipped → changed + appended, but no inventory move", () 
   assert.equal(plan.changed, true);
   assert.equal(plan.move, null);
   assert.equal(plan.statusHistory.length, 3);
+});
+
+check("processing → ready → changed + appended, but no inventory move", () => {
+  const o = makeOrder({
+    status: "processing",
+    statusHistory: [ev("new"), ev("confirmed"), ev("processing")],
+  });
+  const plan = planStatusChange(o, "ready", NOW);
+  assert.equal(plan.changed, true);
+  assert.equal(plan.status, "ready");
+  assert.equal(plan.move, null);
+  assert.equal(plan.statusHistory.length, 4);
+  assert.deepEqual(plan.statusHistory.at(-1), ev("ready"));
+});
+
+check("ready → cancelled still restocks a confirmed order", () => {
+  const o = makeOrder({
+    status: "ready",
+    statusHistory: [ev("new"), ev("confirmed"), ev("processing"), ev("ready")],
+  });
+  const plan = planStatusChange(o, "cancelled", NOW);
+  assert.equal(plan.move, "restock");
 });
 
 check("confirmed → cancelled → restocks", () => {
