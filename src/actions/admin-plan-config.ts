@@ -17,6 +17,10 @@ import {
   type PlanConfig,
 } from "@/lib/platform/plan-config";
 import { syncPlanCatalog } from "@/lib/features/catalog-sync";
+import { getPlanFeatureConfig } from "@/lib/platform/plan-feature-config-server";
+import { resolvePlanFeatureSets } from "@/lib/platform/plan-feature-config";
+import { getFeatureRegistry, persistFeatureRegistry } from "@/lib/platform/feature-registry-server";
+import { reconcileRegistry } from "@/lib/platform/feature-registry";
 
 export type PlanConfigResult = { ok: true } | { error: string };
 
@@ -47,8 +51,13 @@ export async function savePlanConfigAction(input: PlanConfig): Promise<PlanConfi
 
   const config = normalizePlanConfig(input);
 
+  // Arm the "new functionality" baseline on ordinary operator activity: record the
+  // current catalog as known and auto-carry any detected additions as New.
+  const registry = reconcileRegistry(await getFeatureRegistry());
+
   if (isDemoMode()) {
     saveDemoPlatformSetting(PLAN_CONFIG_KEY, config);
+    await persistFeatureRegistry(registry);
     bust();
     return { ok: true };
   }
@@ -59,10 +68,12 @@ export async function savePlanConfigAction(input: PlanConfig): Promise<PlanConfi
       update: { value: config as Prisma.InputJsonValue },
       create: { key: PLAN_CONFIG_KEY, value: config as Prisma.InputJsonValue },
     });
-    // Saving also reconciles the DB plan→feature ceiling to catalog.ts, so new
-    // tenants on each plan light up the right features. Folded in from the old
-    // standalone "Sync plan features" button — one Save now does both writes.
-    await syncPlanCatalog(prisma);
+    // Saving also reconciles the DB plan→feature ceiling, so new tenants on each
+    // plan light up the right features. Uses the operator-edited ceiling
+    // (plan-feature-config) — NOT the raw catalog — so a pricing save never
+    // clobbers the "Package contents" feature edits back to catalog defaults.
+    await syncPlanCatalog(prisma, resolvePlanFeatureSets(await getPlanFeatureConfig()));
+    await persistFeatureRegistry(registry);
   } catch {
     return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
   }

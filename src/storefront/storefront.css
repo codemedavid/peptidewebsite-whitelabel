@@ -1418,6 +1418,75 @@
 }
 .sf-root .track-form .input-wrap { flex: 1; height: 56px; min-width: 0; }
 .sf-root .track-form .btn { height: 56px; padding-inline: 28px; flex-shrink: 0; }
+
+/* Delivery-estimate note (owner-editable), shown under the search box. */
+.sf-root .track-note {
+  margin-top: 20px;
+  margin-bottom: 24px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: var(--shadow-sm);
+}
+.sf-root .track-note__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.sf-root .track-note__icon {
+  display: inline-flex;
+  color: var(--brand-accent);
+}
+.sf-root .track-note__icon svg { width: 20px; height: 20px; }
+.sf-root .track-note__title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--brand-main);
+}
+.sf-root .track-note__sub {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--brand-text-muted);
+}
+.sf-root .track-note__dot { opacity: 0.7; }
+.sf-root .track-note__grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 40px;
+}
+.sf-root .track-note__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.sf-root .track-note__region {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--brand-text-muted);
+}
+.sf-root .track-note__estimate {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--brand-main);
+  white-space: nowrap;
+}
+.sf-root .track-note__footnote {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+@media (max-width: 520px) {
+  .sf-root .track-note__grid { grid-template-columns: 1fr; }
+}
+
 /* Customer's own recent orders — one-tap tracking (store.myOrders). */
 .sf-root .track-recent {
   margin: 0 0 24px;
@@ -2673,6 +2742,20 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--brand-text);
+}
+.sf-root .admin-quick__new {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-accent, var(--brand-button));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.6;
 }
 .sf-root .admin-quick__hint {
   display: block;

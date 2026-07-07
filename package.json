@@ -29,6 +29,7 @@
     "test:staff": "tsx scripts/test-staff-permissions.ts",
     "test:cart": "tsx scripts/test-cart-pricing.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
+    "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
     "test:plan-distribution": "tsx scripts/test-plan-distribution.ts",
     "test:admin-whatsapp": "tsx scripts/test-admin-whatsapp.ts",
     "test:feature-disclosure": "tsx scripts/test-feature-disclosure.ts",
@@ -42,7 +43,8 @@
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
     "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts",
-    "test:notice-modal": "tsx scripts/test-notice-modal.ts"
+    "test:notice-modal": "tsx scripts/test-notice-modal.ts",
+    "test:track-note": "tsx scripts/test-track-note.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

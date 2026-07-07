@@ -18,6 +18,7 @@ import { FEATURES } from "@/lib/features/catalog";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
 import { normalizeBanner } from "@/lib/storefront/banner";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
+import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -477,6 +478,38 @@ export async function saveNoticeModalAction(input: unknown): Promise<ActionResul
   // Force the server-held grant on top of whatever the client sent.
   const normalized = normalizeNoticeModal({ ...owned, operatorEnabled });
   const config = { ...current, noticeModal: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the store owner's track-order delivery note (the informational card on
+ * the Track Order page, under the order-number search box) into
+ * branding.config.trackNote (read-modify-write, mirroring saveNoticeModalAction).
+ * OWNER-ONLY. No operator entitlement — any store may use it, so unlike the notice
+ * modal there is no server-held grant to re-apply; the payload is normalized and
+ * written as-is.
+ */
+export async function saveTrackNoteAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStoreOwner();
+  if (!tenantId) return { error: NO_ACCESS };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+
+  const normalized = normalizeTrackNote(input);
+  const config = { ...current, trackNote: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

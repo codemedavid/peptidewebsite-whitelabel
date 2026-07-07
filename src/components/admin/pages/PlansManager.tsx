@@ -17,6 +17,7 @@ import { formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import type { PlanRow } from "@/lib/admin/data";
 import { getPlanScope, bulletsFromScope } from "@/lib/features/plan-scope";
 import { PlanScopePanel } from "@/components/admin/pages/PlanScopePanel";
+import { resolvePlanCeiling, type PlanFeatureConfig } from "@/lib/platform/plan-feature-config";
 
 const money = formatPesosCompact;
 const MAX_FEATS = 12;
@@ -62,11 +63,14 @@ export function PlansManager({
   rows,
   revenueCents,
   activeCount,
+  featureConfig,
 }: {
   initial: PlanConfig;
   rows: PlanRow[];
   revenueCents: number;
   activeCount: number;
+  /** Operator-edited plan ceiling — makes the read-only scope panel honest. */
+  featureConfig?: PlanFeatureConfig;
 }) {
   const router = useRouter();
   const { showToast } = useAdminUI();
@@ -381,7 +385,12 @@ export function PlansManager({
                   ))}
                 </div>
 
-                <PlanScopePanel scope={getPlanScope(p.key)} />
+                <PlanScopePanel
+                  scope={getPlanScope(
+                    p.key,
+                    featureConfig ? resolvePlanCeiling(featureConfig, p.key) : undefined,
+                  )}
+                />
               </div>
             </div>
           );

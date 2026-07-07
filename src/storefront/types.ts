@@ -6,6 +6,7 @@ import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
+import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type {
   GroupBuyCapabilities,
   GroupBuySettings,
@@ -311,6 +312,14 @@ export type Brand = {
   // through @/lib/storefront/notice-modal. Absent → feature off.
   noticeModal?: NoticeModalConfig;
 
+  // Track-order delivery note — the per-tenant informational card shown on the
+  // Track Order page, under the order-number search box. Single-flag gate: the
+  // store owner switches it on + edits the copy (trackNote.enabled, store admin's
+  // Track Note view). No operator entitlement — any store may use it. Normalized
+  // both on save (server) and at render (client) through @/lib/storefront/
+  // track-note. Absent → feature off.
+  trackNote?: TrackNoteConfig;
+
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;
   showHero: boolean;
@@ -383,6 +392,12 @@ export type Brand = {
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
   // access code (showPageMerchant).
   showAdminReseller?: boolean;
+  // Store-admin module ids (Quick Actions) that the platform operator has flagged
+  // as newly available — the storefront admin shows a "New" tag next to each.
+  // Server-derived from the operator-controlled feature registry (feature_registry
+  // PlatformSetting) intersected with this tenant's entitled modules. See
+  // storefront/visibility.ts (newModulesFor) + app/(tenant)/(storefront)/page.tsx.
+  newModules?: string[];
   // Group Buy MANAGEMENT module (the "Group Buys" manager view, distinct from
   // the rules editor above). Derived server-side from the groupbuy.* feature
   // entitlements — see lib/storefront/group-buy-server. Absent = module off.

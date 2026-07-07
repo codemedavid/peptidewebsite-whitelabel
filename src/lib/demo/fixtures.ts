@@ -3,6 +3,11 @@ import path from "node:path";
 import type { Order, Product } from "@/storefront/types";
 import { slugify } from "@/lib/storefront/product-mapping";
 import { OPERATOR_GRANTABLE, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
+import {
+  PLAN_FEATURES_CONFIG_KEY,
+  normalizePlanFeatureConfig,
+  resolvePlanCeiling,
+} from "@/lib/platform/plan-feature-config";
 import type { HeroTypography } from "@/lib/theme/tokens";
 import {
   defaultOrderNumberFormat,
@@ -286,7 +291,12 @@ export function saveDemoFeatures(slug: string, map: DemoFeatureMap): void {
  */
 export function getDemoEntitlements(idOrSlug: string): Set<FeatureKey> {
   const t = getDemoTenant(idOrSlug);
-  const ceiling = planFeatureSet(t.plan);
+  // Resolve the plan ceiling from the operator-edited package contents (same
+  // plan_features_config the DB path syncs), falling back to the catalog default.
+  const savedCfg = getDemoPlatformSetting(PLAN_FEATURES_CONFIG_KEY);
+  const ceiling = savedCfg
+    ? resolvePlanCeiling(normalizePlanFeatureConfig(savedCfg), t.plan)
+    : planFeatureSet(t.plan);
   const overrides = getDemoFeatures(t.slug);
   const set = new Set<FeatureKey>();
   for (const key of ceiling) if (overrides[key] !== false) set.add(key);

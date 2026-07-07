@@ -91,9 +91,14 @@ function stateFor(key: FeatureKey, ceiling: ReadonlySet<FeatureKey>): { state: F
 /**
  * The functional scope of a plan: every feature it grants (plus the
  * operator-grantable add-ons available on any plan), grouped and state-tagged.
+ *
+ * Pass `ceilingOverride` (the operator-edited set from plan-feature-config) to
+ * reflect the live package contents instead of the hardcoded catalog default —
+ * so the /admin/plans scope panel stays honest after an edit. Omit it and the
+ * catalog default is used (handles aliases + unknown → starter).
  */
-export function getPlanScope(planKey: string): PlanScope {
-  const ceiling = planFeatureSet(planKey); // handles aliases + unknown → starter
+export function getPlanScope(planKey: string, ceilingOverride?: ReadonlySet<FeatureKey>): PlanScope {
+  const ceiling = ceilingOverride ?? planFeatureSet(planKey);
   const display = new Set<FeatureKey>([...ceiling, ...OPERATOR_GRANTABLE]);
 
   const scoped: ScopeFeature[] = FEATURE_ORDER.filter((key) => display.has(key)).map((key) => {

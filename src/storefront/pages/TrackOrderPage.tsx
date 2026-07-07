@@ -3,8 +3,10 @@
 import { useState } from "react";
 import type { Brand, Order, OrderStatusEvent } from "../types";
 import { BackLink } from "../components/BackLink";
+import { TrackNoteCard } from "../components/TrackNoteCard";
 import { useStore } from "../store";
 import { trackStorefrontOrderAction, type TrackedOrder } from "@/actions/orders";
+import { isTrackNoteVisible } from "@/lib/storefront/track-note";
 
 const STATUS_LABELS: Record<Order["status"], string> = {
   new: "Order Received",
@@ -180,6 +182,10 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
             </svg>
           </button>
         </div>
+
+        {isTrackNoteVisible(brand.trackNote) && brand.trackNote && (
+          <TrackNoteCard config={brand.trackNote} />
+        )}
 
         {myOrders.length > 0 && (
           <div className="track-recent">
