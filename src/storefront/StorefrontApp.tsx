@@ -11,6 +11,7 @@ import type { Brand, Product } from "./types";
 import { BRAND } from "./data";
 import { Header } from "./components/Header";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
+import { NoticeModal } from "./components/NoticeModal";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
@@ -206,6 +207,10 @@ function Shell() {
       )}
 
       <AnnouncementBanner brand={brand} onRoute={goToRoute} />
+
+      {/* Per-tenant notice/disclaimer — pops on every visit when the operator has
+          granted it AND the owner enabled it (gate lives in the modal). */}
+      <NoticeModal brand={brand} />
 
       {activePage === "track" && <TrackOrderPage brand={brand} onBack={goHome} />}
       {activePage === "faq" && <FAQPage brand={brand} onBack={goHome} />}

@@ -3,13 +3,16 @@
 import { useState } from "react";
 import type { Brand, Order, OrderStatusEvent } from "../types";
 import { BackLink } from "../components/BackLink";
+import { TrackNoteCard } from "../components/TrackNoteCard";
 import { useStore } from "../store";
 import { trackStorefrontOrderAction, type TrackedOrder } from "@/actions/orders";
+import { isTrackNoteVisible } from "@/lib/storefront/track-note";
 
 const STATUS_LABELS: Record<Order["status"], string> = {
   new: "Order Received",
   confirmed: "Confirmed",
   processing: "Processing",
+  ready: "Ready",
   shipped: "Shipped",
   delivered: "Delivered",
   cancelled: "Cancelled",
@@ -19,13 +22,14 @@ const STATUS_DOT: Record<Order["status"], string> = {
   new: "#f59e0b",
   confirmed: "#3b82f6",
   processing: "#8b5cf6",
+  ready: "#0ea5a3",
   shipped: "#06b6d4",
   delivered: "#22c55e",
   cancelled: "#ef4444",
 };
 
 // The happy-path fulfillment journey (cancelled is a branch, handled below).
-const FLOW: Order["status"][] = ["new", "confirmed", "processing", "shipped", "delivered"];
+const FLOW: Order["status"][] = ["new", "confirmed", "processing", "ready", "shipped", "delivered"];
 
 type JourneyNode = {
   key: string;
@@ -178,6 +182,10 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
             </svg>
           </button>
         </div>
+
+        {isTrackNoteVisible(brand.trackNote) && brand.trackNote && (
+          <TrackNoteCard config={brand.trackNote} />
+        )}
 
         {myOrders.length > 0 && (
           <div className="track-recent">

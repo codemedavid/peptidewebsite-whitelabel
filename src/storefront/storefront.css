@@ -1418,6 +1418,75 @@
 }
 .sf-root .track-form .input-wrap { flex: 1; height: 56px; min-width: 0; }
 .sf-root .track-form .btn { height: 56px; padding-inline: 28px; flex-shrink: 0; }
+
+/* Delivery-estimate note (owner-editable), shown under the search box. */
+.sf-root .track-note {
+  margin-top: 20px;
+  margin-bottom: 24px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: var(--shadow-sm);
+}
+.sf-root .track-note__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.sf-root .track-note__icon {
+  display: inline-flex;
+  color: var(--brand-accent);
+}
+.sf-root .track-note__icon svg { width: 20px; height: 20px; }
+.sf-root .track-note__title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--brand-main);
+}
+.sf-root .track-note__sub {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--brand-text-muted);
+}
+.sf-root .track-note__dot { opacity: 0.7; }
+.sf-root .track-note__grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 40px;
+}
+.sf-root .track-note__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.sf-root .track-note__region {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--brand-text-muted);
+}
+.sf-root .track-note__estimate {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--brand-main);
+  white-space: nowrap;
+}
+.sf-root .track-note__footnote {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+@media (max-width: 520px) {
+  .sf-root .track-note__grid { grid-template-columns: 1fr; }
+}
+
 /* Customer's own recent orders — one-tap tracking (store.myOrders). */
 .sf-root .track-recent {
   margin: 0 0 24px;
@@ -2674,6 +2743,20 @@
   font-weight: 600;
   color: var(--brand-text);
 }
+.sf-root .admin-quick__new {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-accent, var(--brand-button));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.6;
+}
 .sf-root .admin-quick__hint {
   display: block;
   font-size: 12.5px;
@@ -3550,6 +3633,7 @@
 .sf-root .admin-pill--new { background: #FFF6BF; color: #8A6B0B; }
 .sf-root .admin-pill--confirmed { background: color-mix(in srgb, #2A6FDB 18%, transparent); color: #1F4E91; }
 .sf-root .admin-pill--processing { background: color-mix(in srgb, var(--brand-accent) 14%, transparent); color: var(--brand-accent); }
+.sf-root .admin-pill--ready { background: color-mix(in srgb, #0EA5A3 18%, transparent); color: #0B7C7A; }
 .sf-root .admin-pill--shipped { background: color-mix(in srgb, #9D6BE3 18%, transparent); color: #7A4FCF; }
 .sf-root .admin-pill--delivered { background: color-mix(in srgb, #22B07D 18%, transparent); color: #1F8A5B; }
 .sf-root .admin-pill--cancelled { background: color-mix(in srgb, #F23E5C 14%, transparent); color: #C82846; }
@@ -3762,6 +3846,7 @@
 .sf-root .admin-stat-mini[data-tint="new"]      .admin-stat-mini__value { color: #8A6B0B; }
 .sf-root .admin-stat-mini[data-tint="confirmed"].admin-stat-mini__value { color: #1F4E91; }
 .sf-root .admin-stat-mini[data-tint="processing"] .admin-stat-mini__value { color: var(--brand-accent); }
+.sf-root .admin-stat-mini[data-tint="ready"]    .admin-stat-mini__value { color: #0B7C7A; }
 .sf-root .admin-stat-mini[data-tint="shipped"]  .admin-stat-mini__value { color: #7A4FCF; }
 .sf-root .admin-stat-mini[data-tint="delivered"] .admin-stat-mini__value { color: #1F8A5B; }
 .sf-root .admin-stat-mini[data-tint="cancelled"] .admin-stat-mini__value { color: #C82846; }
@@ -3786,6 +3871,20 @@
   margin-bottom: 18px;
   flex-wrap: wrap;
   box-shadow: var(--shadow-sm);
+}
+
+/* Bulk "change status" group (select + apply), sits left of the delete buttons. */
+.sf-root .admin-orders__bulkstatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  margin-right: 4px;
+  border-right: 1px solid var(--brand-border);
+}
+.sf-root .admin-orders__bulkstatus .admin-select {
+  min-width: 150px;
+  width: auto;
 }
 
 .sf-root .admin-order-card {
@@ -3875,10 +3974,17 @@
     font-size: 14px;
     margin-top: 4px;
   }
-  /* bulk-action bar: let the two delete buttons stack full-width */
+  /* bulk-action bar: let the status group + delete buttons stack full-width */
   .sf-root .admin-orders__bulkbar { padding: 14px 16px; }
   .sf-root .admin-orders__bulkbar > div { width: 100%; }
   .sf-root .admin-orders__bulkbar > div .admin-btn { flex: 1; justify-content: center; }
+  .sf-root .admin-orders__bulkstatus {
+    width: 100%;
+    padding-right: 0;
+    margin-right: 0;
+    border-right: none;
+  }
+  .sf-root .admin-orders__bulkstatus .admin-select { flex: 1; min-width: 0; }
 }
 
 /* =========================================================
@@ -4094,6 +4200,62 @@
 .sf-root .od-proof-empty {
   padding: 24px; text-align: center;
   color: var(--brand-text-muted); font-size: 13px;
+}
+
+/* Clickable thumbnail — the receipt is cropped here (object-fit: cover); the
+   whole image opens in the viewer on click. */
+.sf-root button.od-proof--clickable {
+  position: relative; padding: 0; cursor: zoom-in;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.sf-root button.od-proof--clickable:hover {
+  border-color: var(--brand-accent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+.sf-root button.od-proof--clickable:focus-visible {
+  outline: 2px solid var(--brand-accent); outline-offset: 2px;
+}
+/* Zoom affordance badge, bottom-right of the thumbnail. */
+.sf-root .od-proof-zoom {
+  position: absolute; right: 8px; bottom: 8px;
+  display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  background: rgba(10, 12, 16, 0.72); color: #fff;
+  font-size: 14px; line-height: 1; pointer-events: none;
+}
+.sf-root button.od-proof--clickable:hover .od-proof-zoom {
+  background: var(--brand-accent);
+}
+
+/* Full-screen payment-proof viewer (lightbox). Reuses @keyframes sf-viewer-in. */
+.sf-root .od-proof-viewer {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: rgba(10, 12, 16, 0.88);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  cursor: zoom-out; animation: sf-viewer-in 160ms ease;
+}
+.sf-root .od-proof-viewer__img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: 10px; cursor: default;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.sf-root .od-proof-viewer__close {
+  position: absolute; top: 16px; right: 16px;
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1); color: #fff;
+  font-size: 18px; cursor: pointer; transition: background 150ms ease;
+}
+.sf-root .od-proof-viewer__close:hover { background: rgba(255, 255, 255, 0.22); }
+.sf-root .od-proof-viewer__close:focus-visible {
+  outline: 2px solid #fff; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .od-proof-viewer { animation: none; }
+  .sf-root button.od-proof--clickable { transition: none; }
 }
 
 /* ── sidebar: status + action ── */
@@ -6434,5 +6596,212 @@
   }
   .sf-root .sf-banner__slide {
     animation: none;
+  }
+}
+
+/* ==========================================================================
+   Notice / disclaimer modal — the per-tenant pop-up shown on every storefront
+   visit (see components/NoticeModal.tsx). Chrome is themed entirely from the
+   tenant's --brand-* tokens so every store adopts its own palette. Motion is
+   compositor-friendly (transform/opacity only). The same card styles drive the
+   store-admin editor's live preview.
+   ========================================================================== */
+.sf-root .sf-notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 15, 28, 0.55);
+  backdrop-filter: blur(3px);
+  animation: sf-notice-overlay-in 0.25s ease;
+}
+
+.sf-root .sf-notice {
+  width: 560px;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  animation: sf-notice-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.sf-root .sf-notice__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  background: var(--brand-surface-2, #f6f2fb);
+  border-bottom: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  border-radius: 16px 16px 0 0;
+}
+
+.sf-root .sf-notice__icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--brand-surface, #fff);
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--brand-main, #7c5ca8);
+}
+
+.sf-root .sf-notice__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--brand-text, #241d2e);
+  font-family: var(--brand-heading-font, inherit);
+}
+
+.sf-root .sf-notice__sub {
+  font-size: 13px;
+  color: var(--brand-text-muted, #6b6474);
+  margin-top: 2px;
+}
+
+.sf-root .sf-notice__body {
+  padding: 20px 24px 22px;
+}
+
+.sf-root .sf-notice__p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--brand-text, #3d3745);
+}
+
+.sf-root .sf-notice__warn {
+  background: color-mix(in srgb, #d5294a 8%, var(--brand-surface, #fff));
+  border: 1px solid color-mix(in srgb, #d5294a 22%, var(--brand-surface, #fff));
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.sf-root .sf-notice__warn-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #d5294a;
+}
+
+.sf-root .sf-notice__warn-body {
+  font-size: 13px;
+  color: var(--brand-text-muted, #7a5a60);
+  margin-top: 5px;
+}
+
+.sf-root .sf-notice__delivery {
+  background: var(--brand-surface-2, #f6f5f8);
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.07));
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.sf-root .sf-notice__delivery-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--brand-text, #332d3c);
+}
+
+.sf-root .sf-notice__delivery-line {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--brand-text, #4b4553);
+}
+
+.sf-root .sf-notice__agree {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 14px;
+  border: none;
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--brand-button, #7c5ca8), var(--brand-button-2, #5f4386));
+  color: var(--brand-button-text, #fff);
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--brand-button-font, inherit);
+  cursor: pointer;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--brand-button, #7c5ca8) 34%, transparent);
+  transition: filter var(--duration-fast, 150ms) ease;
+}
+
+.sf-root .sf-notice__agree:hover {
+  filter: brightness(1.07);
+}
+
+.sf-root .sf-notice__agree:focus-visible {
+  outline: 2px solid var(--brand-accent, #e94b7d);
+  outline-offset: 2px;
+}
+
+.sf-root .sf-notice__footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--brand-text-muted, #8b8494);
+  margin-top: 12px;
+}
+
+@keyframes sf-notice-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sf-notice-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-notice-overlay,
+  .sf-root .sf-notice {
+    animation: none;
+  }
+}
+
+/* Inline preview variant used by the store-admin editor — same card, no fixed
+   overlay, constrained width so it sits inside the two-column workspace. */
+.sf-root .sf-notice-preview .sf-notice {
+  animation: none;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+/* Store-admin Notice Modal editor — two columns (form + sticky live preview),
+   collapsing to a single column on narrow screens. */
+.sf-root .sf-notice-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.sf-root .sf-notice-editor__preview {
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 900px) {
+  .sf-root .sf-notice-editor {
+    grid-template-columns: 1fr;
+  }
+  .sf-root .sf-notice-editor__preview {
+    position: static;
   }
 }

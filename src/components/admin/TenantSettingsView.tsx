@@ -18,6 +18,7 @@ import {
   saveAdminFeeAction,
   saveAdminPasswordAction,
   saveRequirePaymentProofAction,
+  saveNoticeModalGrantAction,
 } from "@/actions/branding";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import {
@@ -82,6 +83,8 @@ type Props = {
   initialMetaDescription: string;
   /** Whether checkout requires a proof-of-payment upload. */
   initialRequireProofOfPayment: boolean;
+  /** Whether the super admin has granted the Storefront Notice Modal for this tenant. */
+  initialNoticeModalGranted: boolean;
   /** Checkout admin-fee config + the store's currency symbol for display. */
   initialAdminFee: AdminFeeConfig & { currency: string };
   /** Whether the tenant is entitled to the admin-fee feature (admin → Features).
@@ -100,6 +103,7 @@ const SECTIONS = [
   { id: "orders", label: "Order numbers" },
   { id: "channels", label: "Checkout channels" },
   { id: "proof", label: "Payment proof" },
+  { id: "notice", label: "Notice modal" },
   { id: "fee", label: "Admin fee" },
   { id: "copy", label: "Checkout copy" },
   { id: "admin", label: "Admin access" },
@@ -116,6 +120,7 @@ export function TenantSettingsView({
   initialCheckoutNote,
   initialMetaDescription,
   initialRequireProofOfPayment,
+  initialNoticeModalGranted,
   initialAdminFee,
   adminFeeEntitled,
   initialAdminPassword,
@@ -132,6 +137,11 @@ export function TenantSettingsView({
   /* ---------- channels + checkout copy ---------- */
   const [channels, setChannels] = useState<ContactChannel[]>(initialChannels);
   const [requireProof, setRequireProof] = useState(initialRequireProofOfPayment);
+  // Notice Modal grant — a standalone per-tenant operator switch (default OFF).
+  // Saved immediately on toggle (its own flow, never marks a section dirty), with
+  // optimistic state + revert on failure, mirroring the admin-fee master toggle.
+  const [noticeGranted, setNoticeGranted] = useState(initialNoticeModalGranted);
+  const [noticeSaving, setNoticeSaving] = useState(false);
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
@@ -178,6 +188,7 @@ export function TenantSettingsView({
     orders: false,
     channels: false,
     proof: false,
+    notice: false,
     fee: false,
     copy: false,
     admin: false,
@@ -319,6 +330,23 @@ export function TenantSettingsView({
     }
   }
 
+  async function toggleNoticeModal() {
+    if (noticeSaving) return;
+    const next = !noticeGranted;
+    setNoticeGranted(next); // optimistic
+    setNoticeSaving(true);
+    setErrors((e) => ({ ...e, notice: undefined }));
+    const res = await saveNoticeModalGrantAction(slug, next);
+    setNoticeSaving(false);
+    if (!("ok" in res)) {
+      setNoticeGranted(!next); // revert
+      setErrors((e) => ({
+        ...e,
+        notice: res.error === "FORBIDDEN" ? "You don't have permission to change this." : res.error,
+      }));
+    }
+  }
+
   async function saveAdminPassword(): Promise<boolean> {
     setSaving("admin");
     setErrors((e) => ({ ...e, admin: undefined }));
@@ -367,6 +395,7 @@ export function TenantSettingsView({
     orders: useRef<HTMLElement>(null),
     channels: useRef<HTMLElement>(null),
     proof: useRef<HTMLElement>(null),
+    notice: useRef<HTMLElement>(null),
     fee: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
     admin: useRef<HTMLElement>(null),
@@ -393,6 +422,7 @@ export function TenantSettingsView({
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
     proof: requireProof ? "On" : "Off",
+    notice: noticeGranted ? "On" : "Off",
     fee: feeEnabled ? "On" : "Off",
     copy: "3",
     admin: adminPassword.trim() ? "Custom" : "Default",
@@ -802,6 +832,60 @@ export function TenantSettingsView({
                   )}
                 </button>
               </div>
+            </div>
+          </section>
+
+          {/* ---------- notice modal ---------- */}
+          <section className="set-card" ref={refs.notice} data-section="notice">
+            <div className="set-card-head">
+              <div>
+                <span className="set-eyebrow">Storefront</span>
+                <h2>Notice modal</h2>
+                <p className="set-desc">
+                  A pop-up shown to customers on every visit to this store — a
+                  disclaimer, delivery cut-offs, or any must-read note. Granting it
+                  here unlocks the store owner&apos;s <strong>Notice Modal</strong>{" "}
+                  editor, where they turn it on and write the copy. It stays hidden
+                  from shoppers until the owner switches it on.
+                </p>
+              </div>
+              <span className={"badge " + (noticeGranted ? "badge-success" : "badge-neutral")}>
+                {noticeGranted ? "Granted" : "Off"}
+              </span>
+            </div>
+            <div className="set-card-body">
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Enable Notice Modal for this store</div>
+                  <div className="set-row-help">
+                    Off by default. When off, the owner&apos;s Notice Modal editor is
+                    hidden and no notice can appear. Turning it off later hides the
+                    modal but keeps the owner&apos;s saved copy.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (noticeGranted ? " on" : "")}
+                    role="switch"
+                    aria-checked={noticeGranted}
+                    aria-busy={noticeSaving}
+                    aria-label="Grant the notice modal for this store"
+                    tabIndex={0}
+                    onClick={toggleNoticeModal}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleNoticeModal();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              {errors.notice && (
+                <div role="alert" className="set-err">
+                  {errors.notice}
+                </div>
+              )}
             </div>
           </section>
 

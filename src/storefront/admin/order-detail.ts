@@ -111,6 +111,14 @@ export function computeOrderTotals(order: Order): OrderTotals {
   return { subtotal, discount, shipping, fee, total };
 }
 
+/** True only when a real, non-blank payment-proof URL is present. Governs both
+ *  the clickable thumbnail (vs the "no proof" empty state) and whether the
+ *  full-screen viewer may open — so a whitespace-only string never renders a
+ *  broken <img> or an empty lightbox. */
+export function hasPaymentProof(proof: string | null | undefined): boolean {
+  return (proof ?? "").trim() !== "";
+}
+
 /** Total units across all lines, for the "Order Items (N)" count pill. */
 export function itemCount(order: Order): number {
   return (order.items || []).reduce((s, i) => s + (i.qty || 1), 0);

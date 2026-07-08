@@ -16,6 +16,8 @@ import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
+import { AdminNoticeModal } from "./AdminNoticeModal";
+import { AdminTrackNote } from "./AdminTrackNote";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminReviewsManager } from "./AdminReviewsManager";
@@ -63,7 +65,9 @@ type View =
   | "account"
   | "staff"
   | "staff-form"
-  | "notify";
+  | "notify"
+  | "notice"
+  | "tracknote";
 
 export function AdminPage({
   brand,
@@ -197,6 +201,8 @@ export function AdminPage({
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
@@ -288,6 +294,8 @@ export function AdminPage({
       ? [
           { id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" },
           { id: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan" },
+          { id: "notice", label: "Notice Modal", hint: "Storefront pop-up notice", icon: "shield", tint: "orange" },
+          { id: "tracknote", label: "Delivery Note", hint: "Track-page delivery estimates", icon: "truck", tint: "mint" },
         ]
       : []),
   ].filter(
@@ -396,6 +404,9 @@ export function AdminPage({
                     if (q.id === "groupbuys") return setView("groupbuys");
                     if (q.id === "account") return setView("account");
                     if (q.id === "staff") return setView("staff");
+                    if (q.id === "notify") return setView("notify");
+                    if (q.id === "notice") return setView("notice");
+                    if (q.id === "tracknote") return setView("tracknote");
                     toast(`"${q.label}" — wire to your backend`);
                   }}
                 >
@@ -405,7 +416,12 @@ export function AdminPage({
                     </span>
                   </span>
                   <span>
-                    <span className="admin-quick__label">{q.label}</span>
+                    <span className="admin-quick__label">
+                      {q.label}
+                      {brand.newModules?.includes(q.id) && (
+                        <span className="admin-quick__new">New</span>
+                      )}
+                    </span>
                     <span className="admin-quick__hint">{q.hint}</span>
                   </span>
                 </button>

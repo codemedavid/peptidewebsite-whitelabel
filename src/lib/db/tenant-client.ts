@@ -103,13 +103,28 @@ export async function withTenant<T>(
   if (!tenantId) throw new Error("withTenant() requires a tenantId");
 
   const db = forTenant(tenantId);
-  return db.$transaction(async (tx) => {
-    // MUST be the first statement: scopes every policy in this transaction.
-    // Parameterized, so the tenantId can never break out into SQL.
-    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
-    return fn(tx);
-  });
+  return db.$transaction(
+    async (tx) => {
+      // MUST be the first statement: scopes every policy in this transaction.
+      // Parameterized, so the tenantId can never break out into SQL.
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      return fn(tx);
+    },
+    // Every tenant DB op runs through here, and each op is a multi-statement
+    // interactive transaction (set_config + the caller's queries) over a pooled
+    // Supabase/PgBouncer connection from a serverless function. Prisma's defaults
+    // (maxWait 2s, timeout 5s) are too tight for that path: a cold function plus a
+    // multi-round-trip write (e.g. an order status change that also moves stock
+    // line by line) overruns 5s and Prisma aborts with P2028 ("Transaction not
+    // found … obtained before disconnecting"). Widen both to survive cold starts
+    // and pool latency without holding connections open unreasonably long.
+    { maxWait: TX_MAX_WAIT_MS, timeout: TX_TIMEOUT_MS },
+  );
 }
+
+// Interactive-transaction limits for the pooled serverless path (see withTenant).
+const TX_MAX_WAIT_MS = 10_000; // wait up to 10s for a free pooled connection
+const TX_TIMEOUT_MS = 20_000; // allow up to 20s for the transaction body to finish
 
 // Builds the tenant-scoping query extension. Shared by forTenant() and (via it)
 // withTenant() so both layers apply the exact same WHERE/data rewrites.

@@ -7,11 +7,14 @@ import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
-import { resolveShowReviews } from "@/storefront/visibility";
+import { resolveShowReviews, newModulesFor } from "@/storefront/visibility";
+import { getFeatureRegistry } from "@/lib/platform/feature-registry-server";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
+import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
+import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -128,6 +131,22 @@ export default async function HomePage() {
   // fires — sendAdminOrderNotification re-checks this same entitlement server-side.
   brand.showAdminOrderNotify = await hasFeature(tenantId, FEATURES.NOTIFY_ADMIN_ORDER);
 
+  // Storefront Notice Modal: sanitize the stored config so a legacy/absent blob
+  // is always safe, then derive the owner-editor visibility from the super-admin
+  // grant (branding.config.noticeModal.operatorEnabled). The modal itself
+  // additionally needs the owner's own `enabled` flag — both live in the
+  // normalized blob and are re-checked client-side (isNoticeModalVisible). No
+  // platform FEATURES entry: the grant is a per-tenant switch on the settings page.
+  const noticeModal = normalizeNoticeModal(config.noticeModal);
+  brand.noticeModal = noticeModal;
+  brand.showAdminNotice = noticeModal.operatorEnabled;
+
+  // Track-order delivery note: sanitize the stored config so a legacy/absent blob
+  // is always safe. No operator entitlement — the store owner alone switches it on
+  // and edits the copy (store admin's Track Note view), re-checked client-side
+  // (isTrackNoteVisible). The owner editor is always available (owner-only tile).
+  brand.trackNote = normalizeTrackNote(config.trackNote);
+
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
   // least one staff account exists. Until then the login is password-only (the
@@ -203,6 +222,12 @@ export default async function HomePage() {
     );
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
+
+  // "New functionality" tags: the operator's kept flags (persisted registry
+  // newKeys), mapped to this store's admin modules. Detected-but-unsaved additions
+  // are intentionally excluded — store owners only see a tag the operator kept.
+  const registry = await getFeatureRegistry();
+  brand.newModules = newModulesFor(new Set(registry.newKeys));
 
   return <StorefrontApp brand={brand} products={products} tenantKey={tenantId} />;
 }

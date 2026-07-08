@@ -7,11 +7,22 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { syncPlanCatalog } from "../src/lib/features/catalog-sync";
+import {
+  PLAN_FEATURES_CONFIG_KEY,
+  normalizePlanFeatureConfig,
+  defaultPlanFeatureConfig,
+  resolvePlanFeatureSets,
+} from "../src/lib/platform/plan-feature-config";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const summary = await syncPlanCatalog(prisma);
+  // Reconcile to the operator-edited ceiling (plan_features_config) when one is
+  // saved, so re-running this never resets a package's contents to catalog
+  // defaults. No row yet → catalog defaults.
+  const row = await prisma.platformSetting.findUnique({ where: { key: PLAN_FEATURES_CONFIG_KEY } });
+  const config = row ? normalizePlanFeatureConfig(row.value) : defaultPlanFeatureConfig();
+  const summary = await syncPlanCatalog(prisma, resolvePlanFeatureSets(config));
   console.log(`Upserted ${summary.featuresUpserted} features.`);
   let changed = 0;
   for (const p of summary.plans) {

@@ -34,8 +34,16 @@ export interface SyncSummary {
 /**
  * Idempotent: same catalog + same DB → empty diffs. Returns what changed so the
  * caller (script / server action) can log it — silent reconciliation hides drift.
+ *
+ * `planFeatureSets` is the plan→feature ceiling to reconcile the DB to; it
+ * defaults to the hardcoded catalog PLAN_FEATURES. The Super Admin passes the
+ * operator-edited, resolved sets (plan-feature-config) so a saved package edit
+ * reconciles straight into plan_features instead of being reset to catalog.
  */
-export async function syncPlanCatalog(prisma: PrismaClient): Promise<SyncSummary> {
+export async function syncPlanCatalog(
+  prisma: PrismaClient,
+  planFeatureSets: Record<string, readonly string[]> = PLAN_FEATURES,
+): Promise<SyncSummary> {
   // 1. Features — upsert every catalog key (never delete).
   for (const key of ALL_FEATURES) {
     await prisma.feature.upsert({ where: { key }, update: {}, create: { key } });
@@ -46,8 +54,8 @@ export async function syncPlanCatalog(prisma: PrismaClient): Promise<SyncSummary
 
   const summary: SyncSummary = { featuresUpserted: ALL_FEATURES.length, plans: [] };
 
-  // 2. Plans + plan_features — reconcile to catalog (add missing, remove stale).
-  for (const [planKey, featureKeys] of Object.entries(PLAN_FEATURES)) {
+  // 2. Plans + plan_features — reconcile to the given ceiling (add missing, remove stale).
+  for (const [planKey, featureKeys] of Object.entries(planFeatureSets)) {
     const plan = await prisma.plan.upsert({
       where: { key: planKey },
       update: { name: PLAN_NAMES[planKey] ?? planKey },

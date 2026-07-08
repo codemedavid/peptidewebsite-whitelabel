@@ -88,28 +88,13 @@ export const FEATURES = {
 
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 
-// Plan key → feature keys. Seeded into plans/plan_features. Editable without deploy.
-const STARTER: FeatureKey[] = [
-  FEATURES.SITE_HOMEPAGE,
-  FEATURES.SITE_PRODUCTS,
-  FEATURES.SITE_CONTACT_FORM,
-  FEATURES.SITE_BLOG,
-  FEATURES.STORE_PRODUCT_SPECS,
-  FEATURES.STORE_SEARCH,
-  FEATURES.STORE_CATEGORIES,
-  FEATURES.STORE_COMMUNITY_LINK,
-  FEATURES.STORE_CALCULATOR,
-  // Available on every plan; the operator toggles it per tenant. The storefront
-  // only surfaces the gated #merchant page once the store owner also sets an
-  // access code, so being in the plan ceiling (default-on) exposes nothing.
-  FEATURES.STORE_RESELLER_PORTAL,
-  // Checkout admin fee: in every plan ceiling (default ON) so any tenant that
-  // already configured a fee keeps charging it. The operator revokes it per
-  // tenant from admin → Features to switch the whole admin-fee section off —
-  // the storefront then drops the line and orders.ts stops stamping it.
-  FEATURES.STORE_ADMIN_FEE,
-  // Sales Analytics sub-features: in every plan ceiling (default ON) but inert
-  // until the operator grants the STORE_SALES_ANALYTICS module itself.
+// Inert ceiling scaffolding. Sales Analytics slices stay off until the operator
+// grants STORE_SALES_ANALYTICS; Group Buy building blocks stay off until GB_MODULE
+// is granted (resolveGroupBuyCaps ANDs each with GB_MODULE). They sit in EVERY plan
+// ceiling so granting the master switch lights the module up — masterSwitchFor in
+// plan-scope.ts keeps them out of the VISIBLE/active default set. The Enterprise-only
+// GB extras (scheduling, parallel runs, auto-on-close) live in ENTERPRISE, not here.
+const SALES_ANALYTICS_SCAFFOLDING: FeatureKey[] = [
   FEATURES.SA_SECTION_REVENUE,
   FEATURES.SA_SECTION_PRODUCTS,
   FEATURES.SA_SECTION_GROUP_BUYS,
@@ -119,12 +104,8 @@ const STARTER: FeatureKey[] = [
   FEATURES.SA_REPORT_MONTHLY,
   FEATURES.SA_EXPORT_EXCEL,
   FEATURES.SA_EXPORT_PDF,
-  // Group Buy sub-capabilities sit in every plan ceiling (default ON) but stay
-  // inert until the operator grants the GB_MODULE master switch per tenant (see
-  // OPERATOR_GRANTABLE). resolveGroupBuyCaps ANDs each one with GB_MODULE, so
-  // being default-on here just means granting the module lights up the basics.
-  // The Enterprise-only extras (scheduling, parallel runs, auto-on-close) live
-  // in ENTERPRISE below, not here.
+];
+const GROUP_BUY_SCAFFOLDING: FeatureKey[] = [
   FEATURES.GB_CREATE,
   FEATURES.GB_EDIT,
   FEATURES.GB_DUPLICATE,
@@ -138,26 +119,74 @@ const STARTER: FeatureKey[] = [
   FEATURES.GB_REPORT_PRODUCT_BREAKDOWN,
   FEATURES.GB_REPORT_SUPPLIER_SUMMARY,
 ];
+
+// Plan key → feature keys (the CEILING). Seeded into plans/plan_features and
+// operator-editable without deploy via /admin/plans (plan_features_config).
+const STARTER: FeatureKey[] = [
+  FEATURES.SITE_HOMEPAGE,
+  FEATURES.SITE_PRODUCTS,
+  FEATURES.SITE_CONTACT_FORM,
+  FEATURES.SITE_BLOG,
+  FEATURES.STORE_PRODUCT_SPECS,
+  FEATURES.STORE_SEARCH,
+  FEATURES.STORE_CATEGORIES,
+  FEATURES.STORE_COMMUNITY_LINK,
+  FEATURES.STORE_CALCULATOR,
+  // Default-on but only surfaces the gated #merchant page once the store owner
+  // also sets a reseller access code — so being in the ceiling exposes nothing.
+  FEATURES.STORE_RESELLER_PORTAL,
+  // Checkout admin fee: default ON so a tenant that configured a fee keeps it;
+  // the operator revokes it per tenant to drop the whole admin-fee section.
+  FEATURES.STORE_ADMIN_FEE,
+  ...SALES_ANALYTICS_SCAFFOLDING,
+  ...GROUP_BUY_SCAFFOLDING,
+];
+
+// Business tier — the curated inclusion set (pepstack-davao reference): 15 VISIBLE
+// functionalities (site + catalog + core storefront checkout + admin fee) plus the
+// inert SA/GB scaffolding so those modules stay enable-able per tenant.
+// Deliberately NOT `...STARTER`: Business drops the Reseller portal and does not
+// default Customer accounts / Bundles / Upsells / Multi-currency / Email
+// notifications / Staff Accounts. Those live in ENTERPRISE and remain
+// operator-grantable per tenant (see OPERATOR_GRANTABLE).
 const PRO: FeatureKey[] = [
-  ...STARTER,
+  // Site
+  FEATURES.SITE_HOMEPAGE,
+  FEATURES.SITE_CONTACT_FORM,
+  FEATURES.SITE_BLOG,
+  FEATURES.STORE_COMMUNITY_LINK,
+  // Catalog
+  FEATURES.SITE_PRODUCTS,
+  FEATURES.STORE_PRODUCT_SPECS,
+  FEATURES.STORE_SEARCH,
+  FEATURES.STORE_CATEGORIES,
+  FEATURES.STORE_CALCULATOR,
+  // Core storefront / checkout
   FEATURES.ECOM_CART,
   FEATURES.ECOM_CHECKOUT,
-  FEATURES.ECOM_BUNDLES,
   FEATURES.ECOM_DISCOUNTS,
-  FEATURES.ECOM_ACCOUNTS,
-  FEATURES.ECOM_UPSELLS,
   FEATURES.STORE_FLOATING_CART,
   FEATURES.STORE_ORDER_TRACKING,
-  FEATURES.STORE_MULTI_CURRENCY,
-  FEATURES.NOTIFY_EMAIL,
-  // Staff Accounts: in the Business (pro) ceiling — so it's default-ON for
-  // Business and Automated (enterprise inherits ...PRO). Starter does NOT carry
-  // it, but it's also in OPERATOR_GRANTABLE below, so the operator can still
-  // switch it on for an individual Starter tenant without a plan upgrade.
-  FEATURES.STORE_STAFF_ACCOUNTS,
+  FEATURES.STORE_ADMIN_FEE,
+  ...SALES_ANALYTICS_SCAFFOLDING,
+  ...GROUP_BUY_SCAFFOLDING,
 ];
+
+// Automated tier — the full platform. A superset of Business that RE-ADDS the
+// ecommerce/notification/owner features Business no longer defaults (so the top
+// tier is unchanged from before), then layers analytics + automation + the
+// Enterprise-only Group Buy extras.
 const ENTERPRISE: FeatureKey[] = [
   ...PRO,
+  // Re-added so Automated keeps everything the old Business ceiling had.
+  FEATURES.ECOM_BUNDLES,
+  FEATURES.ECOM_ACCOUNTS,
+  FEATURES.ECOM_UPSELLS,
+  FEATURES.STORE_MULTI_CURRENCY,
+  FEATURES.STORE_RESELLER_PORTAL,
+  FEATURES.NOTIFY_EMAIL,
+  FEATURES.STORE_STAFF_ACCOUNTS,
+  // Growth & automation
   FEATURES.ANALYTICS_POSTHOG,
   FEATURES.ANALYTICS_DASHBOARD,
   FEATURES.BEHAVIOR_TRACKING,
@@ -171,8 +200,8 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.NOTIFY_TELEGRAM,
   // Admin order-alert email — Automated package, alongside the Telegram alert.
   FEATURES.NOTIFY_ADMIN_ORDER,
-  // Group Buy Enterprise extras — the advanced controls beyond the basics every
-  // plan ceiling carries. All still gated behind the operator-granted GB_MODULE.
+  // Group Buy Enterprise extras — advanced controls beyond the basics; still
+  // gated behind the operator-granted GB_MODULE.
   FEATURES.GB_SCHEDULED,
   FEATURES.GB_MULTIPLE_ACTIVE,
   FEATURES.GB_REPORT_AUTO_ON_CLOSE,

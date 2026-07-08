@@ -1,4 +1,32 @@
 import type { Brand } from "./types";
+import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
+
+// Store-admin module id → the catalog feature key that unlocks it. Mirrors
+// ADMIN_VIEW_TOGGLE (which module each entitlement gates) and is the reverse
+// lookup the "New functionality" tag uses: a module is flagged New when its
+// feature key is in the operator-controlled registry. Only modules with a
+// gating feature appear here (always-on modules like orders/products never tag).
+export const MODULE_FEATURE: Record<string, FeatureKey> = {
+  analytics: FEATURES.STORE_SALES_ANALYTICS,
+  reseller: FEATURES.STORE_RESELLER_PORTAL,
+  design: FEATURES.STORE_CARD_STUDIO,
+  groupbuy: FEATURES.GB_RULES,
+  checkout: FEATURES.STORE_SMART_CHECKOUT,
+  "access-code": FEATURES.STORE_ACCESS_CODE,
+  groupbuys: FEATURES.GB_MODULE,
+  staff: FEATURES.STORE_STAFF_ACCOUNTS,
+  notify: FEATURES.NOTIFY_ADMIN_ORDER,
+  reviews: FEATURES.STORE_REVIEWS,
+};
+
+// Store-admin module ids whose gating feature is currently flagged "New". The
+// storefront admin renders a "New" tag next to each. Visibility is enforced
+// separately (AdminPage filters by isAdminViewVisible), so this can be permissive.
+export function newModulesFor(newFeatureKeys: ReadonlySet<string>): string[] {
+  return Object.entries(MODULE_FEATURE)
+    .filter(([, key]) => newFeatureKeys.has(key))
+    .map(([moduleId]) => moduleId);
+}
 
 // Maps a sub-page route (the part after "#") to its Brand visibility toggle.
 // A page is visible unless its toggle is explicitly false (default-on).
@@ -58,6 +86,11 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Order-alert email view — owner-only, gated on FEATURES.NOTIFY_ADMIN_ORDER
   // (projected to showAdminOrderNotify in page.tsx). Default OFF.
   notify: (b) => b.showAdminOrderNotify === true,
+
+  // Notice Modal editor — owner-only, gated on the super-admin per-tenant grant
+  // (branding.config.noticeModal.operatorEnabled, projected to showAdminNotice in
+  // page.tsx). Default OFF — hidden until the operator turns the feature on.
+  notice: (b) => b.showAdminNotice === true,
 };
 
 // The Reviews page is a two-layer gate: the platform entitlement

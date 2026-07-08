@@ -302,6 +302,8 @@ export type TenantContactChannels = {
   metaDescription: string;
   /** Whether checkout requires a proof-of-payment upload (default true). */
   requireProofOfPayment: boolean;
+  /** Whether the super admin has granted the Storefront Notice Modal (default false). */
+  noticeModalGranted: boolean;
 };
 
 /** Tenant name + its storefront order-contact channels for the settings editor.
@@ -323,6 +325,11 @@ export async function getTenantContactChannels(
       typeof config.metaDescription === "string" ? config.metaDescription : "",
     // Absent → required (historical default); only an explicit false opts out.
     requireProofOfPayment: config.requireProofOfPayment !== false,
+    // Absent → not granted; only the operator's explicit grant enables it.
+    noticeModalGranted:
+      !!config.noticeModal &&
+      typeof config.noticeModal === "object" &&
+      (config.noticeModal as Record<string, unknown>).operatorEnabled === true,
   });
 
   if (isDemoMode()) {

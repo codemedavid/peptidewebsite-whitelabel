@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
+import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 
 export type BrandingAssetKind = "logo" | "favicon";
@@ -294,6 +295,61 @@ export async function saveRequirePaymentProofAction(
 
   const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
   const config = { ...current, requireProofOfPayment } as Prisma.InputJsonValue;
+
+  await prisma.branding.upsert({
+    where: { tenantId: tenant.id },
+    update: { config },
+    create: { tenantId: tenant.id, config },
+  });
+
+  revalidatePath("/admin");
+  revalidateTenant(tenant.id, slug);
+  return { ok: true };
+}
+
+/**
+ * Grant/revoke the Storefront Notice Modal for a tenant. Super-admin only. This
+ * is the OPERATOR half of the two-flag gate: it flips
+ * `branding.config.noticeModal.operatorEnabled` (read-modify-write, preserving
+ * the owner's copy + their own `enabled` toggle). Default OFF for every tenant —
+ * nothing is auto-enabled. The store owner's editor (saveNoticeModalAction) can
+ * never touch this flag; the modal shows only when this AND the owner toggle are on.
+ */
+export async function saveNoticeModalGrantAction(
+  slug: string,
+  granted: boolean,
+): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+
+  const operatorEnabled = granted === true;
+  const merge = (config: Record<string, unknown>): Record<string, unknown> => {
+    const prev =
+      config.noticeModal && typeof config.noticeModal === "object" ? config.noticeModal : {};
+    // Normalize the whole blob so a legacy/absent config becomes valid, then
+    // force the operator flag — the owner's content + `enabled` are preserved.
+    const noticeModal = normalizeNoticeModal({ ...(prev as Record<string, unknown>), operatorEnabled });
+    return { ...config, noticeModal };
+  };
+
+  if (isDemoMode()) {
+    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    saveDemoBranding(slug, { config: merge(current) });
+    revalidatePath("/admin");
+    revalidateTenant(slug, slug);
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
+  if (!tenant) return { error: "Tenant not found." };
+
+  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const config = merge(current) as Prisma.InputJsonValue;
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },

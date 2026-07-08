@@ -5,6 +5,8 @@ import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
+import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
+import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type {
   GroupBuyCapabilities,
   GroupBuySettings,
@@ -82,6 +84,7 @@ export type OrderStatus =
   | "new"
   | "confirmed"
   | "processing"
+  | "ready"
   | "shipped"
   | "delivered"
   | "cancelled";
@@ -300,6 +303,23 @@ export type Brand = {
   // both on save (server) and at render (client).
   banner?: StorefrontBanner;
 
+  // Storefront notice/disclaimer modal — the per-tenant pop-up shown on every
+  // visit. Two-flag entitlement gate: the super admin grants it per tenant
+  // (noticeModal.operatorEnabled, platform settings page) and the store owner
+  // controls day-to-day on/off + edits the copy (noticeModal.enabled, store
+  // admin's Notice Modal view). Visible only when BOTH are on — no tenant gets
+  // it automatically. Normalized both on save (server) and at render (client)
+  // through @/lib/storefront/notice-modal. Absent → feature off.
+  noticeModal?: NoticeModalConfig;
+
+  // Track-order delivery note — the per-tenant informational card shown on the
+  // Track Order page, under the order-number search box. Single-flag gate: the
+  // store owner switches it on + edits the copy (trackNote.enabled, store admin's
+  // Track Note view). No operator entitlement — any store may use it. Normalized
+  // both on save (server) and at render (client) through @/lib/storefront/
+  // track-note. Absent → feature off.
+  trackNote?: TrackNoteConfig;
+
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;
   showHero: boolean;
@@ -355,6 +375,12 @@ export type Brand = {
   // tile are hidden and the order-alert email is never sent (admin-notify.ts
   // re-checks the same entitlement). See page.tsx projection + visibility.ts.
   showAdminOrderNotify?: boolean;
+  // Server-derived from branding.config.noticeModal.operatorEnabled: shows the
+  // store-admin "Notice Modal" view (owner-only). Off → the view + its dashboard
+  // tile are hidden and the store owner can neither toggle nor edit the notice.
+  // The modal itself additionally needs the owner's own `enabled` flag on. See
+  // page.tsx projection + visibility.ts (ADMIN_VIEW_TOGGLE.notice).
+  showAdminNotice?: boolean;
   // Whether the `#admin` login shows the unified username + password form. True
   // only when Staff Accounts are enabled AND ≥1 staff account exists; otherwise
   // the login is password-only (owner password), so a fresh store is never asked
@@ -366,6 +392,12 @@ export type Brand = {
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
   // access code (showPageMerchant).
   showAdminReseller?: boolean;
+  // Store-admin module ids (Quick Actions) that the platform operator has flagged
+  // as newly available — the storefront admin shows a "New" tag next to each.
+  // Server-derived from the operator-controlled feature registry (feature_registry
+  // PlatformSetting) intersected with this tenant's entitled modules. See
+  // storefront/visibility.ts (newModulesFor) + app/(tenant)/(storefront)/page.tsx.
+  newModules?: string[];
   // Group Buy MANAGEMENT module (the "Group Buys" manager view, distinct from
   // the rules editor above). Derived server-side from the groupbuy.* feature
   // entitlements — see lib/storefront/group-buy-server. Absent = module off.
