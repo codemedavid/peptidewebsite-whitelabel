@@ -17,6 +17,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
 import { normalizeBanner } from "@/lib/storefront/banner";
+import { normalizeFaqGroups } from "@/lib/storefront/faq";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
@@ -898,6 +899,38 @@ export async function saveCardTemplatesAction(templates: unknown): Promise<Actio
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
   const config = { ...current, cardTemplates: normalizeCardTemplates(templates) };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the storefront's FAQ groups into the shared `branding.config` blob
+ * (read-modify-write, mirroring saveProtocolsAction so it never clobbers the
+ * rest of the storefront Brand config). The storefront reads faqGroups from
+ * `branding.config` server-side on every render, so the owner's edits show on
+ * every device/customer — fixing the bug where FAQ edits lived only in the
+ * editing browser's localStorage and "couldn't be saved".
+ */
+export async function saveFaqAction(groups: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("faq");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeFaqGroups(groups);
+  const current = await readConfig(tenantId);
+  const config = { ...current, faqGroups: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

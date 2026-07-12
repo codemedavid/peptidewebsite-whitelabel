@@ -595,6 +595,13 @@ export type Brand = {
   // browser. Absent until the owner saves once → storefront falls back to seeds.
   protocols?: Protocol[];
 
+  // FAQ groups shown on the public #faq page. Edited in the storefront #admin
+  // and persisted server-side in branding.config (same mechanism as protocols)
+  // so the owner's edits show on every device/customer rather than only the
+  // editing browser. Absent until the owner saves once → storefront falls back
+  // to the seed FAQ.
+  faqGroups?: FaqGroup[];
+
   // Couriers the store ships with (the dropdown the admin picks from when
   // saving tracking info on an order). Edited in the storefront #admin and
   // persisted server-side in branding.config (same mechanism as categories) so

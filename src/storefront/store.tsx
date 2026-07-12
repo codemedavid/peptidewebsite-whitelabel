@@ -36,6 +36,7 @@ import {
   saveCardTemplatesAction,
   saveCategoriesAction,
   saveCouriersAction,
+  saveFaqAction,
   savePaymentMethodsAction,
   savePromoCodesAction,
   saveProtocolsAction,
@@ -230,7 +231,12 @@ export function StoreProvider({
   const [paymentMethods, setPaymentsState] = useState<PaymentMethod[]>(
     brandSeed.paymentMethods ?? SEED_PAYMENT_METHODS,
   );
-  const [faqGroups, setFaqState] = useState<FaqGroup[]>(SEED_FAQ_GROUPS);
+  // FAQ groups load from the DB server-side (page → branding.config spread into
+  // the brand prop), same as protocols, so the public FAQ page is identical on
+  // every device. Seed defaults apply only until the owner saves the first time.
+  const [faqGroups, setFaqState] = useState<FaqGroup[]>(
+    brandSeed.faqGroups ?? SEED_FAQ_GROUPS,
+  );
   // Protocols load from the DB server-side (page → branding.config spread into
   // the brand prop), same as payment methods, so they're identical on every
   // device. Seed defaults apply only until the owner saves the first time.
@@ -274,7 +280,11 @@ export function StoreProvider({
     // they come from the DB via the server-provided brand prop, so a stale local
     // copy can't override what the owner configured (this was the cross-device
     // checkout bug). They persist through savePaymentMethodsAction instead.
-    setFaqState(load(NS + "faq", SEED_FAQ_GROUPS));
+    // NOTE: FAQ groups are intentionally NOT hydrated from localStorage — they
+    // come from the DB via the server-provided brand prop (branding.config), so
+    // a stale local copy can't override what the owner saved (the cross-device
+    // bug where FAQ edits "couldn't be saved"). They persist through
+    // saveFaqAction instead.
     // NOTE: protocols are intentionally NOT hydrated from localStorage — they
     // come from the DB via the server-provided brand prop (branding.config), so
     // a stale local copy can't override what the owner saved (the cross-device
@@ -372,8 +382,6 @@ export function StoreProvider({
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setFaqGroups = useMemo(() => makeSetter<FaqGroup[]>("faq", "FAQ_GROUPS", setFaqState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), [NS]);
 
@@ -515,6 +523,35 @@ export function StoreProvider({
         });
     },
     [toast, protocols],
+  );
+
+  // FAQ groups persist to the DB (branding.config), not localStorage, so every
+  // device/customer sees the owner's edits — this was the "FAQ can't be saved"
+  // bug. Local state updates optimistically; the server save is debounced
+  // because the FAQ editor fires on every keystroke (mirrors setCardDesign).
+  // Failures surface via toast, like the rest.
+  const faqSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setFaqGroups = useCallback(
+    (next: Updater<FaqGroup[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: FaqGroup[]) => FaqGroup[])(faqGroups)
+          : next;
+      setFaqState(value);
+      if (faqSaveTimer.current) clearTimeout(faqSaveTimer.current);
+      faqSaveTimer.current = setTimeout(() => {
+        saveFaqAction(value)
+          .then((r) => {
+            if (r && "error" in r) {
+              toast(`Couldn't save FAQ: ${r.error}`);
+            }
+          })
+          .catch(() => {
+            toast("Couldn't save FAQ — please sign in again and retry.");
+          });
+      }, 600);
+    },
+    [toast, faqGroups],
   );
 
   // Card design (Card Studio) persists to the DB (branding.config). The brand
