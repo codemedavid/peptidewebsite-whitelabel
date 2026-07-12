@@ -190,7 +190,17 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                     </div>
                   </td>
                   <td>
-                    <span className={"badge " + packageCls}>{s.packageLabel}</span>
+                    <span
+                      className={"badge " + packageCls}
+                      title={
+                        s.trial && s.trialStartsAt && s.trialEndsAt
+                          ? `Trial ${humanDate(s.trialStartsAt)} → ${humanDate(s.trialEndsAt)}`
+                          : undefined
+                      }
+                    >
+                      {s.packageLabel}
+                      {s.trial && " · Trial"}
+                    </span>
                   </td>
                   <td>
                     <span className={"badge " + statusCls}>

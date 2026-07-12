@@ -20,6 +20,8 @@ export type StarterFeatureKey = (typeof STARTER_FEATURE_KEYS)[number];
 export const STARTER_FEATURE_LIMIT = 2;
 // Price per add-on feature beyond the included STARTER_FEATURE_LIMIT (₱1,500).
 export const STARTER_EXTRA_FEATURE_PRICE_CENTS = 150_000;
+// 1-month Business (pro) trial price (₱699). Only valid with packageKey "pro".
+export const PRO_TRIAL_PRICE_CENTS = 69_900;
 export const STARTER_FEATURE_LABELS: Record<StarterFeatureKey, string> = {
   track: "Order Tracking",
   faq: "FAQ Page",
@@ -78,6 +80,10 @@ export const onboardingSchema = z.object({
 
   // Step 6 — package selection (marketing label or alias → normalized server-side)
   packageKey: z.string().trim().min(1).max(40).default("starter"),
+
+  // Step 6 — 1-month Business trial (₱699, PRO_TRIAL_PRICE_CENTS). Only honored
+  // when the normalized plan is "pro"; the server action drops it otherwise.
+  trial: z.boolean().optional().default(false),
 
   // Step 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT for Starter,
   // extras billed per STARTER_EXTRA_FEATURE_PRICE_CENTS; ignored/empty for other

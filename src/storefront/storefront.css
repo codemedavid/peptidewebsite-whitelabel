@@ -1797,6 +1797,8 @@
   color: var(--brand-text-muted);
   line-height: 1.65;
   font-size: 15px;
+  /* Owner-authored answers may contain deliberate line breaks (schedules, lists). */
+  white-space: pre-line;
 }
 
 /* ---- COA / Lab Reports ---- */

@@ -60,6 +60,8 @@ export type Draft = {
   paymentMethods: DraftPayment[];
   // 6 — package
   packageKey: string;
+  // 6 — ₱699 1-month Business trial (only meaningful when packageKey === "pro")
+  trial: boolean;
   // 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT; extras billed per feature)
   selectedFeatures: StarterFeatureKey[];
   // 7 — checkout
@@ -98,6 +100,7 @@ export const INITIAL_DRAFT: Draft = {
   orderDestinationValue: "",
   paymentMethods: [],
   packageKey: "starter",
+  trial: false,
   selectedFeatures: [],
   paymentProofUrl: "",
   termsAccepted: false,
@@ -215,6 +218,8 @@ export function draftToPayload(d: Draft): OnboardingPayload {
       instructions: m.instructions.trim(),
     })),
     packageKey: d.packageKey,
+    // The ₱699 1-month trial only exists for the Business (pro) package.
+    trial: d.packageKey === "pro" && d.trial,
     // Only Starter carries feature picks; other tiers ship with all pages on.
     selectedFeatures: d.packageKey === "starter" ? d.selectedFeatures : [],
     paymentProofUrl: d.paymentProofUrl,

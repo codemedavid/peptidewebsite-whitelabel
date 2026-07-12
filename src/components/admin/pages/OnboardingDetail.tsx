@@ -15,6 +15,7 @@ import {
   publishTenantAction,
   unpublishTenantAction,
   setStorePasswordAction,
+  setTrialAction,
 } from "@/actions/admin-onboarding";
 import type { OnboardingDetailView } from "@/lib/admin/onboarding-types";
 
@@ -26,6 +27,13 @@ function humanDate(iso: string): string {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+/** "YYYY-MM-DD" + 1 month (for the default trial end date). */
+function plusOneMonth(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 /* ── status badge styling ── */
@@ -47,6 +55,21 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
   const [liveStatus, setLiveStatus] = useState(submission.setupStatus);
   const [livePublished, setLivePublished] = useState(submission.published);
 
+  // ₱699 1-month trial management (pro only) — click the Package stat to edit.
+  const isPro = submission.packageKey === "pro";
+  const defaultStart = (submission.trialStartsAt ?? submission.createdAt).slice(0, 10);
+  const [liveTrial, setLiveTrial] = useState({
+    trial: submission.trial,
+    startsAt: submission.trialStartsAt,
+    endsAt: submission.trialEndsAt,
+  });
+  const [trialOpen, setTrialOpen] = useState(false);
+  const [draftIsTrial, setDraftIsTrial] = useState(submission.trial);
+  const [draftStart, setDraftStart] = useState(defaultStart);
+  const [draftEnd, setDraftEnd] = useState(
+    submission.trialEndsAt?.slice(0, 10) ?? plusOneMonth(defaultStart),
+  );
+
   const statusCls = STATUS_BADGE_CLS[liveStatus] ?? "badge-neutral";
   const storeHref = `https://${submission.url}`;
 
@@ -62,6 +85,27 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
       } else {
         setLiveStatus(status);
         showToast(`Status updated to "${ONBOARDING_STATUS_LABELS[status]}"`);
+        router.refresh();
+      }
+    });
+  }
+
+  function saveTrial() {
+    startTransition(async () => {
+      const res = await setTrialAction(
+        submission.id,
+        draftIsTrial ? { trial: true, startsAt: draftStart, endsAt: draftEnd } : { trial: false },
+      );
+      if ("error" in res) {
+        showToast(res.error);
+      } else {
+        setLiveTrial(
+          draftIsTrial
+            ? { trial: true, startsAt: draftStart, endsAt: draftEnd }
+            : { trial: false, startsAt: null, endsAt: null },
+        );
+        setTrialOpen(false);
+        showToast(draftIsTrial ? "Saved as ₱699 trial." : "Saved as active (full package).");
         router.refresh();
       }
     });
@@ -174,7 +218,19 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
           }}
         >
           {[
-            { label: "Package", v: submission.packageLabel },
+            {
+              label: "Package",
+              v: liveTrial.trial
+                ? `${submission.packageLabel} — Trial (₱699)`
+                : submission.packageLabel,
+              sub:
+                liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
+                  ? `${humanDate(liveTrial.startsAt)} → ${humanDate(liveTrial.endsAt)}`
+                  : isPro
+                    ? "Click to manage trial"
+                    : undefined,
+              onClick: isPro ? () => setTrialOpen((o) => !o) : undefined,
+            },
             { label: "Products", v: String(submission.productCount) },
             { label: "Contact", v: submission.contactPerson || "—" },
             {
@@ -186,9 +242,24 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
           ].map((m, i) => (
             <div
               key={i}
+              onClick={"onClick" in m ? m.onClick : undefined}
+              role={"onClick" in m && m.onClick ? "button" : undefined}
+              tabIndex={"onClick" in m && m.onClick ? 0 : undefined}
+              onKeyDown={
+                "onClick" in m && m.onClick
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        m.onClick?.();
+                      }
+                    }
+                  : undefined
+              }
+              title={"onClick" in m && m.onClick ? "Manage trial / billing" : undefined}
               style={{
                 padding: "14px 24px",
                 borderRight: i < 3 ? "1px solid var(--border-soft)" : "none",
+                cursor: "onClick" in m && m.onClick ? "pointer" : "default",
               }}
             >
               <div
@@ -207,9 +278,99 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
               >
                 {m.v}
               </div>
+              {"sub" in m && m.sub && (
+                <div style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: 2 }}>{m.sub}</div>
+              )}
             </div>
           ))}
         </div>
+
+        {/* Trial / billing editor — opened by clicking the Package stat (pro only) */}
+        {isPro && trialOpen && (
+          <div
+            style={{
+              borderTop: "1px solid var(--border-soft)",
+              background: "var(--bg-canvas)",
+              padding: "14px 24px",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              gap: 14,
+            }}
+          >
+            <div>
+              <span className="field-label">Billing mode</span>
+              <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                <button
+                  type="button"
+                  className={"btn btn-sm" + (!draftIsTrial ? " btn-accent" : "")}
+                  onClick={() => setDraftIsTrial(false)}
+                >
+                  Active — full package
+                </button>
+                <button
+                  type="button"
+                  className={"btn btn-sm" + (draftIsTrial ? " btn-accent" : "")}
+                  onClick={() => setDraftIsTrial(true)}
+                >
+                  Trial — ₱699 / 1 month
+                </button>
+              </div>
+            </div>
+            {draftIsTrial && (
+              <>
+                <div>
+                  <label className="field-label" htmlFor="trial-start">
+                    Trial starts
+                  </label>
+                  <input
+                    id="trial-start"
+                    type="date"
+                    className="input"
+                    value={draftStart}
+                    style={{ marginTop: 4, display: "block" }}
+                    onChange={(e) => {
+                      setDraftStart(e.target.value);
+                      if (e.target.value) setDraftEnd(plusOneMonth(e.target.value));
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="trial-end">
+                    Trial ends
+                  </label>
+                  <input
+                    id="trial-end"
+                    type="date"
+                    className="input"
+                    value={draftEnd}
+                    min={draftStart}
+                    style={{ marginTop: 4, display: "block" }}
+                    onChange={(e) => setDraftEnd(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <div className="row" style={{ gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-accent btn-sm"
+                onClick={saveTrial}
+                disabled={pending}
+              >
+                {pending ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setTrialOpen(false)}
+                disabled={pending}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Two-column layout ── */}

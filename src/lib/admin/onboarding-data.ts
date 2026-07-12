@@ -101,6 +101,9 @@ type DbRow = {
   orderDestinationValue: string | null;
   paymentMethods: unknown;
   packageKey: string;
+  trial: boolean;
+  trialStartsAt: Date | null;
+  trialEndsAt: Date | null;
   selectedFeatures: unknown;
   paymentProofUrl: string | null;
   termsAccepted: boolean;
@@ -122,6 +125,9 @@ function summaryFromDb(r: DbRow): OnboardingSummary {
     url: `${r.slug}.${ROOT}`,
     packageKey: pm.key,
     packageLabel: pm.label,
+    trial: r.trial,
+    trialStartsAt: r.trialStartsAt?.toISOString() ?? null,
+    trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
     setupStatus: r.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[r.setupStatus] ?? r.setupStatus,
     tenantId: r.tenantId,
@@ -170,6 +176,10 @@ function summaryFromDemo(s: DemoOnboardingSubmission): OnboardingSummary {
     url: `${s.slug}.${ROOT}`,
     packageKey: pm.key,
     packageLabel: pm.label,
+    trial: pm.key === "pro" && Boolean(d.trial),
+    // Demo submissions have no operator-managed trial window.
+    trialStartsAt: null,
+    trialEndsAt: null,
     setupStatus: s.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[s.setupStatus] ?? s.setupStatus,
     tenantId: s.tenantId,
@@ -227,6 +237,9 @@ const SELECT = {
   orderDestinationValue: true,
   paymentMethods: true,
   packageKey: true,
+  trial: true,
+  trialStartsAt: true,
+  trialEndsAt: true,
   selectedFeatures: true,
   paymentProofUrl: true,
   termsAccepted: true,

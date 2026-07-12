@@ -2,6 +2,9 @@
 // PURE module (no server-only) so the onboarding wizard can import the packages
 // and payment instructions too. Packages re-use PLAN_CARDS / PLAN_META so the
 // sales site, the onboarding package step, and the admin never diverge on price.
+//
+// Copy follows the 2026-07 editorial redesign handoff (design_handoff_jonina_landing):
+// 8 sections, all Taglish preserved verbatim.
 
 import { PLAN_META, formatPesos } from "@/lib/admin/plans";
 import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
@@ -20,110 +23,75 @@ export const SITE = {
   brandSuffix: ".store",
   tagline: "Mas kaunting oras sa chat, mas maraming oras sa paglago.",
   hero: {
-    chip: "Business automation, done-for-you",
-    line1: "Stop Being The Customer Support",
-    line2: "Of Your Own Peptide Business",
+    eyebrow: "Business automation, done-for-you",
+    // H1: the em part renders italic + green ("peptide business").
+    h1Lead: "Stop being the customer support of your own",
+    h1Em: "peptide business",
     sub: "Ang automation system ang sasagot sa paulit-ulit na tanong, magpapakita ng products at COAs, at mangongolekta ng orders — automated, 24/7. Para ikaw, focus sa paglago ng negosyo, hindi sa kaka-reply.",
     primaryCta: "Get Started",
-    secondaryCta: "View Demo Stores",
+    secondaryCta: "View Demo Store",
+    demoSlug: "ar-jonina",
   },
   contactEmail: "hello@jonina.store",
 };
 
-// ──────────────────────────── Hero bullets ────────────────────────────
-// Outcome-first benefit bullets under the hero sub. Taglish, entrepreneur voice.
-export const HERO_BULLETS = [
-  "Hindi mo na sasagutin ang “magkano po?” nang 40 beses sa isang araw",
-  "Products, presyo, at COAs — nakikita ng customers nang mag-isa",
-  "Orders dumarating nang kumpleto at organized, hindi nakakalat sa DMs",
-  "Tumatakbo ang business kahit tulog ka o nasa byahe",
+// ──────────────────────────── Hero stat row ────────────────────────────
+export const HERO_STATS = [
+  { value: "3+ oras", label: "Nababawi mo kada araw" },
+  { value: "24/7", label: "Sumasagot kahit tulog ka" },
+  { value: "2–5 days", label: "Done-for-you setup" },
 ] as const;
 
-// ──────────────────────────── The problem (pain cards) ────────────────────────────
+// ──────────────────────────── Pain ("Pamilyar ba 'to?") ────────────────────────────
+export const PAIN_INTRO = {
+  eyebrow: "Pamilyar ba ’to?",
+  title: "Parehong tanong. Araw-araw. Buong araw.",
+  body: "Hindi ka tamad. Sobrang busy ka lang sa mga bagay na pwede namang i-automate.",
+} as const;
+
 export type Pain = { q: string; body: string };
 
 export const PAINS: Pain[] = [
   { q: "“Magkano po?”", body: "Pang-30 na today. Copy-paste ka na naman ng parehong sagot." },
-  { q: "“Pa-send po ng product info”", body: "Hahanapin mo pa sa gallery, ise-send mong isa-isa. Ulit. Ulit. Ulit." },
-  { q: "“May COA po ba?”", body: "Meron naman — pero nasa files mo, at ikaw ang maghahanap tuwing may magtatanong." },
+  { q: "“Pa-send po ng product info”", body: "Ise-send mong isa-isa. Ulit. Ulit. Ulit." },
+  { q: "“May COA po ba?”", body: "Nasa files mo — ikaw ang maghahanap tuwing may magtatanong." },
   { q: "“Paano po umorder?”", body: "Ipapaliwanag mo ulit ang steps, sa pang-sampung tao ngayong araw." },
-  { q: "“Sent na po payment”", body: "Ikaw pa rin ang magve-verify — isa-isa, screenshot by screenshot." },
-  { q: "“Saan na po order ko?”", body: "Bubuksan mo pa ang courier app para sa pang-limang follow-up today." },
+  { q: "“Sent na po payment”", body: "Ikaw pa rin ang magve-verify — screenshot by screenshot." },
+  { q: "“Saan na po order ko?”", body: "Bubuksan mo pa ang courier app para sa pang-limang follow-up." },
 ];
 
-export const PAIN_CLOSER =
-  "Hindi ka tamad. Sobrang busy ka lang sa mga bagay na pwede namang i-automate.";
-
-// ──────────────────────────── The hidden cost ────────────────────────────
+// Dark stats band under the pain list.
 export const COST_STATS = [
   { value: "3 oras", label: "kada araw na nauubos sa kakasagot ng parehong tanong" },
   { value: "90 oras", label: "kada buwan na napupunta sa chat, hindi sa negosyo" },
   { value: "2+ linggo", label: "ng full-time na trabaho — nawawala buwan-buwan" },
 ] as const;
 
-export const COST_CARDS: Feature[] = [
-  { icon: "UserX", title: "Missed opportunities", body: "May seryosong buyer na nag-message kahapon. Hindi mo nasagot agad — sa iba na siya bumili." },
-  { icon: "TrendingDown", title: "Slower growth", body: "Walang oras mag-restock, mag-promote, o mag-isip ng bago. Ubos ang araw mo sa inbox." },
-  { icon: "Flame", title: "Burnout", body: "Kahit Sunday, naka-standby ka. Yung “off” mo, may kasamang kaba na baka may nag-message." },
-  { icon: "BellRing", title: "Distractions", body: "Bawat ding ng notification, naputol ang ginagawa mo. Hirap tuloy mag-focus sa malalaking bagay." },
-];
-
-// ──────────────────────────── The real problem ────────────────────────────
-export const REAL_PROBLEM = {
-  line1: "The problem isn’t your product.",
-  line2: "The problem is that you are the system.",
-  beats: [
-    { lead: "Pag online ka,", rest: "may benta." },
-    { lead: "Pag busy ka,", rest: "bumabagal ang lahat." },
-    { lead: "Pag wala ka,", rest: "naghihintay ang customers." },
-  ],
-  closer:
-    "Hindi mo kailangan ng mas mahabang working hours. Kailangan mo ng system na hindi umaasa sa’yo para gumana.",
+// ──────────────────────────── Journey ("Imagine this") ────────────────────────────
+export const JOURNEY_INTRO = {
+  eyebrow: "Imagine this",
+  title: "Paano kung hindi ka na kailangan sa bawat order?",
+  body: "Ganito ang isang sale kapag may system ka — mula dating ng customer hanggang confirmed na order.",
 } as const;
 
-// ──────────────────────────── Future vision (customer flow) ────────────────────────────
-export const VISION_STEPS = [
+export const JOURNEY_STEPS = [
   { n: "01", title: "Dumating ang customer", body: "Nakita niya ang branded store mo — mukhang legit, mukhang professional." },
-  { n: "02", title: "Nag-browse siya ng products", body: "Kumpleto: photos, presyo, descriptions, COAs. Halos wala nang itatanong." },
-  { n: "03", title: "Nabasa niya paano umorder", body: "Malinaw ang steps at payment instructions. Hindi ka niya kailangang kulitin." },
+  { n: "02", title: "Nag-browse ng products", body: "Kumpleto: photos, presyo, descriptions, COAs. Halos wala nang itatanong." },
+  { n: "03", title: "Nabasa paano umorder", body: "Malinaw ang steps at payment instructions. Hindi ka niya kailangang kulitin." },
   { n: "04", title: "Naka-order na siya", body: "Pumili, nagbayad, nag-upload ng proof — lahat sa store, hindi sa DMs." },
   { n: "05", title: "Ikaw, na-notify ka lang", body: "Bukas mo ang dashboard, kumpleto na ang detalye. Confirm na lang. Tapos." },
 ] as const;
 
-export const VISION_CLOSER =
-  "Walang paulit-ulit na tanong. Walang nakakalat na screenshots. Isang organized na system — habang ginagawa mo ang mas mahalagang trabaho.";
-
-// ──────────────────────────── Introduce Jonina (system intro) ────────────────────────────
-export const SYSTEM_CARDS: Feature[] = [
-  { icon: "Globe", title: "Hindi lang website", body: "Ang website ang mukha. Ang system ang gumagawa ng trabaho — sumasagot, nag-oorganize, kumukuha ng orders." },
-  { icon: "Layers", title: "Hindi lang software", body: "Done-for-you ang setup, branding, at products. Hindi DIY na tool na ikaw pa ang mag-aaral." },
-  { icon: "Workflow", title: "Hindi lang storefront", body: "Catalog, FAQs, COAs, ordering, payment proof, tracking — buong operasyon, hindi isang page lang." },
-];
-
-export const SYSTEM_CLOSER =
-  "Hindi lang ito website. System ito para mas organized ang business mo — at para hindi na ikaw ang customer support nito.";
-
 // ──────────────────────────── Features ────────────────────────────
-export type Feature = { icon: string; title: string; body: string };
+export type Feature = { title: string; body: string };
 
 export const FEATURES: Feature[] = [
-  { icon: "ClipboardList", title: "Easy Order Management", body: "Every order in one tidy dashboard — status, customer, items, and proof of payment." },
-  { icon: "MessageCircle", title: "WhatsApp Checkout", body: "Customers complete their order straight to your WhatsApp, Messenger, or Telegram." },
-  { icon: "Smartphone", title: "Mobile-Friendly Website", body: "Looks beautiful and loads fast on every phone — where your customers actually shop." },
-  { icon: "Palette", title: "Custom Branding", body: "Your logo, colors, and fonts. A store that looks unmistakably yours from day one." },
-  { icon: "PackagePlus", title: "Product Upload Ready", body: "Add products with photos, prices, and categories in seconds — no developer needed." },
-  { icon: "QrCode", title: "Payment QR Support", body: "Show your GCash, Maya, and bank QR codes so customers pay in a tap." },
-  { icon: "Truck", title: "Order Tracking", body: "Give customers a tracking page and keep every order moving to delivered." },
-  { icon: "LayoutDashboard", title: "Admin Dashboard", body: "Manage products, orders, payments, and content from one simple control center." },
-];
-
-// ──────────────────────────── Demo websites ────────────────────────────
-// Sample storefronts shown in the "Demo Websites" grid. Point `slug` at any live
-// tenant; the seeded `acme` store works out of the box. Edit freely.
-export type DemoSite = { name: string; category: string; blurb: string; slug: string };
-
-export const DEMO_SITES: DemoSite[] = [
-  { name: "AR Jonina", category: "Peptides & Research", blurb: "Clean clinical storefront with a full catalog, checkout, and order tracking.", slug: "ar-jonina" },
+  { title: "Easy Order Management", body: "Every order in one tidy dashboard — status, customer, items, and proof of payment." },
+  { title: "WhatsApp Checkout", body: "Customers complete their order straight to your WhatsApp, Messenger, or Telegram." },
+  { title: "Payment QR Support", body: "Show your GCash, Maya, and bank QR codes so customers pay in a tap." },
+  { title: "Custom Branding", body: "Your logo, colors, and fonts. A store that looks unmistakably yours from day one." },
+  { title: "Order Tracking", body: "Give customers a tracking page and keep every order moving to delivered." },
+  { title: "Admin Dashboard", body: "Manage products, orders, payments, and content from one simple control center." },
 ];
 
 // ──────────────────────────── Packages ────────────────────────────
@@ -137,6 +105,7 @@ export type Package = {
   name: string;
   priceLabel: string; // list price
   discountLabel?: string; // promo price when set; show it as the headline with priceLabel struck through
+  priceCents: number; // effective price (discount when set, else list) — used for checkout totals
   blurb: string;
   feats: readonly string[];
   tag?: string;
@@ -144,48 +113,59 @@ export type Package = {
 };
 
 export function packagesFrom(plans: EditablePlanCard[]): Package[] {
-  return plans.map((p) => ({
-    key: p.key,
-    name: p.name,
-    priceLabel: formatPesos(p.priceCents),
-    discountLabel:
-      p.discountPriceCents && p.discountPriceCents < p.priceCents
-        ? formatPesos(p.discountPriceCents)
-        : undefined,
-    blurb: p.blurb,
-    feats: p.feats,
-    tag: p.tag || undefined,
-    highlighted: p.key === "pro",
-  }));
+  return plans.map((p) => {
+    const discounted = Boolean(p.discountPriceCents && p.discountPriceCents < p.priceCents);
+    return {
+      key: p.key,
+      name: p.name,
+      priceLabel: formatPesos(p.priceCents),
+      discountLabel: discounted ? formatPesos(p.discountPriceCents as number) : undefined,
+      priceCents: discounted ? (p.discountPriceCents as number) : p.priceCents,
+      blurb: p.blurb,
+      feats: p.feats,
+      tag: p.tag || undefined,
+      highlighted: p.key === "pro",
+    };
+  });
 }
 
 export const PACKAGES: Package[] = packagesFrom(defaultPlanConfig().plans);
 
+// ──────────────────────────── 1-month trial promo ────────────────────────────
+// Banner above the pricing cards + the trial note on the Business card.
+export const TRIAL_PROMO = {
+  tag: "New · 1-month trial",
+  title: "Subukan ang Business package nang isang buwan — ₱699 lang",
+  body: "Hindi ka pa sigurado sa ₱9,899? Subukan muna ang buong system nang isang buwan. Kung sulit para sa'yo, saka ka mag-commit.",
+  cta: "Start 1-month trial",
+  // Shown under the Business card's price.
+  cardNote: "o subukan muna: ₱699 / 1 month trial",
+  // Trial signs up onto the Business plan; the operator confirms the trial arrangement.
+  href: "/get-started?plan=pro&trial=1",
+} as const;
+
 export function packageLabel(key: string): string {
   return (PLAN_META[key] ?? PLAN_META.starter).label;
 }
-
-// ──────────────────────────── Testimonials ────────────────────────────
-export type Testimonial = { quote: string; name: string; role: string; initials: string };
-
-export const TESTIMONIALS: Testimonial[] = [
-  { quote: "I had my store live in two days and got my first WhatsApp order the same week. The whole thing just works.", name: "Bea Santos", role: "Founder, Glow Manila", initials: "BS" },
-  { quote: "The QR payment setup was the selling point for me. My customers pay with GCash and I see the proof instantly.", name: "Marco Reyes", role: "Reseller, MNL Supplies", initials: "MR" },
-  { quote: "It looks like I paid a fortune for a custom site. I didn't. Branding matched my Instagram perfectly.", name: "Patricia Lim", role: "Owner, Petite Skincare", initials: "PL" },
-  { quote: "Order tracking and a clean admin made me look way more professional than my competitors overnight.", name: "Jonas Cruz", role: "Founder, Apex Research PH", initials: "JC" },
-];
 
 // ──────────────────────────── FAQ ────────────────────────────
 export type Faq = { q: string; a: string };
 
 export const FAQS: Faq[] = [
   { q: "How long does setup take?", a: "Most stores go live within 2–5 business days after you complete onboarding and we receive your payment. Larger catalogs may take a little longer." },
-  { q: "Can I use my own domain?", a: "Yes. You start on a free businessname.jonina.store subdomain, and we can connect your own custom domain on the Business and Automated packages." },
-  { q: "Can I customize the colors and branding?", a: "Absolutely. Onboarding collects your logo, brand colors, and style preferences, and we tailor the whole storefront to match. You can request revisions during setup." },
-  { q: "Do you support WhatsApp orders?", a: "Yes — WhatsApp, Messenger, and Telegram. Customers tap checkout and their order is sent straight to your chosen inbox, formatted and ready." },
-  { q: "Can I upload products later?", a: "Of course. You can add products during onboarding and anytime after from your admin dashboard — names, photos, prices, and categories." },
-  { q: "How do customers pay?", a: "You display your GCash, Maya, bank, or QR details and customers upload proof of payment with their order. No payment gateway or extra fees required." },
+  { q: "Can I use my own domain?", a: "Yes — we can connect a domain you already own, or help you register a new one so your store lives at your own address." },
+  { q: "Can I customize the colors and branding?", a: "Every store is built with your logo, colors, and fonts so it looks unmistakably yours from day one." },
+  { q: "Do you support WhatsApp orders?", a: "Yes. Customers complete their order and it lands straight in your WhatsApp, Messenger, or Telegram — complete and organized." },
+  { q: "Can I upload products later?", a: "Anytime. Add products with photos, prices, and categories in seconds from your admin dashboard — no developer needed." },
+  { q: "How do customers pay?", a: "Show your GCash, Maya, and bank QR codes so customers pay in a tap, then upload proof of payment right on the store." },
 ];
+
+// ──────────────────────────── Final CTA ────────────────────────────
+export const FINAL_CTA = {
+  title: "Mas kaunting oras sa chat. Mas maraming oras sa paglago.",
+  body: "Sagutin ang ilang simpleng tanong tungkol sa business mo, at kami na ang bahala sa setup. Sa loob ng ilang araw, may system ka nang sumasagot para sa'yo.",
+  cta: "Get Started",
+} as const;
 
 // ──────────────────────────── Onboarding payment instructions ────────────────────────────
 // Jonina's OWN receiving details, shown on the checkout step so the client can

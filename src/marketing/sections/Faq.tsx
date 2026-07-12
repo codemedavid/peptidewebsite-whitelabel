@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { FAQS } from "@/marketing/config";
 
+const ALL_CLOSED = -1;
+
 export function Faq() {
-  const [open, setOpen] = useState<number | null>(0);
+  const [open, setOpen] = useState(ALL_CLOSED);
   return (
     <section className="mk-section" id="faq">
       <div className="mk-container">
@@ -17,15 +18,17 @@ export function Faq() {
           {FAQS.map((f, i) => {
             const isOpen = open === i;
             return (
-              <div key={f.q} className="mk-faq-item" data-open={isOpen}>
+              <div key={f.q} className="mk-faq-item">
                 <button
                   type="button"
                   className="mk-faq-q"
                   aria-expanded={isOpen}
-                  onClick={() => setOpen(isOpen ? null : i)}
+                  onClick={() => setOpen(isOpen ? ALL_CLOSED : i)}
                 >
                   {f.q}
-                  <ChevronDown size={20} />
+                  <span className="mk-faq-ind" aria-hidden="true">
+                    {isOpen ? "−" : "+"}
+                  </span>
                 </button>
                 {isOpen && <div className="mk-faq-a">{f.a}</div>}
               </div>

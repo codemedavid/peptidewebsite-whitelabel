@@ -31,7 +31,11 @@ import {
   STARTER_FEATURE_LIMIT,
   STARTER_EXTRA_FEATURE_PRICE_CENTS,
 } from "../useOnboardingForm";
-import { STARTER_FEATURE_LABELS, type StarterFeatureKey } from "@/lib/onboarding/schema";
+import {
+  STARTER_FEATURE_LABELS,
+  PRO_TRIAL_PRICE_CENTS,
+  type StarterFeatureKey,
+} from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
 import { packageLabel, type Package } from "@/marketing/config";
 import {
@@ -348,7 +352,7 @@ export function PaymentsStep({ draft, update }: StepProps) {
             <div key={name} className="mk-choice" data-selected={on} style={{ display: "block", cursor: "default" }}>
               <label className="mk-check" style={{ cursor: "pointer" }}>
                 <input type="checkbox" checked={on} onChange={() => toggle(name)} />
-                <b style={{ color: "var(--ink-900)" }}>{name}</b>
+                <b style={{ color: "var(--ink)" }}>{name}</b>
               </label>
               {on && m && (
                 <div style={{ marginTop: 14 }}>
@@ -409,7 +413,7 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                 {p.name} {p.tag && <span className="mk-chip" style={{ marginLeft: 8, padding: "3px 10px", fontSize: 11 }}>{p.tag}</span>}
               </b>
               <small style={{ display: "block", margin: "4px 0 8px" }}>{p.blurb}</small>
-              <span style={{ fontFamily: "var(--font-head)", fontSize: 22, color: "var(--rose-700)", fontWeight: 700 }}>
+              <span style={{ fontFamily: "var(--font-head)", fontSize: 22, color: "var(--green)" }}>
                 {p.discountLabel ?? p.priceLabel}
                 {p.discountLabel && (
                   <s style={{ marginLeft: 8, fontSize: 16, opacity: 0.5, fontWeight: 400, color: "inherit" }}>
@@ -417,11 +421,38 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                   </s>
                 )}
               </span>
+              {p.key === "pro" && draft.trial && (
+                <small style={{ display: "block", marginTop: 4, color: "var(--green)", fontWeight: 600 }}>
+                  1-month trial: {peso(PRO_TRIAL_PRICE_CENTS)}
+                </small>
+              )}
             </span>
             {selected && <Check className="mk-choice-check" size={22} />}
           </button>
         );
       })}
+
+      {draft.packageKey === "pro" && (
+        <button
+          type="button"
+          className="mk-choice"
+          data-selected={draft.trial}
+          style={{ alignItems: "flex-start" }}
+          onClick={() => update({ trial: !draft.trial })}
+          aria-pressed={draft.trial}
+        >
+          <span style={{ flex: 1 }}>
+            <b style={{ fontSize: 15 }}>
+              Start with the 1-month trial — {peso(PRO_TRIAL_PRICE_CENTS)}
+            </b>
+            <small style={{ display: "block", marginTop: 2 }}>
+              Subukan muna ang buong Business system nang isang buwan. Kung sulit para sa&apos;yo,
+              saka ka mag-commit sa full price.
+            </small>
+          </span>
+          {draft.trial && <Check className="mk-choice-check" size={20} />}
+        </button>
+      )}
 
       {isStarter && (
         <div className="mk-card" style={{ marginTop: 8, gridColumn: "1 / -1" }}>
@@ -469,9 +500,9 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
             })}
           </div>
           {extras > 0 && (
-            <p className="mk-hint" style={{ marginTop: 12, fontWeight: 600, color: "var(--ink-900)" }}>
+            <p className="mk-hint" style={{ marginTop: 12, fontWeight: 600, color: "var(--ink)" }}>
               {extras} extra feature{extras > 1 ? "s" : ""} × {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
-              <span style={{ color: "var(--rose-700)" }}>{peso(addonCents)}</span> added to your one-time setup.
+              <span style={{ color: "var(--green)" }}>{peso(addonCents)}</span> added to your one-time setup.
             </p>
           )}
           {errors.selectedFeatures && <p className="mk-error">{errors.selectedFeatures}</p>}
@@ -482,20 +513,48 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
 }
 
 /* ============================================================ Step 7 */
-export function CheckoutStep({ draft, update, errors, packagePayment }: StepProps) {
+export function CheckoutStep({ draft, update, errors, packagePayment, packages }: StepProps) {
   const namedProducts = draft.products.filter((p) => p.name.trim()).length;
   const payMethods = visiblePackagePaymentMethods(packagePayment);
+  const isTrial = draft.packageKey === "pro" && draft.trial;
+  const pkg = packages.find((p) => p.key === draft.packageKey);
+  const starterAddonCents =
+    draft.packageKey === "starter"
+      ? Math.max(0, draft.selectedFeatures.length - STARTER_FEATURE_LIMIT) *
+        STARTER_EXTRA_FEATURE_PRICE_CENTS
+      : 0;
+  const amountCents = isTrial
+    ? PRO_TRIAL_PRICE_CENTS
+    : (pkg?.priceCents ?? 0) + starterAddonCents;
   return (
     <div>
       <div className="mk-paybox">
-        <h4>Pay for your {packageLabel(draft.packageKey)} package</h4>
+        <h4>
+          {isTrial
+            ? `Pay for your 1-month ${packageLabel(draft.packageKey)} trial`
+            : `Pay for your ${packageLabel(draft.packageKey)} package`}
+        </h4>
         <p className="mk-hint" style={{ marginTop: 2 }}>{packagePayment.instructions}</p>
+        <div className="mk-payrow" style={{ marginTop: 10 }}>
+          <span>
+            <b>Amount to pay</b>
+            {isTrial && (
+              <small style={{ display: "block", color: "var(--muted)" }}>
+                1-month Business trial — kung magpapatuloy ka after, saka mo babayaran ang full
+                price ({pkg?.discountLabel ?? pkg?.priceLabel}).
+              </small>
+            )}
+          </span>
+          <span style={{ textAlign: "right" }}>
+            <b style={{ fontFamily: "var(--font-head)", fontSize: 22 }}>{peso(amountCents)}</b>
+          </span>
+        </div>
         <div style={{ marginTop: 12 }}>
           {payMethods.map((m) => (
             <div className="mk-payrow" key={m.id}>
               <span>
                 <b>{m.method}</b>
-                {m.note && <small style={{ display: "block", color: "var(--ink-500)" }}>{m.note}</small>}
+                {m.note && <small style={{ display: "block", color: "var(--muted)" }}>{m.note}</small>}
                 {m.qrUrl && (
                   <img
                     src={m.qrUrl}
@@ -520,11 +579,17 @@ export function CheckoutStep({ draft, update, errors, packagePayment }: StepProp
           aspect="3 / 4" onChange={(url) => update({ paymentProofUrl: url })} />
       </Field>
 
-      <div className="mk-card" style={{ background: "var(--rose-50)", marginBottom: 18 }}>
+      <div className="mk-card" style={{ background: "var(--paper-deep)", marginBottom: 18 }}>
         <h3 className="mk-h3" style={{ fontSize: "1.1rem", marginBottom: 12 }}>Your store at a glance</h3>
         <div className="mk-review-grid">
           <div className="mk-review-item"><span>Business</span><b>{draft.businessName || "—"}</b></div>
-          <div className="mk-review-item"><span>Package</span><b>{packageLabel(draft.packageKey)}</b></div>
+          <div className="mk-review-item">
+            <span>Package</span>
+            <b>
+              {packageLabel(draft.packageKey)}
+              {isTrial && ` — 1-month trial (${peso(PRO_TRIAL_PRICE_CENTS)})`}
+            </b>
+          </div>
           <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
           <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>
           <div className="mk-review-item"><span>Payment methods</span><b>{draft.paymentMethods.length || "—"}</b></div>

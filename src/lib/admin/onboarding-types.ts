@@ -51,6 +51,11 @@ export type OnboardingSummary = {
   url: string;
   packageKey: string;
   packageLabel: string;
+  // Signed up on the ₱699 1-month Business trial (pro only)
+  trial: boolean;
+  // Operator-managed trial window (ISO dates, null until set)
+  trialStartsAt: string | null;
+  trialEndsAt: string | null;
   setupStatus: string;
   setupStatusLabel: string;
   tenantId: string | null;

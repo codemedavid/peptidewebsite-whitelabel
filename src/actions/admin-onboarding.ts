@@ -88,6 +88,52 @@ export async function unpublishTenantAction(id: string): Promise<AdminOnboarding
   return { ok: true };
 }
 
+/** Parse a "YYYY-MM-DD" date-input value into a UTC Date (null when invalid). */
+function parseDay(s: string | undefined): Date | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Manage the ₱699 1-month Business trial: mark the submission active (full
+ *  package) or trial with an explicit start/end window. Pro-only. */
+export async function setTrialAction(
+  id: string,
+  input: { trial: boolean; startsAt?: string; endsAt?: string },
+): Promise<AdminOnboardingResult> {
+  await requirePlatformUser();
+  if (isDemoMode()) return { error: "Connect a database to manage trials." };
+
+  const sub = await prisma.onboardingSubmission.findUnique({
+    where: { id },
+    select: { id: true, packageKey: true },
+  });
+  if (!sub) return { error: "Submission not found." };
+
+  if (!input.trial) {
+    await prisma.onboardingSubmission.update({
+      where: { id },
+      data: { trial: false, trialStartsAt: null, trialEndsAt: null },
+    });
+  } else {
+    if (sub.packageKey !== "pro") {
+      return { error: "Trials are only available on the Business package." };
+    }
+    const startsAt = parseDay(input.startsAt);
+    const endsAt = parseDay(input.endsAt);
+    if (!startsAt || !endsAt) return { error: "Set both the trial start and end dates." };
+    if (endsAt <= startsAt) return { error: "The trial end date must be after the start date." };
+    await prisma.onboardingSubmission.update({
+      where: { id },
+      data: { trial: true, trialStartsAt: startsAt, trialEndsAt: endsAt },
+    });
+  }
+
+  bust();
+  revalidatePath(`/admin/onboarding/${id}`);
+  return { ok: true };
+}
+
 /** Set the client's store credentials: dashboard password (hashed) + storefront
  *  #admin password (plaintext in branding.config), so they can sign into both. */
 export async function setStorePasswordAction(

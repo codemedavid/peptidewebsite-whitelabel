@@ -1,13 +1,8 @@
 import { Hero } from "@/marketing/sections/Hero";
-import { Problem } from "@/marketing/sections/Problem";
-import { HiddenCost } from "@/marketing/sections/HiddenCost";
-import { RealProblem } from "@/marketing/sections/RealProblem";
-import { FutureVision } from "@/marketing/sections/FutureVision";
-import { SystemIntro } from "@/marketing/sections/SystemIntro";
+import { Pain } from "@/marketing/sections/Pain";
+import { Journey } from "@/marketing/sections/Journey";
 import { Features } from "@/marketing/sections/Features";
-import { DemoWebsites } from "@/marketing/sections/DemoWebsites";
 import { Pricing } from "@/marketing/sections/Pricing";
-import { Testimonials } from "@/marketing/sections/Testimonials";
 import { Faq } from "@/marketing/sections/Faq";
 import { FinalCta } from "@/marketing/sections/FinalCta";
 
@@ -18,15 +13,10 @@ export default function MarketingHomePage() {
   return (
     <>
       <Hero />
-      <Problem />
-      <HiddenCost />
-      <RealProblem />
-      <FutureVision />
-      <SystemIntro />
+      <Pain />
+      <Journey />
       <Features />
-      <DemoWebsites />
       <Pricing />
-      <Testimonials />
       <Faq />
       <FinalCta />
     </>

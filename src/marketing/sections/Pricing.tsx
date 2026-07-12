@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Check } from "lucide-react";
-import { packagesFrom } from "@/marketing/config";
+import { packagesFrom, TRIAL_PROMO } from "@/marketing/config";
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
 
 export async function Pricing() {
@@ -13,40 +12,48 @@ export async function Pricing() {
         <div className="mk-section-head mk-center">
           <span className="mk-eyebrow">Simple packages</span>
           <h2 className="mk-h2">Pick the package that fits</h2>
-          <p className="mk-lead">
-            One-time build, yours to keep. Start small and upgrade anytime — every package can grow
-            with your business.
-          </p>
+          <p>One-time build, yours to keep. Start small and upgrade anytime.</p>
         </div>
-        <div className="mk-grid mk-grid-3">
+        <div className="mk-trial-banner">
+          <div>
+            <span className="mk-trial-tag">{TRIAL_PROMO.tag}</span>
+            <h3 className="mk-h3">{TRIAL_PROMO.title}</h3>
+            <p>{TRIAL_PROMO.body}</p>
+          </div>
+          <Link href={TRIAL_PROMO.href} className="mk-btn mk-btn-primary">
+            {TRIAL_PROMO.cta} →
+          </Link>
+        </div>
+        <div className="mk-price-grid">
           {packages.map((p) => (
             <div
               key={p.key}
-              className={`mk-card mk-price-card${p.highlighted ? " mk-price-card--featured" : ""}`}
+              className={`mk-price-card${p.highlighted ? " mk-price-card--featured" : ""}`}
             >
-              {p.tag && <span className="mk-price-tag">{p.tag}</span>}
-              <div className="mk-price-name">{p.name}</div>
+              <div className="mk-price-head">
+                <span className="mk-price-name">{p.name}</span>
+                {p.tag && <span className="mk-price-tag">{p.tag}</span>}
+              </div>
               <div className="mk-price-amount">
                 {p.discountLabel ? (
                   <>
                     <b>{p.discountLabel}</b>
-                    <s style={{ marginLeft: 8, opacity: 0.55, fontWeight: 400 }}>{p.priceLabel}</s>
+                    <s>{p.priceLabel}</s>
                   </>
                 ) : (
                   <b>{p.priceLabel}</b>
                 )}
               </div>
+              {p.highlighted && <p className="mk-price-trial-note">{TRIAL_PROMO.cardNote}</p>}
               <p className="mk-price-blurb">{p.blurb}</p>
               <ul className="mk-price-feats">
                 {p.feats.map((f) => (
-                  <li key={f}>
-                    <Check size={17} /> {f}
-                  </li>
+                  <li key={f}>{f}</li>
                 ))}
               </ul>
               <Link
                 href={`/get-started?plan=${p.key}`}
-                className={`mk-btn ${p.highlighted ? "mk-btn-primary" : "mk-btn-ghost"} mk-btn-block`}
+                className={`mk-btn ${p.highlighted ? "mk-btn-primary" : "mk-btn-ghost"}`}
               >
                 Get Started
               </Link>
