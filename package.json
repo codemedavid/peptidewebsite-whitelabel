@@ -38,6 +38,7 @@
     "test:payment-proof-viewer": "tsx scripts/test-payment-proof-viewer.ts",
     "test:hero-links": "tsx scripts/test-hero-links.ts",
     "test:banner": "tsx scripts/test-banner.ts",
+    "test:faq": "tsx scripts/test-faq.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
