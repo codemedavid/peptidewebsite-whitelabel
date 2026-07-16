@@ -601,11 +601,13 @@
 /* ---------- final CTA band ---------- */
 .mk-cta-band {
   border-top: 1px solid var(--line);
-  background: var(--paper-deep);
+  background: var(--dark);
+  color: var(--paper);
   text-align: center;
   padding: clamp(64px, 9vw, 96px) clamp(20px, 4vw, 56px);
 }
 .mk-cta-band .mk-h2 {
+  color: var(--paper);
   font-size: clamp(32px, 4.2vw, 44px);
   line-height: 1.15;
   max-width: 560px;
@@ -614,12 +616,13 @@
 }
 .mk-cta-band p {
   font-size: 16px;
-  color: var(--body-text);
+  color: var(--dark-muted);
   max-width: 520px;
   margin: 0 auto 32px;
   line-height: 1.6;
 }
 .mk-cta-band .mk-btn { padding: 16px 36px; }
+.mk-cta-band .mk-btn-primary:not(:disabled):hover { background: var(--green-light); color: var(--ink); }
 
 /* ---------- footer ---------- */
 .mk-footer { border-top: 1px solid var(--line); }
