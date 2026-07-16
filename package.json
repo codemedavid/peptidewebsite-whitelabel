@@ -45,7 +45,8 @@
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
     "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts",
     "test:notice-modal": "tsx scripts/test-notice-modal.ts",
-    "test:track-note": "tsx scripts/test-track-note.ts"
+    "test:track-note": "tsx scripts/test-track-note.ts",
+    "test:trial-state": "tsx scripts/test-trial-state.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
