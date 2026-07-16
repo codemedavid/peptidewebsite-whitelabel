@@ -51,7 +51,8 @@
     "test:feature-spotlight": "tsx scripts/test-feature-spotlight.ts",
     "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts",
     "test:trial-expiry": "tsx scripts/test-trial-expiry.ts",
-    "test:pepweb-landing": "tsx scripts/test-pepweb-landing.ts"
+    "test:pepweb-landing": "tsx scripts/test-pepweb-landing.ts",
+    "test:checkout-total": "tsx scripts/test-checkout-total.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
