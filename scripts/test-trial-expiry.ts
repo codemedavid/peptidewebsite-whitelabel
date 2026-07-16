@@ -117,6 +117,15 @@ check("combo B keeps Calculator+Tracking: order tracking granted beyond the ceil
   assert.strictEqual(b.pageToggles.showPageProtocols, false);
 });
 
+check("both combos revoke the Checkout Fee (Business-exclusive, in Starter's ceiling)", () => {
+  for (const combo of STARTER_COMBOS) {
+    assert.ok(
+      combo.revokes.includes(FEATURES.STORE_ADMIN_FEE),
+      `${combo.id} must revoke the admin fee`,
+    );
+  }
+});
+
 check("grants and revokes never overlap within a combo", () => {
   for (const combo of STARTER_COMBOS) {
     const grants = new Set<string>(combo.grants);

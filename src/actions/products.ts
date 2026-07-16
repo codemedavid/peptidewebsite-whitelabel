@@ -16,6 +16,11 @@ import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
+  hasDowngradeMarker,
+  canAddProductAfterDowngrade,
+  STARTER_DOWNGRADE_PRODUCT_CAP,
+} from "@/lib/trial/starter-downgrade";
+import {
   isDemoMode,
   getDemoProducts,
   getDemoStoreProducts,
@@ -215,6 +220,23 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
   // never bloat the DB as a base64 data URL.
   if (p.image && p.image.startsWith("data:")) {
     return { error: "That image wasn't uploaded yet. Use Choose File, or paste an image URL." };
+  }
+
+  // Trial-downgrade product cap (trial system): stores that chose the Starter
+  // downgrade are limited to 10 products. Only the branding.config marker binds
+  // the cap — legacy Starter stores are never capped retroactively.
+  if (!p.id) {
+    const { branding } = await getTenantContext(tenantId);
+    if (hasDowngradeMarker(branding?.config)) {
+      const count = await withTenant(tenantId, (db) =>
+        db.product.count({ where: { status: { not: "archived" } } }),
+      );
+      if (!canAddProductAfterDowngrade(count, true)) {
+        return {
+          error: `Starter is limited to ${STARTER_DOWNGRADE_PRODUCT_CAP} products — upgrade to Business for an unlimited catalog.`,
+        };
+      }
+    }
   }
 
   try {

@@ -12,6 +12,8 @@ import { BRAND } from "./data";
 import { Header } from "./components/Header";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { NoticeModal } from "./components/NoticeModal";
+import { StorePaused } from "./components/StorePaused";
+import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
@@ -189,6 +191,14 @@ function Shell() {
         )}
       </>
     );
+  }
+
+  // Trial expiry (trial system): a paused store's ENTIRE public surface is the
+  // branded pause card — nav, catalog and checkout all disappear. Server-
+  // authoritative twin: placeStorefrontOrderAction re-checks the same rule.
+  // #admin (above) stays reachable so the owner can upgrade or downgrade.
+  if (isTrialPaused(brand.trial)) {
+    return <StorePaused brand={brand} />;
   }
 
   return (

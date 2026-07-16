@@ -56,6 +56,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** The single pause rule every expiry surface derives from — the public
+ *  "We're currently on pause" card, the checkout rejection and the admin
+ *  "Choose how to continue" lock: paused ⇔ trial-governed AND expired.
+ *  Accepts a TrialState, a serialized BrandTrial, or nothing (never paused). */
+export function isTrialPaused(
+  state: { onTrial: boolean; expired: boolean } | undefined | null,
+): boolean {
+  return state?.onTrial === true && state.expired === true;
+}
+
 /** JSON-safe projection of an on-trial TrialState for the client Brand blob
  *  (endsAt as ISO string so demo-mode JSON round-trips keep it intact). */
 export type BrandTrial = {

@@ -53,7 +53,8 @@ import {
   normalizeGroupBuyRules,
 } from "@/lib/storefront/group-buy-rules";
 import { hasFeature } from "@/lib/features/entitlements";
-import { isBusinessExclusiveLocked } from "@/lib/trial/trial-info";
+import { isBusinessExclusiveLocked, getTrialState } from "@/lib/trial/trial-info";
+import { isTrialPaused } from "@/lib/trial/trial-state";
 import { FEATURES } from "@/lib/features/catalog";
 import {
   isOrderStatus,
@@ -776,6 +777,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   }
 
   try {
+    // Trial expiry (trial system): a paused store takes no orders — the same
+    // server-side rule that swaps the public storefront for the pause card, so
+    // a stale/forged client can't check out around it.
+    if (isTrialPaused(await getTrialState(tenantId))) {
+      return { error: "This store is currently on pause and isn't accepting orders right now." };
+    }
+
     // Same server-authoritative fee stamp as the demo path — read through the
     // tag-invalidated tenant cache, so checkout charges exactly what the
     // storefront (which renders from the same cache) displayed.

@@ -17,7 +17,11 @@ import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { getPackagePayment } from "@/lib/platform/package-payment-server";
 import { visiblePackagePaymentMethods, type PackagePaymentMethod } from "@/lib/platform/package-payment";
 import { getTrialState } from "@/lib/trial/trial-info";
+import { isTrialPaused } from "@/lib/trial/trial-state";
 import { upgradeQuote, type UpgradeQuote } from "@/lib/trial/upgrade-quote";
+import { starterCombo } from "@/lib/trial/starter-downgrade";
+import { planConfigPriceCents } from "@/lib/platform/plan-config";
+import type { Prisma } from "@prisma/client";
 
 export type UpgradeContext = {
   quote: UpgradeQuote;
@@ -25,6 +29,9 @@ export type UpgradeContext = {
   /** An undecided request is already filed — the UI shows "in review". */
   pendingRequest: boolean;
   trialGoverned: boolean;
+  /** Starter monthly (plan_config) — the "Choose how to continue" screen's
+   *  downgrade card renders from this. */
+  starterCents: number;
 };
 
 export async function getUpgradeContextAction(): Promise<UpgradeContext | { error: string }> {
@@ -50,7 +57,75 @@ export async function getUpgradeContextAction(): Promise<UpgradeContext | { erro
     methods: visiblePackagePaymentMethods(payment),
     pendingRequest,
     trialGoverned: trial.onTrial,
+    starterCents: planConfigPriceCents(config, "starter"),
   };
+}
+
+/**
+ * The Starter downgrade ("Choose how to continue" after expiry). Owner-only,
+ * expired-trial-only. One transaction: plan → starter, storefront reactivates
+ * (status "active"), the chosen combo's feature grants/revocations land as
+ * TenantFeatureOverride rows, and branding.config gets the page toggles plus
+ * the trialDowngrade marker that binds the 10-product cap.
+ */
+export async function downgradeToStarterAction(
+  comboId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const tenantId = await requireStoreOwner();
+  if (!tenantId) return { error: "You don't have permission to do that." };
+  if (isDemoMode()) return { error: "Downgrades aren't available in the demo store." };
+
+  const combo = starterCombo(String(comboId ?? ""));
+  if (!combo) return { error: "Pick one of the two Starter combinations." };
+  if (!isTrialPaused(await getTrialState(tenantId))) {
+    return { error: "The Starter downgrade is only available after your trial ends." };
+  }
+
+  const [plan, features, branding] = await Promise.all([
+    prisma.plan.findUnique({ where: { key: "starter" }, select: { id: true } }),
+    prisma.feature.findMany({
+      where: { key: { in: [...combo.grants, ...combo.revokes] } },
+      select: { id: true, key: true },
+    }),
+    prisma.branding.findUnique({ where: { tenantId }, select: { config: true } }),
+  ]);
+  if (!plan) return { error: 'The "starter" plan isn\'t set up in the database yet.' };
+
+  const idByKey = new Map(features.map((f) => [f.key, f.id]));
+  const overrides = [
+    ...combo.grants.map((key) => ({ key, enabled: true })),
+    ...combo.revokes.map((key) => ({ key, enabled: false })),
+  ].flatMap(({ key, enabled }) => {
+    const featureId = idByKey.get(key);
+    return featureId ? [{ featureId, enabled }] : []; // unseeded feature — skip
+  });
+  const config = {
+    ...((branding?.config as Record<string, unknown> | null) ?? {}),
+    ...combo.pageToggles,
+    trialDowngrade: { combo: combo.id, at: new Date().toISOString() },
+  };
+
+  await prisma.$transaction([
+    prisma.tenant.update({
+      where: { id: tenantId },
+      data: { planId: plan.id, status: "active" },
+    }),
+    ...overrides.map(({ featureId, enabled }) =>
+      prisma.tenantFeatureOverride.upsert({
+        where: { tenantId_featureId: { tenantId, featureId } },
+        update: { enabled, expiresAt: null },
+        create: { tenantId, featureId, enabled },
+      }),
+    ),
+    prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    }),
+  ]);
+
+  revalidateTenant(tenantId, await getTenantSlug());
+  return { ok: true };
 }
 
 const MAX_URL = 600;

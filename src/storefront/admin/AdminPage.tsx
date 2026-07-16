@@ -34,6 +34,7 @@ import { AdminBannerSettings } from "./AdminBannerSettings";
 import { isAdminViewVisible, isAdminModuleLocked } from "../visibility";
 import { AdminUpgrade } from "./AdminUpgrade";
 import { TrialBanner } from "./TrialBanner";
+import { TrialPlansScreen } from "./TrialPlansScreen";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminStaffForm } from "./AdminStaffForm";
 import { isViewAllowed, quickActionToView, type StaffActor } from "./staff-permissions";
@@ -152,6 +153,18 @@ export function AdminPage({
         {trialChrome}
         <AdminUpgrade brand={brand} onBack={() => setView("dashboard")} />
       </>
+    );
+  }
+
+  // Trial expired: the whole admin sits behind "Choose how to continue" —
+  // only the Upgrade page (above) stays reachable. Header chrome is kept so
+  // the owner can still log out or preview the paused storefront.
+  if (brand.trial?.expired) {
+    return (
+      <div className="admin">
+        {trialChrome}
+        <TrialPlansScreen onUpgrade={() => setView("upgrade")} />
+      </div>
     );
   }
 
