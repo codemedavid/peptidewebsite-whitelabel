@@ -49,7 +49,8 @@
     "test:trial-state": "tsx scripts/test-trial-state.ts",
     "test:trial-gating": "tsx scripts/test-trial-gating.ts",
     "test:feature-spotlight": "tsx scripts/test-feature-spotlight.ts",
-    "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts"
+    "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts",
+    "test:trial-expiry": "tsx scripts/test-trial-expiry.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
