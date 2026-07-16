@@ -30,7 +30,8 @@
   --btn-line: #c9c4b6;
   --danger: #b5442d;
 
-  --radius: 2px;
+  --radius: 8px;
+  --radius-lg: 12px;
 
   --font-head: "Instrument Serif", Georgia, serif;
   --font-body: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -372,44 +373,45 @@
   padding: 26px;
 }
 
-/* ---------- pricing ---------- */
-.mk-trial-banner {
+/* ---------- pricing: intro-offer banner ---------- */
+.mk-offer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
   flex-wrap: wrap;
-  background: var(--green-tint);
-  border: 1px solid var(--green);
-  border-radius: var(--radius);
-  padding: 24px clamp(20px, 3vw, 32px);
-  margin-bottom: 24px;
+  background: var(--green);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: clamp(24px, 3.5vw, 32px) clamp(24px, 4vw, 40px);
+  margin-bottom: 28px;
 }
-.mk-trial-tag {
+.mk-offer-tag {
   display: inline-block;
   font-size: 11px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   font-weight: 600;
-  color: var(--green);
-  margin-bottom: 8px;
+  color: var(--green-light);
+  margin-bottom: 10px;
 }
-.mk-trial-banner .mk-h3 { margin-bottom: 6px; }
-.mk-trial-banner p {
+.mk-offer-title { margin-bottom: 8px; color: #ffffff; }
+.mk-offer-title em { font-style: normal; color: var(--green-light); }
+.mk-offer > div { max-width: 620px; }
+.mk-offer p {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.6;
-  color: var(--body-text);
-  max-width: 560px;
+  color: var(--dark-body);
 }
-.mk-trial-banner .mk-btn { flex-shrink: 0; }
-
-.mk-price-trial-note {
-  margin: -8px 0 12px;
-  font-size: 13px;
-  color: var(--green);
+.mk-offer .mk-btn { flex-shrink: 0; }
+.mk-btn-offer {
+  background: #ffffff;
+  color: var(--ink);
+  padding: 15px 30px;
+  font-size: 15px;
 }
-.mk-price-card--featured .mk-price-trial-note { color: var(--green-light); }
+.mk-btn-offer:not(:disabled):hover { background: var(--green-light); color: var(--ink); }
 
 .mk-price-grid {
   display: grid;
@@ -422,45 +424,75 @@
   flex-direction: column;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 36px 32px;
 }
 .mk-price-card--featured {
-  background: var(--dark);
-  border-color: var(--dark);
-  color: var(--paper);
+  position: relative;
+  background: var(--paper);
+  border: 2px solid var(--green);
+  border-radius: 14px;
+  padding: 44px 32px;
+  box-shadow: 0 12px 32px rgba(46, 92, 70, 0.14);
 }
-.mk-price-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+.mk-price-pill {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--green);
+  color: #ffffff;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 5px 16px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.mk-price-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
   margin-bottom: 12px;
 }
-.mk-price-name { font-size: 13px; font-weight: 600; color: var(--muted); }
-.mk-price-card--featured .mk-price-name { color: var(--green-light); }
-.mk-price-tag {
-  font-size: 11px;
-  letter-spacing: 0.12em;
+.mk-price-card--featured .mk-price-name { color: var(--green); }
+.mk-price-kicker {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--muted);
+  font-weight: 600;
 }
-.mk-price-card--featured .mk-price-tag { color: var(--green-light); }
 .mk-price-amount {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 .mk-price-amount b {
   font-family: var(--font-head);
   font-weight: 400;
-  font-size: 40px;
-  line-height: 1;
+  font-size: 42px;
+  line-height: 1.1;
   color: inherit;
 }
-.mk-price-amount s { opacity: 0.55; font-weight: 400; font-size: 16px; }
+.mk-price-amount span { font-size: 14px; color: var(--muted); }
+.mk-price-amount--promo b { font-size: 52px; color: var(--green); }
+.mk-price-then { margin: 2px 0 0; font-size: 14px; color: var(--body-text); }
+.mk-price-then b {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--ink);
+}
+.mk-price-setup { font-size: 13px; color: var(--muted); margin: 4px 0 16px; }
+.mk-price-setup--waived { color: var(--green); font-weight: 600; }
+.mk-price-setup--waived s { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .mk-price-blurb { font-size: 13.5px; line-height: 1.6; color: var(--body-text); margin: 0 0 20px; }
-.mk-price-card--featured .mk-price-blurb { color: var(--dark-body); }
 .mk-price-feats {
   list-style: none;
   margin: 0 0 24px;
@@ -470,11 +502,77 @@
   line-height: 2;
   color: var(--body-text);
 }
-.mk-price-card--featured .mk-price-feats { border-top-color: var(--dark-line); color: var(--dark-body); }
 .mk-price-card .mk-btn { margin-top: auto; padding: 13px 0; font-size: 14px; width: 100%; }
 .mk-price-card .mk-btn-ghost { border-color: var(--ink); }
 .mk-price-card .mk-btn-ghost:not(:disabled):hover { background: var(--ink); color: var(--paper); }
-.mk-price-card--featured .mk-btn-primary:not(:disabled):hover { background: var(--green-light); color: var(--ink); }
+.mk-price-card--featured .mk-btn-primary:not(:disabled):hover { background: var(--green-dark); }
+
+/* ---------- why monthly ---------- */
+.mk-band { background: var(--paper-deep); }
+.mk-why-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: clamp(32px, 5vw, 56px);
+  align-items: center;
+}
+.mk-why-grid .mk-h2 { margin: 0 0 16px; }
+.mk-why-body { font-size: 15px; line-height: 1.65; color: var(--body-text); margin: 0; }
+.mk-why-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 32px;
+}
+.mk-why-item {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.mk-why-item span { color: var(--green); font-weight: 600; margin-right: 6px; }
+
+/* ---------- plan comparison ---------- */
+.mk-compare-container { max-width: 900px; }
+.mk-compare-scroll { overflow-x: auto; }
+.mk-compare { min-width: 560px; }
+.mk-compare-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  align-items: center;
+}
+.mk-compare-row--head {
+  padding: 10px 4px;
+  border-bottom: 2px solid var(--ink);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.mk-compare-col { text-align: center; color: var(--muted); }
+.mk-compare-col--featured { color: var(--green); }
+.mk-compare-mark { text-align: center; color: var(--muted); }
+.mk-compare-mark--on { color: var(--green); font-weight: 600; }
+.mk-compare-mark--featured { background: var(--green-tint); border-radius: 4px; padding: 4px 0; }
+
+/* ---------- why pepweb (value props) ---------- */
+.mk-value-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+}
+.mk-value-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+}
+.mk-value-card h3 {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.mk-value-card p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
 
 /* ---------- FAQ ---------- */
 .mk-faq { max-width: 760px; margin: 0 auto; }

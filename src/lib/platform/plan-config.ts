@@ -14,7 +14,9 @@ export type EditablePlanCard = {
   key: string; // canonical plan key (starter | pro | enterprise) — fixed
   name: string; // display label — fixed, mirrors planMeta
   priceCents: number; // monthly (list) price in PHP centavos
-  discountPriceCents?: number; // optional promo price (< priceCents); display only — MRR/billing use priceCents
+  discountPriceCents?: number; // optional first-month promo price (< priceCents); display only — MRR/billing use priceCents
+  setupFeeCents: number; // one-time setup fee in PHP centavos (0 = no fee)
+  setupFeeWaived: boolean; // show the fee struck through as "FREE setup"
   blurb: string; // short pitch under the price
   tag: string; // card badge, e.g. "Popular" ("" = none)
   feats: string[]; // feature bullets shown on the card
@@ -34,14 +36,20 @@ export const DEFAULT_TRIAL_PRICE_CENTS = 69_900;
 export function defaultPlanConfig(): PlanConfig {
   return {
     trialPriceCents: DEFAULT_TRIAL_PRICE_CENTS,
-    plans: PLAN_CARDS.map((p) => ({
-      key: p.key,
-      name: p.name,
-      priceCents: p.priceCents,
-      blurb: p.blurb,
-      tag: "tag" in p ? ((p as { tag?: string }).tag ?? "") : "",
-      feats: [...p.feats],
-    })),
+    plans: PLAN_CARDS.map((p) => {
+      const card = p as (typeof PLAN_CARDS)[number] & { discountPriceCents?: number; tag?: string };
+      return {
+        key: p.key,
+        name: p.name,
+        priceCents: p.priceCents,
+        ...(card.discountPriceCents ? { discountPriceCents: card.discountPriceCents } : {}),
+        setupFeeCents: p.setupFeeCents,
+        setupFeeWaived: p.setupFeeWaived,
+        blurb: p.blurb,
+        tag: card.tag ?? "",
+        feats: [...p.feats],
+      };
+    }),
   };
 }
 
@@ -69,12 +77,18 @@ export function normalizePlanConfig(input: unknown): PlanConfig {
       const discount = Math.round(Number(r.discountPriceCents));
       const discountPriceCents =
         Number.isFinite(discount) && discount > 0 && discount < priceCents ? discount : undefined;
+      // Setup fee: 0 is a valid "no fee"; anything malformed falls back per-plan.
+      const setup = Math.round(Number(r.setupFeeCents));
+      const setupFeeCents =
+        Number.isFinite(setup) && setup >= 0 ? Math.min(setup, MAX_PRICE_CENTS) : d.setupFeeCents;
       const rawFeats = Array.isArray(r.feats) ? (r.feats as unknown[]) : null;
       return {
         key: d.key,
         name: d.name,
         priceCents,
         ...(discountPriceCents ? { discountPriceCents } : {}),
+        setupFeeCents,
+        setupFeeWaived: typeof r.setupFeeWaived === "boolean" ? r.setupFeeWaived : d.setupFeeWaived,
         blurb: typeof r.blurb === "string" ? r.blurb.slice(0, 300) : d.blurb,
         tag: typeof r.tag === "string" ? r.tag.slice(0, 40) : d.tag,
         feats: rawFeats

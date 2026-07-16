@@ -1,8 +1,8 @@
 import { Hero } from "@/marketing/sections/Hero";
-import { Pain } from "@/marketing/sections/Pain";
-import { Journey } from "@/marketing/sections/Journey";
-import { Features } from "@/marketing/sections/Features";
 import { Pricing } from "@/marketing/sections/Pricing";
+import { WhyMonthly } from "@/marketing/sections/WhyMonthly";
+import { PlanComparison } from "@/marketing/sections/PlanComparison";
+import { WhyPepweb } from "@/marketing/sections/WhyPepweb";
 import { Faq } from "@/marketing/sections/Faq";
 import { FinalCta } from "@/marketing/sections/FinalCta";
 
@@ -13,10 +13,10 @@ export default function MarketingHomePage() {
   return (
     <>
       <Hero />
-      <Pain />
-      <Journey />
-      <Features />
       <Pricing />
+      <WhyMonthly />
+      <PlanComparison />
+      <WhyPepweb />
       <Faq />
       <FinalCta />
     </>

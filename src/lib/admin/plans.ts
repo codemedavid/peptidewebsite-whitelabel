@@ -21,9 +21,9 @@ export type PlanMeta = {
 };
 
 export const PLAN_META: Record<string, PlanMeta> = {
-  starter: { key: "starter", label: "Starter", priceCents: 599900, rank: 1, tone: "neutral" },
-  pro: { key: "pro", label: "Business", priceCents: 989900, rank: 2, tone: "info" },
-  enterprise: { key: "enterprise", label: "Automated", priceCents: 1689900, rank: 3, tone: "accent" },
+  starter: { key: "starter", label: "Starter", priceCents: 79900, rank: 1, tone: "neutral" },
+  pro: { key: "pro", label: "Business", priceCents: 149900, rank: 2, tone: "info" },
+  enterprise: { key: "enterprise", label: "Automated", priceCents: 299900, rank: 3, tone: "accent" },
 };
 
 const PLAN_ALIASES: Record<string, string> = {
@@ -63,35 +63,66 @@ export function planPriceCents(key: string): number {
   return planMeta(key).priceCents;
 }
 
-/** Pricing cards for the create-tenant flow + Plans page. Mirrors the design. */
+/** Pricing cards for the create-tenant flow + Plans page. Mirrors the Pepweb
+ *  landing design: monthly subscription prices + a one-time setup fee
+ *  (waived on Business while the intro offer runs). Business's first month is
+ *  the ₱699 trial price, expressed as discountPriceCents. */
 export const PLAN_CARDS = [
   {
     key: "starter",
     name: "Starter",
-    priceCents: 599900,
-    blurb: "Take orders and hand them off to your chat inbox — Messenger or WhatsApp.",
+    priceCents: 79900,
+    setupFeeCents: 49900,
+    setupFeeWaived: false,
+    blurb: "Perfect for new peptide sellers who want a simple way to start accepting orders.",
     feats: [
       "Ordering form",
       "Order success + order-details page",
-      "Auto-send order to Messenger / WhatsApp",
-      "2 add-on features included (+₱1,500 each extra)",
+      "Auto-send to Messenger / WhatsApp",
+      "Choose any 2 add-on features",
+      "Hosting included",
+      "Continuous updates",
       "Standard support",
     ],
   },
   {
     key: "pro",
     name: "Business",
-    priceCents: 989900,
-    blurb: "A full storefront for growing peptide brands.",
-    tag: "Popular",
-    feats: ["Everything in Starter", "Full storefront + cart", "Custom domain + SSL", "Coupons, COA, order tracking", "Priority support"],
+    priceCents: 149900,
+    discountPriceCents: 69900,
+    setupFeeCents: 99900,
+    setupFeeWaived: true,
+    blurb: "Everything you need to run a professional peptide storefront.",
+    tag: "Most Popular",
+    feats: [
+      "Everything in Starter, plus:",
+      "Full online storefront + cart",
+      "Order tracking page",
+      "COA + FAQ pages",
+      "Peptide calculator",
+      "Protocol library (20+)",
+      "Sales analytics",
+      "Product card customization",
+      "Continuous feature updates",
+      "Priority support",
+    ],
   },
   {
     key: "enterprise",
     name: "Automated",
-    priceCents: 1689900,
-    blurb: "The flagship — automated growth, analytics, and integrations.",
-    feats: ["Everything in Business", "Marketing automations + journeys", "Abandoned-cart recovery", "Analytics dashboard", "Integrations + dedicated support"],
+    priceCents: 299900,
+    setupFeeCents: 199900,
+    setupFeeWaived: false,
+    blurb: "Scale your business with analytics and automation.",
+    feats: [
+      "Everything in Business, plus:",
+      "Analytics dashboard",
+      "Gmail integration",
+      "Automated order notifications",
+      "Automation tools",
+      "Early access to new features",
+      "VIP support",
+    ],
   },
 ] as const;
 

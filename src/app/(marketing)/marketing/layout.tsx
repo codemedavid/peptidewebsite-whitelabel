@@ -17,16 +17,16 @@ async function assertApex() {
 
 export const metadata: Metadata = {
   title: {
-    default: "Jonina — Business Automation, Done-For-You",
-    template: "%s · Jonina",
+    default: "Pepweb — The All-in-One Platform for Peptide Businesses",
+    template: "%s · Pepweb",
   },
   description:
-    "Jonina builds automated, order-ready storefronts for peptide sellers and small PH online businesses — branded, done-for-you, and answering customers 24/7.",
+    "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation — all in one platform that keeps improving every month.",
   icons: { icon: "/favicon.ico" },
   openGraph: {
-    title: "Jonina — Business Automation, Done-For-You",
+    title: "Pepweb — The All-in-One Platform for Peptide Businesses",
     description:
-      "Stop being the customer support of your own business. Automated storefronts with WhatsApp checkout, QR payments, and an easy admin dashboard — live in days.",
+      "Everything you need to sell peptides online: storefront, ordering, tracking, COAs, protocols, analytics, and automation — done-for-you in 2–5 days.",
     type: "website",
   },
 };
@@ -58,12 +58,12 @@ export default async function MarketingLayout({ children }: { children: React.Re
           </Link>
           <div className="mk-nav-cta">
             <nav className="mk-nav mk-nav-links" aria-label="Primary">
-              <a href="/#features">Features</a>
               <a href="/#pricing">Pricing</a>
+              <a href="/#compare">Features</a>
               <a href="/#faq">FAQ</a>
             </nav>
             <Link href="/get-started" className="mk-btn mk-btn-dark">
-              Get Started
+              Start Today
             </Link>
           </div>
         </div>
@@ -78,8 +78,8 @@ export default async function MarketingLayout({ children }: { children: React.Re
             <span>{SITE.brandSuffix}</span>
           </Link>
           <div className="mk-footer-links">
-            <a href="/#features">Features</a>
-            <a href="/#pricing">Packages</a>
+            <a href="/#pricing">Pricing</a>
+            <a href="/#compare">Features</a>
             <a href="/#faq">FAQ</a>
             <Link href="/terms">Terms</Link>
             <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>

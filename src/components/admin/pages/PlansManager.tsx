@@ -28,7 +28,9 @@ type PlanDraft = {
   key: string;
   name: string;
   priceText: string; // pesos, free-form while typing
-  discountText: string; // optional promo price in pesos ("" = none)
+  discountText: string; // optional first-month promo price in pesos ("" = none)
+  setupFeeText: string; // one-time setup fee in pesos ("" or 0 = no fee)
+  setupFeeWaived: boolean; // show the fee struck through as FREE setup
   blurb: string;
   tag: string;
   feats: FeatRow[];
@@ -40,6 +42,8 @@ function toDrafts(config: PlanConfig): PlanDraft[] {
     name: p.name,
     priceText: String(p.priceCents / 100),
     discountText: p.discountPriceCents ? String(p.discountPriceCents / 100) : "",
+    setupFeeText: p.setupFeeCents ? String(p.setupFeeCents / 100) : "",
+    setupFeeWaived: p.setupFeeWaived,
     blurb: p.blurb,
     tag: p.tag,
     feats: p.feats.map((text) => ({ id: ++nextId, text })),
@@ -55,6 +59,13 @@ function draftPriceCents(d: PlanDraft): number {
 function draftDiscountCents(d: PlanDraft): number {
   if (d.discountText.trim() === "") return 0;
   const pesos = Number(d.discountText);
+  return Number.isFinite(pesos) && pesos > 0 ? Math.round(pesos * 100) : 0;
+}
+
+// 0 = no setup fee (empty/invalid field).
+function draftSetupFeeCents(d: PlanDraft): number {
+  if (d.setupFeeText.trim() === "") return 0;
+  const pesos = Number(d.setupFeeText);
   return Number.isFinite(pesos) && pesos > 0 ? Math.round(pesos * 100) : 0;
 }
 
@@ -181,6 +192,8 @@ export function PlansManager({
             name: p.name,
             priceCents: draftPriceCents(p),
             ...(discount > 0 ? { discountPriceCents: discount } : {}),
+            setupFeeCents: draftSetupFeeCents(p),
+            setupFeeWaived: p.setupFeeWaived,
             blurb: p.blurb,
             tag: p.tag,
             feats: p.feats.map((f) => f.text.trim()).filter(Boolean),
@@ -209,7 +222,7 @@ export function PlansManager({
         <div>
           <h1 className="page-title">Plans &amp; Billing</h1>
           <p className="page-sub">
-            Plan mix and one-time revenue across {totalTenants} tenants. Prices and
+            Plan mix and monthly revenue across {totalTenants} tenants. Prices and
             features here drive the marketing pricing, the get-started wizard, and new-tenant billing.
           </p>
         </div>
@@ -278,7 +291,7 @@ export function PlansManager({
                   ) : (
                     cents > 0 ? formatPesos(cents) : "₱—"
                   )}
-                  <small>one-time</small>
+                  <small>/month</small>
                 </div>
 
                 <div style={{ marginTop: 10 }}>
@@ -294,17 +307,41 @@ export function PlansManager({
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <label className="field-label">Discount price (₱) — optional</label>
+                  <label className="field-label">First-month price (₱) — optional</label>
                   <input
                     className="input"
                     style={{ width: "100%", marginTop: 4 }}
                     type="number"
                     min={1}
                     step={1}
-                    placeholder="Leave blank for no discount"
+                    placeholder="Leave blank for no promo"
                     value={p.discountText}
                     onChange={(e) => patchPlan(p.key, { discountText: e.target.value })}
                   />
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label className="field-label">Setup fee (₱) — one-time</label>
+                  <input
+                    className="input"
+                    style={{ width: "100%", marginTop: 4 }}
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Leave blank for no setup fee"
+                    value={p.setupFeeText}
+                    onChange={(e) => patchPlan(p.key, { setupFeeText: e.target.value })}
+                  />
+                  <label
+                    className="row"
+                    style={{ gap: 6, marginTop: 6, fontSize: 12.5, cursor: "pointer" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={p.setupFeeWaived}
+                      onChange={(e) => patchPlan(p.key, { setupFeeWaived: e.target.checked })}
+                    />
+                    Waived — show as &ldquo;FREE setup&rdquo; with the fee struck through
+                  </label>
                 </div>
                 <div style={{ marginTop: 10 }}>
                   <label className="field-label">Description</label>

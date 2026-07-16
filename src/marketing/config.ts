@@ -1,10 +1,10 @@
-// Single source of truth for the jonina.store marketing site copy + data.
+// Single source of truth for the Pepweb marketing site copy + data.
 // PURE module (no server-only) so the onboarding wizard can import the packages
 // and payment instructions too. Packages re-use PLAN_CARDS / PLAN_META so the
 // sales site, the onboarding package step, and the admin never diverge on price.
 //
-// Copy follows the 2026-07 editorial redesign handoff (design_handoff_jonina_landing):
-// 8 sections, all Taglish preserved verbatim.
+// Copy follows the 2026-07 "Pepweb Landing" design (claude.ai/design, Website UI
+// improvement project): monthly-subscription pricing, all Taglish preserved verbatim.
 
 import { PLAN_META, formatPesos } from "@/lib/admin/plans";
 import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
@@ -19,17 +19,17 @@ export function storeUrl(slug: string): string {
 }
 
 export const SITE = {
-  brand: "Jonina",
-  brandSuffix: ".store",
+  brand: "Pepweb",
+  brandSuffix: ".",
   tagline: "Mas kaunting oras sa chat, mas maraming oras sa paglago.",
   hero: {
-    eyebrow: "Business automation, done-for-you",
-    // H1: the em part renders italic + green ("peptide business").
-    h1Lead: "Stop being the customer support of your own",
-    h1Em: "peptide business",
-    sub: "Ang automation system ang sasagot sa paulit-ulit na tanong, magpapakita ng products at COAs, at mangongolekta ng orders — automated, 24/7. Para ikaw, focus sa paglago ng negosyo, hindi sa kaka-reply.",
-    primaryCta: "Get Started",
-    secondaryCta: "View Demo Store",
+    eyebrow: "The all-in-one platform for peptide businesses",
+    // H1: the em part renders italic + green ("peptides online").
+    h1Lead: "Everything you need to sell",
+    h1Em: "peptides online",
+    sub: "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation — all in one platform that keeps improving every month.",
+    primaryCta: "Start Today",
+    secondaryCta: "View Demo",
     demoSlug: "ar-jonina",
   },
   contactEmail: "hello@jonina.store",
@@ -37,62 +37,33 @@ export const SITE = {
 
 // ──────────────────────────── Hero stat row ────────────────────────────
 export const HERO_STATS = [
-  { value: "3+ oras", label: "Nababawi mo kada araw" },
   { value: "24/7", label: "Sumasagot kahit tulog ka" },
   { value: "2–5 days", label: "Done-for-you setup" },
+  { value: "₱799/mo", label: "Simula ng pinakamurang plan" },
 ] as const;
 
-// ──────────────────────────── Pain ("Pamilyar ba 'to?") ────────────────────────────
-export const PAIN_INTRO = {
-  eyebrow: "Pamilyar ba ’to?",
-  title: "Parehong tanong. Araw-araw. Buong araw.",
-  body: "Hindi ka tamad. Sobrang busy ka lang sa mga bagay na pwede namang i-automate.",
+// ──────────────────────────── Pricing intro ────────────────────────────
+export const PRICING_INTRO = {
+  eyebrow: "Simple monthly pricing",
+  title: "Pick the plan that fits",
+  body: "Hosting, maintenance, and continuous updates included in every plan. Cancel anytime.",
 } as const;
 
-export type Pain = { q: string; body: string };
-
-export const PAINS: Pain[] = [
-  { q: "“Magkano po?”", body: "Pang-30 na today. Copy-paste ka na naman ng parehong sagot." },
-  { q: "“Pa-send po ng product info”", body: "Ise-send mong isa-isa. Ulit. Ulit. Ulit." },
-  { q: "“May COA po ba?”", body: "Nasa files mo — ikaw ang maghahanap tuwing may magtatanong." },
-  { q: "“Paano po umorder?”", body: "Ipapaliwanag mo ulit ang steps, sa pang-sampung tao ngayong araw." },
-  { q: "“Sent na po payment”", body: "Ikaw pa rin ang magve-verify — screenshot by screenshot." },
-  { q: "“Saan na po order ko?”", body: "Bubuksan mo pa ang courier app para sa pang-limang follow-up." },
-];
-
-// Dark stats band under the pain list.
-export const COST_STATS = [
-  { value: "3 oras", label: "kada araw na nauubos sa kakasagot ng parehong tanong" },
-  { value: "90 oras", label: "kada buwan na napupunta sa chat, hindi sa negosyo" },
-  { value: "2+ linggo", label: "ng full-time na trabaho — nawawala buwan-buwan" },
-] as const;
-
-// ──────────────────────────── Journey ("Imagine this") ────────────────────────────
-export const JOURNEY_INTRO = {
-  eyebrow: "Imagine this",
-  title: "Paano kung hindi ka na kailangan sa bawat order?",
-  body: "Ganito ang isang sale kapag may system ka — mula dating ng customer hanggang confirmed na order.",
+// ──────────────────────────── Intro offer (1-month Business trial) ────────────────────────────
+// The green banner above the pricing cards. Prices are rendered live from the
+// plan config (trialPriceCents + the Business monthly price) so operator edits
+// on /admin/plans stay in sync; this holds the non-price copy.
+export const INTRO_OFFER = {
+  tag: "Introductory offer",
+  // Rendered as: "Business plan — first month {trialPrice}, FREE setup"
+  titleLead: "Business plan — first month",
+  titleTail: ", FREE setup",
+  // Rendered as: "Then {monthlyPrice}/month. {bodyTail}"
+  bodyTail: "Buong platform, hosting, at updates — kasama lahat.",
+  cta: "Start Growing",
+  // Trial signs up onto the Business plan; the operator confirms the trial arrangement.
+  href: "/get-started?plan=pro&trial=1",
 } as const;
-
-export const JOURNEY_STEPS = [
-  { n: "01", title: "Dumating ang customer", body: "Nakita niya ang branded store mo — mukhang legit, mukhang professional." },
-  { n: "02", title: "Nag-browse ng products", body: "Kumpleto: photos, presyo, descriptions, COAs. Halos wala nang itatanong." },
-  { n: "03", title: "Nabasa paano umorder", body: "Malinaw ang steps at payment instructions. Hindi ka niya kailangang kulitin." },
-  { n: "04", title: "Naka-order na siya", body: "Pumili, nagbayad, nag-upload ng proof — lahat sa store, hindi sa DMs." },
-  { n: "05", title: "Ikaw, na-notify ka lang", body: "Bukas mo ang dashboard, kumpleto na ang detalye. Confirm na lang. Tapos." },
-] as const;
-
-// ──────────────────────────── Features ────────────────────────────
-export type Feature = { title: string; body: string };
-
-export const FEATURES: Feature[] = [
-  { title: "Easy Order Management", body: "Every order in one tidy dashboard — status, customer, items, and proof of payment." },
-  { title: "WhatsApp Checkout", body: "Customers complete their order straight to your WhatsApp, Messenger, or Telegram." },
-  { title: "Payment QR Support", body: "Show your GCash, Maya, and bank QR codes so customers pay in a tap." },
-  { title: "Custom Branding", body: "Your logo, colors, and fonts. A store that looks unmistakably yours from day one." },
-  { title: "Order Tracking", body: "Give customers a tracking page and keep every order moving to delivered." },
-  { title: "Admin Dashboard", body: "Manage products, orders, payments, and content from one simple control center." },
-];
 
 // ──────────────────────────── Packages ────────────────────────────
 // Derived from the admin plan source of truth. `key` is the DB plan key
@@ -103,9 +74,11 @@ export const FEATURES: Feature[] = [
 export type Package = {
   key: string;
   name: string;
-  priceLabel: string; // list price
-  discountLabel?: string; // promo price when set; show it as the headline with priceLabel struck through
+  priceLabel: string; // list price (monthly)
+  discountLabel?: string; // first-month promo price when set; show as the headline with priceLabel as "then …/month"
   priceCents: number; // effective price (discount when set, else list) — used for checkout totals
+  setupFeeCents: number; // one-time setup fee (0 = none)
+  setupFeeWaived: boolean; // fee shown struck through as FREE setup
   blurb: string;
   feats: readonly string[];
   tag?: string;
@@ -121,6 +94,8 @@ export function packagesFrom(plans: EditablePlanCard[]): Package[] {
       priceLabel: formatPesos(p.priceCents),
       discountLabel: discounted ? formatPesos(p.discountPriceCents as number) : undefined,
       priceCents: discounted ? (p.discountPriceCents as number) : p.priceCents,
+      setupFeeCents: p.setupFeeCents,
+      setupFeeWaived: p.setupFeeWaived,
       blurb: p.blurb,
       feats: p.feats,
       tag: p.tag || undefined,
@@ -131,40 +106,103 @@ export function packagesFrom(plans: EditablePlanCard[]): Package[] {
 
 export const PACKAGES: Package[] = packagesFrom(defaultPlanConfig().plans);
 
-// ──────────────────────────── 1-month trial promo ────────────────────────────
-// Banner above the pricing cards + the trial note on the Business card.
-export const TRIAL_PROMO = {
-  tag: "New · 1-month trial",
-  title: "Subukan ang Business package nang isang buwan — ₱699 lang",
-  body: "Hindi ka pa sigurado sa ₱9,899? Subukan muna ang buong system nang isang buwan. Kung sulit para sa'yo, saka ka mag-commit.",
-  cta: "Start 1-month trial",
-  // Shown under the Business card's price.
-  cardNote: "o subukan muna: ₱699 / 1 month trial",
-  // Trial signs up onto the Business plan; the operator confirms the trial arrangement.
-  href: "/get-started?plan=pro&trial=1",
-} as const;
+/** Per-plan CTA labels on the pricing cards. */
+export const PLAN_CTAS: Record<string, string> = {
+  starter: "Get Started",
+  pro: "Start Growing",
+  enterprise: "Scale Now",
+};
 
 export function packageLabel(key: string): string {
   return (PLAN_META[key] ?? PLAN_META.starter).label;
 }
 
+// ──────────────────────────── Why monthly ────────────────────────────
+export const WHY_MONTHLY = {
+  eyebrow: "Why monthly?",
+  title: "Your business keeps growing — and so does Pepweb.",
+  body: "Your subscription includes everything needed to keep your business running smoothly — hindi lang website, kundi buong system na patuloy na ginagalingan.",
+  items: [
+    "Secure cloud hosting",
+    "Platform maintenance",
+    "Continuous feature updates",
+    "Performance improvements",
+    "Security patches",
+    "Customer support",
+    "Bug fixes",
+    "Future integrations",
+  ],
+} as const;
+
+// ──────────────────────────── Plan comparison ────────────────────────────
+export type ComparisonRow = {
+  label: string;
+  starter: boolean;
+  pro: boolean;
+  enterprise: boolean;
+};
+
+const row = (label: string, starter: boolean, pro: boolean, enterprise: boolean): ComparisonRow => ({
+  label,
+  starter,
+  pro,
+  enterprise,
+});
+
+export const COMPARISON: ComparisonRow[] = [
+  row("Ordering form", true, true, true),
+  row("Messenger orders", true, true, true),
+  row("WhatsApp orders", true, true, true),
+  row("Storefront", false, true, true),
+  row("Shopping cart", false, true, true),
+  row("Order tracking", false, true, true),
+  row("COA page", false, true, true),
+  row("FAQ page", false, true, true),
+  row("Peptide calculator", false, true, true),
+  row("Protocol library", false, true, true),
+  row("Analytics dashboard", false, false, true),
+  row("Gmail integration", false, false, true),
+  row("Automation", false, false, true),
+  row("Priority support", false, true, true),
+];
+
+// ──────────────────────────── Why Pepweb (value props) ────────────────────────────
+export type ValueProp = { title: string; body: string };
+
+export const VALUE_PROPS: ValueProp[] = [
+  { title: "Built for peptide businesses", body: "Purpose-built tools designed specifically for peptide brands." },
+  { title: "Launch faster", body: "Get online without spending weeks building a website." },
+  { title: "Everything in one place", body: "Storefront, ordering, tracking, COAs, protocols, analytics, and automation." },
+  { title: "Always improving", body: "Your subscription includes new features and improvements as Pepweb evolves." },
+];
+
 // ──────────────────────────── FAQ ────────────────────────────
 export type Faq = { q: string; a: string };
 
 export const FAQS: Faq[] = [
-  { q: "How long does setup take?", a: "Most stores go live within 2–5 business days after you complete onboarding and we receive your payment. Larger catalogs may take a little longer." },
-  { q: "Can I use my own domain?", a: "Yes — we can connect a domain you already own, or help you register a new one so your store lives at your own address." },
-  { q: "Can I customize the colors and branding?", a: "Every store is built with your logo, colors, and fonts so it looks unmistakably yours from day one." },
-  { q: "Do you support WhatsApp orders?", a: "Yes. Customers complete their order and it lands straight in your WhatsApp, Messenger, or Telegram — complete and organized." },
-  { q: "Can I upload products later?", a: "Anytime. Add products with photos, prices, and categories in seconds from your admin dashboard — no developer needed." },
-  { q: "How do customers pay?", a: "Show your GCash, Maya, and bank QR codes so customers pay in a tap, then upload proof of payment right on the store." },
+  { q: "Can I cancel anytime?", a: "Yes. There are no long-term contracts." },
+  { q: "Is hosting included?", a: "Yes. Every plan includes secure cloud hosting." },
+  { q: "Are updates included?", a: "Yes. Every subscription includes new features, maintenance, and security updates." },
+  { q: "Can I upgrade later?", a: "Yes. Upgrade anytime as your business grows." },
+  {
+    q: "What domain does my store use?",
+    a: "Every plan includes a free default domain: yourbusinessname.pepweb.store. Want your own .com? It's ₱1,400 — this covers the domain for 1 year, plus service, tax, and processing fees. Already own a domain? We'll connect it for a ₱500 service and setup fee.",
+  },
+  {
+    q: "Can I change the branding or color theme?",
+    a: "Yes, you can! We will customize your store based on your branding — logo, colors, and fonts.",
+  },
+  {
+    q: "Why is there a setup fee?",
+    a: "The one-time setup fee covers the initial onboarding and configuration of your storefront, ensuring everything is ready before launch.",
+  },
 ];
 
 // ──────────────────────────── Final CTA ────────────────────────────
 export const FINAL_CTA = {
   title: "Mas kaunting oras sa chat. Mas maraming oras sa paglago.",
-  body: "Sagutin ang ilang simpleng tanong tungkol sa business mo, at kami na ang bahala sa setup. Sa loob ng ilang araw, may system ka nang sumasagot para sa'yo.",
-  cta: "Get Started",
+  body: "Sagutin ang ilang simpleng tanong tungkol sa business mo, at kami na ang bahala sa setup. Sa loob ng ilang araw, may platform ka nang gumagana para sa'yo.",
+  cta: "Start Today",
 } as const;
 
 // ──────────────────────────── Onboarding payment instructions ────────────────────────────
