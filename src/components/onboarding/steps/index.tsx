@@ -37,6 +37,7 @@ import {
   type StarterFeatureKey,
 } from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
+import { checkoutQuote } from "@/lib/onboarding/pricing";
 import { packageLabel, type Package } from "@/marketing/config";
 import {
   visiblePackagePaymentMethods,
@@ -420,7 +421,24 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                     {p.priceLabel}
                   </s>
                 )}
+                <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--muted)" }}>
+                  /month
+                </span>
               </span>
+              {p.setupFeeCents > 0 && (
+                <small
+                  style={{
+                    display: "block",
+                    marginTop: 2,
+                    color: p.setupFeeWaived ? "var(--green)" : "var(--muted)",
+                    fontWeight: p.setupFeeWaived ? 600 : 400,
+                  }}
+                >
+                  {p.setupFeeWaived
+                    ? `FREE setup (${peso(p.setupFeeCents)} waived)`
+                    : `+ ${peso(p.setupFeeCents)} one-time setup`}
+                </small>
+              )}
               {p.key === "pro" && draft.trial && (
                 <small style={{ display: "block", marginTop: 4, color: "var(--green)", fontWeight: 600 }}>
                   1-month trial: {peso(PRO_TRIAL_PRICE_CENTS)}
@@ -518,14 +536,14 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
   const payMethods = visiblePackagePaymentMethods(packagePayment);
   const isTrial = draft.packageKey === "pro" && draft.trial;
   const pkg = packages.find((p) => p.key === draft.packageKey);
-  const starterAddonCents =
+  const extraFeatureCount =
     draft.packageKey === "starter"
-      ? Math.max(0, draft.selectedFeatures.length - STARTER_FEATURE_LIMIT) *
-        STARTER_EXTRA_FEATURE_PRICE_CENTS
+      ? Math.max(0, draft.selectedFeatures.length - STARTER_FEATURE_LIMIT)
       : 0;
-  const amountCents = isTrial
-    ? PRO_TRIAL_PRICE_CENTS
-    : (pkg?.priceCents ?? 0) + starterAddonCents;
+  const quote = checkoutQuote(
+    pkg ?? { priceCents: 0, setupFeeCents: 0, setupFeeWaived: false },
+    { trial: isTrial, extraFeatureCount },
+  );
   return (
     <div>
       <div className="mk-paybox">
@@ -535,7 +553,42 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
             : `Pay for your ${packageLabel(draft.packageKey)} package`}
         </h4>
         <p className="mk-hint" style={{ marginTop: 2 }}>{packagePayment.instructions}</p>
-        <div className="mk-payrow" style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 10 }}>
+          <div className="mk-payrow">
+            <span>
+              {isTrial
+                ? "1-month Business trial"
+                : `${packageLabel(draft.packageKey)} — first month`}
+            </span>
+            <span style={{ textAlign: "right" }}>{peso(quote.baseCents)}</span>
+          </div>
+          {quote.addonCents > 0 && (
+            <div className="mk-payrow">
+              <span>
+                Extra features ({extraFeatureCount} × {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)})
+              </span>
+              <span style={{ textAlign: "right" }}>{peso(quote.addonCents)}</span>
+            </div>
+          )}
+          {quote.setupFeeCents > 0 && (
+            <div className="mk-payrow">
+              <span>One-time setup fee</span>
+              <span style={{ textAlign: "right" }}>{peso(quote.setupFeeCents)}</span>
+            </div>
+          )}
+          {quote.setupFeeWaived && (
+            <div className="mk-payrow">
+              <span>One-time setup fee</span>
+              <span style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>
+                FREE{" "}
+                <s style={{ color: "var(--muted)", fontWeight: 400 }}>
+                  {peso(pkg?.setupFeeCents ?? 0)}
+                </s>
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="mk-payrow" style={{ marginTop: 4 }}>
           <span>
             <b>Amount to pay</b>
             {isTrial && (
@@ -546,7 +599,7 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
             )}
           </span>
           <span style={{ textAlign: "right" }}>
-            <b style={{ fontFamily: "var(--font-head)", fontSize: 22 }}>{peso(amountCents)}</b>
+            <b style={{ fontFamily: "var(--font-head)", fontSize: 22 }}>{peso(quote.totalCents)}</b>
           </span>
         </div>
         <div style={{ marginTop: 12 }}>
