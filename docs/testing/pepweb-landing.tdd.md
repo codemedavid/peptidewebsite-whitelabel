@@ -55,7 +55,8 @@ The comparison table scrolls inside its own container at 375px — no page-level
   one-time prices, so the live landing shows ₱5,999/₱9,899/₱16,899 with "/month" framing until
   the operator opens **/admin/plans → Reset to defaults → Save** (or edits prices manually).
   Deliberately not auto-migrated — operator-owned data.
-- Setup fees are display + plan-config only; they are **not** added to wizard checkout totals yet.
+- ~~Setup fees are display + plan-config only; not in wizard checkout totals~~ — resolved 2026-07-16,
+  see `docs/testing/checkout-setup-fees.tdd.md` (`checkoutQuote()` + `test:checkout-total`).
 - The `/automation` funnel page and legal Terms intentionally keep Jonina branding.
 - UI sections are covered by visual verification, not unit tests (repo convention: script tests
   for logic, screenshots for `.mk` surfaces).
