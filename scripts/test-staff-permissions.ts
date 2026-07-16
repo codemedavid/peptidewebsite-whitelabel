@@ -486,8 +486,10 @@ console.log("\nStaff Accounts feature gate (plan ceilings + operator-grantable)"
 
 const staffKey = FEATURES.STORE_STAFF_ACCOUNTS;
 
-check("Business (pro) and Automated (enterprise) include Staff Accounts by default", () => {
-  assert.ok(planFeatureSet("pro").has(staffKey), "pro ceiling missing staff");
+check("only Automated (enterprise) includes Staff Accounts by default (Business narrowing)", () => {
+  // Since the pepstack-davao Business narrowing, Staff Accounts lives only in
+  // the Automated ceiling; Business gets it per tenant via OPERATOR_GRANTABLE.
+  assert.equal(planFeatureSet("pro").has(staffKey), false, "pro ceiling should NOT have staff");
   assert.ok(planFeatureSet("enterprise").has(staffKey), "enterprise ceiling missing staff");
 });
 
@@ -499,7 +501,11 @@ check("legacy catalog plan aliases resolve the same (ecommerce→pro, growth→e
   // catalog.ts aliases are basic→starter, ecommerce→pro, growth→enterprise.
   // The Business/Automated display names map to pro/enterprise in plans.ts; the
   // real plan keys reaching planFeatureSet are starter | pro | enterprise.
-  assert.ok(planFeatureSet("ecommerce").has(staffKey), "ecommerce alias = pro");
+  assert.deepStrictEqual(
+    planFeatureSet("ecommerce"),
+    planFeatureSet("pro"),
+    "ecommerce alias = pro",
+  );
   assert.ok(planFeatureSet("growth").has(staffKey), "growth alias = enterprise");
   assert.equal(planFeatureSet("basic").has(staffKey), false, "basic alias = starter");
 });
