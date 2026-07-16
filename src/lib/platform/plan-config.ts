@@ -20,11 +20,20 @@ export type EditablePlanCard = {
   feats: string[]; // feature bullets shown on the card
 };
 
-export type PlanConfig = { plans: EditablePlanCard[] };
+export type PlanConfig = {
+  plans: EditablePlanCard[];
+  /** The one-month Business trial's price (PHP centavos) — the credit applied
+   *  on upgrade (trial system). Operator-editable; defaults to ₱699. */
+  trialPriceCents: number;
+};
+
+/** The ₱699 1-month Business trial (matches OnboardingSubmission.trial). */
+export const DEFAULT_TRIAL_PRICE_CENTS = 69_900;
 
 /** The hardcoded PLAN_CARDS, lifted into the editable shape. */
 export function defaultPlanConfig(): PlanConfig {
   return {
+    trialPriceCents: DEFAULT_TRIAL_PRICE_CENTS,
     plans: PLAN_CARDS.map((p) => ({
       key: p.key,
       name: p.name,
@@ -44,7 +53,12 @@ const MAX_PRICE_CENTS = 100_000_000; // ₱1M/mo guardrail
 export function normalizePlanConfig(input: unknown): PlanConfig {
   const o = (input ?? {}) as Record<string, unknown>;
   const raw = Array.isArray(o.plans) ? (o.plans as unknown[]) : [];
+  const trialCents = Math.round(Number(o.trialPriceCents));
   return {
+    trialPriceCents:
+      Number.isFinite(trialCents) && trialCents > 0
+        ? Math.min(trialCents, MAX_PRICE_CENTS)
+        : DEFAULT_TRIAL_PRICE_CENTS,
     plans: defaultPlanConfig().plans.map((d) => {
       const r = (raw.find((x) => (x as Record<string, unknown> | null)?.key === d.key) ??
         {}) as Record<string, unknown>;

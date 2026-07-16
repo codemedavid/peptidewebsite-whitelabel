@@ -7019,3 +7019,76 @@
   margin-top: 12px;
   line-height: 1.5;
 }
+
+/* Upgrade page — order summary + payment methods (trial system) */
+.sf-root .admin-upgrade__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.sf-root .admin-upgrade__line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  padding: 10px 0;
+  color: var(--brand-text);
+}
+.sf-root .admin-upgrade__line--credit { color: #2e7d4f; }
+.sf-root .admin-upgrade__due {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--brand-border);
+  margin-top: 6px;
+  font-weight: 600;
+}
+.sf-root .admin-upgrade__due-amt { font-size: 30px; font-weight: 800; color: #1e3a2a; }
+.sf-root .admin-upgrade__method {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 2px solid var(--brand-border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.sf-root .admin-upgrade__method.is-active { border-color: #1e3a2a; background: #f4f7f1; }
+.sf-root .admin-upgrade__method input { margin-top: 4px; }
+.sf-root .admin-upgrade__method-body { display: block; }
+.sf-root .admin-upgrade__qr {
+  display: block;
+  max-width: 180px;
+  border-radius: 12px;
+  margin-top: 10px;
+  border: 1px solid var(--brand-border);
+}
+.sf-root .admin-upgrade__proof { margin-top: 18px; }
+.sf-root .admin-upgrade__proof-label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.sf-root .admin-upgrade__pay {
+  width: 100%;
+  margin-top: 20px;
+  background: #1e3a2a;
+  color: #f7f2e9;
+  border: none;
+  border-radius: 999px;
+  padding: 15px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+.sf-root .admin-upgrade__pay:hover:not(:disabled) { background: #16301f; }
+.sf-root .admin-upgrade__pay:disabled { opacity: 0.55; cursor: not-allowed; }
+.sf-root .admin-upgrade__secure {
+  text-align: center;
+  font-size: 12px;
+  color: var(--brand-text-muted);
+  margin-top: 10px;
+}

@@ -73,6 +73,7 @@ model Tenant {
 
   // Self-serve onboarding submissions that provisioned (or will provision) this tenant.
   onboardingSubmissions OnboardingSubmission[]
+  upgradeRequests       UpgradeRequest[]
 
   @@index([planId])
   @@map("tenants")
@@ -667,4 +668,33 @@ model StorefrontStaff {
   @@unique([tenantId, username]) // one username per store; also the scoped lookup key
   @@index([tenantId])
   @@map("storefront_staff")
+}
+
+// Store-owner upgrade submission (trial system): filed from the in-admin
+// Upgrade page with a proof-of-payment upload, decided by the platform
+// operator (Super Admin → Upgrades). Approval flips Tenant.planId to the
+// Business plan and reactivates the storefront; decisions are final
+// (lib/trial/upgrade-request.ts state machine, test:trial-upgrade).
+model UpgradeRequest {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  fromPlan String // plan key at request time (audit)
+  toPlan   String @default("pro")
+  // pending | approved | rejected
+  status String @default("pending")
+
+  // Server-stamped order summary at request time (PHP centavos)
+  amountCents Int @default(0)
+  creditCents Int @default(0)
+
+  payMethod String? // the receiving method the owner said they paid with
+  proofUrl  String? // proof-of-payment image (ImageKit)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
 }

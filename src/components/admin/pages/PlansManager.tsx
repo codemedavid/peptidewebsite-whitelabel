@@ -171,6 +171,9 @@ export function PlansManager({
     }
     startTransition(async () => {
       const res = await savePlanConfigAction({
+        // Not edited here (yet) — carried through so saving plans never resets
+        // an operator-set trial price back to the default.
+        trialPriceCents: initial.trialPriceCents,
         plans: plans.map((p) => {
           const discount = draftDiscountCents(p);
           return {
