@@ -47,7 +47,8 @@
     "test:notice-modal": "tsx scripts/test-notice-modal.ts",
     "test:track-note": "tsx scripts/test-track-note.ts",
     "test:trial-state": "tsx scripts/test-trial-state.ts",
-    "test:trial-gating": "tsx scripts/test-trial-gating.ts"
+    "test:trial-gating": "tsx scripts/test-trial-gating.ts",
+    "test:feature-spotlight": "tsx scripts/test-feature-spotlight.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
