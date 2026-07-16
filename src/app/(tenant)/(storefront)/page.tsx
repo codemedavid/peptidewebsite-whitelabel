@@ -11,7 +11,8 @@ import { resolveShowReviews, newModulesFor } from "@/storefront/visibility";
 import { getFeatureRegistry } from "@/lib/platform/feature-registry-server";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
-import { FEATURES } from "@/lib/features/catalog";
+import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
+import { pickFeatureSpotlight } from "@/lib/features/feature-spotlight";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
@@ -241,6 +242,22 @@ export default async function HomePage() {
   // are intentionally excluded — store owners only see a tag the operator kept.
   const registry = await getFeatureRegistry();
   brand.newModules = newModulesFor(new Set(registry.newKeys));
+
+  // New-feature spotlight (trial system): advertise the first operator-kept new
+  // feature the store should upgrade for — every kept key during an active
+  // trial, otherwise only keys the tenant is NOT entitled to. Entitlements are
+  // resolved server-side so the strip can never tease a feature the store
+  // already has (outside a trial).
+  const trialActive = brand.trial?.onTrial === true && !brand.trial.expired;
+  const spotlightEntitled = new Set<string>();
+  for (const key of registry.newKeys) {
+    if (await hasFeature(tenantId, key as FeatureKey)) spotlightEntitled.add(key);
+  }
+  brand.featureSpotlight = pickFeatureSpotlight(
+    registry.newKeys,
+    (key) => spotlightEntitled.has(key),
+    trialActive,
+  );
 
   return <StorefrontApp brand={brand} products={products} tenantKey={tenantId} />;
 }

@@ -31,7 +31,9 @@ import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
 import { AdminHeroSettings } from "./AdminHeroSettings";
 import { AdminBannerSettings } from "./AdminBannerSettings";
-import { isAdminViewVisible } from "../visibility";
+import { isAdminViewVisible, isAdminModuleLocked } from "../visibility";
+import { AdminUpgrade } from "./AdminUpgrade";
+import { TrialBanner } from "./TrialBanner";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminStaffForm } from "./AdminStaffForm";
 import { isViewAllowed, quickActionToView, type StaffActor } from "./staff-permissions";
@@ -67,7 +69,8 @@ type View =
   | "staff-form"
   | "notify"
   | "notice"
-  | "tracknote";
+  | "tracknote"
+  | "upgrade";
 
 export function AdminPage({
   brand,
@@ -125,12 +128,36 @@ export function AdminPage({
     );
   }
 
-  // A view that's turned off in the super admin, or that this actor isn't
-  // permitted, must not stay visible — bounce back to the dashboard.
+  // A view that's turned off in the super admin, that this actor isn't
+  // permitted, or that is locked behind the Business upgrade (trial system)
+  // must not stay visible — bounce back to the dashboard.
   const activeView: View =
-    isAdminViewVisible(brand, view) && isViewAllowed(actor, view) ? view : "dashboard";
+    isAdminViewVisible(brand, view) && isViewAllowed(actor, view) && !isAdminModuleLocked(brand, view)
+      ? view
+      : "dashboard";
 
-  // Sub-view routing
+  // Trial chrome: the countdown / expired bar tops EVERY admin view while the
+  // tenant is trial-governed (brand.trial is projected server-side).
+  const trialChrome = brand.trial ? (
+    <TrialBanner
+      trial={brand.trial}
+      onUpgrade={() => setView("upgrade")}
+      onPreviewStore={onExitToSite}
+    />
+  ) : null;
+
+  if (activeView === "upgrade") {
+    return (
+      <>
+        {trialChrome}
+        <AdminUpgrade brand={brand} onBack={() => setView("dashboard")} />
+      </>
+    );
+  }
+
+  // Sub-view routing — funneled through renderSubView() so the trial chrome
+  // tops every sub-view without touching each branch.
+  const renderSubView = () => {
   if (activeView === "add-product") {
     return (
       <AdminAddProduct
@@ -259,6 +286,18 @@ export function AdminPage({
     );
   }
 
+  return null;
+  };
+  const subView = renderSubView();
+  if (subView) {
+    return (
+      <>
+        {trialChrome}
+        {subView}
+      </>
+    );
+  }
+
   const stats = [
     { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
     { label: "Available Stock", value: products.reduce((sum, p) => sum + (p.stock ?? 0), 0), icon: "trend", tint: "green" },
@@ -298,9 +337,11 @@ export function AdminPage({
           { id: "tracknote", label: "Delivery Note", hint: "Track-page delivery estimates", icon: "truck", tint: "mint" },
         ]
       : []),
-  ].filter(
-    (q) => isAdminViewVisible(brand, q.id) && isViewAllowed(actor, quickActionToView(q.id)),
-  );
+  ]
+    .filter((q) => isAdminViewVisible(brand, q.id) && isViewAllowed(actor, quickActionToView(q.id)))
+    // Business-exclusive teasers (trial system): locked tiles stay VISIBLE with
+    // a gold BUSINESS badge; clicking opens the Upgrade page, not the editor.
+    .map((q) => ({ ...q, locked: isAdminModuleLocked(brand, q.id) }));
 
   const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
   const catCounts = categories
@@ -349,7 +390,27 @@ export function AdminPage({
         </button>
       </header>
 
+      {trialChrome}
+
       <main className="admin__inner">
+        {brand.featureSpotlight && (
+          <div className="admin-spotlight">
+            <span className="admin-spotlight__badge">NEW FEATURE</span>
+            <span className="admin-spotlight__body">
+              <span className="admin-spotlight__name">
+                {brand.featureSpotlight.label}
+                <span className="admin-spotlight__tag">BUSINESS EXCLUSIVE</span>
+              </span>
+              <span className="admin-spotlight__desc">
+                {brand.featureSpotlight.description} Every new feature we release is included in
+                Business — automatically.
+              </span>
+            </span>
+            <button className="admin-spotlight__cta" onClick={() => setView("upgrade")}>
+              Unlock with Business
+            </button>
+          </div>
+        )}
         <div className="admin__stats">
           {stats.map((s) => (
             <div key={s.label} className="admin-stat">
@@ -374,8 +435,9 @@ export function AdminPage({
               {quickActions.map((q) => (
                 <button
                   key={q.id}
-                  className="admin-quick__btn"
+                  className={`admin-quick__btn${q.locked ? " is-locked" : ""}`}
                   onClick={() => {
+                    if (q.locked) return setView("upgrade");
                     if (q.id === "add") {
                       setEditingProduct(null);
                       setView("add-product");
@@ -423,7 +485,13 @@ export function AdminPage({
                       )}
                     </span>
                     <span className="admin-quick__hint">{q.hint}</span>
+                    {q.locked && (
+                      <span className="admin-quick__lockhint">
+                        Business &amp; Automated exclusive — tap to upgrade
+                      </span>
+                    )}
                   </span>
+                  {q.locked && <span className="admin-quick__badge">BUSINESS</span>}
                 </button>
               ))}
             </div>

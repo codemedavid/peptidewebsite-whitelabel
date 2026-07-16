@@ -6807,3 +6807,215 @@
     position: static;
   }
 }
+
+/* ── Trial system (countdown banner · locked tiles · spotlight · upgrade) ──
+   Platform chrome: deliberately literal colors (dark green/gold/red), the same
+   on every store regardless of theme preset, so contrast never regresses. */
+@keyframes sfTrialPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.sf-root .admin-trial {
+  background: #1e3a2a;
+  color: #f2ead9;
+  padding: 14px var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.sf-root .admin-trial__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+.sf-root .admin-trial__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d9a838;
+  animation: sfTrialPulse 2s infinite;
+}
+.sf-root .admin-trial__title {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.3px;
+}
+.sf-root .admin-trial__sep { color: #c8bfa6; font-size: 13px; }
+.sf-root .admin-trial__left { font-size: 14px; font-weight: 500; color: #e9dfc6; }
+.sf-root .admin-trial__left b { color: #f0c75e; }
+.sf-root .admin-trial__progress { flex: 1; min-width: 180px; max-width: 420px; }
+.sf-root .admin-trial__track {
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.sf-root .admin-trial__fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #d9a838, #f0c75e);
+  transition: width 0.6s ease;
+}
+.sf-root .admin-trial__scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #b7ae95;
+  margin-top: 4px;
+}
+.sf-root .admin-trial__side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.sf-root .admin-trial__info { flex: 1; min-width: 240px; }
+.sf-root .admin-trial__note {
+  font-size: 12.5px;
+  color: #c8bfa6;
+  max-width: 260px;
+  line-height: 1.45;
+}
+.sf-root .admin-trial__cta {
+  background: linear-gradient(135deg, #d9a838, #c8952b);
+  color: #1e2a1f;
+  border: none;
+  border-radius: 999px;
+  padding: 11px 22px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(217, 168, 56, 0.35);
+}
+.sf-root .admin-trial__cta:hover { filter: brightness(1.06); }
+.sf-root .admin-trial--expired { background: #7c2d2d; color: #fbeee6; }
+.sf-root .admin-trial--expired .admin-trial__title { font-size: 17px; }
+.sf-root .admin-trial--expired .admin-trial__note {
+  color: #e8c9bd;
+  max-width: none;
+  margin-top: 2px;
+  font-size: 13.5px;
+}
+.sf-root .admin-trial__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #f0c75e;
+  font-weight: 500;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* New-feature spotlight — gold strip at the top of the trial dashboard */
+.sf-root .admin-spotlight {
+  background: linear-gradient(120deg, #fffdf7, #fdf6e6);
+  border: 1px solid #ecd9a8;
+  border-radius: 22px;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.sf-root .admin-spotlight__badge {
+  background: linear-gradient(135deg, #d9a838, #c8952b);
+  color: #1e2a1f;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.sf-root .admin-spotlight__body { flex: 1; min-width: 220px; display: block; }
+.sf-root .admin-spotlight__name {
+  font-weight: 600;
+  font-size: 15.5px;
+  color: #233028;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sf-root .admin-spotlight__tag {
+  background: #f2ead4;
+  color: #8a6d1f;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.sf-root .admin-spotlight__desc {
+  display: block;
+  font-size: 13.5px;
+  color: #8a7d6d;
+  margin-top: 2px;
+}
+.sf-root .admin-spotlight__cta {
+  background: none;
+  border: 2px solid #1e3a2a;
+  color: #1e3a2a;
+  border-radius: 999px;
+  padding: 9px 20px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sf-root .admin-spotlight__cta:hover { background: #1e3a2a; color: #f7f2e9; }
+
+/* Locked (Business-exclusive) quick-action tiles */
+.sf-root .admin-quick__btn.is-locked {
+  position: relative;
+  border-color: #ecd9a8;
+  background: #fffdf7;
+}
+.sf-root .admin-quick__btn.is-locked:hover { border-color: #d9a838; }
+.sf-root .admin-quick__badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #d9a838, #c8952b);
+  color: #1e2a1f;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 99px;
+}
+.sf-root .admin-quick__lockhint {
+  display: block;
+  font-size: 12px;
+  color: #8a6d1f;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* Upgrade page shell (order summary + payment methods fill it in) */
+.sf-root .admin-upgrade__back {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  color: var(--brand-text-muted);
+  cursor: pointer;
+}
+.sf-root .admin-upgrade__title {
+  font-family: var(--brand-font-display, inherit);
+  font-weight: 700;
+  font-size: 34px;
+  color: var(--brand-text);
+  margin: 14px 0 24px;
+}
+.sf-root .admin-upgrade__lede { font-size: 15px; line-height: 1.6; color: var(--brand-text); }
+.sf-root .admin-upgrade__note {
+  font-size: 13.5px;
+  color: var(--brand-text-muted);
+  margin-top: 12px;
+  line-height: 1.5;
+}

@@ -8,6 +8,7 @@ import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { BrandTrial } from "@/lib/trial/trial-state";
+import type { FeatureSpotlight } from "@/lib/features/feature-spotlight";
 import type {
   GroupBuyCapabilities,
   GroupBuySettings,
@@ -331,6 +332,9 @@ export type Brand = {
   // lock only ever engages on an explicit false or an active trial.
   adminFeeEntitled?: boolean;
   trackNoteEntitled?: boolean;
+  // Operator-flagged "new feature" advertised on the trial dashboard as a
+  // Business exclusive (pickFeatureSpotlight). Absent → no spotlight strip.
+  featureSpotlight?: FeatureSpotlight;
 
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;
