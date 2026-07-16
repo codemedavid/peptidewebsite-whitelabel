@@ -53,6 +53,7 @@ import {
   normalizeGroupBuyRules,
 } from "@/lib/storefront/group-buy-rules";
 import { hasFeature } from "@/lib/features/entitlements";
+import { isBusinessExclusiveLocked } from "@/lib/trial/trial-info";
 import { FEATURES } from "@/lib/features/catalog";
 import {
   isOrderStatus,
@@ -795,10 +796,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // before the fee/discount stamps below so they charge the current subtotal.
     repriceItems(p.items, catalog);
 
-    // Admin fee is operator-revocable per tenant (admin → Features); when the
-    // tenant isn't entitled it's neither stamped nor validated, matching the
-    // storefront which drops the line.
-    const adminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
+    // Admin fee is operator-revocable per tenant (admin → Features) AND
+    // Business-exclusive under the trial system: when the tenant isn't entitled
+    // or the trial lock is engaged it's neither stamped nor validated, matching
+    // the storefront which drops the line. (For non-trial tenants the lock is
+    // exactly !hasFeature, so this preserves the old behavior.)
+    const adminFeeEntitled = !(await isBusinessExclusiveLocked(
+      tenantId,
+      FEATURES.STORE_ADMIN_FEE,
+    ));
     p.adminFee = adminFeeEntitled
       ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
       : undefined;

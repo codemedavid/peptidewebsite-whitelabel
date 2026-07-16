@@ -56,6 +56,26 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** JSON-safe projection of an on-trial TrialState for the client Brand blob
+ *  (endsAt as ISO string so demo-mode JSON round-trips keep it intact). */
+export type BrandTrial = {
+  onTrial: true;
+  expired: boolean;
+  daysLeft: number;
+  dayNum: number;
+  totalDays: number;
+  pctUsed: number;
+  endsAt: string;
+};
+
+/** Serialize a TrialState for brand.trial — undefined when not trial-governed,
+ *  so legacy brands stay byte-identical and every lock check defaults open. */
+export function brandTrialFrom(state: TrialState): BrandTrial | undefined {
+  if (!state.onTrial) return undefined;
+  const { endsAt, ...rest } = state;
+  return { ...rest, endsAt: endsAt.toISOString() };
+}
+
 export function computeTrialState(input: TrialWindowInput, now: Date): TrialState {
   const endsAt = toValidDate(input.trialEndsAt);
   if (input.status !== "trial" || !input.trial || !endsAt) return NOT_ON_TRIAL;

@@ -43,6 +43,9 @@ export const FEATURES = {
   STORE_SMART_CHECKOUT: "storefront.smart_checkout",
   STORE_ACCESS_CODE: "storefront.access_code",
   STORE_ADMIN_FEE: "storefront.admin_fee",
+  // Track-page delivery note (region → estimate card). Business/Automated
+  // exclusive per the trial system; operator-grantable for legacy Starter stores.
+  STORE_TRACK_NOTE: "storefront.track_note",
   STORE_STAFF_ACCOUNTS: "storefront.staff_accounts",
   // Sales Analytics internals. Each key toggles one slice of the store-admin
   // Sales Analytics view; all of them are inert while the module itself
@@ -168,6 +171,9 @@ const PRO: FeatureKey[] = [
   FEATURES.STORE_FLOATING_CART,
   FEATURES.STORE_ORDER_TRACKING,
   FEATURES.STORE_ADMIN_FEE,
+  // Business/Automated exclusive (trial system): the Track-page delivery note.
+  // Deliberately NOT in STARTER — the trial's Starter downgrade keeps it locked.
+  FEATURES.STORE_TRACK_NOTE,
   ...SALES_ANALYTICS_SCAFFOLDING,
   ...GROUP_BUY_SCAFFOLDING,
 ];
@@ -240,6 +246,10 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // also operator-grantable so a Starter tenant can be switched on individually
   // without upgrading. For Starter it stays OFF until the operator grants it.
   FEATURES.STORE_STAFF_ACCOUNTS,
+  // Delivery Note became Business/Automated exclusive with the trial system.
+  // Grantable so legacy Starter stores that relied on it can be re-enabled
+  // per tenant without a plan upgrade.
+  FEATURES.STORE_TRACK_NOTE,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
@@ -303,6 +313,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_SMART_CHECKOUT]: { label: "Smart Checkout", description: "Smart Cart & Checkout rules view in the store admin — cart restrictions, checkout validations and custom messages. Off hides the editor and stops saved rules from constraining the cart.", group: "Ecommerce" },
   [FEATURES.STORE_ACCESS_CODE]: { label: "Access code gate", description: "Private-store access code: visitors must enter a code to view the storefront. Off hides the Access Code manager in the store admin and stops the gate from being enforced. Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.STORE_ADMIN_FEE]: { label: "Admin fee", description: "The flat checkout admin (service) fee, configured per tenant in platform settings → Admin fee. Off hides the section, drops the fee line at checkout and stops orders charging it; saved label/amount are kept for when it's switched back on.", group: "Ecommerce" },
+  [FEATURES.STORE_TRACK_NOTE]: { label: "Delivery note", description: "The Track Order page's delivery-estimates card (region → estimate rows), edited by the store owner in the store admin. Business/Automated exclusive; off locks the editor tile and hides the card. Operator-grantable for legacy Starter stores.", group: "Ecommerce" },
   [FEATURES.STORE_STAFF_ACCOUNTS]: { label: "Staff Accounts", description: "Owner-managed staff sub-accounts with per-module permissions in the store admin. Included with Business and Automated plans; operator-grantable on Starter. Off hides the Staff Accounts manager and blocks staff sign-in and management.", group: "Ecommerce" },
 
   [FEATURES.SA_SECTION_REVENUE]: { label: "Revenue analytics", description: "Revenue KPIs, revenue-over-time chart and payment-method breakdown. Needs the Sales Analytics module on.", group: "Sales Analytics" },

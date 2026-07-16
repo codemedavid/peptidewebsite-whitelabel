@@ -124,3 +124,34 @@ export function isAdminViewVisible(brand: Brand, view: string): boolean {
   const check = ADMIN_VIEW_TOGGLE[view];
   return check ? check(brand) : true;
 }
+
+// ── Business-exclusive lock (trial system) ───────────────────────────────────
+// Unlike ADMIN_VIEW_TOGGLE (which HIDES a module), these modules stay VISIBLE
+// but render locked — gold BUSINESS badge, "tap to upgrade" — and clicking
+// opens the Upgrade page instead of the feature. Module id → is the tenant
+// entitled? Undefined flags count as entitled so legacy brand blobs (rendered
+// before page.tsx projected the fields) never lock anything by accident.
+export const BUSINESS_EXCLUSIVE_MODULES: Record<string, (b: Brand) => boolean> = {
+  fee: (b) => b.adminFeeEntitled !== false,
+  tracknote: (b) => b.trackNoteEntitled !== false,
+};
+
+// Is this store-admin module locked behind the Business upgrade?
+//   - during an ACTIVE trial every exclusive is locked (the trial plan is
+//     technically entitled — the lock is the upsell, per the trial brief);
+//   - after the trial (or for any paid/legacy tenant) entitlement decides —
+//     the Starter downgrade revokes these features, paid Business keeps them.
+// Expired trials defer to entitlement: the whole admin sits behind the
+// "Choose how to continue" screen then, so tile locks are moot.
+export function isAdminModuleLocked(brand: Brand, moduleId: string): boolean {
+  const entitled = BUSINESS_EXCLUSIVE_MODULES[moduleId];
+  if (!entitled) return false;
+  if (brand.trial?.onTrial && !brand.trial.expired) return true;
+  return !entitled(brand);
+}
+
+// All currently locked module ids — the AdminPage quick-action grid and the
+// view guard both derive from this so a deep link can't open a locked editor.
+export function lockedAdminModules(brand: Brand): string[] {
+  return Object.keys(BUSINESS_EXCLUSIVE_MODULES).filter((id) => isAdminModuleLocked(brand, id));
+}

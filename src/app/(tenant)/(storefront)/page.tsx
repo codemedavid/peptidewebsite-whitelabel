@@ -15,6 +15,8 @@ import { FEATURES } from "@/lib/features/catalog";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { getTrialState } from "@/lib/trial/trial-info";
+import { brandTrialFrom } from "@/lib/trial/trial-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -142,10 +144,20 @@ export default async function HomePage() {
   brand.showAdminNotice = noticeModal.operatorEnabled;
 
   // Track-order delivery note: sanitize the stored config so a legacy/absent blob
-  // is always safe. No operator entitlement — the store owner alone switches it on
-  // and edits the copy (store admin's Track Note view), re-checked client-side
-  // (isTrackNoteVisible). The owner editor is always available (owner-only tile).
-  brand.trackNote = normalizeTrackNote(config.trackNote);
+  // is always safe. Business/Automated exclusive since the trial system
+  // (FEATURES.STORE_TRACK_NOTE): unentitled tenants keep their saved copy but the
+  // public card is forced off and the owner editor tile renders locked
+  // (isAdminModuleLocked) — saveTrackNoteAction re-checks the same lock on write.
+  const trackNoteEntitled = await hasFeature(tenantId, FEATURES.STORE_TRACK_NOTE);
+  brand.trackNoteEntitled = trackNoteEntitled;
+  const savedTrackNote = normalizeTrackNote(config.trackNote);
+  brand.trackNote = trackNoteEntitled ? savedTrackNote : { ...savedTrackNote, enabled: false };
+
+  // Trial system: project the JSON-safe trial window (or nothing) so the store
+  // admin can render the countdown banner, lock the Business-exclusive tiles and
+  // gate the expired state. Server-computed here — the client never does date math
+  // against its own clock. Locks are re-checked server-side on every write.
+  brand.trial = brandTrialFrom(await getTrialState(tenantId));
 
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
@@ -174,6 +186,7 @@ export default async function HomePage() {
   // default ON. Revoking drops the fee line from checkout — orders.ts re-applies
   // the same gate at placement so a stale client can't reinstate it.
   const adminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
+  brand.adminFeeEntitled = adminFeeEntitled;
   if (!adminFeeEntitled) delete (brand as Record<string, unknown>).adminFee;
 
   // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the

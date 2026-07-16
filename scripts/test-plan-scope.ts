@@ -101,10 +101,16 @@ check("operator-grantable features outside a plan ceiling show as 'addon'", () =
 });
 
 check("a dual feature is 'included' where the plan grants it, 'addon' where it doesn't", () => {
-  // Staff Accounts: in the Business/Automated ceiling, operator-grantable on Starter.
+  // Staff Accounts: since the Business narrowing (pepstack-davao reference set)
+  // it lives only in the Automated ceiling — operator-grantable (addon) on
+  // Starter AND Business, included on Automated.
   assert.equal(stateOf("starter", FEATURES.STORE_STAFF_ACCOUNTS), "addon");
-  assert.equal(stateOf("pro", FEATURES.STORE_STAFF_ACCOUNTS), "included");
+  assert.equal(stateOf("pro", FEATURES.STORE_STAFF_ACCOUNTS), "addon");
   assert.equal(stateOf("enterprise", FEATURES.STORE_STAFF_ACCOUNTS), "included");
+  // Delivery Note (trial system): in Business/Automated ceilings, addon on Starter.
+  assert.equal(stateOf("starter", FEATURES.STORE_TRACK_NOTE), "addon");
+  assert.equal(stateOf("pro", FEATURES.STORE_TRACK_NOTE), "included");
+  assert.equal(stateOf("enterprise", FEATURES.STORE_TRACK_NOTE), "included");
 });
 
 check("addonCount equals the operator-grantable set size", () => {

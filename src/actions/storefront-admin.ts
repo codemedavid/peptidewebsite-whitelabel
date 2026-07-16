@@ -15,6 +15,7 @@ import { isValidEmail } from "@/lib/analytics/events";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
+import { isBusinessExclusiveLocked } from "@/lib/trial/trial-info";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
 import { normalizeBanner } from "@/lib/storefront/banner";
 import { normalizeFaqGroups } from "@/lib/storefront/faq";
@@ -498,13 +499,19 @@ export async function saveNoticeModalAction(input: unknown): Promise<ActionResul
  * Persist the store owner's track-order delivery note (the informational card on
  * the Track Order page, under the order-number search box) into
  * branding.config.trackNote (read-modify-write, mirroring saveNoticeModalAction).
- * OWNER-ONLY. No operator entitlement — any store may use it, so unlike the notice
- * modal there is no server-held grant to re-apply; the payload is normalized and
- * written as-is.
+ * OWNER-ONLY. Business/Automated exclusive since the trial system
+ * (FEATURES.STORE_TRACK_NOTE, operator-grantable for legacy Starter stores);
+ * the payload is normalized and written as-is once the lock check passes.
  */
 export async function saveTrackNoteAction(input: unknown): Promise<ActionResult> {
   const tenantId = await requireStoreOwner();
   if (!tenantId) return { error: NO_ACCESS };
+
+  // Business/Automated exclusive (trial system, FEATURES.STORE_TRACK_NOTE):
+  // locked during an active trial and whenever the entitlement is revoked.
+  if (await isBusinessExclusiveLocked(tenantId, FEATURES.STORE_TRACK_NOTE)) {
+    return { error: "Delivery Note is a Business feature — upgrade to unlock it." };
+  }
 
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
@@ -677,6 +684,13 @@ export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionRes
   const ctx = await requireStaffPermission("fee");
   if (!ctx) return { error: NO_ACCESS };
   const tenantId = ctx.tenantId;
+
+  // Business/Automated exclusive (trial system): locked during an active trial
+  // and whenever the entitlement is revoked — the UI tile mirrors this lock,
+  // but a stale/forged client must not write through it.
+  if (await isBusinessExclusiveLocked(tenantId, FEATURES.STORE_ADMIN_FEE)) {
+    return { error: "Checkout Fee is a Business feature — upgrade to unlock it." };
+  }
 
   const slug = await getTenantSlug();
   const adminFee = normalizeAdminFee(input);
