@@ -95,8 +95,9 @@ export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 // grants STORE_SALES_ANALYTICS; Group Buy building blocks stay off until GB_MODULE
 // is granted (resolveGroupBuyCaps ANDs each with GB_MODULE). They sit in EVERY plan
 // ceiling so granting the master switch lights the module up — masterSwitchFor in
-// plan-scope.ts keeps them out of the VISIBLE/active default set. The Enterprise-only
-// GB extras (scheduling, parallel runs, auto-on-close) live in ENTERPRISE, not here.
+// plan-scope.ts keeps them out of the VISIBLE/active default set. The GB advanced
+// extras (scheduling, parallel runs, auto-on-close) are operator add-ons
+// (OPERATOR_GRANTABLE), outside every plan ceiling — not here.
 const SALES_ANALYTICS_SCAFFOLDING: FeatureKey[] = [
   FEATURES.SA_SECTION_REVENUE,
   FEATURES.SA_SECTION_PRODUCTS,
@@ -180,8 +181,9 @@ const PRO: FeatureKey[] = [
 
 // Automated tier — the full platform. A superset of Business that RE-ADDS the
 // ecommerce/notification/owner features Business no longer defaults (so the top
-// tier is unchanged from before), then layers analytics + automation + the
-// Enterprise-only Group Buy extras.
+// tier is unchanged from before), then layers analytics + automation. The Group
+// Buy advanced extras are NOT bundled — they are operator add-ons on every plan
+// (OPERATOR_GRANTABLE), granted per tenant and never auto-on.
 const ENTERPRISE: FeatureKey[] = [
   ...PRO,
   // Re-added so Automated keeps everything the old Business ceiling had.
@@ -206,11 +208,6 @@ const ENTERPRISE: FeatureKey[] = [
   FEATURES.NOTIFY_TELEGRAM,
   // Admin order-alert email — Automated package, alongside the Telegram alert.
   FEATURES.NOTIFY_ADMIN_ORDER,
-  // Group Buy Enterprise extras — advanced controls beyond the basics; still
-  // gated behind the operator-granted GB_MODULE.
-  FEATURES.GB_SCHEDULED,
-  FEATURES.GB_MULTIPLE_ACTIVE,
-  FEATURES.GB_REPORT_AUTO_ON_CLOSE,
 ];
 
 export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
@@ -250,6 +247,14 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Grantable so legacy Starter stores that relied on it can be re-enabled
   // per tenant without a plan upgrade.
   FEATURES.STORE_TRACK_NOTE,
+  // Group Buy advanced extras (scheduled runs, parallel runs, auto-report on
+  // close). Sold per tenant by the operator on ANY plan — never bundled into a
+  // package ceiling, so they are default OFF everywhere and never plan-locked.
+  // Like the GB scaffolding they stay inert until GB_MODULE is also granted
+  // (resolveGroupBuyCaps ANDs every capability with the module switch).
+  FEATURES.GB_SCHEDULED,
+  FEATURES.GB_MULTIPLE_ACTIVE,
+  FEATURES.GB_REPORT_AUTO_ON_CLOSE,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
