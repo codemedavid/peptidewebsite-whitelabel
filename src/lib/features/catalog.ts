@@ -247,6 +247,13 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Grantable so legacy Starter stores that relied on it can be re-enabled
   // per tenant without a plan upgrade.
   FEATURES.STORE_TRACK_NOTE,
+  // Private-store access code gate. Same two-layer shape as Reviews: this
+  // entitlement is ANDed with the owner's branding accessGate.enabled toggle and
+  // a code actually being set (see the storefront layout). It was declared in the
+  // catalog but sat in NO plan ceiling and NOT here — so the admin Features row
+  // rendered "Locked · upgrade to <null>" and the gate could never be granted to
+  // any tenant. Default OFF; granting it does not gate a store on its own.
+  FEATURES.STORE_ACCESS_CODE,
   // Group Buy advanced extras (scheduled runs, parallel runs, auto-report on
   // close). Sold per tenant by the operator on ANY plan — never bundled into a
   // package ceiling, so they are default OFF everywhere and never plan-locked.
