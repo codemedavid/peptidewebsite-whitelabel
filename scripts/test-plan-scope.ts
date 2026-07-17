@@ -130,6 +130,25 @@ check("GB Enterprise extras are operator add-ons on EVERY plan (never plan-bundl
   }
 });
 
+check("every catalog feature is reachable from admin → Features", () => {
+  // The general form of the groupbuy.* rule below. A feature that sits in NO
+  // plan ceiling AND is not operator-grantable is unreachable: the admin
+  // Features page computes lockedByPlan = true, requiredPlan() returns
+  // undefined, and the row renders "Locked · upgrade to <null>" with no plan
+  // that would ever unlock it. It can never be granted to any tenant, so the
+  // feature is dead code with a toggle drawn next to it.
+  const PLANS = ["starter", "pro", "enterprise"];
+  const unreachable = (Object.values(FEATURES) as FeatureKey[]).filter((key) => {
+    const inAnyCeiling = PLANS.some((plan) => planFeatureSet(plan).has(key));
+    return !inAnyCeiling && !OPERATOR_GRANTABLE.has(key);
+  });
+  assert.deepEqual(
+    unreachable,
+    [],
+    `unreachable from admin → Features (add to a plan ceiling or OPERATOR_GRANTABLE): ${unreachable.join(", ")}`,
+  );
+});
+
 check("no groupbuy.* feature is ever plan-locked (grantable on every plan)", () => {
   // Mirrors the admin Features page's lock rule (tenants/[slug]/features/page.tsx):
   // lockedByPlan = outside the ceiling AND not operator-grantable.
