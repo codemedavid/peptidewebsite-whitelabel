@@ -42,6 +42,7 @@
     "test:faq": "tsx scripts/test-faq.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
+    "test:coa-protocols-backfill": "tsx scripts/test-coa-protocols-backfill.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",

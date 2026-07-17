@@ -384,8 +384,16 @@ export function BrandTweaksForm({
       <TweakSection label="Pages (show / hide)" />
       <TweakToggle label="Track Order page" value={t.showPageTrack !== false} onChange={(v) => setTweak("showPageTrack", v)} />
       <TweakToggle label="FAQ page" value={t.showPageFAQ !== false} onChange={(v) => setTweak("showPageFAQ", v)} />
-      <TweakToggle label="Lab Reports (COA) page" value={t.showPageCOA !== false} onChange={(v) => setTweak("showPageCOA", v)} />
-      <TweakToggle label="Protocols page" value={t.showPageProtocols !== false} onChange={(v) => setTweak("showPageProtocols", v)} />
+      {/* Hidden when the platform operator hasn't granted the COA / Protocols
+          features (admin → Features). Both operator-grantable / default-OFF, so
+          an unentitled tenant offers no toggle. Undefined entitlement (platform
+          branding editor) is treated as available. */}
+      {t.coaEntitled !== false && (
+        <TweakToggle label="Lab Reports (COA) page" value={t.showPageCOA !== false} onChange={(v) => setTweak("showPageCOA", v)} />
+      )}
+      {t.protocolsEntitled !== false && (
+        <TweakToggle label="Protocols page" value={t.showPageProtocols !== false} onChange={(v) => setTweak("showPageProtocols", v)} />
+      )}
       {/* Hidden when the platform operator hasn't granted the calculator feature
           (admin → Features). Undefined entitlement (e.g. platform branding
           editor) is treated as available. */}

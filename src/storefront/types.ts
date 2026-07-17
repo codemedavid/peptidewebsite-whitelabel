@@ -345,7 +345,17 @@ export type Brand = {
   showPageTrack: boolean;
   showPageFAQ: boolean;
   showPageCOA: boolean;
+  // Server-derived: is the Lab Reports (COA) page (FEATURES.STORE_COA) entitled
+  // for this tenant? Operator-grantable, default OFF. Drives whether the store
+  // admin even offers the "Lab Reports (COA) page" toggle. Undefined outside the
+  // entitlement-aware storefront render (treated as entitled there).
+  coaEntitled?: boolean;
   showPageProtocols: boolean;
+  // Server-derived: is the Protocols page (FEATURES.STORE_PROTOCOLS) entitled for
+  // this tenant? Operator-grantable, default OFF. Drives whether the store admin
+  // even offers the "Protocols page" toggle. Undefined outside the entitlement-
+  // aware storefront render (treated as entitled there).
+  protocolsEntitled?: boolean;
   showPageCalculator: boolean;
   // Server-derived: is the reconstitution calculator (FEATURES.STORE_CALCULATOR)
   // entitled for this tenant? Drives whether the store-admin even offers the

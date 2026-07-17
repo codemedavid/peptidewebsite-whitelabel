@@ -31,6 +31,11 @@ export const FEATURES = {
   STORE_CALCULATOR: "storefront.calculator",
   STORE_REVIEWS: "storefront.reviews",
   STORE_PRODUCT_SPECS: "storefront.product_specs",
+  // Lab Reports (COA) and Protocols: the storefront pages AND their store-admin
+  // managers. Distinct from STORE_PRODUCT_SPECS, which only gates the purity/COA
+  // block on the product detail page. Operator-grantable, default OFF.
+  STORE_COA: "storefront.coa",
+  STORE_PROTOCOLS: "storefront.protocols",
   STORE_SEARCH: "storefront.search",
   STORE_CATEGORIES: "storefront.categories",
   STORE_COMMUNITY_LINK: "storefront.community_link",
@@ -235,8 +240,23 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // the page via the "Reviews page" branding toggle (resolveShowReviews ANDs the
   // two). Revoking hides the storefront page/nav AND the store-admin manager.
   FEATURES.STORE_REVIEWS,
+  // Lab Reports (COA) and Protocols. Same two-layer shape as Reviews: outside
+  // every plan ceiling (default OFF) so no tenant surfaces either page or its
+  // store-admin manager until the operator grants it per tenant. Historically
+  // these had NO entitlement at all — the owner's branding toggle was the only
+  // gate, so every plan got both managers. Existing tenants are backfilled a
+  // grant (scripts/backfill-coa-protocols-grants.ts) so nothing disappears.
+  FEATURES.STORE_COA,
+  FEATURES.STORE_PROTOCOLS,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
+  // Private-store access code gate. Same two-layer shape as Reviews: this
+  // entitlement is ANDed with the owner's branding accessGate.enabled toggle and
+  // a code actually being set (see the storefront layout). It was declared in the
+  // catalog but sat in NO plan ceiling and NOT here — so the admin Features row
+  // rendered "Locked · upgrade to <null>" and the gate could never be granted to
+  // any tenant. Default OFF; granting it does not gate a store on its own.
+  FEATURES.STORE_ACCESS_CODE,
   // Group Buy: both the management module (GB_MODULE) and the order-rules engine
   // (GB_RULES, gated independently of the module) are off for every tenant until
   // the operator grants them per tenant from admin → Features.
@@ -250,13 +270,6 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Grantable so legacy Starter stores that relied on it can be re-enabled
   // per tenant without a plan upgrade.
   FEATURES.STORE_TRACK_NOTE,
-  // Private-store access code gate. Same two-layer shape as Reviews: this
-  // entitlement is ANDed with the owner's branding accessGate.enabled toggle and
-  // a code actually being set (see the storefront layout). It was declared in the
-  // catalog but sat in NO plan ceiling and NOT here — so the admin Features row
-  // rendered "Locked · upgrade to <null>" and the gate could never be granted to
-  // any tenant. Default OFF; granting it does not gate a store on its own.
-  FEATURES.STORE_ACCESS_CODE,
   // Group Buy advanced extras (scheduled runs, parallel runs, auto-report on
   // close). Sold per tenant by the operator on ANY plan — never bundled into a
   // package ceiling, so they are default OFF everywhere and never plan-locked.
@@ -312,6 +325,8 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_CALCULATOR]: { label: "Dosage calculator", description: "Reconstitution / dosage calculator tool.", group: "Catalog" },
   [FEATURES.STORE_CARD_STUDIO]: { label: "Card Studio", description: "Product card design studio in the store admin (presets, templates, per-card styling).", group: "Catalog" },
   [FEATURES.STORE_REVIEWS]: { label: "Product reviews", description: "Customer reviews / testimonials page on the storefront and its Reviews manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor.", group: "Catalog" },
+  [FEATURES.STORE_COA]: { label: "Lab reports (COA)", description: "Certificate-of-analysis page on the storefront and its Lab Results manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor. Separate from “Product specs”, which only gates the COA block on product pages.", group: "Catalog" },
+  [FEATURES.STORE_PROTOCOLS]: { label: "Protocols", description: "Peptide protocol guides page on the storefront and its Protocols manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor.", group: "Catalog" },
 
   [FEATURES.ECOM_CART]: { label: "Shopping cart", description: "Add-to-cart and cart page.", group: "Ecommerce" },
   [FEATURES.ECOM_CHECKOUT]: { label: "Checkout", description: "Order placement and payment.", group: "Ecommerce" },

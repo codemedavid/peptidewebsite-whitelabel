@@ -7,7 +7,7 @@ import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
-import { resolveShowReviews, newModulesFor } from "@/storefront/visibility";
+import { resolveShowReviews, resolveEntitledPage, newModulesFor } from "@/storefront/visibility";
 import { getFeatureRegistry } from "@/lib/platform/feature-registry-server";
 import { BRAND } from "@/storefront/data";
 import { hasFeature } from "@/lib/features/entitlements";
@@ -101,6 +101,22 @@ export default async function HomePage() {
   const reviewsEntitled = await hasFeature(tenantId, FEATURES.STORE_REVIEWS);
   brand.reviewsEntitled = reviewsEntitled;
   brand.showPageReviews = resolveShowReviews(reviewsEntitled, config.showPageReviews);
+
+  // Lab Reports (COA) + Protocols pages: same two-layer gate as Reviews — the
+  // platform entitlement (FEATURES.STORE_COA / STORE_PROTOCOLS, both operator-
+  // grantable and default OFF) AND the branding-editor page toggle. Revoking the
+  // feature hides the storefront page/nav, the store-admin manager (ADMIN_VIEW_
+  // TOGGLE.lab / .proto both derive from these fields) and the branding toggle
+  // itself (the form keys off coaEntitled / protocolsEntitled). Before these
+  // features existed the owner toggle was the ONLY gate, so every tenant on every
+  // plan got both managers; existing tenants are backfilled a grant.
+  const coaEntitled = await hasFeature(tenantId, FEATURES.STORE_COA);
+  brand.coaEntitled = coaEntitled;
+  brand.showPageCOA = resolveEntitledPage(coaEntitled, config.showPageCOA);
+
+  const protocolsEntitled = await hasFeature(tenantId, FEATURES.STORE_PROTOCOLS);
+  brand.protocolsEntitled = protocolsEntitled;
+  brand.showPageProtocols = resolveEntitledPage(protocolsEntitled, config.showPageProtocols);
 
   // Group Buy Rules engine: the store-admin view AND rule enforcement are gated
   // on the platform entitlement alone. Revoking the feature both hides the

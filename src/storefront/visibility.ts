@@ -17,6 +17,8 @@ export const MODULE_FEATURE: Record<string, FeatureKey> = {
   staff: FEATURES.STORE_STAFF_ACCOUNTS,
   notify: FEATURES.NOTIFY_ADMIN_ORDER,
   reviews: FEATURES.STORE_REVIEWS,
+  lab: FEATURES.STORE_COA,
+  proto: FEATURES.STORE_PROTOCOLS,
 };
 
 // Store-admin module ids whose gating feature is currently flagged "New". The
@@ -46,6 +48,11 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
 // too so operators don't curate content that nobody can see.
 const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   faq: (b) => b.showPageFAQ !== false,
+  // Lab Results (COA) + Protocols managers. Server-derived: page.tsx projects
+  // resolveEntitledPage(entitlement, ownerToggle) onto showPageCOA /
+  // showPageProtocols, so revoking the platform grant hides the manager as well
+  // as the storefront page. Both were ungated before the COA/Protocols features
+  // existed — the owner toggle alone decided, on every plan.
   lab: (b) => b.showPageCOA !== false,
   proto: (b) => b.showPageProtocols !== false,
   reviews: (b) => b.showPageReviews !== false,
@@ -93,14 +100,20 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   notice: (b) => b.showAdminNotice === true,
 };
 
-// The Reviews page is a two-layer gate: the platform entitlement
-// (FEATURES.STORE_REVIEWS — operator-grantable, default OFF) AND the store
-// owner's "Reviews page" branding toggle must both be on. The storefront render
-// resolves this into brand.showPageReviews, from which the nav, the page and the
-// store-admin Reviews manager (ADMIN_VIEW_TOGGLE.reviews) all derive. The owner
-// toggle is default-on, so it only hides Reviews when explicitly set to false.
-export function resolveShowReviews(entitled: boolean, ownerToggle: boolean | undefined): boolean {
+// The two-layer page gate shared by Reviews, Lab Reports (COA) and Protocols:
+// the platform entitlement (operator-grantable, default OFF) AND the store
+// owner's branding toggle for the page must both be on. The storefront render
+// resolves this into the matching brand.showPage* field, from which the nav, the
+// page and the store-admin manager (ADMIN_VIEW_TOGGLE) all derive. The owner
+// toggle is default-on, so it only hides a page when explicitly set to false —
+// an entitled tenant that never touched the branding editor keeps the page.
+export function resolveEntitledPage(entitled: boolean, ownerToggle: boolean | undefined): boolean {
   return entitled && ownerToggle !== false;
+}
+
+// Reviews page → brand.showPageReviews (FEATURES.STORE_REVIEWS).
+export function resolveShowReviews(entitled: boolean, ownerToggle: boolean | undefined): boolean {
+  return resolveEntitledPage(entitled, ownerToggle);
 }
 
 // Is the given route ("track", "faq", …) currently shown on the site?
