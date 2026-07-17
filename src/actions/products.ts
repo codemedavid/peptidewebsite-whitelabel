@@ -35,6 +35,7 @@ import {
   type DbProductRow,
 } from "@/lib/storefront/product-mapping";
 import type { Product } from "@/storefront/types";
+import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 
 export type ActionResult = { ok: true } | { error: string };
 export type SaveProductResult = { ok: true; product: Product } | { error: string };
@@ -338,7 +339,7 @@ export async function deleteProductsAction(
 
 // ── Image upload (ImageKit) ─────────────────────────────────────────────────────
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_BYTES = STOREFRONT_IMAGE_MAX_BYTES; // 10 MB
 
 /** Whether real ImageKit credentials are present (not blank / not placeholders). */
 function imageKitConfigured(): boolean {
