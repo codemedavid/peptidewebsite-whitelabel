@@ -11,8 +11,8 @@
 
 import assert from "node:assert";
 
-import { checkoutQuote } from "../src/lib/onboarding/pricing";
-import { defaultPlanConfig } from "../src/lib/platform/plan-config";
+import { checkoutQuote, amountDueFromConfig } from "../src/lib/onboarding/pricing";
+import { defaultPlanConfig, normalizePlanConfig } from "../src/lib/platform/plan-config";
 import { packagesFrom } from "../src/marketing/config";
 import {
   PRO_TRIAL_PRICE_CENTS,
@@ -93,6 +93,43 @@ check("zero setup fee stays zero and un-waived (no line to show)", () => {
 check("extras never apply to non-Starter-style negative counts", () => {
   const q = checkoutQuote(pkg("enterprise"), { trial: false, extraFeatureCount: -3 });
   assert.strictEqual(q.addonCents, 0);
+});
+
+// ───────────── server-side stamp: amountDueFromConfig ─────────────
+const config = defaultPlanConfig();
+
+check("amountDueFromConfig matches the wizard quote (Starter + 1 extra)", () => {
+  const due = amountDueFromConfig(config, { planKey: "starter", trial: false, extraFeatureCount: 1 });
+  assert.strictEqual(due, 129_800 + STARTER_EXTRA_FEATURE_PRICE_CENTS);
+});
+
+check("amountDueFromConfig: Business non-trial = ₱699 first-month promo", () => {
+  assert.strictEqual(
+    amountDueFromConfig(config, { planKey: "pro", trial: false, extraFeatureCount: 0 }),
+    69_900,
+  );
+});
+
+check("amountDueFromConfig: trial uses the operator-editable trialPriceCents", () => {
+  const custom = normalizePlanConfig({ ...config, trialPriceCents: 49_900 });
+  assert.strictEqual(
+    amountDueFromConfig(custom, { planKey: "pro", trial: true, extraFeatureCount: 0 }),
+    49_900,
+  );
+});
+
+check("amountDueFromConfig resolves legacy plan aliases (business → pro)", () => {
+  assert.strictEqual(
+    amountDueFromConfig(config, { planKey: "business", trial: false, extraFeatureCount: 0 }),
+    69_900,
+  );
+});
+
+check("amountDueFromConfig: Automated = ₱4,998", () => {
+  assert.strictEqual(
+    amountDueFromConfig(config, { planKey: "enterprise", trial: false, extraFeatureCount: 0 }),
+    499_800,
+  );
 });
 
 // ──────────────────────────── summary ────────────────────────────
