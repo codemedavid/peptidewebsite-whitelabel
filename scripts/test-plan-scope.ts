@@ -113,6 +113,38 @@ check("a dual feature is 'included' where the plan grants it, 'addon' where it d
   assert.equal(stateOf("enterprise", FEATURES.STORE_TRACK_NOTE), "included");
 });
 
+check("GB Enterprise extras are operator add-ons on EVERY plan (never plan-bundled)", () => {
+  // Scheduled runs, parallel runs and auto-report-on-close are sold per tenant
+  // by the operator — on any plan, never auto-on with a package.
+  const extras = [
+    FEATURES.GB_SCHEDULED,
+    FEATURES.GB_MULTIPLE_ACTIVE,
+    FEATURES.GB_REPORT_AUTO_ON_CLOSE,
+  ];
+  for (const key of extras) {
+    assert.ok(OPERATOR_GRANTABLE.has(key), `${key} should be operator-grantable`);
+    for (const plan of ["starter", "pro", "enterprise"]) {
+      assert.ok(!planFeatureSet(plan).has(key), `${key} must not sit in the ${plan} ceiling`);
+      assert.equal(stateOf(plan, key), "addon", `${key} on ${plan}`);
+    }
+  }
+});
+
+check("no groupbuy.* feature is ever plan-locked (grantable on every plan)", () => {
+  // Mirrors the admin Features page's lock rule (tenants/[slug]/features/page.tsx):
+  // lockedByPlan = outside the ceiling AND not operator-grantable.
+  const gbKeys = (Object.values(FEATURES) as FeatureKey[]).filter((k) =>
+    k.startsWith("groupbuy."),
+  );
+  for (const plan of ["starter", "pro", "enterprise"]) {
+    const ceiling = planFeatureSet(plan);
+    for (const key of gbKeys) {
+      const lockedByPlan = !ceiling.has(key) && !OPERATOR_GRANTABLE.has(key);
+      assert.ok(!lockedByPlan, `${key} shows "Locked · upgrade plan" on ${plan}`);
+    }
+  }
+});
+
 check("addonCount equals the operator-grantable set size", () => {
   const scope = getPlanScope("starter");
   assert.equal(scope.addonCount, OPERATOR_GRANTABLE.size);
