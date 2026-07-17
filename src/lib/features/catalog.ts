@@ -75,7 +75,10 @@ export const FEATURES = {
   GB_DUPLICATE: "groupbuy.duplicate",
   GB_ARCHIVE: "groupbuy.archive",
   GB_SCHEDULED: "groupbuy.scheduled",
-  GB_MULTIPLE_ACTIVE: "groupbuy.multiple_active",
+  // NOTE: no GB_MULTIPLE_ACTIVE. Exactly one active round per tenant is an
+  // invariant (rule #4) enforced by the DB partial unique index
+  // group_buys_one_active_per_tenant — never an entitlement, because Postgres
+  // cannot see a tenant's grants and the constraint must hold unconditionally.
   GB_PRODUCT_ASSIGNMENT: "groupbuy.product_assignment",
   GB_SUPPLIER_REPORTS: "groupbuy.supplier_reports",
   GB_RULES: "groupbuy.rules",
@@ -260,7 +263,6 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Like the GB scaffolding they stay inert until GB_MODULE is also granted
   // (resolveGroupBuyCaps ANDs every capability with the module switch).
   FEATURES.GB_SCHEDULED,
-  FEATURES.GB_MULTIPLE_ACTIVE,
   FEATURES.GB_REPORT_AUTO_ON_CLOSE,
 ]);
 
@@ -344,7 +346,6 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.GB_DUPLICATE]: { label: "Duplicate group buys", description: "One-click copy of an existing group buy as a new draft.", group: "Group Buy" },
   [FEATURES.GB_ARCHIVE]: { label: "Archive group buys", description: "Lets the store owner archive finished group buys (kept for records, hidden from active lists).", group: "Group Buy" },
   [FEATURES.GB_SCHEDULED]: { label: "Scheduled group buys", description: "Group buys can be scheduled with a start date and go live automatically.", group: "Group Buy" },
-  [FEATURES.GB_MULTIPLE_ACTIVE]: { label: "Multiple active group buys", description: "Allow more than one group buy to run at the same time.", group: "Group Buy" },
   [FEATURES.GB_PRODUCT_ASSIGNMENT]: { label: "Product assignment", description: "Assign specific products to each group buy; unassigned products fall outside it.", group: "Group Buy" },
   [FEATURES.GB_SUPPLIER_REPORTS]: { label: "Supplier reports", description: "Aggregated per-product order quantities for a group buy — the list to send the supplier.", group: "Group Buy" },
   [FEATURES.GB_RULES]: { label: "Group buy rules engine", description: "Order rules for group buys: admin fee (fixed/percentage), per-product and total vial minimums, bac water limits, cart & checkout validation.", group: "Group Buy" },

@@ -29,7 +29,6 @@ export async function resolveGroupBuyCaps(tenantId: string): Promise<GroupBuyCap
     canDuplicate: has(FEATURES.GB_DUPLICATE),
     canArchive: has(FEATURES.GB_ARCHIVE),
     scheduled: has(FEATURES.GB_SCHEDULED),
-    multipleActive: has(FEATURES.GB_MULTIPLE_ACTIVE),
     productAssignment: has(FEATURES.GB_PRODUCT_ASSIGNMENT),
     supplierReports: has(FEATURES.GB_SUPPLIER_REPORTS),
     reports: {

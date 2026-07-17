@@ -111,7 +111,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
  * groupbuy.create, edit needs groupbuy.edit, a "scheduled" status needs
  * groupbuy.scheduled, product assignment is dropped without
  * groupbuy.product_assignment, and going live alongside another live run is
- * rejected without groupbuy.multiple_active.
+ * always rejected — exactly one active round per tenant (rule #4).
  */
 export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyResult> {
   const gate = await requireGroupBuyAdmin();
@@ -132,20 +132,16 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
   }
 
   try {
-    // Single-active guard: without groupbuy.multiple_active, at most one run may
-    // be live (effective status "active") at a time.
-    if (!caps.multipleActive) {
-      const others = (await loadGroupBuys(tenantId, slug)).filter((x) => x.id !== gb.id);
-      const wouldBeLive = effectiveGroupBuyStatus(gb, caps.scheduled) === "active";
-      const otherLive = others.some(
-        (x) => effectiveGroupBuyStatus(x, caps.scheduled) === "active",
-      );
-      if (wouldBeLive && otherLive) {
-        return {
-          error:
-            "Another group buy is already active. Close it first, or ask the platform to enable multiple active group buys.",
-        };
-      }
+    // Single-active guard (rule #4): at most one run may be live (effective
+    // status "active") at a time. Unconditional — there is no entitlement that
+    // widens this. Still a read-then-write, so it races under concurrent saves;
+    // the DB partial unique index group_buys_one_active_per_tenant is the real
+    // enforcement and this check exists to return a readable error first.
+    const others = (await loadGroupBuys(tenantId, slug)).filter((x) => x.id !== gb.id);
+    const wouldBeLive = effectiveGroupBuyStatus(gb, caps.scheduled) === "active";
+    const otherLive = others.some((x) => effectiveGroupBuyStatus(x, caps.scheduled) === "active");
+    if (wouldBeLive && otherLive) {
+      return { error: "Another group buy is already active. Close it before opening this one." };
     }
 
     if (isDemoMode()) {

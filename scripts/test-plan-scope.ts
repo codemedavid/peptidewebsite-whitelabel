@@ -114,13 +114,15 @@ check("a dual feature is 'included' where the plan grants it, 'addon' where it d
 });
 
 check("GB Enterprise extras are operator add-ons on EVERY plan (never plan-bundled)", () => {
-  // Scheduled runs, parallel runs and auto-report-on-close are sold per tenant
-  // by the operator — on any plan, never auto-on with a package.
-  const extras = [
-    FEATURES.GB_SCHEDULED,
-    FEATURES.GB_MULTIPLE_ACTIVE,
-    FEATURES.GB_REPORT_AUTO_ON_CLOSE,
-  ];
+  // Scheduled runs and auto-report-on-close are sold per tenant by the operator —
+  // on any plan, never auto-on with a package.
+  //
+  // GB_MULTIPLE_ACTIVE is deliberately absent: running two rounds at once is no
+  // longer purchasable at all. Exactly one active round per tenant is an
+  // invariant (rule #4) backed by the DB partial unique index, and Postgres
+  // cannot consult a tenant's entitlements — so the constraint and the add-on
+  // could not coexist. See scripts/test-gb-rounds.ts.
+  const extras = [FEATURES.GB_SCHEDULED, FEATURES.GB_REPORT_AUTO_ON_CLOSE];
   for (const key of extras) {
     assert.ok(OPERATOR_GRANTABLE.has(key), `${key} should be operator-grantable`);
     for (const plan of ["starter", "pro", "enterprise"]) {

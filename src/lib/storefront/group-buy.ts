@@ -49,7 +49,9 @@ export type GroupBuyCapabilities = {
   canDuplicate: boolean;
   canArchive: boolean;
   scheduled: boolean;
-  multipleActive: boolean;
+  // NOTE: there is deliberately no `multipleActive` capability. Exactly one
+  // active round per tenant is an invariant (rule #4), enforced by the DB partial
+  // unique index and by liveGroupBuys — never widened per tenant.
   productAssignment: boolean;
   supplierReports: boolean;
   reports: GroupBuyReportCapabilities;
@@ -62,7 +64,6 @@ export const GROUP_BUY_CAPS_OFF: GroupBuyCapabilities = {
   canDuplicate: false,
   canArchive: false,
   scheduled: false,
-  multipleActive: false,
   productAssignment: false,
   supplierReports: false,
   reports: {
@@ -179,17 +180,21 @@ export function effectiveGroupBuyStatus(
   return "active";
 }
 
-/** The group buys currently live, honoring the multiple-active entitlement:
- *  without it, only the earliest-created live run counts. */
+/** The group buys currently live. At most ONE per tenant — rule #4, an invariant
+ *  rather than an entitlement: a tenant can never run two rounds at once. Ties
+ *  break on earliest-created so the winner is deterministic, not insertion-ordered.
+ *  The DB partial unique index (group_buys_one_active_per_tenant) enforces the same
+ *  rule at the storage layer; this slice is the read-side backstop for any row that
+ *  predates it. */
 export function liveGroupBuys(
   list: GroupBuy[],
-  caps: Pick<GroupBuyCapabilities, "scheduled" | "multipleActive">,
+  caps: Pick<GroupBuyCapabilities, "scheduled">,
   now: Date = new Date(),
 ): GroupBuy[] {
-  const live = list
+  return list
     .filter((gb) => effectiveGroupBuyStatus(gb, caps.scheduled, now) === "active")
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  return caps.multipleActive ? live : live.slice(0, 1);
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(0, 1);
 }
 
 /**
@@ -200,7 +205,7 @@ export function liveGroupBuys(
  */
 export function groupBuyForOrder(
   list: GroupBuy[],
-  caps: Pick<GroupBuyCapabilities, "scheduled" | "multipleActive" | "productAssignment">,
+  caps: Pick<GroupBuyCapabilities, "scheduled" | "productAssignment">,
   orderedProductIds: string[],
   now: Date = new Date(),
 ): GroupBuy | null {
@@ -236,7 +241,7 @@ export const GROUP_BUY_GATE_OPEN: GroupBuyStorefrontGate = {
 
 export function buildGroupBuyGate(
   list: GroupBuy[],
-  caps: Pick<GroupBuyCapabilities, "scheduled" | "multipleActive" | "productAssignment">,
+  caps: Pick<GroupBuyCapabilities, "scheduled" | "productAssignment">,
   allowOnHand: boolean,
   now: Date = new Date(),
 ): GroupBuyStorefrontGate {
