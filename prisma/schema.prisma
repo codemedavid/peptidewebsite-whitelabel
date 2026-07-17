@@ -611,6 +611,10 @@ model OnboardingSubmission {
   // Step 7 — checkout
   paymentProofUrl String?
   termsAccepted   Boolean @default(false)
+  // Server-computed total the client was asked to pay (centavos): first payment
+  // + Starter extras + setup fee — see lib/onboarding/pricing.amountDueFromConfig.
+  // Null on submissions predating the stamp.
+  amountDueCents Int?
 
   // ── Automation / operator workflow ──
   slug        String // generated subdomain label

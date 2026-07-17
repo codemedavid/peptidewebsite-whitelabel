@@ -221,8 +221,12 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
             {
               label: "Package",
               v: liveTrial.trial
-                ? `${submission.packageLabel} — Trial (₱699)`
-                : submission.packageLabel,
+                ? `${submission.packageLabel} — Trial (${
+                    submission.amountDueCents != null ? formatPesos(submission.amountDueCents) : "₱699"
+                  })`
+                : submission.amountDueCents != null
+                  ? `${submission.packageLabel} · ${formatPesos(submission.amountDueCents)}`
+                  : submission.packageLabel,
               sub:
                 liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
                   ? `${humanDate(liveTrial.startsAt)} → ${humanDate(liveTrial.endsAt)}`

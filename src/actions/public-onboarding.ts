@@ -17,6 +17,8 @@ import { planMeta } from "@/lib/admin/plans";
 import { slugify, uniqueize } from "@/lib/storefront/product-mapping";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { onboardingSchema, STARTER_FEATURE_LIMIT, type OnboardingPayload } from "@/lib/onboarding/schema";
+import { amountDueFromConfig } from "@/lib/onboarding/pricing";
+import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { buildProvisioning } from "@/lib/onboarding/mapping";
 import {
   isDemoMode,
@@ -130,6 +132,18 @@ export async function submitOnboardingAction(
   }
 
   // ── DB path. ──
+  // Server-authoritative checkout total (operator-edited plan config; the same
+  // math the wizard paybox shows) — stamped so the operator can verify the
+  // uploaded proof against what was actually quoted.
+  const amountDueCents = amountDueFromConfig(await getPlanConfig(), {
+    planKey,
+    trial,
+    extraFeatureCount:
+      planKey === "starter"
+        ? Math.max(0, selectedFeatures.length - STARTER_FEATURE_LIMIT)
+        : 0,
+  });
+
   const plan = await prisma.plan.findUnique({ where: { key: planKey }, select: { id: true } });
   if (!plan) return { error: `Plan not available: ${planKey}. Please contact support.` };
 
@@ -195,6 +209,7 @@ export async function submitOnboardingAction(
             paymentMethods: payload.paymentMethods as unknown as Prisma.InputJsonValue,
             packageKey: planKey,
             trial,
+            amountDueCents,
             selectedFeatures: selectedFeatures as unknown as Prisma.InputJsonValue,
             paymentProofUrl: payload.paymentProofUrl || null,
             termsAccepted: payload.termsAccepted,

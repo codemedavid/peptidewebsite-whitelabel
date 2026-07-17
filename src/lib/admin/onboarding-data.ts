@@ -104,6 +104,7 @@ type DbRow = {
   trial: boolean;
   trialStartsAt: Date | null;
   trialEndsAt: Date | null;
+  amountDueCents: number | null;
   selectedFeatures: unknown;
   paymentProofUrl: string | null;
   termsAccepted: boolean;
@@ -128,6 +129,7 @@ function summaryFromDb(r: DbRow): OnboardingSummary {
     trial: r.trial,
     trialStartsAt: r.trialStartsAt?.toISOString() ?? null,
     trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
+    amountDueCents: r.amountDueCents,
     setupStatus: r.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[r.setupStatus] ?? r.setupStatus,
     tenantId: r.tenantId,
@@ -177,9 +179,10 @@ function summaryFromDemo(s: DemoOnboardingSubmission): OnboardingSummary {
     packageKey: pm.key,
     packageLabel: pm.label,
     trial: pm.key === "pro" && Boolean(d.trial),
-    // Demo submissions have no operator-managed trial window.
+    // Demo submissions have no operator-managed trial window or stamped total.
     trialStartsAt: null,
     trialEndsAt: null,
+    amountDueCents: null,
     setupStatus: s.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[s.setupStatus] ?? s.setupStatus,
     tenantId: s.tenantId,
@@ -240,6 +243,7 @@ const SELECT = {
   trial: true,
   trialStartsAt: true,
   trialEndsAt: true,
+  amountDueCents: true,
   selectedFeatures: true,
   paymentProofUrl: true,
   termsAccepted: true,

@@ -6,6 +6,8 @@ import {
   PRO_TRIAL_PRICE_CENTS,
   STARTER_EXTRA_FEATURE_PRICE_CENTS,
 } from "@/lib/onboarding/schema";
+import { planMeta } from "@/lib/admin/plans";
+import type { PlanConfig } from "@/lib/platform/plan-config";
 
 /** The pricing fields checkoutQuote needs from a marketing Package. */
 export type QuotablePackage = {
@@ -23,12 +25,14 @@ export type CheckoutQuote = {
 };
 
 /** Amount due at onboarding checkout. The Business trial always includes FREE
- *  setup (the intro offer's promise), regardless of the plan's waived flag. */
+ *  setup (the intro offer's promise), regardless of the plan's waived flag.
+ *  `trialPriceCents` overrides the code-default trial price (the operator can
+ *  edit it in plan config); the wizard display uses the default. */
 export function checkoutQuote(
   pkg: QuotablePackage,
-  opts: { trial: boolean; extraFeatureCount: number },
+  opts: { trial: boolean; extraFeatureCount: number; trialPriceCents?: number },
 ): CheckoutQuote {
-  const baseCents = opts.trial ? PRO_TRIAL_PRICE_CENTS : pkg.priceCents;
+  const baseCents = opts.trial ? (opts.trialPriceCents ?? PRO_TRIAL_PRICE_CENTS) : pkg.priceCents;
   const addonCents =
     Math.max(0, Math.floor(opts.extraFeatureCount)) * STARTER_EXTRA_FEATURE_PRICE_CENTS;
   const waived = pkg.setupFeeCents > 0 && (pkg.setupFeeWaived || opts.trial);
@@ -40,4 +44,30 @@ export function checkoutQuote(
     setupFeeWaived: waived,
     totalCents: baseCents + addonCents + setupFeeCents,
   };
+}
+
+/** The server-authoritative total stamped onto OnboardingSubmission.amountDueCents:
+ *  the same checkoutQuote, fed from the operator-edited plan config (first-month
+ *  promo as the effective price, config trialPriceCents for trials). Accepts
+ *  legacy plan aliases (business → pro etc.). */
+export function amountDueFromConfig(
+  config: PlanConfig,
+  opts: { planKey: string; trial: boolean; extraFeatureCount: number },
+): number {
+  const key = planMeta(opts.planKey).key;
+  const plan = config.plans.find((p) => p.key === key);
+  if (!plan) return 0;
+  const discounted = Boolean(plan.discountPriceCents && plan.discountPriceCents < plan.priceCents);
+  return checkoutQuote(
+    {
+      priceCents: discounted ? (plan.discountPriceCents as number) : plan.priceCents,
+      setupFeeCents: plan.setupFeeCents,
+      setupFeeWaived: plan.setupFeeWaived,
+    },
+    {
+      trial: opts.trial,
+      extraFeatureCount: opts.extraFeatureCount,
+      trialPriceCents: config.trialPriceCents,
+    },
+  ).totalCents;
 }

@@ -56,6 +56,9 @@ export type OnboardingSummary = {
   // Operator-managed trial window (ISO dates, null until set)
   trialStartsAt: string | null;
   trialEndsAt: string | null;
+  // Server-computed checkout total the client was asked to pay (centavos;
+  // null for submissions predating the stamp / demo mode)
+  amountDueCents: number | null;
   setupStatus: string;
   setupStatusLabel: string;
   tenantId: string | null;
