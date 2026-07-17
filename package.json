@@ -41,6 +41,7 @@
     "test:banner": "tsx scripts/test-banner.ts",
     "test:faq": "tsx scripts/test-faq.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
+    "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
@@ -53,7 +54,8 @@
     "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts",
     "test:trial-expiry": "tsx scripts/test-trial-expiry.ts",
     "test:pepweb-landing": "tsx scripts/test-pepweb-landing.ts",
-    "test:checkout-total": "tsx scripts/test-checkout-total.ts"
+    "test:checkout-total": "tsx scripts/test-checkout-total.ts",
+    "test:upload-limits": "tsx scripts/test-upload-limits.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
