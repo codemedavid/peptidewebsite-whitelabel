@@ -11,8 +11,13 @@
  * `scripts/test-upload-limits.ts` enforces that invariant.
  */
 
-export const SERVER_ACTION_BODY_LIMIT = "2mb";
-export const SERVER_ACTION_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
+/**
+ * Must stay above the largest per-file max below, with room for multipart
+ * overhead. It was previously "2mb" — exactly BRANDING_ASSET_MAX_BYTES — which
+ * made the 2 MB logo limit unenforceable and the 10 MB image limit dead code.
+ */
+export const SERVER_ACTION_BODY_LIMIT = "12mb";
+export const SERVER_ACTION_BODY_LIMIT_BYTES = 12 * 1024 * 1024;
 
 /** Logos and favicons are small; anything bigger is a mistake, not a need. */
 export const BRANDING_ASSET_MAX_BYTES = 2 * 1024 * 1024;

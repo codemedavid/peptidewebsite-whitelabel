@@ -12,15 +12,26 @@
 
 export type UploadFailure = { error: string };
 
+/**
+ * Next's body-limit rejection surfaces as an opaque framework error that means
+ * nothing to a store operator; translate it into the actionable version.
+ */
+const BODY_LIMIT_THROW = /body exceeded|request entity too large|payload too large|\b413\b/i;
+
 /** Human-readable message for anything an upload action can throw. */
 export function uploadErrorMessage(thrown: unknown): string {
-  const raw = thrown instanceof Error ? thrown.message : String(thrown ?? "");
-  return raw;
+  const raw = (thrown instanceof Error ? thrown.message : String(thrown ?? "")).trim();
+  if (BODY_LIMIT_THROW.test(raw)) return "File too large — try a smaller image.";
+  return raw || "Upload failed. Please try again.";
 }
 
 /** Run an upload action, resolving to `{ error }` instead of rejecting. */
 export async function settleUpload<T extends object>(
   work: () => Promise<T | UploadFailure>,
 ): Promise<T | UploadFailure> {
-  return await work();
+  try {
+    return await work();
+  } catch (e) {
+    return { error: uploadErrorMessage(e) };
+  }
 }

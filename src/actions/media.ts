@@ -12,10 +12,11 @@ import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { isDemoMode } from "@/lib/demo/fixtures";
+import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 
 export type UploadImageResult = { url: string } | { error: string };
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_BYTES = STOREFRONT_IMAGE_MAX_BYTES; // 10 MB
 
 /** Whether real ImageKit credentials are present (not blank / not placeholders). */
 function imageKitConfigured(): boolean {

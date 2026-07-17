@@ -11,11 +11,12 @@ import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { BRANDING_ASSET_MAX_BYTES, STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 
 export type BrandingAssetKind = "logo" | "favicon";
 export type UploadAssetResult = { url: string | null } | { error: string };
 
-const MAX_BYTES = 2 * 1024 * 1024; // 2 MB — logos/favicons are small
+const MAX_BYTES = BRANDING_ASSET_MAX_BYTES; // 2 MB — logos/favicons are small
 const ALLOWED_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -101,7 +102,7 @@ export async function uploadBrandingAssetAction(
 
 export type UploadImageResult = { url: string } | { error: string };
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_BYTES = STOREFRONT_IMAGE_MAX_BYTES; // 10 MB
 
 /**
  * Upload an arbitrary storefront image (e.g. the logo picked in the Storefront

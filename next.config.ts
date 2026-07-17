@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { SERVER_ACTION_BODY_LIMIT } from "./src/lib/upload/limits";
+
 const nextConfig: NextConfig = {
   // Allow an isolated build dir (e.g. CI / verifying a build while `next dev`
   // holds .next) without colliding on the default .next directory.
@@ -17,7 +19,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     // Prisma works in Node runtime; keep middleware on edge but DB lookups cached.
-    serverActions: { bodySizeLimit: "2mb" },
+    // Must stay in sync with the per-file maxes in src/lib/upload/limits.ts —
+    // Next enforces this before any action code runs. See test:upload-limits.
+    serverActions: { bodySizeLimit: SERVER_ACTION_BODY_LIMIT },
     // Tree-shake heavy icon / animation / SDK barrels — huge first-load JS win.
     optimizePackageImports: [
       "lucide-react",

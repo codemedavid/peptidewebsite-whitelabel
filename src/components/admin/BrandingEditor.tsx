@@ -43,6 +43,7 @@ import {
   removeBrandingAssetAction,
   type BrandingAssetKind,
 } from "@/actions/branding";
+import { settleUpload } from "@/lib/upload/settle";
 
 // Tenant storefronts live at `<slug>.<ROOT>`. ROOT carries its own dev port
 // (e.g. "lvh.me:3100"), and `*.lvh.me` resolves in every browser incl. Safari —
@@ -1205,7 +1206,9 @@ function AssetUpload({
     setError(null);
     const fd = new FormData();
     fd.set("file", file);
-    const res = await uploadBrandingAssetAction(slug, kind, fd);
+    // settleUpload guarantees a resolved result even if the action throws (e.g.
+    // Next rejecting an oversized body), so busy never sticks on "Uploading…".
+    const res = await settleUpload(() => uploadBrandingAssetAction(slug, kind, fd));
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
     if ("error" in res) setError(res.error);
@@ -1215,7 +1218,7 @@ function AssetUpload({
   async function onRemove() {
     setBusy(true);
     setError(null);
-    const res = await removeBrandingAssetAction(slug, kind);
+    const res = await settleUpload(() => removeBrandingAssetAction(slug, kind));
     setBusy(false);
     if ("error" in res) setError(res.error);
     else onChange(null);
