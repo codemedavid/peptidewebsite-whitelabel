@@ -42,5 +42,22 @@
 
 ## Known gaps
 
-- The submission still stores no amount server-side (unchanged behavior — payment is manual
-  proof-upload; the operator verifies the receipt against the same plan config).
+- ~~The submission stores no amount server-side~~ — resolved 2026-07-17 (see below).
+
+## Follow-up: amountDueCents stamped onto OnboardingSubmission (2026-07-17)
+
+**Checkpoints:** RED `0a42e82` (8/13 — `amountDueFromConfig is not a function`) → GREEN `db8b39c` (13/13).
+
+- `amountDueFromConfig(config, {planKey, trial, extraFeatureCount})` in `pricing.ts`: the same
+  `checkoutQuote`, fed from the operator-edited plan config — first-month promo as the effective
+  price, config `trialPriceCents` for trials (operator-editable, unlike the wizard's display
+  constant), legacy plan aliases resolved via `planMeta`.
+- `submitOnboardingAction` computes it server-side (never trusts the client) and stamps
+  `OnboardingSubmission.amountDueCents Int?` (schema pushed to the live DB; existing rows null;
+  demo mode stays null).
+- Admin Onboarding detail's Package stat now reads e.g. "Starter · ₱2,798" or
+  "Business — Trial (₱699)" from the stamp, falling back to the old labels for pre-stamp rows.
+- New guarantees (5): Starter+extra parity with the wizard quote, Business promo total, custom
+  trialPriceCents honored, alias resolution, Automated ₱4,998. `tsc` clean, build passes,
+  `test:pepweb-landing` 14/14 and `test:trial-upgrade` 9/9 still green; live column verified
+  with a real query (`amountDueCents: null` on a pre-stamp row).
