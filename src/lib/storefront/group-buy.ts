@@ -339,32 +339,67 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
 
 // ── Supplier report ──────────────────────────────────────────────────────────
 // Aggregated per-product quantities across a group buy's orders — the list the
-// owner sends the supplier. Cancelled orders are excluded.
+// owner sends the supplier. Two number sets, reported side by side (spec §6):
+//
+//   DEMAND    — every order EXCEPT cancelled / canceled / refunded, paid or not.
+//               The headline: what the supplier order is sized against. The
+//               instinct to "only count paid" under-orders and is wrong here.
+//   COMMITTED — the DEMAND subset that is paymentStatus 'paid' OR a fulfilled
+//               order status. Reported ALONGSIDE demand, never instead of it.
 
 export type SupplierReportLine = {
   productId: string | null; // null = legacy/name-only line
   name: string;
-  qty: number;
-  revenue: number; // qty × price across the counted orders
+  qty: number; // DEMAND qty
+  revenue: number; // DEMAND revenue (qty × price)
+  committedQty: number; // committed subset of qty
+  committedRevenue: number; // committed subset of revenue
 };
 
 export type SupplierReport = {
   groupBuyId: string;
+  // DEMAND (headline)
   orderCount: number;
   totalQty: number;
   totalRevenue: number;
+  // COMMITTED (alongside)
+  committedOrderCount: number;
+  committedTotalQty: number;
+  committedTotalRevenue: number;
   lines: SupplierReportLine[];
 };
 
 type ReportOrder = {
   status: string;
+  paymentStatus?: string;
   items: Array<{ name: string; qty: number; price: number; productId?: string }>;
 };
 
+// Excluded from demand entirely. Both English spellings + refunds.
+const DEMAND_EXCLUDED_STATUSES = new Set(["cancelled", "canceled", "refunded"]);
+// Order statuses that mark an order committed regardless of payment.
+const COMMITTED_STATUSES = new Set(["confirmed", "processing", "shipped", "delivered", "completed"]);
+
+/** Whether an order status feeds supplier-report DEMAND (everything except
+ *  cancelled / canceled / refunded). Exported so every report surface — the
+ *  supplier lines AND the per-customer breakdown — shares one definition. */
+export function orderCountsAsDemand(status: string): boolean {
+  return !DEMAND_EXCLUDED_STATUSES.has(status.toLowerCase());
+}
+function isDemand(o: ReportOrder): boolean {
+  return orderCountsAsDemand(o.status);
+}
+function isCommitted(o: ReportOrder): boolean {
+  return o.paymentStatus?.toLowerCase() === "paid" || COMMITTED_STATUSES.has(o.status.toLowerCase());
+}
+
 export function buildSupplierReport(groupBuyId: string, orders: ReportOrder[]): SupplierReport {
-  const counted = orders.filter((o) => o.status !== "cancelled");
+  const counted = orders.filter(isDemand);
   const byKey = new Map<string, SupplierReportLine>();
+  let committedOrderCount = 0;
   for (const o of counted) {
+    const committed = isCommitted(o); // subset of demand: `counted` already excludes cancels
+    if (committed) committedOrderCount++;
     for (const it of o.items) {
       const key = it.productId ?? `name:${it.name}`;
       const line = byKey.get(key) ?? {
@@ -372,9 +407,15 @@ export function buildSupplierReport(groupBuyId: string, orders: ReportOrder[]): 
         name: it.name,
         qty: 0,
         revenue: 0,
+        committedQty: 0,
+        committedRevenue: 0,
       };
       line.qty += it.qty;
       line.revenue += it.qty * it.price;
+      if (committed) {
+        line.committedQty += it.qty;
+        line.committedRevenue += it.qty * it.price;
+      }
       byKey.set(key, line);
     }
   }
@@ -384,6 +425,9 @@ export function buildSupplierReport(groupBuyId: string, orders: ReportOrder[]): 
     orderCount: counted.length,
     totalQty: lines.reduce((s, l) => s + l.qty, 0),
     totalRevenue: lines.reduce((s, l) => s + l.revenue, 0),
+    committedOrderCount,
+    committedTotalQty: lines.reduce((s, l) => s + l.committedQty, 0),
+    committedTotalRevenue: lines.reduce((s, l) => s + l.committedRevenue, 0),
     lines,
   };
 }

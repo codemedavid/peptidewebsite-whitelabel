@@ -38,6 +38,7 @@ import {
   effectiveGroupBuyStatus,
   staleActiveRoundIds,
   buildSupplierReport,
+  orderCountsAsDemand,
   dbGroupBuyToStorefront,
   groupBuyToDbWrite,
   type DbGroupBuyRow,
@@ -346,11 +347,12 @@ export async function getGroupBuySupplierReportAction(
       const rows = await withTenant(tenantId, (db) =>
         db.storefrontOrder.findMany({
           where: { groupBuyId: gbId },
-          select: { status: true, items: true, customer: true },
+          select: { status: true, paymentStatus: true, items: true, customer: true },
         }),
       );
       orders = rows.map((r) => ({
         status: r.status,
+        paymentStatus: r.paymentStatus,
         items: r.items,
         customer: r.customer,
       })) as unknown as Order[];
@@ -358,14 +360,14 @@ export async function getGroupBuySupplierReportAction(
 
     const report = buildSupplierReport(
       gbId,
-      orders.map((o) => ({ status: o.status, items: o.items ?? [] })),
+      orders.map((o) => ({ status: o.status, paymentStatus: o.paymentStatus, items: o.items ?? [] })),
     );
 
     let customers: GroupBuyCustomerLine[] | null = null;
     if (caps.reports.customerBreakdown) {
       const byKey = new Map<string, GroupBuyCustomerLine>();
       for (const o of orders) {
-        if (o.status === "cancelled") continue;
+        if (!orderCountsAsDemand(o.status)) continue; // same demand rule as the supplier lines
         const c = (o.customer ?? {}) as { name?: string; email?: string };
         const key = (c.email || c.name || "unknown").toLowerCase();
         const line = byKey.get(key) ?? {
