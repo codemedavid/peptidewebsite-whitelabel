@@ -3,13 +3,13 @@
  * (no DB, no Next):
  *
  *   1. Plan defaults move to the monthly model — Starter ₱799, Business
- *      ₱1,499 (first month ₱699 via discountPriceCents), Automated ₱2,999 —
- *      and PLAN_META mirrors the same monthly prices.
+ *      ₱1,499 (flat; the ₱699 first-month trial offer is retired), Automated
+ *      ₱2,999 — and PLAN_META mirrors the same monthly prices.
  *   2. Plans gain a one-time setup fee (setupFeeCents + setupFeeWaived) with
  *      the same clamp/fallback discipline as plan prices, and packagesFrom
  *      carries it through to the marketing/wizard Package shape.
  *   3. marketing/config exports the new landing copy: Pepweb brand, hero
- *      stats, intro offer (trial link preserved), why-monthly checklist,
+ *      stats, no trial funnel (INTRO_OFFER retired), why-monthly checklist,
  *      plan-comparison rows, value props, and the 7-question FAQ.
  *
  *   npm run test:pepweb-landing
@@ -20,13 +20,12 @@ import assert from "node:assert";
 import {
   defaultPlanConfig,
   normalizePlanConfig,
-  DEFAULT_TRIAL_PRICE_CENTS,
 } from "../src/lib/platform/plan-config";
 import { planPriceCents } from "../src/lib/admin/plans";
+import * as marketingConfig from "../src/marketing/config";
 import {
   SITE,
   HERO_STATS,
-  INTRO_OFFER,
   WHY_MONTHLY,
   COMPARISON,
   VALUE_PROPS,
@@ -70,9 +69,8 @@ check("PLAN_META mirrors the same monthly prices", () => {
   assert.strictEqual(planPriceCents("enterprise"), 299_900);
 });
 
-check("Business first month is the ₱699 trial price (discountPriceCents)", () => {
-  assert.strictEqual(byKey("pro").discountPriceCents, 69_900);
-  assert.strictEqual(byKey("pro").discountPriceCents, DEFAULT_TRIAL_PRICE_CENTS);
+check("Business has no first-month promo — the ₱699 trial offer is retired", () => {
+  assert.strictEqual(byKey("pro").discountPriceCents, undefined);
 });
 
 // ───────────────────── setup fees ─────────────────────
@@ -116,9 +114,9 @@ check("packagesFrom carries setup fee + monthly framing into Package", () => {
   assert.strictEqual(starter.setupFeeCents, 49_900);
   assert.strictEqual(starter.setupFeeWaived, false);
   assert.strictEqual(pro.setupFeeWaived, true);
-  // effective (checkout) price = first-month promo when set
-  assert.strictEqual(pro.priceCents, 69_900);
-  assert.strictEqual(pro.discountLabel, "₱699");
+  // effective (checkout) price = flat monthly now the trial offer is retired
+  assert.strictEqual(pro.priceCents, 149_900);
+  assert.strictEqual(pro.discountLabel, undefined);
   assert.strictEqual(pro.priceLabel, "₱1,499");
 });
 
@@ -134,9 +132,8 @@ check("hero stats show 24/7, setup time, and the ₱799 entry price", () => {
   assert.ok(values.includes("₱799"), "₱799/mo stat");
 });
 
-check("intro offer keeps the trial link (?plan=pro&trial=1)", () => {
-  assert.ok(INTRO_OFFER.href.includes("plan=pro"), "targets Business");
-  assert.ok(INTRO_OFFER.href.includes("trial=1"), "enters trial mode");
+check("marketing config no longer exposes an INTRO_OFFER trial funnel", () => {
+  assert.ok(!("INTRO_OFFER" in marketingConfig), "INTRO_OFFER export removed");
 });
 
 check("why-monthly checklist has the 8 included items", () => {

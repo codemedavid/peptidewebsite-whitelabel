@@ -53,12 +53,12 @@ check("Starter extras bill on top (2 × ₱1,500)", () => {
   assert.strictEqual(q.totalCents, 129_800 + 300_000);
 });
 
-check("Business default = first-month ₱699, setup waived → ₱699 total", () => {
+check("Business default = ₱1,499 flat (trial offer retired), setup waived → ₱1,499", () => {
   const q = checkoutQuote(pkg("pro"), { trial: false, extraFeatureCount: 0 });
-  assert.strictEqual(q.baseCents, 69_900); // effective (promo) price
+  assert.strictEqual(q.baseCents, 149_900); // flat monthly — no first-month promo
   assert.strictEqual(q.setupFeeCents, 0); // waived → nothing charged
   assert.strictEqual(q.setupFeeWaived, true); // but shown as FREE (₱999 struck)
-  assert.strictEqual(q.totalCents, 69_900);
+  assert.strictEqual(q.totalCents, 149_900);
 });
 
 check("Business trial = ₱699, setup always FREE even if un-waived", () => {
@@ -103,10 +103,10 @@ check("amountDueFromConfig matches the wizard quote (Starter + 1 extra)", () => 
   assert.strictEqual(due, 129_800 + STARTER_EXTRA_FEATURE_PRICE_CENTS);
 });
 
-check("amountDueFromConfig: Business non-trial = ₱699 first-month promo", () => {
+check("amountDueFromConfig: Business non-trial = ₱1,499 flat (no first-month promo)", () => {
   assert.strictEqual(
     amountDueFromConfig(config, { planKey: "pro", trial: false, extraFeatureCount: 0 }),
-    69_900,
+    149_900,
   );
 });
 
@@ -121,7 +121,7 @@ check("amountDueFromConfig: trial uses the operator-editable trialPriceCents", (
 check("amountDueFromConfig resolves legacy plan aliases (business → pro)", () => {
   assert.strictEqual(
     amountDueFromConfig(config, { planKey: "business", trial: false, extraFeatureCount: 0 }),
-    69_900,
+    149_900,
   );
 });
 
