@@ -414,6 +414,9 @@ export async function getGroupBuySupplierReportAction(
           items: oo.items ?? [],
         };
       }),
+      // Reuse the report already aggregated above — one pass over the orders, and
+      // the workbook can never diverge from the on-screen numbers.
+      report,
     );
     return { ok: true, report, customers, prep };
   } catch (e) {

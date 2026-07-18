@@ -80,13 +80,22 @@ function customerKey(c: ReportCustomer | undefined): string {
   return raw.toLowerCase();
 }
 
-export function prepareReport(round: ReportRound, orders: ReportInputOrder[]): ReportPrep {
+/**
+ * @param report Optional pre-built supplier report for these same orders. The
+ *   server action already builds one for its on-screen response; passing it in
+ *   avoids a second buildSupplierReport pass and guarantees the workbook can't
+ *   drift from the numbers the UI showed. Omit it and it's aggregated here.
+ */
+export function prepareReport(
+  round: ReportRound,
+  orders: ReportInputOrder[],
+  report: SupplierReport = buildSupplierReport("", orders),
+): ReportPrep {
   const demand = orders.filter((o) => orderCountsAsDemand(o.status));
   const committed = demand.filter(isCommitted);
 
   // Product Summary rides on the audited supplier-report aggregation, then folds
   // in per-product order counts (how many demand orders included the product).
-  const report: SupplierReport = buildSupplierReport("", orders);
   const orderCountByKey = new Map<string, number>();
   for (const o of demand) {
     const seen = new Set<string>();
