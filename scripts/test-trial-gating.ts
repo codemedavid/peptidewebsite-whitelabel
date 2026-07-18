@@ -30,7 +30,11 @@ import {
   lockedAdminModules,
   isAdminViewVisible,
 } from "../src/storefront/visibility";
-import { computeTrialState, brandTrialFrom } from "../src/lib/trial/trial-state";
+import {
+  computeTrialState,
+  brandTrialFrom,
+  businessExclusiveLocked,
+} from "../src/lib/trial/trial-state";
 import type { Brand } from "../src/storefront/types";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -125,6 +129,35 @@ check("brandTrialFrom returns undefined for tenants not governed by a trial", ()
     ),
   );
   assert.strictEqual(none, undefined);
+});
+
+// ───────────── pure Business-exclusive lock rule (single source) ─────────────
+// The ONE rule the server charge gate (isBusinessExclusiveLocked), the client
+// tile lock (isAdminModuleLocked) AND the storefront fee display all derive from,
+// so the fee a customer is SHOWN can never diverge from the fee the server
+// CHARGES. Active trial → locked regardless of entitlement (the trial plan is
+// technically entitled — the lock is the upsell); otherwise follow entitlement.
+check("businessExclusiveLocked: active trial locks regardless of entitlement", () => {
+  assert.strictEqual(businessExclusiveLocked(activeTrial, true), true);
+  assert.strictEqual(businessExclusiveLocked(activeTrial, false), true);
+});
+
+check("businessExclusiveLocked: no trial blob → follows entitlement", () => {
+  assert.strictEqual(businessExclusiveLocked(undefined, true), false);
+  assert.strictEqual(businessExclusiveLocked(undefined, false), true);
+});
+
+check("businessExclusiveLocked: expired trial → follows entitlement", () => {
+  assert.strictEqual(businessExclusiveLocked(expiredTrial, true), false);
+  assert.strictEqual(businessExclusiveLocked(expiredTrial, false), true);
+});
+
+check("isAdminModuleLocked('fee') is exactly businessExclusiveLocked(trial, entitled)", () => {
+  const b = brandWith({ trial: activeTrial, adminFeeEntitled: true });
+  assert.strictEqual(
+    isAdminModuleLocked(b, "fee"),
+    businessExclusiveLocked(b.trial, b.adminFeeEntitled !== false),
+  );
 });
 
 // ───────────────────────────── lock rules (visibility) ──────────────────────
