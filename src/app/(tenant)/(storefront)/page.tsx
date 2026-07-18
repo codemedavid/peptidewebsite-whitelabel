@@ -18,7 +18,7 @@ import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { getTrialState } from "@/lib/trial/trial-info";
-import { brandTrialFrom } from "@/lib/trial/trial-state";
+import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -200,12 +200,19 @@ export default async function HomePage() {
   }
   brand.staffLoginActive = resolveAdminLoginMode(staffEntitled, staffCount) === "unified";
 
-  // Checkout admin fee: operator-revocable per tenant (admin → Features),
-  // default ON. Revoking drops the fee line from checkout — orders.ts re-applies
-  // the same gate at placement so a stale client can't reinstate it.
+  // Checkout admin fee: operator-revocable per tenant (admin → Features, default
+  // ON) AND Business-exclusive under the trial system. brand.adminFeeEntitled is
+  // the raw entitlement (drives the store-admin tile). The storefront FEE LINE is
+  // dropped whenever the fee won't be charged — the SAME businessExclusiveLocked
+  // rule orders.ts applies at placement — so what the customer is shown equals
+  // what they're charged (during an active trial the fee is locked/uncharged even
+  // though the tenant is technically entitled). Keeping display and charge on one
+  // rule is what closes the "shown a fee we don't charge" gap.
   const adminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
   brand.adminFeeEntitled = adminFeeEntitled;
-  if (!adminFeeEntitled) delete (brand as Record<string, unknown>).adminFee;
+  if (businessExclusiveLocked(brand.trial, adminFeeEntitled)) {
+    delete (brand as Record<string, unknown>).adminFee;
+  }
 
   // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the
   // rules editor above): ship the resolved groupbuy.* capability set so the
@@ -283,5 +290,9 @@ export default async function HomePage() {
     trialActive,
   );
 
-  return <StorefrontApp brand={brand} products={products} tenantKey={tenantId} />;
+  // A paused (expired-trial) store renders the StorePaused card, not the catalog,
+  // so don't serialize the full product list into that page's payload.
+  const catalogProducts = isTrialPaused(brand.trial) ? [] : products;
+
+  return <StorefrontApp brand={brand} products={catalogProducts} tenantKey={tenantId} />;
 }

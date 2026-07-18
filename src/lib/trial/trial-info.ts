@@ -19,7 +19,7 @@ import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { hasFeature } from "@/lib/features/entitlements";
 import type { FeatureKey } from "@/lib/features/catalog";
-import { computeTrialState, type TrialState } from "./trial-state";
+import { businessExclusiveLocked, computeTrialState, type TrialState } from "./trial-state";
 
 const NOT_ON_TRIAL: TrialState = { onTrial: false, expired: false };
 
@@ -75,7 +75,9 @@ export async function isBusinessExclusiveLocked(
   tenantId: string,
   feature: FeatureKey,
 ): Promise<boolean> {
-  const state = await getTrialState(tenantId);
-  if (state.onTrial && !state.expired) return true;
-  return !(await hasFeature(tenantId, feature));
+  const [state, entitled] = await Promise.all([
+    getTrialState(tenantId),
+    hasFeature(tenantId, feature),
+  ]);
+  return businessExclusiveLocked(state, entitled);
 }

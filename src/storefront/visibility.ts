@@ -1,5 +1,6 @@
 import type { Brand } from "./types";
 import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
+import { businessExclusiveLocked } from "@/lib/trial/trial-state";
 
 // Store-admin module id → the catalog feature key that unlocks it. Mirrors
 // ADMIN_VIEW_TOGGLE (which module each entitlement gates) and is the reverse
@@ -159,8 +160,8 @@ export const BUSINESS_EXCLUSIVE_MODULES: Record<string, (b: Brand) => boolean> =
 export function isAdminModuleLocked(brand: Brand, moduleId: string): boolean {
   const entitled = BUSINESS_EXCLUSIVE_MODULES[moduleId];
   if (!entitled) return false;
-  if (brand.trial?.onTrial && !brand.trial.expired) return true;
-  return !entitled(brand);
+  // Same rule the server charge gate + storefront fee display use, so they can't drift.
+  return businessExclusiveLocked(brand.trial, entitled(brand));
 }
 
 // All currently locked module ids — the AdminPage quick-action grid and the

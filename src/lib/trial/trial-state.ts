@@ -66,6 +66,22 @@ export function isTrialPaused(
   return state?.onTrial === true && state.expired === true;
 }
 
+/** The single Business-exclusive lock rule, shared by the server charge gate
+ *  (isBusinessExclusiveLocked, trial-info.ts), the store-admin tile lock
+ *  (isAdminModuleLocked, visibility.ts) AND the storefront fee display (page.tsx),
+ *  so the fee a customer is SHOWN can never diverge from the fee the server
+ *  CHARGES. During an ACTIVE (non-expired) trial the feature is locked regardless
+ *  of entitlement — the trial plan is technically entitled, so the lock is the
+ *  upsell; otherwise the entitlement decides. Accepts a TrialState, a serialized
+ *  BrandTrial, or nothing (never trial-locked → follows entitlement). */
+export function businessExclusiveLocked(
+  trial: { onTrial: boolean; expired: boolean } | undefined | null,
+  entitled: boolean,
+): boolean {
+  if (trial?.onTrial === true && trial.expired === false) return true;
+  return !entitled;
+}
+
 /** JSON-safe projection of an on-trial TrialState for the client Brand blob
  *  (endsAt as ISO string so demo-mode JSON round-trips keep it intact). */
 export type BrandTrial = {
