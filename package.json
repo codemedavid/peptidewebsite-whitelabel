@@ -32,6 +32,7 @@
     "test:gb-rounds": "tsx scripts/test-gb-rounds.ts",
     "test:gb-report": "tsx scripts/test-gb-report.ts",
     "test:auth-audit": "tsx scripts/test-auth-audit.ts",
+    "test:gate-heartbeat": "tsx scripts/test-gate-heartbeat.ts",
     "test:onhand-gate": "tsx scripts/test-onhand-gate.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
     "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
