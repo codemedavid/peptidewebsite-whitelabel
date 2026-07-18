@@ -49,21 +49,9 @@ export const PRICING_INTRO = {
   body: "Hosting, maintenance, and continuous updates included in every plan. Cancel anytime.",
 } as const;
 
-// ──────────────────────────── Intro offer (1-month Business trial) ────────────────────────────
-// The green banner above the pricing cards. Prices are rendered live from the
-// plan config (trialPriceCents + the Business monthly price) so operator edits
-// on /admin/plans stay in sync; this holds the non-price copy.
-export const INTRO_OFFER = {
-  tag: "Introductory offer",
-  // Rendered as: "Business plan — first month {trialPrice}, FREE setup"
-  titleLead: "Business plan — first month",
-  titleTail: ", FREE setup",
-  // Rendered as: "Then {monthlyPrice}/month. {bodyTail}"
-  bodyTail: "Buong platform, hosting, at updates — kasama lahat.",
-  cta: "Start Growing",
-  // Trial signs up onto the Business plan; the operator confirms the trial arrangement.
-  href: "/get-started?plan=pro&trial=1",
-} as const;
+// The ₱699 / 1-month Business trial offer was retired for new sign-ups
+// (2026-07). The former INTRO_OFFER banner + its /get-started?plan=pro&trial=1
+// funnel are gone; existing trial tenants + the trial machinery are untouched.
 
 // ──────────────────────────── Packages ────────────────────────────
 // Derived from the admin plan source of truth. `key` is the DB plan key

@@ -65,8 +65,9 @@ export function planPriceCents(key: string): number {
 
 /** Pricing cards for the create-tenant flow + Plans page. Mirrors the Pepweb
  *  landing design: monthly subscription prices + a one-time setup fee
- *  (waived on Business while the intro offer runs). Business's first month is
- *  the ₱699 trial price, expressed as discountPriceCents. */
+ *  (waived on Business). The ₱699 / 1-month Business trial offer was retired
+ *  (2026-07) — no default first-month `discountPriceCents`. An operator can
+ *  still set a first-month promo per plan on /admin/plans if desired. */
 export const PLAN_CARDS = [
   {
     key: "starter",
@@ -89,7 +90,6 @@ export const PLAN_CARDS = [
     key: "pro",
     name: "Business",
     priceCents: 149900,
-    discountPriceCents: 69900,
     setupFeeCents: 99900,
     setupFeeWaived: true,
     blurb: "Everything you need to run a professional peptide storefront.",

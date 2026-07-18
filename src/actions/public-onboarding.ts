@@ -95,8 +95,11 @@ export async function submitOnboardingAction(
 
   const planKey = planMeta(payload.packageKey).key; // normalize aliases → starter|pro|enterprise
 
-  // The ₱699 1-month trial only exists for the Business (pro) package.
-  const trial = planKey === "pro" && payload.trial;
+  // The ₱699 / 1-month Business trial offer is retired for new sign-ups
+  // (2026-07): no new tenant is ever provisioned as a trial, regardless of any
+  // stale `?trial=1` link or crafted payload. Existing trial tenants + the
+  // trial machinery are untouched — only new intake is closed here.
+  const trial = false;
 
   // Starter must commit to at least N included add-on features (extras beyond N
   // are billed per STARTER_EXTRA_FEATURE_PRICE_CENTS; the schema caps the max at

@@ -48,14 +48,11 @@ export function OnboardingWizard({
   const [done, setDone] = useState<{ slug: string; url: string } | null>(null);
 
   // Preselect the package from ?plan=… (set by the marketing pricing cards).
-  // ?trial=1 opts into the ₱699 1-month Business trial (implies plan=pro).
+  // The ₱699 trial offer is retired: a stale `?trial=1` link no longer opts in.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const plan = params.get("plan");
-    const trial = params.get("trial") === "1" && (!plan || plan === "pro");
-    if (trial) {
-      update({ packageKey: "pro", trial: true });
-    } else if (plan && ["starter", "pro", "enterprise"].includes(plan)) {
+    if (plan && ["starter", "pro", "enterprise"].includes(plan)) {
       update({ packageKey: plan });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

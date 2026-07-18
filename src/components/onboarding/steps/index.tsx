@@ -33,7 +33,6 @@ import {
 } from "../useOnboardingForm";
 import {
   STARTER_FEATURE_LABELS,
-  PRO_TRIAL_PRICE_CENTS,
   type StarterFeatureKey,
 } from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
@@ -439,38 +438,11 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                     : `+ ${peso(p.setupFeeCents)} one-time setup`}
                 </small>
               )}
-              {p.key === "pro" && draft.trial && (
-                <small style={{ display: "block", marginTop: 4, color: "var(--green)", fontWeight: 600 }}>
-                  1-month trial: {peso(PRO_TRIAL_PRICE_CENTS)}
-                </small>
-              )}
             </span>
             {selected && <Check className="mk-choice-check" size={22} />}
           </button>
         );
       })}
-
-      {draft.packageKey === "pro" && (
-        <button
-          type="button"
-          className="mk-choice"
-          data-selected={draft.trial}
-          style={{ alignItems: "flex-start" }}
-          onClick={() => update({ trial: !draft.trial })}
-          aria-pressed={draft.trial}
-        >
-          <span style={{ flex: 1 }}>
-            <b style={{ fontSize: 15 }}>
-              Start with the 1-month trial — {peso(PRO_TRIAL_PRICE_CENTS)}
-            </b>
-            <small style={{ display: "block", marginTop: 2 }}>
-              Subukan muna ang buong Business system nang isang buwan. Kung sulit para sa&apos;yo,
-              saka ka mag-commit sa full price.
-            </small>
-          </span>
-          {draft.trial && <Check className="mk-choice-check" size={20} />}
-        </button>
-      )}
 
       {isStarter && (
         <div className="mk-card" style={{ marginTop: 8, gridColumn: "1 / -1" }}>
@@ -534,7 +506,6 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
 export function CheckoutStep({ draft, update, errors, packagePayment, packages }: StepProps) {
   const namedProducts = draft.products.filter((p) => p.name.trim()).length;
   const payMethods = visiblePackagePaymentMethods(packagePayment);
-  const isTrial = draft.packageKey === "pro" && draft.trial;
   const pkg = packages.find((p) => p.key === draft.packageKey);
   const extraFeatureCount =
     draft.packageKey === "starter"
@@ -542,24 +513,16 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
       : 0;
   const quote = checkoutQuote(
     pkg ?? { priceCents: 0, setupFeeCents: 0, setupFeeWaived: false },
-    { trial: isTrial, extraFeatureCount },
+    { trial: false, extraFeatureCount },
   );
   return (
     <div>
       <div className="mk-paybox">
-        <h4>
-          {isTrial
-            ? `Pay for your 1-month ${packageLabel(draft.packageKey)} trial`
-            : `Pay for your ${packageLabel(draft.packageKey)} package`}
-        </h4>
+        <h4>Pay for your {packageLabel(draft.packageKey)} package</h4>
         <p className="mk-hint" style={{ marginTop: 2 }}>{packagePayment.instructions}</p>
         <div style={{ marginTop: 10 }}>
           <div className="mk-payrow">
-            <span>
-              {isTrial
-                ? "1-month Business trial"
-                : `${packageLabel(draft.packageKey)} — first month`}
-            </span>
+            <span>{packageLabel(draft.packageKey)} — first month</span>
             <span style={{ textAlign: "right" }}>{peso(quote.baseCents)}</span>
           </div>
           {quote.addonCents > 0 && (
@@ -591,12 +554,6 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
         <div className="mk-payrow" style={{ marginTop: 4 }}>
           <span>
             <b>Amount to pay</b>
-            {isTrial && (
-              <small style={{ display: "block", color: "var(--muted)" }}>
-                1-month Business trial — kung magpapatuloy ka after, saka mo babayaran ang full
-                price ({pkg?.discountLabel ?? pkg?.priceLabel}).
-              </small>
-            )}
           </span>
           <span style={{ textAlign: "right" }}>
             <b style={{ fontFamily: "var(--font-head)", fontSize: 22 }}>{peso(quote.totalCents)}</b>
@@ -638,10 +595,7 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
           <div className="mk-review-item"><span>Business</span><b>{draft.businessName || "—"}</b></div>
           <div className="mk-review-item">
             <span>Package</span>
-            <b>
-              {packageLabel(draft.packageKey)}
-              {isTrial && ` — 1-month trial (${peso(PRO_TRIAL_PRICE_CENTS)})`}
-            </b>
+            <b>{packageLabel(draft.packageKey)}</b>
           </div>
           <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
           <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>

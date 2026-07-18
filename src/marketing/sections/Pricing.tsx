@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   packagesFrom,
-  INTRO_OFFER,
   PRICING_INTRO,
   PLAN_CTAS,
   type Package,
@@ -26,10 +25,6 @@ export async function Pricing() {
   // back to the code defaults when nothing has been saved.
   const config = await getPlanConfig();
   const packages = packagesFrom(config.plans);
-  const trialLabel = formatPesos(config.trialPriceCents);
-  const proMonthly = formatPesos(
-    config.plans.find((p) => p.key === "pro")?.priceCents ?? 0,
-  );
   return (
     <section className="mk-section" id="pricing">
       <div className="mk-container">
@@ -37,21 +32,6 @@ export async function Pricing() {
           <span className="mk-eyebrow">{PRICING_INTRO.eyebrow}</span>
           <h2 className="mk-h2">{PRICING_INTRO.title}</h2>
           <p>{PRICING_INTRO.body}</p>
-        </div>
-        <div className="mk-offer">
-          <div>
-            <span className="mk-offer-tag">{INTRO_OFFER.tag}</span>
-            <h3 className="mk-h3 mk-offer-title">
-              {INTRO_OFFER.titleLead} <em>{trialLabel}</em>
-              {INTRO_OFFER.titleTail}
-            </h3>
-            <p>
-              Then {proMonthly}/month. {INTRO_OFFER.bodyTail}
-            </p>
-          </div>
-          <Link href={INTRO_OFFER.href} className="mk-btn mk-btn-offer">
-            {INTRO_OFFER.cta} →
-          </Link>
         </div>
         <div className="mk-price-grid">
           {packages.map((p) => (
@@ -85,7 +65,7 @@ export async function Pricing() {
                 ))}
               </ul>
               <Link
-                href={`/get-started?plan=${p.key}${p.key === "pro" && p.discountLabel ? "&trial=1" : ""}`}
+                href={`/get-started?plan=${p.key}`}
                 className={`mk-btn ${p.highlighted ? "mk-btn-primary" : "mk-btn-ghost"}`}
               >
                 {PLAN_CTAS[p.key] ?? "Get Started"}
