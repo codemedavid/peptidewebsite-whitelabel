@@ -77,6 +77,9 @@ export async function evaluateOnHandGate(
     const groupBuys = await deps.loadGroupBuys(tenantId, demoSlug);
     return decideOnHandBlock({ allowOnHand, caps, groupBuys, items });
   } catch {
-    return null; // TODO(phase-2): fails OPEN — must fail closed. See RED test.
+    // FAIL CLOSED. On-hand sales are off, so a paused product must not slip
+    // through just because the gate couldn't be evaluated. We only reach here
+    // once allowOnHand is false, so this never walls an ordinary checkout.
+    return ON_HAND_GATE_UNVERIFIED_MESSAGE;
   }
 }
