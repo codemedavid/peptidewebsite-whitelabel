@@ -46,8 +46,9 @@ import {
   checkoutRuleViolations,
   normalizeCheckoutRules,
 } from "@/lib/storefront/checkout-rules";
-import { groupBuyForOrder, buildGroupBuyGate, isOnHandBlocked } from "@/lib/storefront/group-buy";
+import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { evaluateOnHandGate } from "@/lib/storefront/on-hand-gate";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
@@ -375,23 +376,10 @@ async function groupBuyOnHandViolation(
   demoSlug: string,
   items: OrderItem[],
 ): Promise<string | null> {
-  try {
-    const caps = await resolveGroupBuyCaps(tenantId);
-    if (!caps.enabled || !caps.productAssignment) return null;
-    const allowOnHand = config.groupBuyAllowOnHand !== false;
-    if (allowOnHand) return null;
-    const groupBuys = await loadGroupBuys(tenantId, demoSlug);
-    const gate = buildGroupBuyGate(groupBuys, caps, allowOnHand);
-    if (!gate.active || gate.allowOnHand || gate.coversAll) return null;
-    const blocked = items.find(
-      (it) => it.productId && isOnHandBlocked(it.productId, gate),
-    );
-    return blocked
-      ? `${blocked.name} isn't part of the current group buy. Remove it to check out.`
-      : null;
-  } catch {
-    return null; // never wall checkout on an attribution-side error
-  }
+  return evaluateOnHandGate(config, tenantId, demoSlug, items, {
+    resolveCaps: resolveGroupBuyCaps,
+    loadGroupBuys,
+  });
 }
 
 /** Coerce a stored/untrusted fee blob into the order's fee, or undefined when
