@@ -49,6 +49,7 @@ model Tenant {
 
   domains           Domain[]
   groupBuys         GroupBuy[]
+  authAudits        AuthAudit[]
   integrations      TenantIntegration[]
   featureOverrides  TenantFeatureOverride[]
   contacts          Contact[]
@@ -356,6 +357,21 @@ model GroupBuy {
 
   @@index([tenantId, status])
   @@map("group_buys")
+}
+
+// Auth audit trail — security-relevant events on the access gate / tenant admin.
+// Written server-side only (best-effort; see lib/auth/audit.ts). event is one of
+// code_rotated | admin_login | admin_login_failed.
+model AuthAudit {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  event     String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("auth_audit")
 }
 
 // ──────────────────────────── Events, email, automation ────────────────────────────

@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db/prisma";
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
+import { recordAuthAudit } from "@/lib/auth/audit";
+import { clientIp } from "@/lib/security/rate-limit";
 import {
   clearTenantAdminCookie,
   hashAdminPassword,
@@ -59,10 +61,15 @@ export async function signInTenantAdminAction(
   if (!tenant?.adminPasswordHash) {
     return { error: "Admin password isn't set yet. Contact the platform administrator." };
   }
+  const write = (row: Parameters<typeof recordAuthAudit>[1]) =>
+    recordAuthAudit((r) => prisma.authAudit.create({ data: r }), row);
+
   if (!verifyAdminPassword(parsed.data.password, tenant.adminPasswordHash)) {
+    await write({ tenantId, event: "admin_login_failed", ip: await clientIp() });
     return { error: "Wrong password." };
   }
 
+  await write({ tenantId, event: "admin_login", ip: await clientIp() });
   await setTenantAdminCookie(tenantId);
   redirect("/dashboard");
 }

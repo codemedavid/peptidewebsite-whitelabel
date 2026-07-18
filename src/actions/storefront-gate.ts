@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { saveGateSession, clearGateSession } from "@/lib/auth/storefront-gate";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
+import { recordAuthAudit } from "@/lib/auth/audit";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 
@@ -206,6 +207,12 @@ export async function rotateAccessCodeAction(
       where: { tenantId },
       update: { config: config as Prisma.InputJsonValue },
       create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+
+    await recordAuthAudit((row) => prisma.authAudit.create({ data: row }), {
+      tenantId,
+      event: "code_rotated",
+      ip: await clientIp(),
     });
 
     const slug = await getTenantSlug();
