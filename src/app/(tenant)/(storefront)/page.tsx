@@ -270,8 +270,12 @@ export default async function HomePage() {
   // already has (outside a trial).
   const trialActive = brand.trial?.onTrial === true && !brand.trial.expired;
   const spotlightEntitled = new Set<string>();
-  for (const key of registry.newKeys) {
-    if (await hasFeature(tenantId, key as FeatureKey)) spotlightEntitled.add(key);
+  // During an active trial pickFeatureSpotlight ignores entitlement (every kept
+  // key qualifies), so skip resolving it — the loop is pure dead work then.
+  if (!trialActive) {
+    for (const key of registry.newKeys) {
+      if (await hasFeature(tenantId, key as FeatureKey)) spotlightEntitled.add(key);
+    }
   }
   brand.featureSpotlight = pickFeatureSpotlight(
     registry.newKeys,
