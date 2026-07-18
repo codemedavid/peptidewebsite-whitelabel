@@ -8,7 +8,7 @@ export function Hero() {
       <div className="mk-hero-inner">
         <span className="mk-eyebrow">{hero.eyebrow}</span>
         <h1 className="mk-h1">
-          {hero.h1Lead} <em>{hero.h1Em}</em>
+          {hero.h1Lead} <em>{hero.h1Em}</em> {hero.h1Tail}
         </h1>
         <p className="mk-lead">{hero.sub}</p>
         <div className="mk-hero-cta">

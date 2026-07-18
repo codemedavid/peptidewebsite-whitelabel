@@ -24,9 +24,10 @@ export const SITE = {
   tagline: "Mas kaunting oras sa chat, mas maraming oras sa paglago.",
   hero: {
     eyebrow: "The all-in-one platform for peptide businesses",
-    // H1: the em part renders italic + green ("peptides online").
-    h1Lead: "Everything you need to sell",
-    h1Em: "peptides online",
+    // H1: the em part renders italic + green ("Peptide Brands").
+    h1Lead: "Built to Help",
+    h1Em: "Peptide Brands",
+    h1Tail: "Scale",
     sub: "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation — all in one platform that keeps improving every month.",
     primaryCta: "Start Today",
     secondaryCta: "View Demo",
@@ -204,6 +205,6 @@ export const PACKAGE_PAYMENT: { instructions: string; methods: PayTo[] } = {
   methods: [
     { method: "GCash", account: "JO*N AN***O D.", number: "0992 821 ••••", note: "Scan the QR or send to this number, then screenshot the receipt.", qr: "/payment/gcash-qr.png" },
     { method: "Maya", account: "Ma. Jonina Cassandra Donaire", number: "+63 *** *** 4519", note: "Scan the QR with your Maya app. Transfer fees may apply.", qr: "/payment/maya-qr.png" },
-    { method: "Bank Transfer", account: "Jonina Store", number: "BPI 0000 0000 00", note: "Use your business name as the reference." },
+    { method: "Bank Transfer", account: "Pepweb", number: "BPI 0000 0000 00", note: "Use your business name as the reference." },
   ],
 };

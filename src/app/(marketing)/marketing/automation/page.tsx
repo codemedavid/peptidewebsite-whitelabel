@@ -97,7 +97,7 @@ function Logo({ light = false }: { light?: boolean }) {
         light ? "text-white" : "text-zinc-900"
       }`}
     >
-      Jonina
+      Pepweb
       <span className="bg-gradient-to-r from-[#e94b7d] to-[#b0345e] bg-clip-text text-transparent">
         .automate
       </span>
@@ -642,7 +642,7 @@ function SiteFooter() {
       </div>
       <div className="border-t border-zinc-100">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-5 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <span>© {year} Jonina. All rights reserved.</span>
+          <span>© {year} Pepweb. All rights reserved.</span>
           <span>Built with care in the Philippines 🌸</span>
         </div>
       </div>

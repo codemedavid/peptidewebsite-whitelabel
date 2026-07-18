@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Terms & Conditions",
   description:
-    "The simple, friendly rules for working together with Jonina’s Peptide Website Services.",
+    "The simple, friendly rules for working together with Pepweb.",
 };
 
 function Block({ block }: { block: TermsBlock }) {

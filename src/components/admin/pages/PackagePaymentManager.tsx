@@ -229,7 +229,7 @@ function MethodCard({
             style={{ width: "100%", marginTop: 4 }}
             value={m.account}
             maxLength={200}
-            placeholder="e.g. Jonina Store"
+            placeholder="e.g. Pepweb"
             onChange={(e) => onPatch({ account: e.target.value })}
           />
         </div>

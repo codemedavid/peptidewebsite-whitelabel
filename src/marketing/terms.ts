@@ -1,4 +1,4 @@
-// Source of truth for the Jonina Peptide Website Services Terms & Conditions.
+// Source of truth for the Pepweb Terms & Conditions.
 // PURE data module (no server-only imports) so the marketing /terms page renders
 // it and other surfaces can link to it. Edit the copy here; the page renders it.
 
@@ -10,7 +10,7 @@ export const TERMS_META = {
   lastUpdated: "June 16, 2026",
   contactEmail: SITE.contactEmail,
   operator: "Ma. Jonina Donaire",
-  businessName: "Jonina’s Peptide Website Services",
+  businessName: "Pepweb",
 };
 
 export type TermsBlock =
@@ -21,8 +21,8 @@ export type TermsBlock =
 export type TermsSection = { n: number; title: string; blocks: TermsBlock[] };
 
 export const TERMS_INTRO =
-  "These Terms & Conditions (the “Terms”) explain how Jonina’s Peptide Website " +
-  "Services (“we,” “us,” “our,” or the “Developer”) works with you (“you,” “your,” " +
+  "These Terms & Conditions (the “Terms”) explain how Pepweb " +
+  "(“we,” “us,” “our,” or the “Developer”) works with you (“you,” “your,” " +
   "or the “Client”) when you visit our website, request a quote, or purchase any of " +
   "our website packages and services. We’ve kept them clear and friendly — our goal " +
   "is a great relationship built on trust.";
@@ -41,7 +41,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: "A Few Key Terms",
     blocks: [
       { type: "ul", items: [
-        "Developer — Jonina’s Peptide Website Services, operated by Ma. Jonina Donaire.",
+        "Developer — Pepweb, operated by Ma. Jonina Donaire.",
         "Client — the individual or business that purchases or uses our services.",
         "Services — website design, development, delivery, hosting setup, optional care plans, and related work we provide.",
         "Deliverables — the completed website and related items we hand over to you.",
