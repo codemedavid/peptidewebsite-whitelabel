@@ -28,6 +28,8 @@ import {
   saveGroupBuyAllowOnHandAction,
   type GroupBuyCustomerLine,
 } from "@/actions/group-buys";
+import { downloadSupplierWorkbook } from "@/storefront/admin/supplier-workbook";
+import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -301,6 +303,7 @@ function ReportModal({
 }) {
   const [report, setReport] = useState<SupplierReport | null>(null);
   const [customers, setCustomers] = useState<GroupBuyCustomerLine[] | null>(null);
+  const [prep, setPrep] = useState<ReportPrep | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -311,6 +314,7 @@ function ReportModal({
       else {
         setReport(res.report);
         setCustomers(res.customers);
+        setPrep(res.prep);
       }
     });
     return () => {
@@ -370,17 +374,12 @@ function ReportModal({
       ${customerTable}`;
   };
 
-  const downloadExcel = () => {
-    if (!report) return;
-    // No xlsx dependency: an HTML table with the ms-excel mime opens natively in
-    // Excel / Numbers / Google Sheets as a spreadsheet.
-    const html = `<html><head><meta charset="utf-8"><style>table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head><body>${reportHtml()}</body></html>`;
-    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${fileStem}.xls`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const downloadExcel = async () => {
+    if (!prep) return;
+    // Real 3-sheet .xlsx (Totals / Product Summary / Orders). exceljs is lazy-
+    // loaded inside downloadSupplierWorkbook so it never enters the storefront
+    // bundle. Data shaping is the unit-tested prepareReport (server-side).
+    await downloadSupplierWorkbook(prep);
   };
 
   const downloadPdf = () => {

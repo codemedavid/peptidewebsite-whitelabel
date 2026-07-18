@@ -48,6 +48,7 @@ import {
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
 import type { Order } from "@/storefront/types";
 
 export type ListGroupBuysResult =
@@ -65,7 +66,7 @@ export type GroupBuyCustomerLine = {
   total: number; // items only — fees/shipping excluded, same as the supplier lines
 };
 export type SupplierReportResult =
-  | { ok: true; report: SupplierReport; customers: GroupBuyCustomerLine[] | null }
+  | { ok: true; report: SupplierReport; customers: GroupBuyCustomerLine[] | null; prep: ReportPrep }
   | { error: string };
 
 const NOT_SIGNED_IN = "Not signed in to the store admin.";
@@ -347,10 +348,11 @@ export async function getGroupBuySupplierReportAction(
       const rows = await withTenant(tenantId, (db) =>
         db.storefrontOrder.findMany({
           where: { groupBuyId: gbId },
-          select: { status: true, paymentStatus: true, items: true, customer: true },
+          select: { orderNumber: true, status: true, paymentStatus: true, items: true, customer: true },
         }),
       );
       orders = rows.map((r) => ({
+        orderNumber: r.orderNumber,
         status: r.status,
         paymentStatus: r.paymentStatus,
         items: r.items,
@@ -387,7 +389,33 @@ export async function getGroupBuySupplierReportAction(
       customers = [...byKey.values()].sort((a, b) => b.total - a.total);
     }
 
-    return { ok: true, report, customers };
+    // Structured 3-sheet workbook prep for the client's lazy exceljs serializer.
+    const round = (await loadGroupBuys(tenantId, slug)).find((g) => g.id === gbId);
+    const prep = prepareReport(
+      {
+        name: round?.name ?? "",
+        status: round?.status ?? "",
+        startsAt: round?.startsAt ?? null,
+        endsAt: round?.endsAt ?? null,
+      },
+      orders.map((o) => {
+        const oo = o as unknown as {
+          orderNumber?: string;
+          status: string;
+          paymentStatus?: string;
+          customer?: { name?: string; email?: string; phone?: string };
+          items?: Array<{ name: string; qty: number; price: number; productId?: string }>;
+        };
+        return {
+          orderNumber: oo.orderNumber,
+          status: oo.status,
+          paymentStatus: oo.paymentStatus,
+          customer: oo.customer,
+          items: oo.items ?? [],
+        };
+      }),
+    );
+    return { ok: true, report, customers, prep };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't build the report." };
   }
