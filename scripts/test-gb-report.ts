@@ -152,5 +152,35 @@ check("Totals: demand headline + committed alongside + cancelled count", () => {
   assert.equal(get("Total Customers"), 2, "unique demand customers: Ann, Bo");
 });
 
+check("prepareReport uses the injected report instead of re-aggregating (no drift)", () => {
+  // The caller (getGroupBuySupplierReportAction) already builds the SupplierReport
+  // for the on-screen response; passing it in must avoid a SECOND
+  // buildSupplierReport over the same orders, so the workbook can't diverge from
+  // it. A sentinel report (deliberately unlike what the orders would produce)
+  // proves the param is wired: the Product Summary and the report-derived totals
+  // must reflect the injected report, not a recomputation.
+  const sentinel: ReturnType<typeof buildSupplierReport> = {
+    groupBuyId: "",
+    orderCount: 1,
+    totalQty: 777,
+    totalRevenue: 8888,
+    committedOrderCount: 1,
+    committedTotalQty: 5,
+    committedTotalRevenue: 55,
+    lines: [
+      { productId: "pX", name: "INJECTED", qty: 777, revenue: 8888, committedQty: 5, committedRevenue: 55 },
+    ],
+  };
+  const p = prepareReport(round, reportOrders, sentinel);
+  assert.deepEqual(p.summary.map((s) => s.productId), ["pX"], "summary comes from the injected report");
+  assert.equal(p.summary[0].demandQty, 777);
+  assert.equal(p.summary[0].committedQty, 5);
+  const get = (label: string) => p.totals.find((t) => t.label === label)?.value;
+  assert.equal(get("Total Items"), 777, "report-derived totals reflect the injected report");
+  assert.equal(get("Committed Items"), 5);
+  // The Orders sheet still derives from the raw orders (all 4 lines, cancelled incl).
+  assert.equal(p.orderLines.length, 4, "order lines still come from the raw orders");
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
