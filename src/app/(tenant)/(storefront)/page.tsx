@@ -14,6 +14,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import { pickFeatureSpotlight } from "@/lib/features/feature-spotlight";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
+import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { getTrialState } from "@/lib/trial/trial-info";
@@ -227,6 +228,9 @@ export default async function HomePage() {
       brand.groupBuyCaps,
       brand.groupBuyAllowOnHand,
     );
+    // Public banner + "Explore GB #N" scope filter for the live run. Purely
+    // presentational — the on-hand gate above owns what can actually be bought.
+    brand.groupBuyBanner = buildGroupBuyBanner(groupBuys, brand.groupBuyCaps) ?? undefined;
   }
 
   // Products are the source of truth in the DB. Load the tenant's catalog

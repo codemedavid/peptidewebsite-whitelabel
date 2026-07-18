@@ -17,6 +17,8 @@ import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
+import { GroupBuyBanner } from "./components/GroupBuyBanner";
+import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { ADMIN_AUTH_KEY } from "./admin/authKey";
@@ -58,6 +60,9 @@ function pageFromHash(): string {
 function Shell() {
   const { brand, products, categories, cart, addToCart } = useStore();
   const [category, setCategory] = useState("all");
+  // "Explore GB #N" scope toggle — default OFF so the normal view is the full
+  // catalog; opting in narrows it to the live round's products (presentation only).
+  const [gbScope, setGbScope] = useState(false);
   const [page, setPage] = useState("home");
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -236,11 +241,25 @@ function Shell() {
           {brand.showCategories !== false && (
             <Categories categories={categories} active={category} onChange={setCategory} />
           )}
+          {brand.groupBuyBanner && (
+            <GroupBuyBanner
+              banner={brand.groupBuyBanner}
+              scopeOn={gbScope}
+              onToggle={setGbScope}
+            />
+          )}
           {brand.showCatalog !== false && (
             <Catalog
               // Public catalog hides products the owner marked unavailable; the
-              // store admin (separate route below) still sees the full set.
-              products={products.filter((p) => p.available !== false)}
+              // store admin (separate route below) still sees the full set. The
+              // "Explore GB #N" toggle further narrows the view to the live
+              // round's products — presentation only; the on-hand gate (in the
+              // card + server) still owns what's actually buyable.
+              products={scopedCatalog(
+                products.filter((p) => p.available !== false),
+                brand.groupBuyBanner ?? null,
+                gbScope,
+              )}
               category={category}
               onAddToCart={addToCart}
               brand={brand}

@@ -14,6 +14,7 @@ import type {
   GroupBuySettings,
   GroupBuyStorefrontGate,
 } from "@/lib/storefront/group-buy";
+import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
@@ -440,6 +441,11 @@ export type Brand = {
   // and whether on-hand products are blocked. Computed server-side in page.tsx
   // so a stale client can't bypass it; absent = no live run / module off.
   groupBuyGate?: GroupBuyStorefrontGate;
+  // Public banner for the live run: name/eta shown above the catalog plus the
+  // products it covers, driving the "Explore GB #N" scope toggle. Computed
+  // server-side (buildGroupBuyBanner); absent = no live run / module off. Purely
+  // presentational — never gates what can be bought (that's groupBuyGate).
+  groupBuyBanner?: GroupBuyBanner;
   // Group buy slice of the Sales Analytics view. Derived server-side from
   // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
   // meaningful while the Sales Analytics module itself is on). Absent/false =
