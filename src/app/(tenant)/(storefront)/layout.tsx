@@ -9,11 +9,9 @@ import { ComplianceBanner } from "@/modules/sections/ComplianceBanner";
 import { Monogram } from "@/components/Monogram";
 import { Gate } from "@/components/Gate";
 import { FEATURES } from "@/lib/features/catalog";
-import { isDemoMode } from "@/lib/demo/fixtures";
-import { hasFeature } from "@/lib/features/entitlements";
-import { getTenantGateState } from "@/lib/tenant/gate-state";
-import { isGateUnlocked } from "@/lib/auth/storefront-gate";
+import { evaluateVisitorGate } from "@/lib/auth/gate-enforcement";
 import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
+import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import "@/storefront/storefront.css";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
@@ -52,35 +50,30 @@ export default async function StorefrontLayout({
   const name = settings?.storeName ?? tenant.name;
 
   // ── Visitor access-code gate ────────────────────────────────────────────────
-  // When the tenant has the gate ON (and a code set), render the access wall
-  // server-side INSTEAD of the store for any visitor without a valid cookie for
-  // this tenant at the current code version — so the gated store HTML never
-  // reaches an unauthenticated browser. The gate STATE is read fresh (see
-  // getTenantGateState — uncached on purpose, it's a security boundary); the
-  // cookie check is read-only (Server Components can't write cookies, so the
-  // cookie is minted by verifyAccessCodeAction). Skipped in demo mode, and gated
-  // on the platform entitlement (FEATURES.STORE_ACCESS_CODE) — operator-grantable,
-  // default OFF — so revoking it reopens a currently-gated store.
-  if (!isDemoMode() && (await hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE))) {
-    const gate = await getTenantGateState(tenantId);
-    if (
-      gate.enabled &&
-      gate.hasCode &&
-      !(await isGateUnlocked({ id: tenantId, accessCodeVersion: gate.codeVersion }))
-    ) {
-      const colors = (branding?.colors ?? {}) as { primary?: string };
-      return (
-        <div style={cssVars} className="min-h-screen">
-          <AccessCodeGate
-            storeName={name}
-            logoUrl={branding?.logoUrl}
-            brandColor={colors.primary || "#0f172a"}
-            heading={gate.heading}
-          />
-        </div>
-      );
-    }
+  // One decision (evaluateVisitorGate) drives BOTH the wall here and the
+  // heartbeat endpoint /api/gate/session, so the two can't disagree. When the
+  // gate is on and this visitor has no valid cookie for this tenant at the
+  // current code version, render the access wall server-side INSTEAD of the store
+  // — the gated store HTML never reaches an unauthenticated browser. When the
+  // visitor IS unlocked, mount the heartbeat: the storefront is a hash-routed SPA
+  // that never re-hits the server on its own, so without it a later code rotation
+  // wouldn't boot an idle visitor until a hard refresh. The gate state is read
+  // fresh (security boundary); skipped in demo and when the entitlement is off.
+  const gateDecision = await evaluateVisitorGate(tenantId);
+  if (gateDecision.status === "blocked") {
+    const colors = (branding?.colors ?? {}) as { primary?: string };
+    return (
+      <div style={cssVars} className="min-h-screen">
+        <AccessCodeGate
+          storeName={name}
+          logoUrl={branding?.logoUrl}
+          brandColor={colors.primary || "#0f172a"}
+          heading={gateDecision.heading}
+        />
+      </div>
+    );
   }
+  const gateHeartbeat = gateDecision.status === "unlocked" ? <GateHeartbeat /> : null;
 
   const fonts = (branding?.fonts ?? {}) as { heading?: string; body?: string };
   // Hero typography lives on the storefront Brand config; load its distinct
@@ -121,6 +114,7 @@ export default async function StorefrontLayout({
 
   return (
     <div style={cssVars} className="min-h-screen bg-background text-foreground">
+      {gateHeartbeat}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       {/* Preload the font CSS so the network request starts before HTML parsing
