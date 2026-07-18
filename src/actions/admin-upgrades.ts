@@ -75,27 +75,46 @@ export async function decideUpgradeRequestAction(
     include: { tenant: { select: { id: true, slug: true } } },
   });
   if (!request) return { error: "Request not found." };
+  // Friendly-error pre-check. The race-proof guard is the conditional updateMany
+  // inside the transaction below — this read is only here to fail fast/readably.
   if (!canTransitionUpgrade(normalizeUpgradeStatus(request.status), decision)) {
     return { error: "This request has already been decided." };
   }
 
+  // Resolve the target plan before opening the transaction (read-only), so a bad
+  // plan key fails cleanly.
+  let planId: string | null = null;
   if (decision === "approved") {
     const plan = await prisma.plan.findUnique({
       where: { key: request.toPlan },
       select: { id: true },
     });
     if (!plan) return { error: `The "${request.toPlan}" plan isn't set up in the database yet.` };
-    // One transaction: the decision and the plan flip land together, and the
-    // storefront reactivates (status "active") the moment the operator approves.
-    await prisma.$transaction([
-      prisma.upgradeRequest.update({ where: { id }, data: { status: "approved" } }),
-      prisma.tenant.update({
-        where: { id: request.tenant.id },
-        data: { planId: plan.id, status: "active" },
-      }),
-    ]);
-  } else {
-    await prisma.upgradeRequest.update({ where: { id }, data: { status: "rejected" } });
+    planId = plan.id;
+  }
+
+  // Decide atomically. The status flip is a CONDITIONAL update guarded on the row
+  // still being pending, so two concurrent decisions can't both apply — the
+  // second sees count 0 and is rejected. On approval the plan flip + storefront
+  // reactivation (status "active") land in the same transaction.
+  try {
+    const applied = await prisma.$transaction(async (tx) => {
+      const flip = await tx.upgradeRequest.updateMany({
+        where: { id, status: "pending" },
+        data: { status: decision },
+      });
+      if (flip.count === 0) return false; // decided by a concurrent call
+      if (decision === "approved" && planId) {
+        await tx.tenant.update({
+          where: { id: request.tenant.id },
+          data: { planId, status: "active" },
+        });
+      }
+      return true;
+    });
+    if (!applied) return { error: "This request has already been decided." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't apply the decision right now." };
   }
 
   // Bust the storefront caches (entitlements + trial state re-gate) and the
