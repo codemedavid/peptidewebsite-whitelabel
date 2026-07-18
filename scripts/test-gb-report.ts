@@ -15,6 +15,7 @@
 import assert from "node:assert";
 
 import { buildSupplierReport } from "../src/lib/storefront/group-buy";
+import { prepareReport } from "../src/lib/storefront/group-buy-report";
 
 let passed = 0;
 let failed = 0;
@@ -98,6 +99,57 @@ check("lines stay sorted by demand qty descending", () => {
   ];
   const r = buildSupplierReport("gb1", orders);
   assert.deepEqual(r.lines.map((l) => l.productId), ["p2", "p1"]);
+});
+
+// ── prepareReport: the 3-sheet workbook data (pure, no exceljs) ──────────────
+console.log("\nprepareReport — 3-sheet workbook data\n");
+
+const round = {
+  name: "Holiday Round",
+  status: "closed",
+  startsAt: "2026-06-01T00:00:00.000Z",
+  endsAt: "2026-06-30T00:00:00.000Z",
+};
+const reportOrders = [
+  { orderNumber: "A1", status: "pending", paymentStatus: "unpaid", customer: { name: "Ann", email: "ann@x.io" }, items: [line("BPC-157", 2, 100, "p1")] },
+  { orderNumber: "A2", status: "delivered", paymentStatus: "paid", customer: { name: "Bo", email: "bo@x.io" }, items: [line("BPC-157", 1, 100, "p1"), line("TB-500", 4, 50, "p2")] },
+  { orderNumber: "A3", status: "cancelled", paymentStatus: "unpaid", customer: { name: "Cy", email: "cy@x.io" }, items: [line("TB-500", 9, 50, "p2")] },
+];
+
+check("filename is GB-{slug(name)}-report.xlsx", () => {
+  const p = prepareReport(round, reportOrders);
+  assert.equal(p.filename, "GB-holiday-round-report.xlsx");
+});
+
+check("Product Summary: one row per product, demand desc, with committed subset", () => {
+  const p = prepareReport(round, reportOrders);
+  // demand: p1 = 2+1 = 3 ; p2 = 4 (A3 cancelled excluded). p2 > p1.
+  assert.deepEqual(p.summary.map((s) => s.productId), ["p2", "p1"]);
+  const p1 = p.summary.find((s) => s.productId === "p1")!;
+  assert.equal(p1.demandQty, 3);
+  assert.equal(p1.committedQty, 1, "only the delivered/paid A2 line is committed");
+  assert.equal(p1.orders, 2, "p1 appears on A1 and A2");
+});
+
+check("Orders sheet lists EVERY line incl cancelled, with Counted Yes/No", () => {
+  const p = prepareReport(round, reportOrders);
+  // lines: A1(1) + A2(2) + A3(1) = 4
+  assert.equal(p.orderLines.length, 4);
+  const a3 = p.orderLines.find((l) => l.orderNumber === "A3")!;
+  assert.equal(a3.counted, false, "cancelled line is present but not counted");
+  const a1 = p.orderLines.find((l) => l.orderNumber === "A1")!;
+  assert.equal(a1.counted, true);
+});
+
+check("Totals: demand headline + committed alongside + cancelled count", () => {
+  const p = prepareReport(round, reportOrders);
+  const get = (label: string) => p.totals.find((t) => t.label === label)?.value;
+  assert.equal(get("Placed Orders"), 2, "demand order count (A1, A2)");
+  assert.equal(get("Cancelled Orders"), 1);
+  assert.equal(get("Total Items"), 7, "demand qty: 2 + (1+4)");
+  assert.equal(get("Committed Orders"), 1);
+  assert.equal(get("Committed Items"), 5, "A2 qty 1+4");
+  assert.equal(get("Total Customers"), 2, "unique demand customers: Ann, Bo");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
