@@ -21,6 +21,7 @@ import {
   liveGroupBuys,
   groupBuyForOrder,
   buildGroupBuyGate,
+  staleActiveRoundIds,
   type GroupBuy,
   type GroupBuyStatus,
 } from "../src/lib/storefront/group-buy";
@@ -159,6 +160,36 @@ check("the gate is built from at most one live round", () => {
   // Only round "a" is live, so only its products are covered. If both rounds
   // counted, p2 would leak in and the on-hand gate would under-block.
   assert.deepEqual(gate.productIds, ["p1"]);
+});
+
+// ───────────── reconciliation for the DB partial unique index ───────────────
+// The index group_buys_one_active_per_tenant guards the STORED status='active'.
+// effectiveGroupBuyStatus derives "closed" on read, so a lapsed round lingers
+// stored-active forever. staleActiveRoundIds finds exactly those rows, so the
+// save path can persist their close before activating a new round — otherwise
+// the index would false-reject a legitimate activation.
+console.log("staleActiveRoundIds — reconcile lapsed stored-active rows");
+
+check("finds a stored-active round whose window has lapsed", () => {
+  const rounds = [
+    mkRound({ id: "lapsed", status: "active", endsAt: iso(-1 * HOUR) }),
+    mkRound({ id: "live", status: "active", endsAt: iso(+24 * HOUR) }),
+  ];
+  assert.deepEqual(staleActiveRoundIds(rounds, { scheduled: true }, NOW), ["lapsed"]);
+});
+
+check("ignores a genuinely-live stored-active round", () => {
+  const rounds = [mkRound({ id: "live", status: "active", endsAt: iso(+24 * HOUR) })];
+  assert.deepEqual(staleActiveRoundIds(rounds, { scheduled: true }, NOW), []);
+});
+
+check("ignores rounds not stored active (scheduled/closed/draft)", () => {
+  const rounds = [
+    mkRound({ id: "s", status: "scheduled", startsAt: iso(-2 * HOUR), endsAt: iso(-1 * HOUR) }),
+    mkRound({ id: "c", status: "closed" }),
+    mkRound({ id: "d", status: "draft" }),
+  ];
+  assert.deepEqual(staleActiveRoundIds(rounds, { scheduled: true }, NOW), []);
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────

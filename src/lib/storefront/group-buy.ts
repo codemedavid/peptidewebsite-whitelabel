@@ -198,6 +198,28 @@ export function liveGroupBuys(
 }
 
 /**
+ * Rounds stored as `status = 'active'` whose window has since lapsed (effective
+ * status "closed"). effectiveGroupBuyStatus derives the close on read, so nothing
+ * ever persists it — a lapsed round lingers stored-active indefinitely. The save
+ * path closes these before activating a new round; otherwise the DB partial
+ * unique index (group_buys_one_active_per_tenant, one stored-active per tenant)
+ * would false-reject a legitimate activation against a round that is really over.
+ */
+export function staleActiveRoundIds(
+  list: GroupBuy[],
+  caps: Pick<GroupBuyCapabilities, "scheduled">,
+  now: Date = new Date(),
+): string[] {
+  return list
+    .filter(
+      (gb) =>
+        gb.status === "active" &&
+        effectiveGroupBuyStatus(gb, caps.scheduled, now) === "closed",
+    )
+    .map((gb) => gb.id);
+}
+
+/**
  * The group buy an order belongs to, decided server-side at placement: the first
  * live run whose product assignment covers at least one ordered line (runs with
  * no assignment — or when the tenant lacks groupbuy.product_assignment — cover

@@ -36,6 +36,7 @@ import {
   normalizeGroupBuy,
   normalizeGroupBuySettings,
   effectiveGroupBuyStatus,
+  staleActiveRoundIds,
   buildSupplierReport,
   dbGroupBuyToStorefront,
   groupBuyToDbWrite,
@@ -144,6 +145,13 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
       return { error: "Another group buy is already active. Close it before opening this one." };
     }
 
+    // Reconcile before writing a stored-active row: persist the close of any
+    // lapsed round still stored 'active' (effective status "closed") so the DB
+    // partial unique index group_buys_one_active_per_tenant doesn't false-reject
+    // this activation. Only relevant when the row we're about to write is itself
+    // stored 'active'.
+    const staleIds = gb.status === "active" ? staleActiveRoundIds(others, caps) : [];
+
     if (isDemoMode()) {
       const list = (await loadGroupBuys(tenantId, slug)).slice();
       const now = new Date().toISOString();
@@ -165,6 +173,9 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     };
     if (isEdit) {
       const row = await withTenant(tenantId, async (db) => {
+        if (staleIds.length) {
+          await db.groupBuy.updateMany({ where: { id: { in: staleIds } }, data: { status: "closed" } });
+        }
         // updateMany is tenant-scoped by the extension; the bare-id update isn't.
         const n = await db.groupBuy.updateMany({ where: { id: gb.id }, data });
         return n.count ? db.groupBuy.findFirst({ where: { id: gb.id } }) : null;
@@ -172,11 +183,20 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
       if (!row) return { error: "Group buy not found." };
       return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
     }
-    const row = await withTenant(tenantId, (db) =>
-      db.groupBuy.create({ data: { ...data, tenantId } }),
-    );
+    const row = await withTenant(tenantId, async (db) => {
+      if (staleIds.length) {
+        await db.groupBuy.updateMany({ where: { id: { in: staleIds } }, data: { status: "closed" } });
+      }
+      return db.groupBuy.create({ data: { ...data, tenantId } });
+    });
     return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
   } catch (e) {
+    // The DB partial unique index rejects a second concurrent activation with
+    // P2002 — surface the same readable message the app guard would have, never
+    // the raw constraint text.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { error: "Another group buy is already active. Close it before opening this one." };
+    }
     return { error: e instanceof Error ? e.message : "Couldn't save the group buy." };
   }
 }
