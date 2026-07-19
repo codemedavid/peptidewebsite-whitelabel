@@ -139,6 +139,18 @@ export function isAdminViewVisible(brand: Brand, view: string): boolean {
   return check ? check(brand) : true;
 }
 
+// Is the product editor's "Reseller / Wholesale Pricing" card available? It
+// writes the prices the Reseller Portal sells, so it rides the exact same
+// entitlement (FEATURES.STORE_RESELLER_PORTAL → brand.showAdminReseller) as the
+// portal manager view. Deliberately delegates to isAdminViewVisible rather than
+// re-reading the flag, so the two can't drift apart. Unentitled tenants used to
+// still see this card — filling in wholesale prices that no storefront surface
+// would ever sell. Saved values are left untouched: turning the feature back on
+// restores them.
+export function isResellerPricingVisible(brand: Brand): boolean {
+  return isAdminViewVisible(brand, "reseller");
+}
+
 // ── Business-exclusive lock (trial system) ───────────────────────────────────
 // Unlike ADMIN_VIEW_TOGGLE (which HIDES a module), these modules stay VISIBLE
 // but render locked — gold BUSINESS badge, "tap to upgrade" — and clicking

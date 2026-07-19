@@ -5,6 +5,12 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
 import { RESELLER_MIN_QTY } from "../checkout";
+import { isResellerPricingVisible } from "../visibility";
+import {
+  VARIATION_PRESETS,
+  applyVariationPreset,
+  type VariationDraft,
+} from "./variation-presets";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,8 +112,8 @@ function SetInclusionsEditor({ items, onChange }: SetInclusionsEditorProps) {
 
 // `price` is kept as `number | string` so the input can be cleared to an empty
 // string while editing (a bare `0` you can't delete is annoying); the save path
-// coerces it back to a number.
-type Variation = { name: string; price: number | string };
+// coerces it back to a number. Shared with the preset helper.
+type Variation = VariationDraft;
 
 type VariationsEditorProps = {
   items: Variation[];
@@ -151,13 +157,28 @@ function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) 
           </button>
         </div>
       ))}
-      <button
-        className="admin-image-btn admin-image-btn--secondary"
-        style={{ alignSelf: "flex-start" }}
-        onClick={add}
-      >
-        + Add variation
-      </button>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <button className="admin-image-btn admin-image-btn--secondary" onClick={add}>
+          + Add variation
+        </button>
+        {VARIATION_PRESETS.map((preset) => {
+          // Already in the list → the button would be a no-op, so retire it
+          // rather than leave a control that silently does nothing.
+          const used = items.some(
+            (it) => it.name.trim().toLowerCase() === preset.toLowerCase(),
+          );
+          if (used) return null;
+          return (
+            <button
+              key={preset}
+              className="admin-image-btn admin-image-btn--secondary"
+              onClick={() => onChange(applyVariationPreset(items, preset))}
+            >
+              + {preset}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -442,8 +463,10 @@ export function AdminAddProduct({
           <h2 className="admin-form__section">🧬 Variations</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
             Offer the same product in multiple options — e.g. dosages or sizes like
-            5mg / 10mg — each with its own price ({currency}). Leave empty to sell
-            the product as a single option at the base price above.
+            5mg / 10mg, or the shortcuts below for selling vials on their own
+            versus the complete set — each with its own price ({currency}).
+            Customers pick the option on the storefront. Leave empty to sell the
+            product as a single option at the base price above.
           </div>
           <VariationsEditor items={variations} currency={currency} onChange={setVariations} />
         </div>
@@ -515,6 +538,10 @@ export function AdminAddProduct({
         </div>
 
         {/* ---------- Reseller Pricing ---------- */}
+        {/* Entitlement-gated, same as the Reseller Portal manager view. Saved
+            prices are preserved while hidden — the state above still seeds from
+            `initial`, so the save path round-trips them untouched. */}
+        {isResellerPricingVisible(brand) && (
         <div className="admin-form__card">
           <h2 className="admin-form__section">🤝 Reseller / Wholesale Pricing</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
@@ -542,6 +569,7 @@ export function AdminAddProduct({
             </div>
           </div>
         </div>
+        )}
 
         {/* ---------- Product Image ---------- */}
         <div className="admin-form__card">
