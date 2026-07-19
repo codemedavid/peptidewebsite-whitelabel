@@ -11,6 +11,7 @@ import {
   applyVariationPreset,
   type VariationDraft,
 } from "./variation-presets";
+import { unpricedVariationNames } from "@/lib/storefront/variations";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,7 +234,17 @@ export function AdminAddProduct({
 
   const currency = brand.currency || "₱";
   const fileRef = useRef<HTMLInputElement>(null);
-  const canSave = !!(name.trim() && description.trim() && category && Number(price) >= 0);
+  // A named variation with no price would save as 0 (`Number("") || 0`) and the
+  // storefront would sell it for nothing — one click of a preset button is
+  // enough to create that row, so saving is blocked until every option is priced.
+  const unpriced = unpricedVariationNames(variations);
+  const canSave = !!(
+    name.trim() &&
+    description.trim() &&
+    category &&
+    Number(price) >= 0 &&
+    unpriced.length === 0
+  );
 
   // Real categories the owner can assign (the synthetic "all" tab is a filter,
   // not an assignable category).
@@ -469,6 +480,16 @@ export function AdminAddProduct({
             product as a single option at the base price above.
           </div>
           <VariationsEditor items={variations} currency={currency} onChange={setVariations} />
+          {unpriced.length > 0 && (
+            <div
+              className="admin-field__hint"
+              role="alert"
+              style={{ marginTop: 12, color: "var(--danger, #b42318)" }}
+            >
+              Set a price for {unpriced.join(", ")} before saving — an option
+              without a price would be sold for free.
+            </div>
+          )}
         </div>
 
         {/* ---------- Complete Set Inclusions ---------- */}

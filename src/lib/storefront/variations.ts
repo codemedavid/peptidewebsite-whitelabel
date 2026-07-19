@@ -1,0 +1,91 @@
+// Shared rules for per-product variations (the size/dosage options a seller
+// defines, e.g. "Vials only" / "Complete set" / "5mg").
+//
+// Lives here rather than in either consumer because the storefront card and the
+// store-admin editor must agree on them: the card decides what a customer can
+// pick and pay, the editor decides what a seller is allowed to save. Splitting
+// the rules across the two is how a variation ends up sellable at a price the
+// editor never meant to allow.
+
+/** A saved variation: name plus its own price, in the storefront's major units. */
+export type Variation = { name: string; price: number };
+
+/** An option offered on the product card. `variation` is absent on the product's
+ *  own base price ("Standard") and present on every real variation — the cart
+ *  needs it to clone the product via makeVariationEntry. */
+export type ProductOption = {
+  name: string;
+  price: number;
+  variation?: Variation;
+};
+
+/** Just the fields the option rules read. Keeps this module free of the full
+ *  storefront `Product` type (and its import cycle back into components). */
+type OptionSource = { price: number; variations?: Variation[] };
+
+const variationsOf = (p: OptionSource): Variation[] =>
+  Array.isArray(p.variations) ? p.variations : [];
+
+/**
+ * The options a customer can choose between on the product card.
+ *
+ * A product with no variations returns `[]` — the card keeps its plain
+ * single-price behavior and never renders a picker. Otherwise the product's own
+ * base price leads as "Standard", so a seller who adds one variation still
+ * offers a genuine choice, and the variations follow in the order the seller
+ * arranged them. A base price of 0 is skipped rather than offered: a "Standard"
+ * option at zero would be a free checkout, not a choice.
+ */
+export function buildProductOptions(product: OptionSource): ProductOption[] {
+  const variations = variationsOf(product);
+  if (variations.length === 0) return [];
+
+  return [
+    ...(product.price > 0 ? [{ name: "Standard", price: product.price }] : []),
+    ...variations.map((v) => ({ name: v.name, price: v.price, variation: v })),
+  ];
+}
+
+/**
+ * Should the card render its option picker?
+ *
+ * Any variation at all earns one. This deliberately does NOT key off the option
+ * count: a product priced at 0 with a single variation produces exactly one
+ * option, and the old `options.length > 1` rule hid it — the seller had set a
+ * price the customer could pay but never see named.
+ */
+export function shouldShowOptionPicker(product: OptionSource): boolean {
+  return variationsOf(product).length > 0;
+}
+
+/** Label for one option pill, e.g. "Vials only · ₱2,500". The name alone isn't
+ *  enough once a card offers several tiers — the whole point of the picker is
+ *  comparing what each costs without clicking through them one at a time. */
+export function optionLabel(option: ProductOption, currency: string): string {
+  return `${option.name} · ${currency}${option.price.toLocaleString()}`;
+}
+
+/**
+ * Names of variations that are named but carry no usable price (blank, zero or
+ * negative) — the editor blocks saving while this is non-empty.
+ *
+ * Without this a one-click preset adds "Vials only" with an empty price, the
+ * save path coerces it (`Number("") || 0`) to 0, and the storefront happily
+ * sells it for nothing. Rows with no name are ignored: the save path drops them
+ * as empty, so they are not an error the seller needs to act on.
+ */
+export function unpricedVariationNames(
+  items: readonly { name: string; price: number | string }[],
+): string[] {
+  return items
+    .filter((it) => it.name.trim() !== "")
+    .filter((it) => {
+      // A blank string must not read as 0 here — it is exactly the case we are
+      // catching, and `Number("") === 0` would otherwise pass a `>= 0` test.
+      const price = typeof it.price === "string" ? it.price.trim() : it.price;
+      if (price === "") return true;
+      const n = Number(price);
+      return !Number.isFinite(n) || n <= 0;
+    })
+    .map((it) => it.name.trim());
+}

@@ -29,6 +29,11 @@ import {
   applyVariationPreset,
   type VariationDraft,
 } from "../src/storefront/admin/variation-presets";
+import {
+  buildProductOptions,
+  shouldShowOptionPicker,
+  unpricedVariationNames,
+} from "../src/lib/storefront/variations";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
 let passed = 0;
@@ -142,6 +147,106 @@ check("is a no-op when the preset is already in the list", () => {
 check("matches an existing preset case-insensitively and ignores stray whitespace", () => {
   const items: VariationDraft[] = [{ name: "  vials ONLY ", price: 800 }];
   assert.deepEqual(applyVariationPreset(items, "Vials only"), items);
+});
+
+// ───────────────── buildProductOptions / shouldShowOptionPicker ─────────────
+// The storefront card's option list, extracted out of Catalog.tsx so the
+// "which options does a customer see" rule is testable and shared.
+console.log("buildProductOptions");
+
+const productWith = (price: number, variations?: { name: string; price: number }[]) =>
+  ({ price, variations }) as Parameters<typeof buildProductOptions>[0];
+
+check("a product with no variations offers no options at all", () => {
+  assert.deepEqual(buildProductOptions(productWith(1500)), []);
+});
+
+check("variations are offered after the base price as 'Standard'", () => {
+  const v = [{ name: "Complete set", price: 2500 }];
+  assert.deepEqual(buildProductOptions(productWith(1500, v)), [
+    { name: "Standard", price: 1500 },
+    { name: "Complete set", price: 2500, variation: v[0] },
+  ]);
+});
+
+check("a base price of 0 drops the Standard option instead of offering a free one", () => {
+  const v = [{ name: "Vials only", price: 900 }];
+  assert.deepEqual(buildProductOptions(productWith(0, v)), [
+    { name: "Vials only", price: 900, variation: v[0] },
+  ]);
+});
+
+check("each option carries the original variation object for the cart clone", () => {
+  const v = [{ name: "Vials only", price: 900 }];
+  const opts = buildProductOptions(productWith(0, v));
+  assert.equal(opts[0].variation, v[0], "cart needs the exact variation reference");
+});
+
+console.log("shouldShowOptionPicker");
+
+check("no variations → no picker (unchanged single-price card)", () => {
+  assert.equal(shouldShowOptionPicker(productWith(1500)), false);
+});
+
+check("a single priced variation is still shown — it was invisible before", () => {
+  assert.equal(shouldShowOptionPicker(productWith(0, [{ name: "Vials only", price: 900 }])), true);
+});
+
+check("multiple variations show the picker", () => {
+  assert.equal(
+    shouldShowOptionPicker(
+      productWith(1500, [
+        { name: "Vials only", price: 900 },
+        { name: "Complete set", price: 2500 },
+      ]),
+    ),
+    true,
+  );
+});
+
+// ─────────────────── unpricedVariationNames (the ₱0 guard) ──────────────────
+console.log("unpricedVariationNames");
+
+check("a fully priced list reports nothing to fix", () => {
+  assert.deepEqual(unpricedVariationNames([{ name: "Vials only", price: 900 }]), []);
+});
+
+check("a preset row left at a blank price is reported", () => {
+  assert.deepEqual(unpricedVariationNames([{ name: "Vials only", price: "" }]), ["Vials only"]);
+});
+
+check("an explicit zero price is reported — it would sell the product free", () => {
+  assert.deepEqual(unpricedVariationNames([{ name: "Complete set", price: 0 }]), ["Complete set"]);
+});
+
+check("a negative price is reported", () => {
+  assert.deepEqual(unpricedVariationNames([{ name: "Vials only", price: -5 }]), ["Vials only"]);
+});
+
+check("unnamed rows are ignored — the save path drops them anyway", () => {
+  assert.deepEqual(unpricedVariationNames([{ name: "", price: "" }]), []);
+});
+
+check("reports every offender, in order, so the warning can name them all", () => {
+  assert.deepEqual(
+    unpricedVariationNames([
+      { name: "Vials only", price: "" },
+      { name: "5mg", price: 1200 },
+      { name: "Complete set", price: 0 },
+    ]),
+    ["Vials only", "Complete set"],
+  );
+});
+
+check("the editor blocks saving while any named variation is unpriced", () => {
+  const src = readFileSync(
+    join(process.cwd(), "src/storefront/admin/AdminAddProduct.tsx"),
+    "utf8",
+  );
+  assert.ok(
+    /const\s+canSave\s*=[^;]*unpriced/s.test(src),
+    "canSave does not consult unpricedVariationNames — a ₱0 variation can still be saved",
+  );
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────

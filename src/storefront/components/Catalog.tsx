@@ -4,6 +4,11 @@ import { useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import {
+  buildProductOptions,
+  optionLabel,
+  shouldShowOptionPicker,
+} from "@/lib/storefront/variations";
 
 /**
  * The storefront product card. Also rendered by the admin Card Studio for its
@@ -36,19 +41,13 @@ export function ProductCard({
   // available as a default "Standard" option (so a single variation still gives a
   // real choice) — skipped only when the seller left the base price at 0. No
   // variations → unchanged single-price behavior.
-  const variations = Array.isArray(product.variations) ? product.variations : [];
-  const options: { name: string; price: number; variation?: { name: string; price: number } }[] =
-    variations.length > 0
-      ? [
-          ...(product.price > 0 ? [{ name: "Standard", price: product.price }] : []),
-          ...variations.map((v) => ({ name: v.name, price: v.price, variation: v })),
-        ]
-      : [];
+  const options = buildProductOptions(product);
   const [optIdx, setOptIdx] = useState(0);
   const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
-  // Show the pill picker only when there's a genuine choice (>1 option); a lone
-  // option still sets the price + add payload without a pointless single button.
-  const showSelector = options.length > 1;
+  // Any variation the seller priced earns a picker. Keying off the option count
+  // instead used to hide a lone variation on a product with no base price — the
+  // customer paid that price without ever seeing which option it was.
+  const showSelector = shouldShowOptionPicker(product);
   const displayPrice = selectedOpt ? selectedOpt.price : product.price;
   const cd = design ? cardDesignAttrs(design) : null;
   // Stock-aware buying: the stepper can't exceed what's left, and a product
@@ -138,7 +137,7 @@ export function ProductCard({
                     fontWeight: active ? 600 : 500,
                   }}
                 >
-                  {o.name}
+                  {optionLabel(o, product.currency)}
                 </button>
               );
             })}
