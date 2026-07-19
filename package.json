@@ -35,6 +35,7 @@
     "test:gate-heartbeat": "tsx scripts/test-gate-heartbeat.ts",
     "test:gb-banner": "tsx scripts/test-gb-banner.ts",
     "test:onhand-gate": "tsx scripts/test-onhand-gate.ts",
+    "test:product-variations": "tsx scripts/test-product-variations.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
     "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
     "test:plan-distribution": "tsx scripts/test-plan-distribution.ts",
