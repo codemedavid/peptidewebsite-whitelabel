@@ -19,6 +19,9 @@ export type GroupBuyBanner = {
   deliveryEta: string; // customer-facing, e.g. "3–4 weeks after close"
   productIds: string[]; // products in the run (empty when coversAll)
   coversAll: boolean; // the whole catalog IS the run → the scope toggle is a no-op
+  slotGoal: number; // storefront progress-bar goal; 0 = off (no bar). See two-ways.slotProgress.
+  endsAt: string | null; // ISO close boundary — drives the "Closes in N days" countdown. null = open-ended.
+  filled: number; // slots taken so far (demand orders on this round). 0 until page.tsx counts them.
 };
 
 /**
@@ -44,6 +47,12 @@ export function buildGroupBuyBanner(
     deliveryEta: gb.deliveryEta,
     productIds: coversAll ? [] : [...gb.productIds],
     coversAll,
+    slotGoal: gb.slotGoal,
+    endsAt: gb.endsAt,
+    // Filled slots come from the round's orders, which this pure builder doesn't
+    // load — page.tsx counts them (StorefrontOrder.groupBuyId === this round) and
+    // overwrites this default so the progress bar reflects real demand.
+    filled: 0,
   };
 }
 

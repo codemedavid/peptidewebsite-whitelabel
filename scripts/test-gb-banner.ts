@@ -103,6 +103,9 @@ function main() {
     deliveryEta: "",
     productIds: ["p1", "p3"],
     coversAll: false,
+    slotGoal: 0,
+    endsAt: null,
+    filled: 0,
   };
 
   check("no banner → full catalog regardless of the toggle", () => {

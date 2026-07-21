@@ -137,7 +137,7 @@ function revalidateSubscriptionSurfaces(tenantId: string, slug: string): void {
  */
 export async function setSubscriptionWindowAction(
   slug: string,
-  input: { cycle: string | null; startsAt?: string; endsAt?: string },
+  input: { cycle: string | null; startsAt?: string; endsAt?: string; amountCents?: number | null },
 ): Promise<AdminActionResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Connect a database to manage subscriptions." };
@@ -149,7 +149,12 @@ export async function setSubscriptionWindowAction(
   if (!input.cycle) {
     await prisma.tenant.update({
       where: { id: tenant.id },
-      data: { subscriptionCycle: null, subscriptionStartsAt: null, subscriptionEndsAt: null },
+      data: {
+        subscriptionCycle: null,
+        subscriptionStartsAt: null,
+        subscriptionEndsAt: null,
+        subscriptionAmountCents: null,
+      },
     });
     revalidateSubscriptionSurfaces(tenant.id, slug);
     return { ok: true };
@@ -165,9 +170,23 @@ export async function setSubscriptionWindowAction(
     return { error: "The due date must be after the start date." };
   }
 
+  // What the tenant paid for the term (centavos). Optional — null clears it.
+  let amountCents: number | null = null;
+  if (input.amountCents != null) {
+    if (!Number.isFinite(input.amountCents) || input.amountCents < 0) {
+      return { error: "Enter a valid subscription amount." };
+    }
+    amountCents = Math.round(input.amountCents);
+  }
+
   await prisma.tenant.update({
     where: { id: tenant.id },
-    data: { subscriptionCycle: input.cycle, subscriptionStartsAt: startsAt, subscriptionEndsAt: endsAt },
+    data: {
+      subscriptionCycle: input.cycle,
+      subscriptionStartsAt: startsAt,
+      subscriptionEndsAt: endsAt,
+      subscriptionAmountCents: amountCents,
+    },
   });
   revalidateSubscriptionSurfaces(tenant.id, slug);
   return { ok: true };

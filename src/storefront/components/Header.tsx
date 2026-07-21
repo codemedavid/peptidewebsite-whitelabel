@@ -23,6 +23,12 @@ export function Header({
   if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {
     nav.push({ label: "Resellers", href: "#merchant" });
   }
+  // Surface the Group Buy page automatically while a round is live (the server
+  // sets brand.groupBuyBanner) so customers can reach the live round from the
+  // nav. Slotted first — it's the timely, high-intent destination.
+  if (brand.groupBuyBanner && !nav.some((i) => i.href === "#groupbuy")) {
+    nav.unshift({ label: "Group Buy", href: "#groupbuy" });
+  }
   // Surface the reconstitution calculator (default-on) for every tenant — even
   // those whose stored nav predates the feature. Slot it before Reviews when
   // present, otherwise append.

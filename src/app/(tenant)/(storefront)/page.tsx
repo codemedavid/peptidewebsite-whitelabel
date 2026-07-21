@@ -2,7 +2,8 @@ import { getTenantId, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
 import { resolveAdminLoginMode } from "@/lib/storefront/admin-login-mode";
-import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
+import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders } from "@/lib/demo/fixtures";
+import { orderCountsAsDemand } from "@/lib/storefront/group-buy";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
@@ -246,6 +247,33 @@ export default async function HomePage() {
     // Public banner + "Explore GB #N" scope filter for the live run. Purely
     // presentational — the on-hand gate above owns what can actually be bought.
     brand.groupBuyBanner = buildGroupBuyBanner(groupBuys, brand.groupBuyCaps) ?? undefined;
+    // Slots filled = the round's demand orders (everything except cancelled /
+    // refunded), which the pure banner builder can't load. Drives the Group Buy
+    // page's "N of GOAL slots filled" progress bar (two-ways.slotProgress).
+    const bannerId = brand.groupBuyBanner?.id;
+    if (bannerId) {
+      let filled = 0;
+      try {
+        if (isDemoMode()) {
+          filled = getDemoStoreOrders(slug).filter(
+            (o) => o.groupBuyId === bannerId && orderCountsAsDemand(o.status),
+          ).length;
+        } else {
+          filled = await withTenant(tenantId, (db) =>
+            db.storefrontOrder.count({
+              where: {
+                tenantId,
+                groupBuyId: bannerId,
+                status: { notIn: ["cancelled", "canceled", "refunded"] },
+              },
+            }),
+          );
+        }
+      } catch {
+        filled = 0; // progress bar just shows 0 — never block the storefront on it
+      }
+      brand.groupBuyBanner = { ...brand.groupBuyBanner!, filled };
+    }
   }
 
   // Products are the source of truth in the DB. Load the tenant's catalog

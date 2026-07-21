@@ -49,6 +49,7 @@ const ROUND_COVERS_P1: GroupBuy = {
   id: "gb1",
   name: "Round 1",
   description: "",
+  slotGoal: 0,
   status: "active",
   startsAt: null,
   endsAt: iso(+24 * HOUR),

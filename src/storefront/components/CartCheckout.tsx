@@ -103,9 +103,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // re-applies the same resolution at placement). The snapshot total is kept
   // only to detect — and gently flag — that a price moved since the item was
   // added.
+  // While a group buy is live (brand.groupBuyBanner present), group-buy products
+  // are priced at their gbPrice — the same single price the group-buy page shows
+  // and the server charges at placement (orders.ts repriceItems).
+  const groupBuyLive = !!brand.groupBuyBanner;
   const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
-  const subtotal = useMemo(() => cartTotal(lines), [lines]);
-  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart)), [cart]);
+  const subtotal = useMemo(() => cartTotal(lines, groupBuyLive), [lines, groupBuyLive]);
+  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart), groupBuyLive), [cart, groupBuyLive]);
   const pricesUpdated = cart.length > 0 && snapshotSubtotal !== subtotal;
   const channels = useMemo(() => activeChannels(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
@@ -384,7 +388,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         productId: baseProductId(l.product),
         name: l.product.name,
         qty: l.qty,
-        price: unitPrice(l.product, l.qty),
+        price: unitPrice(l.product, l.qty, groupBuyLive),
         ...(l.product.variantName ? { variation: l.product.variantName } : {}),
       })),
       // Echo the fee this checkout DISPLAYED (zero when none was shown). The
@@ -553,7 +557,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
                 const reseller = isResellerQty(l.product, l.qty);
-                const up = unitPrice(l.product, l.qty);
+                const up = unitPrice(l.product, l.qty, groupBuyLive);
                 // How many more units of THIS product unlock the wholesale price.
                 const toReseller =
                   !reseller && resellerUnitPrice(l.product) != null

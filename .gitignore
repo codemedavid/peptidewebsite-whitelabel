@@ -10,4 +10,5 @@ build/
 next-env.d.ts
 /prisma/*.db
 .demo-data/
+.rehost-backup/
 .env*

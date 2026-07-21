@@ -349,6 +349,14 @@ export type Brand = {
   // legacy brands stay byte-identical — the trial banner owns trial chrome).
   subscription?: BrandSubscription;
 
+  // Optional editorial site frame — a thin border around the whole viewport
+  // plus a hairline divider under the hero, completing the "framed" look. The
+  // header + category bar already carry hairlines; turning this on ties them
+  // together into one frame. Owner-toggleable in the branding editor. Absent /
+  // false = off, so every existing tenant is unaffected. Rendered by
+  // .sf-root[data-sf-frame="on"] in storefront.css.
+  siteBorder?: boolean;
+
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;
   showHero: boolean;

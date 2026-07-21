@@ -86,6 +86,11 @@ function normalizeProductInput(input: unknown): Product {
     available: o.available !== false,
     discountPrice: Math.max(0, num(o.discountPrice)),
     discountEnabled: o.discountEnabled === true,
+    // "Group Buy product": tagged "gb" so the storefront lists it under the group
+    // buy (priced by gbPrice) rather than on-hand. Only "gb" + a positive gbPrice
+    // persist (see product-mapping.productToDbWrite); anything else is on-hand.
+    productType: o.productType === "gb" ? "gb" : undefined,
+    gbPrice: o.productType === "gb" && num(o.gbPrice) > 0 ? num(o.gbPrice) : undefined,
     isSet: o.isSet === true,
     inclusions,
     molecularWeight: str(o.molecularWeight, 64),

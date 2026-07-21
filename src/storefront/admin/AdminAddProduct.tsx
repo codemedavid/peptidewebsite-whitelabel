@@ -228,6 +228,10 @@ export function AdminAddProduct({
   const [available, setAvailable]   = useState<boolean>(initial?.available !== false);
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
+  // Group Buy product: lists under the storefront's Group Buy section (priced by
+  // gbPrice) instead of on-hand. gbPrice is the per-unit group-buy price.
+  const [isGroupBuy, setIsGroupBuy] = useState<boolean>(initial?.productType === "gb");
+  const [gbPrice, setGbPrice]       = useState<number | string>(initial?.gbPrice ?? 0);
   const [resellerVials, setResellerVials] = useState<number | string>(initial?.reseller?.vialsOnly ?? 0);
   const [resellerSet, setResellerSet]     = useState<number | string>(initial?.reseller?.completeSet ?? 0);
   const [resellerMin, setResellerMin]     = useState<number | string>(initial?.reseller?.minQty ?? RESELLER_MIN_QTY);
@@ -311,6 +315,8 @@ export function AdminAddProduct({
       available,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
+      productType: isGroupBuy ? "gb" : "onhand",
+      gbPrice: isGroupBuy ? Number(gbPrice) || 0 : 0,
       reseller: {
         vialsOnly: Number(resellerVials) || 0,
         completeSet: Number(resellerSet) || 0,
@@ -573,6 +579,29 @@ export function AdminAddProduct({
                 <input type="checkbox" checked={discountOn}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountOn(e.target.checked)} />
                 <span>🏷️ Enable Discount</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------- Group Buy ---------- */}
+        <div className="admin-form__card">
+          <h2 className="admin-form__section">🛒 Group Buy</h2>
+          <div className="admin-form__row">
+            <div className="admin-field">
+              <label className="admin-field__label">Group Buy Price ({currency})</label>
+              <NumberField value={gbPrice} onChange={setGbPrice} min={0} disabled={!isGroupBuy} />
+              <div className="admin-field__hint">
+                {isGroupBuy
+                  ? "Shown in the storefront's Group Buy section with the on-hand price and the saving."
+                  : "Off — this product lists as on-hand (ships now)."}
+              </div>
+            </div>
+            <div className="admin-form__inline-row" style={{ alignSelf: "start", paddingTop: 24 }}>
+              <label className="admin-check">
+                <input type="checkbox" checked={isGroupBuy}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIsGroupBuy(e.target.checked)} />
+                <span>🛒 Group Buy product</span>
               </label>
             </div>
           </div>

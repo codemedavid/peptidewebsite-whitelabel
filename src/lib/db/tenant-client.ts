@@ -52,6 +52,7 @@ const TENANT_MODELS = new Set<string>([
   "blogPost",
   "coupon",
   "mediaAsset",
+  "subscriptionPayment",
 ]);
 
 const SCOPED_READS = new Set([

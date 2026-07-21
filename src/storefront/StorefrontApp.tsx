@@ -46,10 +46,11 @@ const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => 
 const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").then((m) => m.ReconstitutionPage), { ssr: false, loading: PageSpinner });
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: PageSpinner });
 const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: PageSpinner });
+const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: PageSpinner });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "catalog", "admin"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -234,6 +235,9 @@ function Shell() {
       {activePage === "calculator" && <ReconstitutionPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
+      {activePage === "groupbuy" && (
+        <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
+      )}
 
       {(activePage === "home" || activePage === "catalog") && (
         <>
@@ -297,7 +301,7 @@ export function StorefrontApp({
   tenantKey?: string;
 }) {
   return (
-    <div className="sf-root">
+    <div className="sf-root" data-sf-frame={brand?.siteBorder ? "on" : undefined}>
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell />
       </StoreProvider>

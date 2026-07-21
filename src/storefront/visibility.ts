@@ -42,6 +42,10 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   reviews: (b) => b.showPageReviews !== false,
   // Default OFF — the wholesale page only exists for tenants that opt in.
   merchant: (b) => b.showPageMerchant === true,
+  // The Group Buy page exists only while a round is live — the server sets
+  // brand.groupBuyBanner (buildGroupBuyBanner) when there is one. No round → the
+  // nav link is hidden and a direct #groupbuy visit falls back to home.
+  groupbuy: (b) => !!b.groupBuyBanner,
 };
 
 // Each store-admin sub-view that exists to manage a storefront page. When the

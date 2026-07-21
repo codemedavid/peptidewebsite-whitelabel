@@ -49,6 +49,7 @@ function mkRound(over: Partial<GroupBuy> & { id: string }): GroupBuy {
   return {
     name: `Round ${over.id}`,
     description: "",
+    slotGoal: 0,
     status: "active" as GroupBuyStatus,
     startsAt: null,
     endsAt: null,

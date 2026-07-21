@@ -59,6 +59,25 @@
 .sf-root button { font-family: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
 .sf-root a { color: inherit; text-decoration: none; }
 
+/* ── Optional editorial site frame (branding: siteBorder) ─────────────────
+   Opt-in via data-sf-frame="on" on the scoping root. Draws a thin frame
+   around the storefront (a non-interactive ::after overlay covering the full
+   root) plus a hairline under the hero, so the header + category-bar hairlines
+   read as one frame. Absolutely positioned against .sf-root (not fixed) so it
+   behaves identically in the live admin preview, which scrolls inside a boxed
+   container. Uses --brand-border so the frame follows the tenant's theme.
+   Unset (the default) leaves every existing tenant byte-identical. */
+.sf-root[data-sf-frame="on"] { position: relative; }
+.sf-root[data-sf-frame="on"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 60;                 /* above sticky header (40) / cats (30), below cart (100) */
+  pointer-events: none;        /* never intercept clicks or scroll */
+  border: 1.5px solid var(--brand-border);
+}
+.sf-root[data-sf-frame="on"] .hero { border-bottom: 1px solid var(--brand-border); }
+
 /* Typography utility */
 .sf-root .font-display { font-family: var(--brand-heading-font); font-weight: 500; letter-spacing: -0.01em; }
 .sf-root .font-display-italic { font-family: var(--brand-heading-font); font-style: italic; font-weight: 500; }

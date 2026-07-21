@@ -1,0 +1,232 @@
+"use client";
+
+// Store-admin Billing view (OWNER-ONLY). The tenant sees their subscription
+// due window and files a proof-of-payment for the current term: amount, method,
+// reference, date paid, and a payment screenshot. The screenshot is uploaded to
+// the tenant's own ImageKit folder (uploadStorefrontImageAction, kind
+// "subscription-proof"), then the payment is recorded via
+// submitSubscriptionPaymentAction as a PENDING row. The platform operator
+// confirms or rejects it on the super-admin tenant-detail Billing tab.
+//
+// Read side (the due window) comes from brand.subscription, projected
+// server-side in the storefront RSC — never computed against the browser clock.
+
+import { useRef, useState } from "react";
+import type { Brand } from "../types";
+import { useStore } from "../store";
+import { uploadStorefrontImageAction } from "@/actions/media";
+import { submitSubscriptionPaymentAction } from "@/actions/subscription-payments";
+import { SUBSCRIPTION_PAYMENT_METHODS, parsePaymentAmountCents } from "@/lib/subscription/payments";
+
+/** ISO → "Aug 10, 2026" for the due-window summary. */
+function fmtDate(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+  const { toast } = useStore();
+  const sub = brand.subscription;
+
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<string>(SUBSCRIPTION_PAYMENT_METHODS[0]);
+  const [reference, setReference] = useState("");
+  const [paidAt, setPaidAt] = useState("");
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const amountValid = parsePaymentAmountCents(amount) != null;
+  const canSave = amountValid && !saving && !uploading;
+
+  const pickProof = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast("Please choose an image file.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "subscription-proof");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("error" in res) toast(res.error);
+      else setProofUrl(res.url);
+    } catch {
+      toast("Upload failed — please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const res = await submitSubscriptionPaymentAction({
+        amount,
+        method,
+        reference,
+        paidAt: paidAt || undefined,
+        proofUrl: proofUrl ?? undefined,
+      });
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setDone(true);
+      setAmount("");
+      setReference("");
+      setPaidAt("");
+      setProofUrl(null);
+      toast("Payment submitted for review");
+    } catch {
+      toast("Couldn't submit — please sign in again and retry.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="admin">
+      <header className="admin-form__bar">
+        <button className="admin-form__back" onClick={onBack}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          Dashboard
+        </button>
+        <h1 className="admin-form__title">
+          <span style={{ fontSize: 20 }}>💳</span>
+          Billing
+        </h1>
+        <div className="admin-form__bar-spacer" />
+        <button className="admin-form__save" onClick={submit} disabled={!canSave}>
+          {saving ? "Submitting…" : "Submit payment"}
+        </button>
+      </header>
+
+      <div className="admin-form__body">
+        {/* Subscription due window */}
+        <div className="admin-form__card" style={{ marginBottom: 16 }}>
+          <h2 className="admin-form__section">📅 Your subscription</h2>
+          {sub?.onSubscription ? (
+            sub.expired ? (
+              <div className="admin-field__hint" style={{ marginTop: -8, color: "var(--sf-danger, #b91c1c)" }}>
+                Your subscription ended on <b>{fmtDate(sub.endsAt)}</b>. Submit your renewal payment below to
+                restore full access.
+              </div>
+            ) : (
+              <div className="admin-field__hint" style={{ marginTop: -8 }}>
+                Next payment due <b>{fmtDate(sub.endsAt)}</b>
+                {typeof sub.daysLeft === "number" ? ` — ${sub.daysLeft} day${sub.daysLeft === 1 ? "" : "s"} left` : ""}. Pay early
+                and file your proof below so your provider can confirm it.
+              </div>
+            )
+          ) : (
+            <div className="admin-field__hint" style={{ marginTop: -8 }}>
+              No active subscription window is set. You can still file a payment below — your provider will match it
+              to your account.
+            </div>
+          )}
+        </div>
+
+        {/* File a payment */}
+        <div className="admin-form__card">
+          <h2 className="admin-form__section">🧾 Submit a payment</h2>
+          <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
+            After you pay, record it here with a screenshot so your provider can confirm it. It stays “awaiting
+            confirmation” until they review it.
+          </div>
+
+          {done && (
+            <div
+              className="admin-field__hint"
+              style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 8, background: "var(--sf-success-soft, #f0fdf4)", color: "var(--sf-success, #15803d)", fontWeight: 600 }}
+            >
+              ✓ Payment submitted — awaiting your provider&apos;s confirmation. File another below if needed.
+            </div>
+          )}
+
+          <div className="admin-field" style={{ marginBottom: 14 }}>
+            <label className="admin-field__label">Amount paid (₱)</label>
+            <input
+              className="admin-input"
+              inputMode="decimal"
+              value={amount}
+              placeholder="e.g. 1499"
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <div className="admin-field__hint">
+              {amount.trim() && !amountValid ? "Enter a valid amount greater than zero." : "The total you sent for this term."}
+            </div>
+          </div>
+
+          <div className="admin-field" style={{ marginBottom: 14 }}>
+            <label className="admin-field__label">Payment method</label>
+            <select className="admin-input" value={method} onChange={(e) => setMethod(e.target.value)}>
+              {SUBSCRIPTION_PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="admin-field" style={{ marginBottom: 14 }}>
+            <label className="admin-field__label">Reference number</label>
+            <input
+              className="admin-input"
+              value={reference}
+              placeholder="e.g. 9021 447 6613"
+              maxLength={120}
+              onChange={(e) => setReference(e.target.value)}
+            />
+          </div>
+
+          <div className="admin-field" style={{ marginBottom: 14 }}>
+            <label className="admin-field__label">Date paid</label>
+            <input className="admin-input" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+          </div>
+
+          <div className="admin-field" style={{ marginBottom: 8 }}>
+            <label className="admin-field__label">Payment screenshot</label>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pickProof(f);
+              }}
+            />
+            {proofUrl ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={proofUrl} alt="Payment proof" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--sf-border, #e2e8f0)" }} />
+                <button type="button" className="admin-form__back" onClick={() => setProofUrl(null)}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="admin-input"
+                style={{ textAlign: "left", cursor: "pointer", opacity: uploading ? 0.6 : 1 }}
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading…" : "Choose an image…"}
+              </button>
+            )}
+            <div className="admin-field__hint">A GCash/bank receipt screenshot helps your provider confirm faster. Optional but recommended.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

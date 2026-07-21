@@ -30,7 +30,7 @@ function imageKitConfigured(): boolean {
 
 // Allowed `kind` values become the ImageKit tag + MediaAsset.type, so they stay
 // a short known set rather than arbitrary client strings.
-const KINDS = new Set(["payment-qr", "lab-result", "review", "branding", "storefront"]);
+const KINDS = new Set(["payment-qr", "lab-result", "review", "branding", "storefront", "subscription-proof"]);
 
 /**
  * Upload an admin-supplied image to the tenant's ImageKit folder and return its

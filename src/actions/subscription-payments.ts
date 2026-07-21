@@ -1,0 +1,148 @@
+"use server";
+
+// Subscription-payment actions — the write half of the tenant Billing feature.
+//
+//   • submitSubscriptionPaymentAction  (TENANT side, requireStorefrontAdmin)
+//       The store owner files a proof-of-payment for their subscription term
+//       from the store admin's Billing view. Written through withTenant so the
+//       row is tenant-scoped like every other storefront write.
+//
+//   • confirm / rejectSubscriptionPaymentAction  (OPERATOR side, requirePlatformUser)
+//       The platform operator reviews a filed payment on the tenant-detail
+//       Billing tab. Transitions are owned by lib/subscription/payments.ts
+//       (test:subscription-payments) — illegal transitions are refused here.
+//
+// Both fail closed on demo mode (no DB) and revalidate the tenant + admin caches.
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { prisma } from "@/lib/db/prisma";
+import { withTenant } from "@/lib/db/tenant-client";
+import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
+import { requirePlatformUser } from "@/lib/auth/session";
+import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { isDemoMode } from "@/lib/demo/fixtures";
+import {
+  applyReview,
+  isSubscriptionPaymentStatus,
+  normalizePaymentMethod,
+  parsePaymentAmountCents,
+  type SubscriptionPaymentReview,
+} from "@/lib/subscription/payments";
+
+export type SubscriptionPaymentActionResult = { ok: true } | { error: string };
+
+const MAX_REFERENCE_LEN = 120;
+
+/** A valid hosted proof URL, or null. Rejects `data:`/`javascript:` — a proof
+ *  must be a real ImageKit URL uploaded via uploadStorefrontImageAction. */
+function safeProofUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  return /^https:\/\//i.test(raw.trim()) ? raw.trim() : null;
+}
+
+export type SubmitSubscriptionPaymentInput = {
+  /** Raw peso amount the tenant typed (e.g. "1499" or "₱1,499.00"). */
+  amount: string;
+  method?: string;
+  reference?: string;
+  /** ISO date / datetime-local string of when they paid. */
+  paidAt?: string;
+  /** Proof screenshot, already uploaded via uploadStorefrontImageAction. */
+  proofUrl?: string;
+};
+
+/**
+ * Tenant files a proof-of-payment against their current subscription term. The
+ * cycle + term are snapshotted from the operator-set window so the row keeps its
+ * context even if the window later changes.
+ */
+export async function submitSubscriptionPaymentAction(
+  input: SubmitSubscriptionPaymentInput,
+): Promise<SubscriptionPaymentActionResult> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Sign in to the store admin to submit a payment." };
+  if (isDemoMode()) return { error: "Connect a database to submit subscription payments." };
+
+  const amountCents = parsePaymentAmountCents(input.amount ?? "");
+  if (amountCents == null) return { error: "Enter a valid payment amount." };
+
+  const method = normalizePaymentMethod(input.method ?? "");
+  const reference = (input.reference ?? "").trim().slice(0, MAX_REFERENCE_LEN);
+  const proofUrl = safeProofUrl(input.proofUrl);
+
+  const paid = input.paidAt ? new Date(input.paidAt) : null;
+  const paidAt = paid && !Number.isNaN(paid.getTime()) ? paid : null;
+
+  // Snapshot the current window (cycle + term) for context on the row.
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { subscriptionCycle: true, subscriptionStartsAt: true, subscriptionEndsAt: true },
+  });
+
+  try {
+    await withTenant(tenantId, (db) =>
+      db.subscriptionPayment.create({
+        data: {
+          tenantId,
+          amountCents,
+          method,
+          reference,
+          proofUrl,
+          paidAt,
+          cycle: tenant?.subscriptionCycle ?? null,
+          periodStart: tenant?.subscriptionStartsAt ?? null,
+          periodEnd: tenant?.subscriptionEndsAt ?? null,
+          status: "pending",
+        },
+      }),
+    );
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save the payment." };
+  }
+
+  revalidateTenant(tenantId);
+  revalidateTag("admin:data");
+  return { ok: true };
+}
+
+/** Confirm / reject a filed payment. Shared operator-side core. */
+async function reviewSubscriptionPayment(
+  paymentId: string,
+  action: SubscriptionPaymentReview,
+): Promise<SubscriptionPaymentActionResult> {
+  await requirePlatformUser();
+  if (isDemoMode()) return { error: "Connect a database to review subscription payments." };
+  if (!paymentId) return { error: "Missing payment id." };
+
+  const payment = await prisma.subscriptionPayment.findUnique({
+    where: { id: paymentId },
+    select: { id: true, status: true, tenantId: true, tenant: { select: { slug: true } } },
+  });
+  if (!payment) return { error: "Payment not found." };
+  if (!isSubscriptionPaymentStatus(payment.status)) return { error: "Payment has an unknown status." };
+
+  const next = applyReview(payment.status, action);
+  if (!next) return { error: `Cannot ${action} a payment that is already ${payment.status}.` };
+
+  await prisma.subscriptionPayment.update({
+    where: { id: paymentId },
+    data: { status: next, reviewedAt: new Date() },
+  });
+
+  revalidateTenant(payment.tenantId, payment.tenant.slug);
+  revalidateTag("admin:data");
+  revalidatePath(`/admin/tenants/${payment.tenant.slug}`);
+  return { ok: true };
+}
+
+export async function confirmSubscriptionPaymentAction(
+  paymentId: string,
+): Promise<SubscriptionPaymentActionResult> {
+  return reviewSubscriptionPayment(paymentId, "confirm");
+}
+
+export async function rejectSubscriptionPaymentAction(
+  paymentId: string,
+): Promise<SubscriptionPaymentActionResult> {
+  return reviewSubscriptionPayment(paymentId, "reject");
+}

@@ -112,6 +112,7 @@ function GroupBuyModal({
       endsAt,
       deliveryEta: settings.defaultDeliveryEta,
       productIds: [] as string[],
+      slotGoal: 0,
       createdAt: "",
       updatedAt: "",
     };
@@ -124,6 +125,9 @@ function GroupBuyModal({
   const [endsAt, setEndsAt] = useState(isoToLocal(seed.endsAt));
   const [deliveryEta, setDeliveryEta] = useState(seed.deliveryEta);
   const [productIds, setProductIds] = useState<string[]>(seed.productIds);
+  // Storefront slot-goal for the progress bar. 0 = off (no bar) — the owner can
+  // clear the number to hide the progress bar for this round entirely.
+  const [slotGoal, setSlotGoal] = useState<number>(seed.slotGoal ?? 0);
 
   const statusOptions: GroupBuyStatus[] = caps.scheduled
     ? ["draft", "scheduled", "active", "closed"]
@@ -218,6 +222,24 @@ function GroupBuyModal({
           />
         </div>
 
+        <div className="admin-modal__row">
+          <label className="admin-field__label">Slot goal</label>
+          <input
+            className="admin-input"
+            type="number"
+            min={0}
+            step={1}
+            value={slotGoal || ""}
+            placeholder="Off — leave blank to hide the progress bar"
+            onChange={(e) => setSlotGoal(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+          />
+          <div className="admin-field__hint">
+            {slotGoal > 0
+              ? `Storefront shows “${slotGoal} slots” with a fill bar as orders come in.`
+              : "Off — no progress bar shows for this group buy."}
+          </div>
+        </div>
+
         {caps.productAssignment && (
           <div className="admin-modal__row">
             <label className="admin-field__label">Products</label>
@@ -277,6 +299,7 @@ function GroupBuyModal({
                 endsAt: localToIso(endsAt),
                 deliveryEta,
                 productIds,
+                slotGoal,
               })
             }
           >

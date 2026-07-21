@@ -64,6 +64,11 @@ model Tenant {
   // so this never has to agree with the exact day span (an overridden due date
   // keeps its stored cycle label).
   subscriptionCycle    String?
+  // What the tenant actually paid for the current subscription term, in centavos
+  // (e.g. a yearly plan billed at ₱15,000 → 1500000). Operator-set alongside the
+  // window; null = not recorded. Shown as "Amount paid" in the tenant detail and
+  // as the plan-fee value once a subscription cycle is active.
+  subscriptionAmountCents Int?
 
   domains           Domain[]
   groupBuys         GroupBuy[]
@@ -94,8 +99,61 @@ model Tenant {
   onboardingSubmissions OnboardingSubmission[]
   upgradeRequests       UpgradeRequest[]
 
+  // Proof-of-payment ledger the tenant submits against their subscription term;
+  // the operator confirms/rejects each on the platform Billing tab.
+  subscriptionPayments  SubscriptionPayment[]
+
   @@index([planId])
   @@map("tenants")
+}
+
+// One tenant-submitted proof-of-payment for a subscription term. The tenant
+// uploads a payment screenshot + reference from the store admin's Billing view;
+// the platform operator reviews it (confirm | reject) on the tenant-detail
+// Billing tab. Confirmed rows are the platform's realized subscription revenue
+// from this tenant — the Billing page's lifetime metrics roll up from them
+// (lib/subscription/payments.ts, test:subscription-payments). Separate from the
+// operator-set subscription *window* on Tenant: the window says when a term is
+// due, this ledger records what was actually paid against it.
+model SubscriptionPayment {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // What the tenant says they paid, in centavos (₱1,499.00 → 149900).
+  amountCents Int
+  // Billing cycle the payment covers (snapshot of Tenant.subscriptionCycle at
+  // submit time): monthly | quarterly | semi_annual | yearly. Null = unspecified.
+  cycle       String?
+  // The billing term this payment is for (snapshot of the window). Both null for
+  // an ad-hoc payment not tied to a resolved window.
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  // How the tenant paid + their reference number (normalizePaymentMethod keeps
+  // method to a known set: GCash | Maya | Bank transfer | Card | Other).
+  method    String @default("Other")
+  reference String @default("")
+  // ImageKit-hosted proof screenshot (never a data URL in production). Null =
+  // none uploaded (submission still allowed; operator reviews on trust).
+  proofUrl  String?
+  // When the tenant says the payment was made (their receipt time), distinct
+  // from submittedAt (when they filed it here).
+  paidAt    DateTime?
+
+  // pending | confirmed | failed (lib/subscription/payments.ts owns the
+  // transitions). Confirmed = counted as revenue; failed = operator-rejected.
+  status     String    @default("pending")
+  reviewedAt DateTime?
+  reviewNote String    @default("")
+
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, submittedAt])
+  @@map("subscription_payments")
 }
 
 model Domain {
@@ -370,6 +428,9 @@ model GroupBuy {
   // Product ids assigned to this group buy (groupbuy.product_assignment).
   // Empty array = the group buy covers the whole catalog.
   productIds  Json      @default("[]")
+  // Storefront slot-goal for the progress bar ("18 of 30 slots filled"). 0 = the
+  // goal is off and no bar renders — set/cleared per round by the store owner.
+  slotGoal    Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 

@@ -18,7 +18,12 @@ import { aggregatePlanDistribution, type PlanDistribution } from "@/lib/admin/pl
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { getSubscriptionState, getSubscriptionMeta } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom, type BrandSubscription } from "@/lib/subscription/subscription-state";
-import type { BillingCycle } from "@/lib/subscription/billing-cycle";
+import { isBillingCycle, type BillingCycle } from "@/lib/subscription/billing-cycle";
+import {
+  subscriptionInvoiceCode,
+  isSubscriptionPaymentStatus,
+  type SubscriptionPaymentStatus,
+} from "@/lib/subscription/payments";
 import { subscriptionUrgency, type FlaggedUrgency } from "@/lib/subscription/near-due";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
@@ -128,7 +133,65 @@ export type TenantDetail = AdminTenantRow & {
   // setter. `subscriptionStartsAt` is an ISO string for the client boundary.
   subscriptionCycle?: BillingCycle;
   subscriptionStartsAt?: string;
+  // What the tenant paid for the current term (centavos); undefined when unset.
+  subscriptionAmountCents?: number;
+  // Tenant-filed proof-of-payment ledger (newest first), fail-open to [] when the
+  // table isn't on the DB yet or in demo mode. Drives the operator Billing tab's
+  // invoice history, review drawer, and lifetime metrics.
+  subscriptionPayments: TenantSubscriptionPayment[];
 };
+
+/** One filed subscription payment, shaped for the client boundary (dates → ISO). */
+export type TenantSubscriptionPayment = {
+  id: string;
+  invoiceCode: string; // INV-YYYYMM keyed to the paid/submitted month
+  amountCents: number;
+  status: SubscriptionPaymentStatus;
+  method: string;
+  reference: string;
+  proofUrl: string | null;
+  paidAt: string | null; // ISO
+  submittedAt: string; // ISO
+  cycle: BillingCycle | null;
+};
+
+/** Fail-open read of a tenant's payment ledger for the operator Billing tab.
+ *  Any error (pending db:push, connection blip) yields [] so the tenant-detail
+ *  page never 500s on the billing join. */
+async function loadTenantSubscriptionPayments(tenantId: string): Promise<TenantSubscriptionPayment[]> {
+  try {
+    const rows = await prisma.subscriptionPayment.findMany({
+      where: { tenantId },
+      orderBy: { submittedAt: "desc" },
+      take: 60,
+      select: {
+        id: true,
+        amountCents: true,
+        status: true,
+        method: true,
+        reference: true,
+        proofUrl: true,
+        paidAt: true,
+        submittedAt: true,
+        cycle: true,
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      invoiceCode: subscriptionInvoiceCode(r.paidAt ?? r.submittedAt),
+      amountCents: r.amountCents,
+      status: isSubscriptionPaymentStatus(r.status) ? r.status : "pending",
+      method: r.method,
+      reference: r.reference,
+      proofUrl: r.proofUrl,
+      paidAt: r.paidAt ? r.paidAt.toISOString() : null,
+      submittedAt: r.submittedAt.toISOString(),
+      cycle: isBillingCycle(r.cycle) ? r.cycle : null,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 /* ============================================================
    Helpers
@@ -749,7 +812,7 @@ function demoActivity(rows: AdminTenantRow[]): ActivityItem[] {
 }
 
 const _cachedTenantDetail = unstable_cache(
-  async (slug: string): Promise<Omit<TenantDetail, "planPriceCents"> | null> => {
+  async (slug: string): Promise<Omit<TenantDetail, "planPriceCents" | "subscriptionPayments"> | null> => {
     const t = await prisma.tenant.findUnique({
       where: { slug },
       select: {
@@ -889,6 +952,7 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
       visitors: (hashInt(t.slug) % 18000) + 800,
       audit: demoAudit(row),
       planPriceCents: planConfigPriceCents(planConfig, row.planKey),
+      subscriptionPayments: [],
     };
   }
   const detail = await _cachedTenantDetail(slug);
@@ -897,9 +961,10 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
   // and day-boundary ticks show without waiting out the 120s revalidate, and so a
   // pending-db:push column can't take down the whole tenant-detail page. The
   // computed countdown and the raw descriptors share one cached read.
-  const [subscription, meta] = await Promise.all([
+  const [subscription, meta, subscriptionPayments] = await Promise.all([
     getSubscriptionState(detail.id).then(brandSubscriptionFrom),
     getSubscriptionMeta(detail.id),
+    loadTenantSubscriptionPayments(detail.id),
   ]);
   return {
     ...detail,
@@ -907,6 +972,8 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
     subscription,
     subscriptionCycle: meta.cycle ?? undefined,
     subscriptionStartsAt: meta.startsAt?.toISOString(),
+    subscriptionAmountCents: meta.amountCents ?? undefined,
+    subscriptionPayments,
   };
 }
 

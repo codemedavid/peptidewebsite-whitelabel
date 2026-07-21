@@ -34,6 +34,7 @@ const loadSubscriptionWindow = (tenantId: string) =>
           subscriptionCycle: true,
           subscriptionStartsAt: true,
           subscriptionEndsAt: true,
+          subscriptionAmountCents: true,
         },
       }),
     ["tenant-subscription", tenantId],
@@ -63,17 +64,22 @@ export const getSubscriptionState = cache(async (tenantId: string): Promise<Subs
  *  rows in the tenant detail: the chosen billing cycle and start date. Reuses
  *  the same cached read as getSubscriptionState (one DB hit) and fails open to
  *  nulls, so a pending-db:push column just yields "no cycle set". */
-export type SubscriptionMeta = { cycle: BillingCycle | null; startsAt: Date | null };
+export type SubscriptionMeta = {
+  cycle: BillingCycle | null;
+  startsAt: Date | null;
+  amountCents: number | null;
+};
 
 export const getSubscriptionMeta = cache(async (tenantId: string): Promise<SubscriptionMeta> => {
-  if (isDemoMode()) return { cycle: null, startsAt: null };
+  if (isDemoMode()) return { cycle: null, startsAt: null, amountCents: null };
   try {
     const tenant = await loadSubscriptionWindow(tenantId);
     return {
       cycle: isBillingCycle(tenant?.subscriptionCycle) ? tenant.subscriptionCycle : null,
       startsAt: tenant?.subscriptionStartsAt ?? null,
+      amountCents: tenant?.subscriptionAmountCents ?? null,
     };
   } catch {
-    return { cycle: null, startsAt: null };
+    return { cycle: null, startsAt: null, amountCents: null };
   }
 });

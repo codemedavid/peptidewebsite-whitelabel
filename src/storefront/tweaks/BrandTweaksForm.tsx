@@ -381,6 +381,15 @@ export function BrandTweaksForm({
       <TweakToggle label="Catalog" value={t.showCatalog !== false} onChange={(v) => setTweak("showCatalog", v)} />
       <TweakToggle label="Footer" value={t.showFooter !== false} onChange={(v) => setTweak("showFooter", v)} />
 
+      <TweakSection label="Appearance" />
+      {/* Optional editorial frame: a thin border around the whole storefront
+          plus a hairline under the hero, tying the header + category-bar
+          hairlines into one frame. Default OFF, so existing tenants are
+          unaffected until the owner turns it on. Renders via
+          .sf-root[data-sf-frame="on"] (storefront.css); the frame color
+          follows the theme's border color. */}
+      <TweakToggle label="Site border (frame)" value={t.siteBorder === true} onChange={(v) => setTweak("siteBorder", v)} />
+
       <TweakSection label="Pages (show / hide)" />
       <TweakToggle label="Track Order page" value={t.showPageTrack !== false} onChange={(v) => setTweak("showPageTrack", v)} />
       <TweakToggle label="FAQ page" value={t.showPageFAQ !== false} onChange={(v) => setTweak("showPageFAQ", v)} />

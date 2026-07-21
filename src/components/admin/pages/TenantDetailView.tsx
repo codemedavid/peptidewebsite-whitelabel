@@ -8,7 +8,15 @@ import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, planLimits, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
 import { suspendTenantAction, setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
+import { confirmSubscriptionPaymentAction, rejectSubscriptionPaymentAction } from "@/actions/subscription-payments";
 import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
+import {
+  summarizeSubscriptionPayments,
+  canConfirm,
+  canReject,
+  SUBSCRIPTION_PAYMENT_STATUS_LABELS,
+  SUBSCRIPTION_PAYMENT_STATUS_TONE,
+} from "@/lib/subscription/payments";
 import {
   addBillingCycle,
   BILLING_CYCLES,
@@ -16,7 +24,7 @@ import {
   type BillingCycle,
 } from "@/lib/subscription/billing-cycle";
 import { buildWaLink } from "@/lib/admin/whatsapp";
-import type { TenantDetail } from "@/lib/admin/data";
+import type { TenantDetail, TenantSubscriptionPayment } from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -124,7 +132,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           {[
             { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
             { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
-            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.planPriceCents), sub: `${pm.label} · one-time` },
+            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.subscriptionAmountCents ?? tenant.planPriceCents), sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
             <div key={i} style={{ padding: "14px 24px", borderRight: i < 3 ? "1px solid var(--border-soft)" : "none" }}>
@@ -174,15 +182,6 @@ function UsageBar({ label, used, cap, unit = "" }: { label: string; used: number
       <div className={"bar " + tone}>
         <span style={{ width: pct + "%" }} />
       </div>
-    </div>
-  );
-}
-
-function ReviewRow({ k, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", padding: "8px 0", borderBottom: "1px solid var(--border-soft)", fontSize: 13 }}>
-      <div style={{ color: "var(--ink-400)" }}>{k}</div>
-      <div style={{ color: "var(--ink-900)" }}>{v}</div>
     </div>
   );
 }
@@ -483,6 +482,10 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
   const [cycle, setCycle] = useState<BillingCycle | "">(tenant.subscriptionCycle ?? "");
   const [startsAt, setStartsAt] = useState(isoToDateInput(tenant.subscriptionStartsAt));
   const [endsAt, setEndsAt] = useState(isoToDateInput(tenant.subscription?.endsAt));
+  // Pesos the tenant paid for this term (e.g. the yearly price). Blank = unset.
+  const [amount, setAmount] = useState(
+    tenant.subscriptionAmountCents != null ? String(tenant.subscriptionAmountCents / 100) : "",
+  );
   // Once the operator hand-edits the due date we stop auto-recomputing it.
   const [overridden, setOverridden] = useState(false);
 
@@ -511,7 +514,9 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
 
   const dueBeforeStart =
     DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && endsAt <= startsAt;
-  const canSave = !!cycle && DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && !dueBeforeStart;
+  const amountInvalid = amount.trim() !== "" && !(Number.isFinite(Number(amount)) && Number(amount) >= 0);
+  const canSave =
+    !!cycle && DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && !dueBeforeStart && !amountInvalid;
   const hasWindow = !!tenant.subscriptionCycle;
 
   const save = () => {
@@ -521,6 +526,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         cycle: cycle || null,
         startsAt,
         endsAt,
+        amountCents: amount.trim() === "" ? null : Math.round(Number(amount) * 100),
       });
       if ("error" in res) setErr(res.error);
       else {
@@ -539,6 +545,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         setCycle("");
         setStartsAt("");
         setEndsAt("");
+        setAmount("");
         setOverridden(false);
         showToast("Subscription window cleared.");
         router.refresh();
@@ -578,6 +585,22 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
             <input type="date" value={endsAt} onChange={(e) => handleEnds(e.target.value)} style={inputStyle} />
           </label>
         </div>
+        <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
+          Amount paid (₱) — what the tenant paid for this term
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="e.g. 15000 for a yearly plan"
+            style={inputStyle}
+          />
+        </label>
+        {amountInvalid && (
+          <div style={{ fontSize: 12, color: "var(--danger)" }}>Enter a valid amount (0 or more).</div>
+        )}
         {tenant.status === "trial" && (
           <div style={{ fontSize: 12, color: "var(--ink-400)" }}>
             This tenant is on a trial — the window activates once they move to a paid plan.
@@ -851,112 +874,313 @@ function OrdersPanel({ tenant }: { tenant: TenantDetail }) {
 }
 
 /* ---------- BILLING ---------- */
+
+/** ISO string → "Aug 10, 2026 · 3:42 PM" for the payment drawer. */
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function BillingPanel({ tenant }: { tenant: TenantDetail }) {
-  const pm = planMeta(tenant.planKey);
-  const priceCents = tenant.planPriceCents;
-  const now = new Date();
-  const invoices = Array.from({ length: 6 }).map((_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 10);
-    const failed = i === 0 && tenant.status === "past_due";
-    return { id: `INV-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`, date: `${MONTHS[d.getMonth()]} 10`, amount: priceCents, failed };
-  });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const payments = tenant.subscriptionPayments;
+  const summary = summarizeSubscriptionPayments(payments);
+  const selected = payments.find((p) => p.id === selectedId) ?? null;
+
   return (
     <div className="grid-2">
-      <div className="col" style={{ gap: 16 }}>
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Subscription</h3>
-          </div>
-          <div className="card-body">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em" }}>{pm.label}</div>
-                <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                  {tenant.status === "trial" ? "Free trial" : `${formatPesos(priceCents)} · one-time`}
-                </div>
-              </div>
-              <Link className="btn" href={`/tenants/${tenant.slug}/settings`}>
-                Change plan
-              </Link>
-            </div>
-            <div className="divider" />
-            <ReviewRow k="Status" v={<StatusBadge status={tenant.status} />} />
-            <ReviewRow k="Billing email" v={tenant.email} />
-            {tenant.subscriptionCycle && (
-              <ReviewRow k="Type" v={BILLING_CYCLE_LABELS[tenant.subscriptionCycle]} />
-            )}
-            {tenant.subscriptionStartsAt && (
-              <ReviewRow k="Start date" v={subEndLabel(tenant.subscriptionStartsAt)} />
-            )}
-            {tenant.subscription &&
-              (tenant.subscription.expired ? (
-                <>
-                  <ReviewRow k="Due date" v={subEndLabel(tenant.subscription.endsAt)} />
-                  <ReviewRow
-                    k="Days remaining"
-                    v={<span style={{ color: "var(--danger, #c0392b)" }}>Ended {subEndLabel(tenant.subscription.endsAt)}</span>}
-                  />
-                </>
-              ) : (
-                <>
-                  <ReviewRow k="Due date" v={subEndLabel(tenant.subscription.endsAt)} />
-                  <ReviewRow
-                    k="Days remaining"
-                    v={`${tenant.subscription.daysLeft} ${tenant.subscription.daysLeft === 1 ? "day" : "days"} left (day ${tenant.subscription.dayNum} of ${tenant.subscription.totalDays})`}
-                  />
-                </>
-              ))}
-          </div>
-        </div>
-
+      <div className="col" style={{ gap: 16, minWidth: 0 }}>
         <SubscriptionWindowCard tenant={tenant} />
-
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Invoice history</h3>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Invoice</th>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id} style={{ cursor: "default" }}>
-                  <td className="mono" style={{ fontSize: 12.5 }}>
-                    {inv.id}
-                  </td>
-                  <td className="muted">{inv.date}</td>
-                  <td className="tnum">{formatPesos(inv.amount, { decimals: true })}</td>
-                  <td>
-                    <span className={"badge " + (inv.failed ? "badge-danger" : "badge-success")}>
-                      <span className="bdot" />
-                      {inv.failed ? "Failed" : "Paid"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <InvoiceHistoryCard payments={payments} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
 
       <div className="col" style={{ gap: 16 }}>
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Lifetime metrics</h3>
+        <LifetimeMetricsCard tenant={tenant} summary={summary} />
+      </div>
+
+      {selected && <PaymentReviewDrawer key={selected.id} payment={selected} onClose={() => setSelectedId(null)} />}
+    </div>
+  );
+}
+
+function InvoiceHistoryCard({
+  payments,
+  selectedId,
+  onSelect,
+}: {
+  payments: TenantSubscriptionPayment[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h3 className="card-title">Invoice history</h3>
+          <div className="card-sub">Click an invoice to review its payment proof.</div>
+        </div>
+      </div>
+      {payments.length === 0 ? (
+        <div style={{ padding: 28, textAlign: "center", color: "var(--ink-400)", fontSize: 13 }}>
+          No subscription payments filed yet. The tenant submits proof of payment from their store admin&apos;s Billing view.
+        </div>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Filed</th>
+              <th style={{ textAlign: "right" }}>Amount</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map((p) => (
+              <tr
+                key={p.id}
+                onClick={() => onSelect(p.id)}
+                style={{ cursor: "pointer", background: p.id === selectedId ? "var(--bg-canvas)" : undefined }}
+              >
+                <td className="mono" style={{ fontSize: 12.5, fontWeight: 500 }}>
+                  {p.invoiceCode}
+                </td>
+                <td className="muted">{subEndLabel(p.submittedAt)}</td>
+                <td className="tnum" style={{ textAlign: "right", fontWeight: 500 }}>
+                  {formatPesos(p.amountCents, { decimals: true })}
+                </td>
+                <td>
+                  <span className={"badge badge-" + SUBSCRIPTION_PAYMENT_STATUS_TONE[p.status]}>
+                    <span className="bdot" />
+                    {SUBSCRIPTION_PAYMENT_STATUS_LABELS[p.status]}
+                  </span>
+                </td>
+                <td style={{ textAlign: "right", color: "var(--ink-300)" }}>
+                  <Ic.ChevronRight style={{ width: 14, height: 14 }} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function LifetimeMetricsCard({
+  tenant,
+  summary,
+}: {
+  tenant: TenantDetail;
+  summary: ReturnType<typeof summarizeSubscriptionPayments>;
+}) {
+  const rows: { color: string; label: string; value: React.ReactNode }[] = [
+    { color: "var(--success)", label: "Confirmed payments", value: summary.confirmedCount },
+    { color: "var(--warn, #b45309)", label: "Awaiting confirmation", value: summary.pendingCount },
+    { color: "var(--danger)", label: "Failed payments", value: summary.failedCount },
+    { color: "var(--ink-300)", label: "Store orders", value: tenant.orders.toLocaleString() },
+  ];
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="card-title">Lifetime metrics</h3>
+      </div>
+      <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 18, padding: 20 }}>
+        <div>
+          <div style={{ fontSize: 12.5, color: "var(--ink-400)" }}>Subscription revenue</div>
+          <div className="tnum" style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em" }}>
+            {formatPesos(summary.lifetimeConfirmedCents)}
           </div>
-          <div className="card-body">
-            <ReviewRow k="Lifetime revenue" v={<span className="tnum">{formatPesosCompact(tenant.revenueCents)}</span>} />
-            <ReviewRow k="Total orders" v={<span className="tnum">{tenant.orders.toLocaleString()}</span>} />
-            <ReviewRow k="Failed payments" v={tenant.status === "past_due" ? <span style={{ color: "var(--danger)" }}>1 · needs review</span> : "0"} />
+          <div style={{ fontSize: 11.5, color: "var(--ink-400)" }}>from {summary.confirmedCount} confirmed payment{summary.confirmedCount === 1 ? "" : "s"}</div>
+        </div>
+
+        <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "var(--bg-canvas)" }}>
+          <span style={{ width: `${summary.paidPct}%`, background: "var(--success)" }} />
+          <span style={{ width: `${summary.pendingPct}%`, background: "var(--warn, #f59e0b)" }} />
+        </div>
+
+        <div>
+          {rows.map((r, i) => (
+            <div
+              key={r.label}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 0",
+                borderBottom: i < rows.length - 1 ? "1px solid var(--border-soft)" : "none",
+                fontSize: 13,
+              }}
+            >
+              <span className="row" style={{ gap: 8, color: "var(--ink-700)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: r.color }} />
+                {r.label}
+              </span>
+              <span className="tnum" style={{ fontWeight: 600 }}>
+                {r.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "12px 14px" }}>
+          <div style={{ fontSize: 11, color: "var(--ink-400)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+            Avg. per confirmed payment
+          </div>
+          <div className="tnum" style={{ fontSize: 19, fontWeight: 700, marginTop: 4 }}>
+            {formatPesos(summary.avgMonthlyCents)}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaymentReviewDrawer({ payment, onClose }: { payment: TenantSubscriptionPayment; onClose: () => void }) {
+  const { showToast } = useAdminUI();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [zoomed, setZoomed] = useState(false);
+  const tone = SUBSCRIPTION_PAYMENT_STATUS_TONE[payment.status];
+
+  const review = (action: "confirm" | "reject") =>
+    startTransition(async () => {
+      const fn = action === "confirm" ? confirmSubscriptionPaymentAction : rejectSubscriptionPaymentAction;
+      const res = await fn(payment.id);
+      if ("error" in res) showToast(res.error);
+      else {
+        showToast(action === "confirm" ? "Payment confirmed." : "Payment marked as failed.");
+        router.refresh();
+        onClose();
+      }
+    });
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", zIndex: 40 }}
+      />
+      <aside
+        role="dialog"
+        aria-label={`Review payment ${payment.invoiceCode}`}
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: "min(440px, 100vw)",
+          background: "var(--bg-surface, #fff)",
+          zIndex: 50,
+          boxShadow: "-12px 0 40px rgba(15,23,42,0.15)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div className="card-head" style={{ borderBottom: "1px solid var(--border-soft)" }}>
+          <div>
+            <div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
+              {payment.invoiceCode}
+            </div>
+            <div className="card-sub">
+              Filed {subEndLabel(payment.submittedAt)} · {formatPesos(payment.amountCents, { decimals: true })}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} aria-label="Close">
+            <Ic.X />
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 18 }}>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-500)", marginBottom: 8 }}>Payment screenshot</div>
+            {payment.proofUrl ? (
+              <button
+                type="button"
+                onClick={() => setZoomed(true)}
+                style={{ display: "block", width: "100%", padding: 0, border: "1px solid var(--border-soft)", borderRadius: 12, overflow: "hidden", cursor: "zoom-in", background: "var(--bg-canvas)" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={payment.proofUrl} alt="Payment proof" style={{ display: "block", width: "100%", maxHeight: 320, objectFit: "cover" }} />
+              </button>
+            ) : (
+              <div style={{ border: "1px dashed var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--ink-400)", fontSize: 13 }}>
+                No screenshot uploaded — the tenant filed this payment without a proof image.
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: "1px solid var(--border-soft)", borderRadius: 12, overflow: "hidden" }}>
+            <DrawerRow k="Paid on" v={fmtDateTime(payment.paidAt)} />
+            <DrawerRow k="Method" v={payment.method} />
+            <DrawerRow k="Reference" v={payment.reference ? <span className="mono">{payment.reference}</span> : "—"} />
+            <DrawerRow
+              k="Status"
+              last
+              v={
+                <span className={"badge badge-" + tone}>
+                  <span className="bdot" />
+                  {SUBSCRIPTION_PAYMENT_STATUS_LABELS[payment.status]}
+                </span>
+              }
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 10 }}>
+          {payment.status === "confirmed" && (
+            <div style={{ background: "var(--success-soft, #f0fdf4)", border: "1px solid var(--success)", color: "var(--success)", borderRadius: 10, padding: 12, fontSize: 13.5, fontWeight: 600, textAlign: "center" }}>
+              ✓ Payment confirmed
+            </div>
+          )}
+          {payment.status === "failed" && (
+            <div style={{ background: "var(--danger-soft, #fef2f2)", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 10, padding: 12, fontSize: 13.5, fontWeight: 600, textAlign: "center" }}>
+              Payment marked as failed
+            </div>
+          )}
+          {canConfirm(payment.status) && (
+            <button className="btn btn-accent" style={{ justifyContent: "center", width: "100%" }} onClick={() => review("confirm")} disabled={pending}>
+              <Ic.Check /> {payment.status === "failed" ? "Re-confirm as paid" : "Confirm payment received"}
+            </button>
+          )}
+          {canReject(payment.status) && (
+            <button className="btn" style={{ justifyContent: "center", width: "100%", color: "var(--danger)" }} onClick={() => review("reject")} disabled={pending}>
+              Mark as failed
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {zoomed && payment.proofUrl && (
+        <div
+          onClick={() => setZoomed(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(4,7,15,0.85)", zIndex: 60, display: "grid", placeItems: "center", padding: 24, cursor: "zoom-out" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={payment.proofUrl} alt="Payment proof" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function DrawerRow({ k, v, last }: { k: string; v: React.ReactNode; last?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "11px 14px",
+        borderBottom: last ? "none" : "1px solid var(--border-soft)",
+        fontSize: 13.5,
+        gap: 12,
+      }}
+    >
+      <span style={{ color: "var(--ink-500)" }}>{k}</span>
+      <span style={{ color: "var(--ink-900)", fontWeight: 500, textAlign: "right" }}>{v}</span>
     </div>
   );
 }

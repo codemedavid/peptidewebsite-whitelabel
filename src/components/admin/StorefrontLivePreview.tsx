@@ -90,7 +90,7 @@ export function StorefrontLivePreview({ brand }: { brand: Brand }) {
 
       <div className="max-h-[640px] overflow-y-auto overflow-x-hidden rounded-[var(--radius)] border border-border">
         <StoreProvider brand={brand}>
-          <div className="sf-root" style={brandVars(brand)}>
+          <div className="sf-root" style={brandVars(brand)} data-sf-frame={brand.siteBorder ? "on" : undefined}>
             {brand.showHeader !== false && (
               <Header brand={brand} cartCount={0} onShopClick={goHome} />
             )}

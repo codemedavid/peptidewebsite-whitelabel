@@ -218,9 +218,9 @@ function itemsSubtotal(items: OrderItem[]): number {
  * order object is local to this request. Must run BEFORE the fee/discount stamps
  * so they compute against the authoritative subtotal.
  */
-function repriceItems(items: OrderItem[], catalog: Product[]): void {
+function repriceItems(items: OrderItem[], catalog: Product[], groupBuyLive = false): void {
   for (const it of items) {
-    const live = authoritativeItemPrice(it, catalog);
+    const live = authoritativeItemPrice(it, catalog, groupBuyLive);
     if (live != null) it.price = live;
   }
 }
@@ -737,10 +737,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       getDemoProducts(slug).map((dp) =>
         dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
       );
+    // Group-buy attribution FIRST — it decides whether this order is in a live
+    // round, which drives whether GB products re-price at their gbPrice below.
+    await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative item prices: re-read each line from the live catalog
-    // so a price the owner changed (or a tampered client) can't be stored. Runs
-    // before the fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, demoProducts);
+    // so a price the owner changed (or a tampered client) can't be stored. When
+    // the order belongs to a live round, group-buy products charge their gbPrice
+    // (the single price the group-buy page advertised). Runs before the
+    // fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, demoProducts, !!p.groupBuyId);
     const demoViolation = stockViolation(demoProducts, p.items);
     if (demoViolation) return { error: demoViolation };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
@@ -780,8 +785,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
     const demoGbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
     if (demoGbOnHand) return { error: demoGbOnHand };
-    // Group-buy attribution — same server-authoritative stamp as the fee.
-    await stampGroupBuy(p, tenantId, slug);
+    // (Group-buy attribution already ran above, before re-pricing.)
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
     const orderNumber = nextDemoOrderNumber(slug);
     const saved: Order = { ...p, id, orderNumber };
@@ -814,10 +818,17 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const catalog = rows.map((r) =>
       dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
     );
+    // Tenant slug (used for group-buy attribution + the on-hand gate below).
+    const slug = (await getTenantSlug()) ?? tenantId;
+    // Group-buy attribution FIRST — it decides whether this order is in a live
+    // round, which drives whether GB products re-price at their gbPrice below.
+    await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative item prices: re-read each line from the live catalog
-    // so a price the owner changed (or a tampered client) can't be stored. Runs
-    // before the fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, catalog);
+    // so a price the owner changed (or a tampered client) can't be stored. When
+    // the order belongs to a live round, group-buy products charge their gbPrice
+    // (the single price the group-buy page advertised). Runs before the
+    // fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, catalog, !!p.groupBuyId);
 
     // Admin fee is operator-revocable per tenant (admin → Features) AND
     // Business-exclusive under the trial system: when the tenant isn't entitled
@@ -863,11 +874,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     if (gbRuleError) return { error: gbRuleError };
 
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
-    const slug = (await getTenantSlug()) ?? tenantId;
+    // (`slug` + group-buy attribution already ran above, before re-pricing.)
     const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
     if (gbOnHand) return { error: gbOnHand };
-    // Group-buy attribution — same server-authoritative stamp as the fee.
-    await stampGroupBuy(p, tenantId, slug);
 
     const { row, created } = await createStorefrontOrder(tenantId, p);
     const placed = dbOrderToStorefront(row as DbOrderRow);

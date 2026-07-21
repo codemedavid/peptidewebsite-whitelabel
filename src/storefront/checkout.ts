@@ -7,6 +7,7 @@
 
 import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product } from "./types";
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
+import { isGroupBuyProduct, groupBuyLine } from "@/lib/storefront/two-ways";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
@@ -154,7 +155,15 @@ export function isResellerQty(p: Product, qty: number): boolean {
  * above retail/discount is ignored). Otherwise the active discount price, else
  * retail. Defaults to qty 1 so existing single-unit callers are unchanged.
  */
-export function unitPrice(p: Product, qty = 1): number {
+export function unitPrice(p: Product, qty = 1, groupBuyLive = false): number {
+  // While a group buy is live, a group-buy product (productType "gb") is sold at
+  // its gbPrice — the single price the page advertises and the customer pays.
+  // groupBuyLine clamps a missing/misconfigured gbPrice back to the regular
+  // price, so this never invents a discount. GB pricing is the round price: it
+  // deliberately overrides the discount/wholesale legs below.
+  if (groupBuyLive && isGroupBuyProduct(p)) {
+    return groupBuyLine(p).gbPrice;
+  }
   const base = basePrice(p);
   if (qty >= resellerMinQty(p)) {
     const wholesale = resellerUnitPrice(p);
@@ -163,8 +172,8 @@ export function unitPrice(p: Product, qty = 1): number {
   return base;
 }
 
-export function cartTotal(lines: CartLine[]): number {
-  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty) * l.qty, 0);
+export function cartTotal(lines: CartLine[], groupBuyLive = false): number {
+  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, groupBuyLive) * l.qty, 0);
 }
 
 // ── Always-live pricing ───────────────────────────────────────────────────────
@@ -211,6 +220,7 @@ export function liveCartLines(cart: Product[], catalog: Product[]): CartLine[] {
 export function authoritativeItemPrice(
   item: { productId?: string; name: string; qty: number; variation?: string },
   catalog: Product[],
+  groupBuyLive = false,
 ): number | null {
   const live = catalog.find((p) => (item.productId ? p.id === item.productId : p.name === item.name));
   if (!live) return null;
@@ -218,7 +228,7 @@ export function authoritativeItemPrice(
     const variation = (live.variations ?? []).find((v) => v.name === item.variation);
     return variation ? Math.max(0, Number(variation.price) || 0) : null;
   }
-  return unitPrice(live, item.qty);
+  return unitPrice(live, item.qty, groupBuyLive);
 }
 
 /** The channels that are enabled AND have a destination set. */

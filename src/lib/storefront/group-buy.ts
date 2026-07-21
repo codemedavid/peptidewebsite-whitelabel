@@ -24,6 +24,9 @@ export type GroupBuy = {
   endsAt: string | null; // ISO — auto-close boundary
   deliveryEta: string; // customer-facing free text, e.g. "3–4 weeks after close"
   productIds: string[]; // assigned products; empty = whole catalog
+  // Slot goal for the storefront progress bar ("18 of 30 slots filled"). 0 = the
+  // goal is OFF and no progress bar renders — the owner sets/clears it per round.
+  slotGoal: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -149,9 +152,18 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     endsAt: isoOrNull(x.endsAt),
     deliveryEta: str(x.deliveryEta, 200),
     productIds,
+    slotGoal: slotGoalInt(x.slotGoal),
     createdAt: isoOrNull(x.createdAt) ?? now,
     updatedAt: isoOrNull(x.updatedAt) ?? now,
   };
+}
+
+/** Coerce an untrusted slot goal to a clean count: a non-negative integer, capped
+ *  at a sane ceiling. Anything invalid, negative or absent → 0 (goal off). */
+function slotGoalInt(v: unknown): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 100000);
 }
 
 // ── Status resolution ────────────────────────────────────────────────────────
@@ -306,6 +318,7 @@ export type DbGroupBuyRow = {
   endsAt: Date | null;
   deliveryEta: string;
   productIds: unknown;
+  slotGoal?: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -320,6 +333,7 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     endsAt: row.endsAt?.toISOString() ?? null,
     deliveryEta: row.deliveryEta,
     productIds: row.productIds,
+    slotGoal: row.slotGoal ?? 0,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   });
@@ -334,6 +348,7 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
     endsAt: gb.endsAt ? new Date(gb.endsAt) : null,
     deliveryEta: gb.deliveryEta,
     productIds: gb.productIds,
+    slotGoal: gb.slotGoal,
   };
 }
 

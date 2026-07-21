@@ -488,6 +488,17 @@ export const THEME_SEEDS: ThemeSeed[] = [
     success: "#1E7D62", warning: "#9A6209", info: "#2E6FA8", error: "#C0303C",
   },
   {
+    id: "kglow", name: "K Glow", category: "fun", mode: "light",
+    tagline: "Rosy K-beauty pink, editorial serif, softly verified.",
+    headingFont: "Playfair Display", bodyFont: "DM Sans", radius: "1rem",
+    primary: "#C21E6C", primaryForeground: "#FFFFFF",
+    accent: "#A8175A", accentForeground: "#FFFFFF",
+    background: "#FDF1F6", surface: "#FFFFFF", subtle: "#FCE4EF",
+    text: "#3A1F2C", mutedText: "#7A3A56", border: "#F1CFDF",
+    success: "#137A50", warning: "#9A6206", info: "#2563B0", error: "#C62F44",
+    gradientFrom: "#FCE4EF", gradientTo: "#FDF1F6",
+  },
+  {
     id: "lavender-dream", name: "Lavender Dream", category: "fun", mode: "light",
     tagline: "Soft violet dreams, airy and sweet",
     headingFont: "Poppins", bodyFont: "Plus Jakarta Sans", radius: "1rem",

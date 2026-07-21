@@ -16,6 +16,7 @@ import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
+import { AdminBilling } from "./AdminBilling";
 import { AdminNoticeModal } from "./AdminNoticeModal";
 import { AdminTrackNote } from "./AdminTrackNote";
 import { AdminFAQManager } from "./AdminFAQManager";
@@ -74,6 +75,7 @@ type View =
   | "notify"
   | "notice"
   | "tracknote"
+  | "billing"
   | "upgrade";
 
 export function AdminPage({
@@ -250,6 +252,7 @@ export function AdminPage({
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "billing") return <AdminBilling brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
@@ -356,6 +359,7 @@ export function AdminPage({
     ...(isOwner
       ? [
           { id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" },
+          { id: "billing", label: "Billing", hint: "Pay & submit proof", icon: "card", tint: "green" },
           { id: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan" },
           { id: "notice", label: "Notice Modal", hint: "Storefront pop-up notice", icon: "shield", tint: "orange" },
           { id: "tracknote", label: "Delivery Note", hint: "Track-page delivery estimates", icon: "truck", tint: "mint" },
@@ -492,6 +496,7 @@ export function AdminPage({
                     if (q.id === "account") return setView("account");
                     if (q.id === "staff") return setView("staff");
                     if (q.id === "notify") return setView("notify");
+                    if (q.id === "billing") return setView("billing");
                     if (q.id === "notice") return setView("notice");
                     if (q.id === "tracknote") return setView("tracknote");
                     toast(`"${q.label}" — wire to your backend`);
