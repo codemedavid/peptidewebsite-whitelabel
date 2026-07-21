@@ -35,6 +35,7 @@
     "test:gate-heartbeat": "tsx scripts/test-gate-heartbeat.ts",
     "test:gb-banner": "tsx scripts/test-gb-banner.ts",
     "test:onhand-gate": "tsx scripts/test-onhand-gate.ts",
+    "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
     "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
@@ -57,12 +58,15 @@
     "test:notice-modal": "tsx scripts/test-notice-modal.ts",
     "test:track-note": "tsx scripts/test-track-note.ts",
     "test:trial-state": "tsx scripts/test-trial-state.ts",
+    "test:subscription-state": "tsx scripts/test-subscription-state.ts",
+    "test:billing-cycle": "tsx scripts/test-billing-cycle.ts",
     "test:trial-gating": "tsx scripts/test-trial-gating.ts",
     "test:feature-spotlight": "tsx scripts/test-feature-spotlight.ts",
     "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts",
     "test:trial-expiry": "tsx scripts/test-trial-expiry.ts",
     "test:pepweb-landing": "tsx scripts/test-pepweb-landing.ts",
     "test:checkout-total": "tsx scripts/test-checkout-total.ts",
+    "test:contact-channels": "tsx scripts/test-contact-channels.ts",
     "test:upload-limits": "tsx scripts/test-upload-limits.ts"
   },
   "prisma": {
