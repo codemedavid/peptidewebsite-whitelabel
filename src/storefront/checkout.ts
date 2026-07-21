@@ -6,6 +6,7 @@
 // clipboard as a fallback.
 
 import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product } from "./types";
+import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
@@ -352,11 +353,11 @@ export function channelUrl(channel: ContactChannel, message: string): string {
     case "messenger":
       return `https://m.me/${dest.replace(/^@/, "")}`;
     case "instagram":
-      // Instagram's click-to-DM deep link (the IG analog of Messenger's m.me).
-      // Opens a direct-message thread with the store; it cannot carry a
-      // prefilled message, so channelPrefills() stays false and the checkout
-      // copies the order summary to the clipboard as a paste-in fallback.
-      return `https://ig.me/m/${dest.replace(/^@/, "")}`;
+      // Opens an Instagram DM thread with the store. It cannot carry a prefilled
+      // message, so channelPrefills() stays false and the checkout copies the
+      // order summary to the clipboard as a paste-in fallback. URL construction
+      // is shared with the email support link so the two can't drift.
+      return instagramDmUrl(dest);
     case "viber":
       // Viber deep links are phone-number based: viber://chat?number=<digits>.
       return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;

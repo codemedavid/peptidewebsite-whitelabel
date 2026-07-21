@@ -9,6 +9,7 @@
 // the capture layer can decide gating/flush separately from payload shape.
 
 import type { Order } from "@/storefront/types";
+import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 
 export const POSTHOG_EVENTS = {
   ORDER_PLACED: "order_placed",
@@ -85,7 +86,7 @@ function supportLink(
       case "messenger":
         return { supportUrl: `https://m.me/${dest.replace(/^@/, "")}`, supportLabel: "Messenger" };
       case "instagram":
-        return { supportUrl: `https://ig.me/m/${dest.replace(/^@/, "")}`, supportLabel: "Instagram" };
+        return { supportUrl: instagramDmUrl(dest), supportLabel: "Instagram" };
       case "gmail":
         return { supportUrl: `mailto:${dest}`, supportLabel: "email" };
       default:

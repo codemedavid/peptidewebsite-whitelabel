@@ -90,6 +90,20 @@ check("channelUrl trims surrounding whitespace", () => {
   assert.strictEqual(channelUrl(ig("  mystore  "), "New order"), "https://ig.me/m/mystore");
 });
 
+check("channelUrl recovers the handle from a pasted profile URL", () => {
+  assert.strictEqual(
+    channelUrl(ig("https://www.instagram.com/mystore/"), "New order"),
+    "https://ig.me/m/mystore",
+  );
+});
+
+check("channelUrl recovers the handle from a bare instagram.com path", () => {
+  assert.strictEqual(
+    channelUrl(ig("instagram.com/mystore"), "New order"),
+    "https://ig.me/m/mystore",
+  );
+});
+
 check("channelPrefills('instagram') is false (no prefilled DM)", () => {
   assert.strictEqual(channelPrefills("instagram"), false);
 });
@@ -102,6 +116,14 @@ check("buildEmailBrand surfaces Instagram as the support link", () => {
   assert.ok(brand, "expected an EmailBrand");
   assert.strictEqual(brand!.supportUrl, "https://ig.me/m/mystore");
   assert.strictEqual(brand!.supportLabel, "Instagram");
+});
+
+check("buildEmailBrand recovers the handle from a pasted profile URL", () => {
+  const brand = buildEmailBrand({
+    name: "My Store",
+    contactChannels: [ig("https://instagram.com/mystore")],
+  });
+  assert.strictEqual(brand!.supportUrl, "https://ig.me/m/mystore");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
