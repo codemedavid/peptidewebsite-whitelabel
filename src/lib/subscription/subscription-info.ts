@@ -24,19 +24,36 @@ import { isBillingCycle, type BillingCycle } from "./billing-cycle";
 
 const NOT_ON_SUBSCRIPTION: SubscriptionState = { onSubscription: false, expired: false };
 
+// Columns that predate subscriptionPriceCents — the ones the existing banner +
+// countdown read. Kept separate so a not-yet-migrated price column can't take
+// the whole window read (and therefore the banner) down with it.
+const LEGACY_WINDOW_SELECT = {
+  status: true,
+  subscriptionCycle: true,
+  subscriptionStartsAt: true,
+  subscriptionEndsAt: true,
+  subscriptionAmountCents: true,
+} as const;
+
 const loadSubscriptionWindow = (tenantId: string) =>
   unstable_cache(
-    () =>
-      prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: {
-          status: true,
-          subscriptionCycle: true,
-          subscriptionStartsAt: true,
-          subscriptionEndsAt: true,
-          subscriptionAmountCents: true,
-        },
-      }),
+    async () => {
+      try {
+        return await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { ...LEGACY_WINDOW_SELECT, subscriptionPriceCents: true },
+        });
+      } catch {
+        // subscriptionPriceCents not on the DB yet (see live-db-state) → retry
+        // with only the pre-existing columns so the banner/countdown still
+        // resolve; the price simply reads as unset until db:push runs.
+        const legacy = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: LEGACY_WINDOW_SELECT,
+        });
+        return legacy ? { ...legacy, subscriptionPriceCents: null as number | null } : null;
+      }
+    },
     ["tenant-subscription", tenantId],
     { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:subscription`], revalidate: 300 },
   )();
@@ -68,18 +85,27 @@ export type SubscriptionMeta = {
   cycle: BillingCycle | null;
   startsAt: Date | null;
   amountCents: number | null;
+  priceCents: number | null;
+};
+
+const NO_SUBSCRIPTION_META: SubscriptionMeta = {
+  cycle: null,
+  startsAt: null,
+  amountCents: null,
+  priceCents: null,
 };
 
 export const getSubscriptionMeta = cache(async (tenantId: string): Promise<SubscriptionMeta> => {
-  if (isDemoMode()) return { cycle: null, startsAt: null, amountCents: null };
+  if (isDemoMode()) return NO_SUBSCRIPTION_META;
   try {
     const tenant = await loadSubscriptionWindow(tenantId);
     return {
       cycle: isBillingCycle(tenant?.subscriptionCycle) ? tenant.subscriptionCycle : null,
       startsAt: tenant?.subscriptionStartsAt ?? null,
       amountCents: tenant?.subscriptionAmountCents ?? null,
+      priceCents: tenant?.subscriptionPriceCents ?? null,
     };
   } catch {
-    return { cycle: null, startsAt: null, amountCents: null };
+    return NO_SUBSCRIPTION_META;
   }
 });

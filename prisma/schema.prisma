@@ -66,9 +66,15 @@ model Tenant {
   subscriptionCycle    String?
   // What the tenant actually paid for the current subscription term, in centavos
   // (e.g. a yearly plan billed at ₱15,000 → 1500000). Operator-set alongside the
-  // window; null = not recorded. Shown as "Amount paid" in the tenant detail and
-  // as the plan-fee value once a subscription cycle is active.
+  // window; null = not recorded. Shown as "Amount paid" in the tenant detail.
   subscriptionAmountCents Int?
+  // The tenant's recurring MONTHLY price ("Monthly price due" in the Subscription
+  // window setter), in centavos — the per-month rate, NOT the per-term total, so
+  // it feeds monthly MRR directly the same way the plan-config monthly price does.
+  // Operator-set and per-tenant, distinct from subscriptionAmountCents (an actual
+  // past per-term payment). When set it overrides the plan-config monthly price
+  // for this tenant's Plan-fee display + MRR (effectivePlanFeeCents); null = plan.
+  subscriptionPriceCents Int?
 
   domains           Domain[]
   groupBuys         GroupBuy[]

@@ -74,7 +74,8 @@
     "test:checkout-total": "tsx scripts/test-checkout-total.ts",
     "test:contact-channels": "tsx scripts/test-contact-channels.ts",
     "test:upload-limits": "tsx scripts/test-upload-limits.ts",
-    "test:rehost-urls": "tsx scripts/test-rehost-urls.ts"
+    "test:rehost-urls": "tsx scripts/test-rehost-urls.ts",
+    "test:plan-fee": "tsx scripts/test-plan-fee.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

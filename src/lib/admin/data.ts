@@ -28,6 +28,7 @@ import {
   type SubscriptionPaymentSummary,
 } from "@/lib/subscription/payments";
 import { subscriptionUrgency, type FlaggedUrgency } from "@/lib/subscription/near-due";
+import { effectivePlanFeeCents } from "@/lib/subscription/plan-fee";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
@@ -59,6 +60,11 @@ export type AdminTenantRow = {
   // (fail-open: absent when ok, in demo mode, or if the columns aren't on the DB).
   // Drives the tenants-list badge + the "Expiring soon" dashboard panel.
   subscriptionUrgency?: FlaggedUrgency;
+  // Operator-set per-tenant recurring price ("Monthly price due"), centavos.
+  // Fail-open (undefined when unset, in demo mode, or if the column isn't on the
+  // DB yet). When present it overrides the plan-config price for this tenant's
+  // MRR contribution (effectivePlanFeeCents).
+  subscriptionPriceCents?: number;
 };
 
 export type OverviewData = {
@@ -138,6 +144,9 @@ export type TenantDetail = AdminTenantRow & {
   subscriptionStartsAt?: string;
   // What the tenant paid for the current term (centavos); undefined when unset.
   subscriptionAmountCents?: number;
+  // The tenant's recurring price / monthly payment due (centavos); undefined when
+  // unset. Overrides the plan-config price for the Plan-fee tile (effectivePlanFeeCents).
+  subscriptionPriceCents?: number;
   // Tenant-filed proof-of-payment ledger (newest first), CAPPED for display,
   // fail-open to [] when the table isn't on the DB yet or in demo mode. Drives the
   // operator Billing tab's invoice history + review drawer.
@@ -586,40 +595,77 @@ const _cachedAdminTenants = unstable_cache(
   { tags: ["admin:data"], revalidate: 120 },
 );
 
+type TenantSubscriptionSignals = {
+  urgencies: Map<string, FlaggedUrgency>;
+  prices: Map<string, number>; // tenantId → subscriptionPriceCents (only when set)
+};
+
 /**
- * Fresh, fail-open map of tenantId → flagged subscription urgency. Read outside
- * the 120s tenant-list cache so the near-due signal reflects the current clock
- * (a tenant crossing a day boundary flips promptly) and so a pending-db:push
- * subscription column can't take down the whole tenants list — a read error
- * just yields no badges. Only flagged (non-ok) tenants land in the map.
+ * Fresh, fail-open subscription signals per tenant. Read outside the 120s
+ * tenant-list cache so the near-due signal reflects the current clock (a tenant
+ * crossing a day boundary flips promptly) and so a pending-db:push subscription
+ * column can't take down the whole tenants list — a read error just yields no
+ * badges and no per-tenant price overrides. Only flagged (non-ok) tenants land
+ * in `urgencies`; only tenants with a set price land in `prices`.
  */
-async function loadTenantUrgencies(): Promise<Map<string, FlaggedUrgency>> {
-  const map = new Map<string, FlaggedUrgency>();
-  if (isDemoMode()) return map;
+async function loadTenantSubscriptionSignals(): Promise<TenantSubscriptionSignals> {
+  const urgencies = new Map<string, FlaggedUrgency>();
+  const prices = new Map<string, number>();
+  if (isDemoMode()) return { urgencies, prices };
+  // Pre-price columns the urgency badges depend on. Selected on their own so a
+  // not-yet-migrated subscriptionPriceCents can't take the near-due signal down.
+  const legacySelect = {
+    id: true,
+    status: true,
+    subscriptionStartsAt: true,
+    subscriptionEndsAt: true,
+  } as const;
+  let rows: Array<{
+    id: string;
+    status: string;
+    subscriptionStartsAt: Date | null;
+    subscriptionEndsAt: Date | null;
+    subscriptionPriceCents?: number | null;
+  }>;
   try {
-    const rows = await prisma.tenant.findMany({
-      select: { id: true, status: true, subscriptionStartsAt: true, subscriptionEndsAt: true },
+    rows = await prisma.tenant.findMany({
+      select: { ...legacySelect, subscriptionPriceCents: true },
     });
-    const now = new Date();
-    for (const t of rows) {
-      const u = subscriptionUrgency(t, now);
-      if (u.level !== "ok") map.set(t.id, u);
-    }
   } catch {
-    // Columns not yet on the DB (see live-db-state) → no near-due signal.
+    // subscriptionPriceCents not on the DB yet (see live-db-state) → retry with
+    // only the pre-existing columns so urgency badges + Expiring-soon survive.
+    try {
+      rows = await prisma.tenant.findMany({ select: legacySelect });
+    } catch {
+      // Even the legacy columns are missing → no signals at all.
+      return { urgencies, prices };
+    }
   }
-  return map;
+  const now = new Date();
+  for (const t of rows) {
+    const u = subscriptionUrgency(t, now);
+    if (u.level !== "ok") urgencies.set(t.id, u);
+    if (t.subscriptionPriceCents != null) prices.set(t.id, t.subscriptionPriceCents);
+  }
+  return { urgencies, prices };
 }
 
 export async function listAdminTenants(): Promise<AdminTenantRow[]> {
   if (isDemoMode()) {
     return listDemoTenants().map(demoRow).sort((a, b) => b.revenueCents - a.revenueCents);
   }
-  const [rows, urgencies] = await Promise.all([_cachedAdminTenants(), loadTenantUrgencies()]);
-  if (urgencies.size === 0) return rows;
+  const [rows, signals] = await Promise.all([_cachedAdminTenants(), loadTenantSubscriptionSignals()]);
+  const { urgencies, prices } = signals;
+  if (urgencies.size === 0 && prices.size === 0) return rows;
   return rows.map((r) => {
     const u = urgencies.get(r.id);
-    return u ? { ...r, subscriptionUrgency: u } : r;
+    const price = prices.get(r.id);
+    if (!u && price == null) return r;
+    return {
+      ...r,
+      ...(u ? { subscriptionUrgency: u } : {}),
+      ...(price != null ? { subscriptionPriceCents: price } : {}),
+    };
   });
 }
 
@@ -651,7 +697,11 @@ export async function getPlatformOverview(): Promise<OverviewData> {
   const totalOrders = rows.reduce((s, r) => s + r.orders, 0);
   const mrrCents = rows
     .filter((r) => r.status === "active")
-    .reduce((s, r) => s + planConfigPriceCents(planConfig, r.planKey), 0);
+    .reduce(
+      (s, r) =>
+        s + effectivePlanFeeCents(r.subscriptionPriceCents, planConfigPriceCents(planConfig, r.planKey)),
+      0,
+    );
 
   const now = Date.now();
   const D30 = 30 * 24 * 3600 * 1000;
@@ -996,6 +1046,7 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
     subscriptionCycle: meta.cycle ?? undefined,
     subscriptionStartsAt: meta.startsAt?.toISOString(),
     subscriptionAmountCents: meta.amountCents ?? undefined,
+    subscriptionPriceCents: meta.priceCents ?? undefined,
     subscriptionPayments: display,
     subscriptionPaymentSummary: summary,
   };

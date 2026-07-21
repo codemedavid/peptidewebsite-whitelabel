@@ -8,6 +8,7 @@ import { isValidPlanKey, isValidStatus } from "@/lib/admin/plan-options";
 import { validateWhatsapp } from "@/lib/admin/whatsapp";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { addBillingCycle, isBillingCycle } from "@/lib/subscription/billing-cycle";
+import { resolvePriceCentsInput } from "@/lib/subscription/plan-fee";
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
@@ -137,7 +138,13 @@ function revalidateSubscriptionSurfaces(tenantId: string, slug: string): void {
  */
 export async function setSubscriptionWindowAction(
   slug: string,
-  input: { cycle: string | null; startsAt?: string; endsAt?: string; amountCents?: number | null },
+  input: {
+    cycle: string | null;
+    startsAt?: string;
+    endsAt?: string;
+    amountCents?: number | null;
+    priceCents?: number | null;
+  },
 ): Promise<AdminActionResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Connect a database to manage subscriptions." };
@@ -154,6 +161,7 @@ export async function setSubscriptionWindowAction(
         subscriptionStartsAt: null,
         subscriptionEndsAt: null,
         subscriptionAmountCents: null,
+        subscriptionPriceCents: null,
       },
     });
     revalidateSubscriptionSurfaces(tenant.id, slug);
@@ -179,6 +187,13 @@ export async function setSubscriptionWindowAction(
     amountCents = Math.round(input.amountCents);
   }
 
+  // The tenant's recurring monthly price / payment due (centavos). Optional —
+  // null clears it and the Plan fee / MRR fall back to the plan-config price.
+  // Validated + clamped centrally (0 is a valid comped value).
+  const priceResult = resolvePriceCentsInput(input.priceCents);
+  if ("error" in priceResult) return { error: priceResult.error };
+  const priceCents = priceResult.value;
+
   await prisma.tenant.update({
     where: { id: tenant.id },
     data: {
@@ -186,6 +201,7 @@ export async function setSubscriptionWindowAction(
       subscriptionStartsAt: startsAt,
       subscriptionEndsAt: endsAt,
       subscriptionAmountCents: amountCents,
+      subscriptionPriceCents: priceCents,
     },
   });
   revalidateSubscriptionSurfaces(tenant.id, slug);

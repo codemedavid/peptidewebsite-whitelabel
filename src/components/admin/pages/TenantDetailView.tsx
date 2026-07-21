@@ -24,6 +24,7 @@ import {
   type BillingCycle,
 } from "@/lib/subscription/billing-cycle";
 import { buildWaLink } from "@/lib/admin/whatsapp";
+import { effectivePlanFeeCents } from "@/lib/subscription/plan-fee";
 import type { TenantDetail, TenantSubscriptionPayment } from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
@@ -132,7 +133,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           {[
             { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
             { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
-            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(tenant.subscriptionAmountCents ?? tenant.planPriceCents), sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}` },
+            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(effectivePlanFeeCents(tenant.subscriptionPriceCents, tenant.planPriceCents)), sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
             <div key={i} style={{ padding: "14px 24px", borderRight: i < 3 ? "1px solid var(--border-soft)" : "none" }}>
@@ -486,6 +487,11 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
   const [amount, setAmount] = useState(
     tenant.subscriptionAmountCents != null ? String(tenant.subscriptionAmountCents / 100) : "",
   );
+  // The tenant's recurring price / monthly payment due (pesos). Blank = use the
+  // plan's list price. 0 is a valid comped-tenant value.
+  const [price, setPrice] = useState(
+    tenant.subscriptionPriceCents != null ? String(tenant.subscriptionPriceCents / 100) : "",
+  );
   // Once the operator hand-edits the due date we stop auto-recomputing it.
   const [overridden, setOverridden] = useState(false);
 
@@ -515,8 +521,9 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
   const dueBeforeStart =
     DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && endsAt <= startsAt;
   const amountInvalid = amount.trim() !== "" && !(Number.isFinite(Number(amount)) && Number(amount) >= 0);
+  const priceInvalid = price.trim() !== "" && !(Number.isFinite(Number(price)) && Number(price) >= 0);
   const canSave =
-    !!cycle && DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && !dueBeforeStart && !amountInvalid;
+    !!cycle && DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && !dueBeforeStart && !amountInvalid && !priceInvalid;
   const hasWindow = !!tenant.subscriptionCycle;
 
   const save = () => {
@@ -527,6 +534,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         startsAt,
         endsAt,
         amountCents: amount.trim() === "" ? null : Math.round(Number(amount) * 100),
+        priceCents: price.trim() === "" ? null : Math.round(Number(price) * 100),
       });
       if ("error" in res) setErr(res.error);
       else {
@@ -546,6 +554,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         setStartsAt("");
         setEndsAt("");
         setAmount("");
+        setPrice("");
         setOverridden(false);
         showToast("Subscription window cleared.");
         router.refresh();
@@ -600,6 +609,22 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         </label>
         {amountInvalid && (
           <div style={{ fontSize: 12, color: "var(--danger)" }}>Enter a valid amount (0 or more).</div>
+        )}
+        <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
+          Monthly price due (₱) — the tenant's recurring monthly fee
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder={`Defaults to the plan price (${formatPesos(tenant.planPriceCents)})`}
+            style={inputStyle}
+          />
+        </label>
+        {priceInvalid && (
+          <div style={{ fontSize: 12, color: "var(--danger)" }}>Enter a valid price (0 or more).</div>
         )}
         {tenant.status === "trial" && (
           <div style={{ fontSize: 12, color: "var(--ink-400)" }}>
