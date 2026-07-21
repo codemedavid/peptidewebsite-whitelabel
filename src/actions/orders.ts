@@ -52,6 +52,8 @@ import { evaluateOnHandGate } from "@/lib/storefront/on-hand-gate";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
+  ratioViolation,
+  type RatioLine,
 } from "@/lib/storefront/group-buy-rules";
 import { hasFeature } from "@/lib/features/entitlements";
 import { isBusinessExclusiveLocked, getTrialState } from "@/lib/trial/trial-info";
@@ -286,11 +288,29 @@ function stampShipping(config: Record<string, unknown>, p: Order): void {
 function groupBuyViolation(
   config: Record<string, unknown>,
   items: OrderItem[],
+  catalog: Product[],
 ): string | null {
   const rules = normalizeGroupBuyRules(config.groupBuyRules);
   if (!rules.enabled || !rules.validation.checkout) return null;
   const lines = items.map((it) => ({ name: it.name, qty: it.qty }));
-  return groupBuyViolations(rules, lines)[0] ?? null;
+  const legacy = groupBuyViolations(rules, lines)[0];
+  if (legacy) return legacy;
+  // Order Ratio Control — classify each line by the admin's per-product tag
+  // (carried on the live catalog row), falling back to the name heuristic. Only
+  // a BLOCKING (strict / auto_add residual) violation rejects the order; warn
+  // mode never hard-blocks server-side, matching the cart.
+  const ratioLines: RatioLine[] = items.map((it) => {
+    const p = catalog.find((c) => (it.productId ? c.id === it.productId : c.name === it.name));
+    return {
+      name: it.name,
+      qty: it.qty,
+      category: p?.category,
+      sequence: p?.sequence,
+      productClass: p?.productClass,
+    };
+  });
+  const rv = ratioViolation(rules, ratioLines);
+  return rv?.blocking ? rv.message : null;
 }
 
 /** Apply an order's line items to a product list (− on deduct, + on restock),
@@ -738,6 +758,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       ? checkoutRulesViolation(config, demoProducts, p.items, clientFee, demoAdminFeeEntitled)
       : null;
     if (demoRuleError) return { error: demoRuleError };
+    // Group Buy Rules (incl. Order Ratio Control) — entitlement-gated on
+    // GB_RULES, re-applied server-side so a stale/tampered client can't bypass a
+    // blocking (strict / auto_add) ratio floor. Warn mode never rejects here.
+    const demoGbRuleError = (await hasFeature(tenantId, FEATURES.GB_RULES))
+      ? groupBuyViolation(config, p.items, demoProducts)
+      : null;
+    if (demoGbRuleError) return { error: demoGbRuleError };
     p.adminFee = demoAdminFeeEntitled
       ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
       : undefined;
@@ -826,6 +853,14 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       ? checkoutRulesViolation(config, catalog, p.items, clientFee, adminFeeEntitled)
       : null;
     if (ruleError) return { error: ruleError };
+
+    // Group Buy Rules (incl. Order Ratio Control) — entitlement-gated on
+    // GB_RULES, re-applied server-side so a stale/tampered client can't bypass a
+    // blocking (strict / auto_add) ratio floor. Warn mode never rejects here.
+    const gbRuleError = (await hasFeature(tenantId, FEATURES.GB_RULES))
+      ? groupBuyViolation(config, p.items, catalog)
+      : null;
+    if (gbRuleError) return { error: gbRuleError };
 
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
     const slug = (await getTenantSlug()) ?? tenantId;

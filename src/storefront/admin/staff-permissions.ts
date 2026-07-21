@@ -49,6 +49,7 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "access-code", label: "Access Code" },
   { key: "checkout", label: "Smart Checkout" },
   { key: "groupbuys", label: "Group Buys" },
+  { key: "groupbuy", label: "Order Ratio Control" },
 ] as const;
 
 export const STAFF_MODULE_KEYS: string[] = STAFF_MODULES.map((m) => m.key);

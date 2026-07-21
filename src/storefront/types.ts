@@ -5,9 +5,11 @@ import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
+import type { ProductClass } from "@/lib/storefront/product-class";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { BrandTrial } from "@/lib/trial/trial-state";
+import type { BrandSubscription } from "@/lib/subscription/subscription-state";
 import type { FeatureSpotlight } from "@/lib/features/feature-spotlight";
 import type {
   GroupBuyCapabilities,
@@ -55,6 +57,10 @@ export type Product = {
    *  per-product minimum order that unlocks the wholesale price; unset falls back
    *  to the global RESELLER_MIN_QTY default. */
   reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
+  /** Order Ratio Control classification the storefront admin set on this product
+   *  (peptide / bacWater / other). Absent → the ratio engine falls back to the
+   *  name/category/sequence heuristic. Stored in `metadata.productClass`. */
+  productClass?: ProductClass;
   /** "gb" = group-buy listing (sold under a buying window, priced by gbPrice);
    *  "onhand" / absent = regular stocked item. */
   productType?: "gb" | "onhand";
@@ -336,6 +342,12 @@ export type Brand = {
   // Operator-flagged "new feature" advertised on the trial dashboard as a
   // Business exclusive (pickFeatureSpotlight). Absent → no spotlight strip.
   featureSpotlight?: FeatureSpotlight;
+
+  // ── Subscription duration (server-projected, page.tsx) ─────────────────────
+  // JSON-safe paid-subscription window for the store-admin countdown banner.
+  // Absent for every tenant without an operator-set window (trial tenants and
+  // legacy brands stay byte-identical — the trial banner owns trial chrome).
+  subscription?: BrandSubscription;
 
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;

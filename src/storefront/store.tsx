@@ -45,6 +45,11 @@ import {
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { baseProductId, makeVariationEntry } from "./checkout";
+import {
+  normalizeGroupBuyRules,
+  ratioCounts,
+  requiredBacWater,
+} from "@/lib/storefront/group-buy-rules";
 import { getStorefrontProductsAction } from "@/actions/products";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type {
@@ -473,6 +478,49 @@ export function StoreProvider({
   }, []);
 
   const clearCart = useCallback(() => setCart([]), []);
+
+  // Order Ratio Control — auto-add mode. When the owner runs the peptide→bac-water
+  // floor in "auto_add", keep the default bac-water line synced to the required
+  // count as the cart changes: top up when short (capped at stock), trim the
+  // surplus when peptides are removed. The cart is a flat Product[] (one entry per
+  // unit), so we add/remove whole entries. Reconciling to EXACTLY the requirement
+  // is deterministic and converges in one extra render (equal → no-op), so this
+  // never loops. A residual shortfall (bac water sold out) is left for the
+  // blocking ratio violation to stop at checkout. Strict/warn modes never enter.
+  useEffect(() => {
+    const rules = normalizeGroupBuyRules(brand.groupBuyRules);
+    const r = rules.ratio;
+    if (!rules.enabled || !r.enabled || r.mode !== "auto_add" || !r.defaultBacWaterProductId) return;
+    const bacProduct = products.find((p) => p.id === r.defaultBacWaterProductId);
+    if (!bacProduct) return;
+    const { peptide } = ratioCounts(
+      cart.map((p) => ({
+        name: p.name,
+        qty: 1,
+        category: p.category,
+        sequence: p.sequence,
+        productClass: p.productClass,
+      })),
+    );
+    const required = peptide > 0 ? requiredBacWater(rules, peptide) : 0;
+    const current = cart.filter((p) => baseProductId(p) === bacProduct.id).length;
+    if (current === required) return;
+    setCart((c) => {
+      if (required > current) {
+        const room = Math.max(0, (bacProduct.stock || 0) - current);
+        const toAdd = Math.min(required - current, room);
+        return toAdd > 0 ? [...c, ...Array.from({ length: toAdd }, () => bacProduct)] : c;
+      }
+      let remove = current - required;
+      return c.filter((p) => {
+        if (remove > 0 && baseProductId(p) === bacProduct.id) {
+          remove--;
+          return false;
+        }
+        return true;
+      });
+    });
+  }, [cart, products, brand.groupBuyRules]);
 
   // Payment methods persist to the DB (not localStorage) so every device sees
   // the owner's configured set. The server action gates on the storefront-admin

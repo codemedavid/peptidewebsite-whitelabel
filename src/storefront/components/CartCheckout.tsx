@@ -16,6 +16,7 @@ import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
+import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import {
   activeChannels,
   activePaymentMethods,
@@ -166,9 +167,32 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // custom copy. Blocking violations stop the checkout here AND are re-checked
   // server-side at placement, so the gate can't be bypassed.
   const rules = useMemo(() => normalizeCheckoutRules(brand.checkoutRules), [brand.checkoutRules]);
-  const violations = useMemo(
+  const checkoutViolations = useMemo(
     () => checkoutRuleViolations(lines, products, brand.checkoutRules),
     [lines, products, brand.checkoutRules],
+  );
+  // Order Ratio Control — the peptide→bac-water floor, merged into the same
+  // violation list so it renders (and blocks strict mode) exactly like a
+  // checkout rule. Only surfaces in the cart when the owner enabled cart
+  // validation; the server re-checks at placement regardless.
+  const ratioV = useMemo(() => {
+    const rules = normalizeGroupBuyRules(brand.groupBuyRules);
+    if (!rules.validation.cart) return null;
+    const v = ratioViolation(
+      rules,
+      lines.map((l) => ({
+        name: l.product.name,
+        qty: l.qty,
+        category: l.product.category,
+        sequence: l.product.sequence,
+        productClass: l.product.productClass,
+      })),
+    );
+    return v ? { rule: "ratio", message: v.message, blocking: v.blocking } : null;
+  }, [lines, brand.groupBuyRules]);
+  const violations = useMemo(
+    () => (ratioV ? [...checkoutViolations, ratioV] : checkoutViolations),
+    [checkoutViolations, ratioV],
   );
   const blocked = violations.some((v) => v.blocking);
 

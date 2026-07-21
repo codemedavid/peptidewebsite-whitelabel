@@ -24,6 +24,7 @@ import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
+import { normalizeGroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
 import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
@@ -653,6 +654,38 @@ export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionRes
   const checkoutRules = normalizeCheckoutRules(rules);
   const current = await readConfig(tenantId);
   const config = { ...current, checkoutRules };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the Group Buy Rules engine (incl. Order Ratio Control) into the shared
+ * branding.config blob (read-modify-write, mirroring saveCheckoutRulesAction so
+ * it never clobbers the rest of the Brand config). Gated on the "groupbuy" staff
+ * permission; page.tsx additionally strips brand.groupBuyRules when the tenant
+ * lacks the GB_RULES entitlement, so a revoked feature both hides the editor and
+ * stops the saved rules from constraining the cart.
+ */
+export async function saveGroupBuyRulesAction(rules: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("groupbuy");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const groupBuyRules = normalizeGroupBuyRules(rules);
+  const current = await readConfig(tenantId);
+  const config = { ...current, groupBuyRules };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

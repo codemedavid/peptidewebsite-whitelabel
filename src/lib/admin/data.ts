@@ -16,6 +16,10 @@ import { planMeta } from "@/lib/admin/plans";
 import { planConfigPriceCents } from "@/lib/platform/plan-config";
 import { aggregatePlanDistribution, type PlanDistribution } from "@/lib/admin/plan-distribution";
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
+import { getSubscriptionState, getSubscriptionMeta } from "@/lib/subscription/subscription-info";
+import { brandSubscriptionFrom, type BrandSubscription } from "@/lib/subscription/subscription-state";
+import type { BillingCycle } from "@/lib/subscription/billing-cycle";
+import { subscriptionUrgency, type FlaggedUrgency } from "@/lib/subscription/near-due";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
@@ -43,6 +47,10 @@ export type AdminTenantRow = {
   revenueCents: number;
   orders: number;
   features: number;
+  // Set only when the tenant's paid subscription is near its due date or lapsed
+  // (fail-open: absent when ok, in demo mode, or if the columns aren't on the DB).
+  // Drives the tenants-list badge + the "Expiring soon" dashboard panel.
+  subscriptionUrgency?: FlaggedUrgency;
 };
 
 export type OverviewData = {
@@ -59,6 +67,10 @@ export type OverviewData = {
   revenueSeries: { labels: string[]; current: number[]; previous: number[] }; // dollars
   tenantGrowth: number[];
   topTenants: AdminTenantRow[];
+  // Tenants whose paid subscription is due within NEAR_DUE_DAYS or already
+  // lapsed, most-urgent first — powers the "Expiring soon" dashboard panel.
+  // Empty when nothing is near due (or columns aren't on the DB yet).
+  expiringTenants: AdminTenantRow[];
   activity: ActivityItem[];
   // small sparkline series for KPI cards (dollars / counts)
   sparks: {
@@ -107,6 +119,15 @@ export type TenantDetail = AdminTenantRow & {
   visitors: number;
   audit: ActivityItem[];
   planPriceCents: number; // effective monthly price (operator-edited plan config)
+  // Operator-set paid-subscription window, resolved fail-open (undefined when no
+  // window is set, in demo mode, or if the columns aren't yet on the DB). Drives
+  // the "Subscription" row in the tenant-detail overview.
+  subscription?: BrandSubscription;
+  // Raw window descriptors (fail-open to null): the chosen billing cycle and
+  // start date. Power the "Type"/"Start date" rows and pre-fill the operator
+  // setter. `subscriptionStartsAt` is an ISO string for the client boundary.
+  subscriptionCycle?: BillingCycle;
+  subscriptionStartsAt?: string;
 };
 
 /* ============================================================
@@ -487,11 +508,61 @@ const _cachedAdminTenants = unstable_cache(
   { tags: ["admin:data"], revalidate: 120 },
 );
 
+/**
+ * Fresh, fail-open map of tenantId → flagged subscription urgency. Read outside
+ * the 120s tenant-list cache so the near-due signal reflects the current clock
+ * (a tenant crossing a day boundary flips promptly) and so a pending-db:push
+ * subscription column can't take down the whole tenants list — a read error
+ * just yields no badges. Only flagged (non-ok) tenants land in the map.
+ */
+async function loadTenantUrgencies(): Promise<Map<string, FlaggedUrgency>> {
+  const map = new Map<string, FlaggedUrgency>();
+  if (isDemoMode()) return map;
+  try {
+    const rows = await prisma.tenant.findMany({
+      select: { id: true, status: true, subscriptionStartsAt: true, subscriptionEndsAt: true },
+    });
+    const now = new Date();
+    for (const t of rows) {
+      const u = subscriptionUrgency(t, now);
+      if (u.level !== "ok") map.set(t.id, u);
+    }
+  } catch {
+    // Columns not yet on the DB (see live-db-state) → no near-due signal.
+  }
+  return map;
+}
+
 export async function listAdminTenants(): Promise<AdminTenantRow[]> {
   if (isDemoMode()) {
     return listDemoTenants().map(demoRow).sort((a, b) => b.revenueCents - a.revenueCents);
   }
-  return _cachedAdminTenants();
+  const [rows, urgencies] = await Promise.all([_cachedAdminTenants(), loadTenantUrgencies()]);
+  if (urgencies.size === 0) return rows;
+  return rows.map((r) => {
+    const u = urgencies.get(r.id);
+    return u ? { ...r, subscriptionUrgency: u } : r;
+  });
+}
+
+/** Most-urgent-first ordering for flagged tenants: overdue before due_soon,
+ *  then fewest days left, then soonest end date. */
+function compareUrgency(a: AdminTenantRow, b: AdminTenantRow): number {
+  const ua = a.subscriptionUrgency!;
+  const ub = b.subscriptionUrgency!;
+  const rank = (u: FlaggedUrgency) => (u.level === "overdue" ? 0 : 1);
+  return rank(ua) - rank(ub) || ua.daysLeft - ub.daysLeft || ua.endsAt.localeCompare(ub.endsAt);
+}
+
+/** The flagged (near-due / overdue) tenants from a row set, most-urgent first. */
+function expiringFrom(rows: AdminTenantRow[]): AdminTenantRow[] {
+  return rows.filter((r) => r.subscriptionUrgency).sort(compareUrgency);
+}
+
+/** Tenants whose paid subscription is due within NEAR_DUE_DAYS or already
+ *  lapsed, ordered most-urgent first — the "Expiring soon" panel's data. */
+export async function getExpiringTenants(): Promise<AdminTenantRow[]> {
+  return expiringFrom(await listAdminTenants());
 }
 
 export async function getPlatformOverview(): Promise<OverviewData> {
@@ -617,6 +688,7 @@ export async function getPlatformOverview(): Promise<OverviewData> {
     revenueSeries: { labels, current: revCurrent, previous: revPrevious },
     tenantGrowth: growth,
     topTenants: rows.filter((r) => r.status === "active").slice(0, 5),
+    expiringTenants: expiringFrom(rows),
     activity,
     sparks: {
       tenants: growth,
@@ -821,7 +893,21 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
   }
   const detail = await _cachedTenantDetail(slug);
   if (!detail) return null;
-  return { ...detail, planPriceCents: planConfigPriceCents(planConfig, detail.planKey) };
+  // Subscription window resolved outside the cache (fail-open) so operator edits
+  // and day-boundary ticks show without waiting out the 120s revalidate, and so a
+  // pending-db:push column can't take down the whole tenant-detail page. The
+  // computed countdown and the raw descriptors share one cached read.
+  const [subscription, meta] = await Promise.all([
+    getSubscriptionState(detail.id).then(brandSubscriptionFrom),
+    getSubscriptionMeta(detail.id),
+  ]);
+  return {
+    ...detail,
+    planPriceCents: planConfigPriceCents(planConfig, detail.planKey),
+    subscription,
+    subscriptionCycle: meta.cycle ?? undefined,
+    subscriptionStartsAt: meta.startsAt?.toISOString(),
+  };
 }
 
 /* ============================================================

@@ -4,6 +4,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { getTenantGateState } from "@/lib/tenant/gate-state";
 import { isGateUnlocked } from "@/lib/auth/storefront-gate";
+import { requireStorefrontAdmin } from "@/lib/auth/storefront-admin";
 
 /**
  * Single source of truth for "what should this visitor see — the store, or the
@@ -38,6 +39,15 @@ export async function evaluateVisitorGate(tenantId: string): Promise<VisitorGate
   // boundary, see that module). A gate with no code set can't be enforced.
   const gate = await getTenantGateState(tenantId);
   if (!gate.enabled || !gate.hasCode) return { status: "off" };
+
+  // A signed-in store admin/staff is NEVER walled. The visitor gate exists to
+  // hide the store from shoppers — not to make the operator type the visitor
+  // code to reach #admin, which is a client-only hash the server can't see. The
+  // sf_admin_session cookie IS sent to the server and is tenant-scoped
+  // (requireStorefrontAdmin rejects a cookie issued for another store), so
+  // treating a valid admin session as unlocked can't leak store A to store B.
+  // The heartbeat shares this decision, so an admin is never booted mid-session.
+  if (await requireStorefrontAdmin()) return { status: "unlocked" };
 
   const unlocked = await isGateUnlocked({ id: tenantId, accessCodeVersion: gate.codeVersion });
   return unlocked ? { status: "unlocked" } : { status: "blocked", heading: gate.heading };

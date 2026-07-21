@@ -7,6 +7,7 @@ import { isDemoMode } from "@/lib/demo/fixtures";
 import { isValidPlanKey, isValidStatus } from "@/lib/admin/plan-options";
 import { validateWhatsapp } from "@/lib/admin/whatsapp";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { addBillingCycle, isBillingCycle } from "@/lib/subscription/billing-cycle";
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
@@ -98,6 +99,77 @@ export async function setTenantWhatsappAction(slug: string, raw: string): Promis
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
   revalidatePath(`/admin/tenants/${slug}`);
+  return { ok: true };
+}
+
+/** Parse a "YYYY-MM-DD" date-input value into a UTC Date (null when invalid). */
+function parseDay(s: string | undefined | null): Date | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Bust every surface that renders a tenant's subscription window. */
+function revalidateSubscriptionSurfaces(tenantId: string, slug: string): void {
+  // tenant:${id} (via revalidateTenant) is the tag the subscription resolver
+  // and the store-admin banner read through; admin:data + the tenant pages are
+  // the platform-side views.
+  revalidateTenant(tenantId, slug);
+  revalidateTag("admin:data");
+  revalidatePath("/admin");
+  revalidatePath("/admin/tenants");
+  revalidatePath(`/admin/tenants/${slug}`);
+}
+
+/**
+ * Set (or clear) a tenant's paid-subscription window from the Super Admin
+ * tenant-detail page — the operator setter the subscription-duration display
+ * machinery was waiting on.
+ *
+ * The operator picks a billing cycle (monthly | quarterly | semi_annual |
+ * yearly) and a start date; the due date is auto-calculated one calendar term
+ * on (addBillingCycle) unless an explicit `endsAt` overrides it. Passing
+ * `cycle: null` clears the whole window, so the tenant returns to the
+ * byte-identical no-banner legacy state.
+ *
+ * Server is the authority: it re-derives/validates the window regardless of what
+ * the client computed, so the due date can never be saved on or before the start.
+ */
+export async function setSubscriptionWindowAction(
+  slug: string,
+  input: { cycle: string | null; startsAt?: string; endsAt?: string },
+): Promise<AdminActionResult> {
+  await requirePlatformUser();
+  if (isDemoMode()) return { error: "Connect a database to manage subscriptions." };
+
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  if (!tenant) return { error: "Tenant not found." };
+
+  // Clear the window — no cycle chosen.
+  if (!input.cycle) {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { subscriptionCycle: null, subscriptionStartsAt: null, subscriptionEndsAt: null },
+    });
+    revalidateSubscriptionSurfaces(tenant.id, slug);
+    return { ok: true };
+  }
+
+  if (!isBillingCycle(input.cycle)) return { error: "Unknown billing cycle." };
+  const startsAt = parseDay(input.startsAt);
+  if (!startsAt) return { error: "Set a valid subscription start date." };
+  // Auto-calc the due date from the cycle; an explicit endsAt is the operator's
+  // manual override.
+  const endsAt = parseDay(input.endsAt) ?? addBillingCycle(startsAt, input.cycle);
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    return { error: "The due date must be after the start date." };
+  }
+
+  await prisma.tenant.update({
+    where: { id: tenant.id },
+    data: { subscriptionCycle: input.cycle, subscriptionStartsAt: startsAt, subscriptionEndsAt: endsAt },
+  });
+  revalidateSubscriptionSurfaces(tenant.id, slug);
   return { ok: true };
 }
 

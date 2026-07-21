@@ -10,6 +10,7 @@
 // runtime.
 
 import type { Product } from "@/storefront/types";
+import { toProductClass, type ProductClass } from "./product-class";
 
 /** The subset of the Prisma `Product` row this layer reads. */
 export type DbProductRow = {
@@ -44,6 +45,9 @@ export type ProductMetadata = {
   /** Per-product variations (dosage/size options + their price). Only present
    *  when at least one named variation exists — see `cleanVariations`. */
   variations?: { name: string; price: number }[];
+  /** Order Ratio Control classification (peptide / bacWater / other) set by the
+   *  storefront admin. Absent → the ratio engine's name heuristic decides. */
+  productClass?: ProductClass;
   /** The display symbol the storefront renders (e.g. "₱") — distinct from the
    *  ISO `currency` column used by Intl on the product detail page. */
   currencySymbol?: string;
@@ -172,6 +176,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     sequence: meta.sequence ?? "",
     sizes: meta.sizes ?? "",
     variations: cleanVariations(meta.variations) ?? [],
+    productClass: toProductClass(meta.productClass),
     reseller: cleanReseller(meta.reseller),
     productType: meta.productType === "gb" ? "gb" : "onhand",
     gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
@@ -269,6 +274,7 @@ export function productToDbWrite(
       sequence: p.sequence || undefined,
       sizes: p.sizes || undefined,
       variations: cleanVariations(p.variations),
+      productClass: toProductClass(p.productClass),
       currencySymbol: displaySymbol || undefined,
       reseller: cleanReseller(p.reseller),
       productType: p.productType === "gb" ? "gb" : undefined,

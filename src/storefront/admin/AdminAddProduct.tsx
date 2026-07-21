@@ -215,6 +215,11 @@ export function AdminAddProduct({
   const [cas, setCas]               = useState<string>(initial?.cas || "");
   const [storage, setStorage]       = useState<string>(initial?.storage || "Store at -20°C");
   const [sequence, setSequence]     = useState<string>(initial?.sequence || "");
+  // Order Ratio Control classification. "" = auto (the ratio engine's name
+  // heuristic decides); peptide / bacWater / other override it explicitly.
+  const [productClass, setProductClass] = useState<"" | "peptide" | "bacWater" | "other">(
+    initial?.productClass || "",
+  );
   const [isSet, setIsSet]           = useState<boolean>(initial?.isSet || false);
   const [setItems, setSetItems]     = useState<Inclusion[]>(initial?.inclusions || []);
   const [variations, setVariations] = useState<Variation[]>(initial?.variations || []);
@@ -295,6 +300,7 @@ export function AdminAddProduct({
       cas,
       storage,
       sequence,
+      ...(productClass ? { productClass } : {}),
       isSet,
       inclusions: setItems,
       variations: variations
@@ -420,6 +426,20 @@ export function AdminAddProduct({
                   adding products.
                 </p>
               )}
+            </div>
+            <div className="admin-field">
+              <label className="admin-field__label">Order ratio class</label>
+              <select className="admin-select" value={productClass}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setProductClass(e.target.value as "" | "peptide" | "bacWater" | "other")}>
+                <option value="">Auto (detect by name)</option>
+                <option value="peptide">Peptide</option>
+                <option value="bacWater">Bacteriostatic water</option>
+                <option value="other">Other (accessory)</option>
+              </select>
+              <p className="admin-field__hint">
+                Used by Order Ratio Control to pair peptides with bac water.
+              </p>
             </div>
             <div className="admin-field">
               <label className="admin-field__label">Base Price ({currency})<span className="req">*</span></label>

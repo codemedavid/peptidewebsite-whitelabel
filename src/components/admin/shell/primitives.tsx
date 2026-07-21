@@ -9,9 +9,11 @@ import {
   ArrowUp,
   BarChart3,
   Bell,
+  Box,
   Building2,
   Calendar,
   Check,
+  Clock,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -54,9 +56,14 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { withIconFallback } from "./icon-fallback";
 
-/* Icon registry — string keys used across the admin map to Lucide icons. */
-export const Ic: Record<string, LucideIcon> = {
+/* Icon registry — string keys used across the admin map to Lucide icons. A
+ * missing key (typo, or a name not in this map like an un-added "Clock") would
+ * otherwise return undefined and crash the render with "Element type is
+ * invalid"; withIconFallback degrades it to AlertCircle instead. */
+export const Ic: Record<string, LucideIcon> = withIconFallback(
+  {
   Home,
   Buildings: Building2,
   Layers,
@@ -107,7 +114,11 @@ export const Ic: Record<string, LucideIcon> = {
   Calendar,
   Shield,
   Code,
-};
+  Box,
+  Clock,
+  },
+  AlertCircle,
+);
 
 /* ---------- formatting ---------- */
 export function formatMoney(pesos: number): string {

@@ -47,6 +47,24 @@ model Tenant {
   // platform tenants console.
   ownerWhatsapp     String?
 
+  // Paid subscription window (operator-set, not tenant-editable) that powers the
+  // subscription-duration banner in the store admin + the window row in the
+  // platform tenant detail. Governs a PAID tenant only (status != "trial" — trial
+  // tenants show the trial banner from OnboardingSubmission instead). Resolved
+  // through lib/subscription/subscription-state.ts (pure math, test:subscription-state)
+  // and lib/subscription/subscription-info.ts (cached read). Both null = no window,
+  // so no banner renders and legacy tenants stay byte-identical.
+  subscriptionStartsAt DateTime?
+  subscriptionEndsAt   DateTime?
+  // Billing cycle the operator chose for this window: monthly | quarterly |
+  // semi_annual | yearly (string-enum, see lib/subscription/billing-cycle.ts).
+  // Drives the auto-calculated due date in the tenant-detail setter and the
+  // "Type" row shown in the tenant details. Null = no window / legacy tenant.
+  // Purely descriptive — the countdown math reads the concrete start/end dates,
+  // so this never has to agree with the exact day span (an overridden due date
+  // keeps its stored cycle label).
+  subscriptionCycle    String?
+
   domains           Domain[]
   groupBuys         GroupBuy[]
   authAudits        AuthAudit[]

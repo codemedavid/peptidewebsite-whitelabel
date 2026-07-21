@@ -60,6 +60,8 @@
     "test:trial-state": "tsx scripts/test-trial-state.ts",
     "test:subscription-state": "tsx scripts/test-subscription-state.ts",
     "test:billing-cycle": "tsx scripts/test-billing-cycle.ts",
+    "test:near-due": "tsx scripts/test-near-due.ts",
+    "test:icon-fallback": "tsx scripts/test-icon-fallback.ts",
     "test:trial-gating": "tsx scripts/test-trial-gating.ts",
     "test:feature-spotlight": "tsx scripts/test-feature-spotlight.ts",
     "test:trial-upgrade": "tsx scripts/test-trial-upgrade.ts",

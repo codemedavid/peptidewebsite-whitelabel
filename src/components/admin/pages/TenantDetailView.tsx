@@ -7,13 +7,26 @@ import { Ic, StatusBadge, TenantAvatar, FeedText, tenantColor } from "@/componen
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, planLimits, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
-import { suspendTenantAction, setTenantWhatsappAction } from "@/actions/admin";
+import { suspendTenantAction, setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
 import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
+import {
+  addBillingCycle,
+  BILLING_CYCLES,
+  BILLING_CYCLE_LABELS,
+  type BillingCycle,
+} from "@/lib/subscription/billing-cycle";
 import { buildWaLink } from "@/lib/admin/whatsapp";
 import type { TenantDetail } from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Format an ISO subscription end date for the tenant-detail Subscription card. */
+function subEndLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
 
 export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
   const router = useRouter();
@@ -447,6 +460,148 @@ function TenantWhatsappCard({ slug, tenantName, current }: { slug: string; tenan
   );
 }
 
+/** Operator setter for the paid-subscription window: pick a billing cycle +
+ *  start date and the due date auto-fills one calendar term on (addBillingCycle),
+ *  overridable by hand. Mirrors TenantWhatsappCard's inline-action shape. */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isoToDateInput = (iso?: string): string => (iso ? iso.slice(0, 10) : "");
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 6,
+  border: "1px solid var(--border)",
+  background: "var(--bg-canvas)",
+  fontSize: 13,
+};
+
+function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
+  const { showToast } = useAdminUI();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  const [cycle, setCycle] = useState<BillingCycle | "">(tenant.subscriptionCycle ?? "");
+  const [startsAt, setStartsAt] = useState(isoToDateInput(tenant.subscriptionStartsAt));
+  const [endsAt, setEndsAt] = useState(isoToDateInput(tenant.subscription?.endsAt));
+  // Once the operator hand-edits the due date we stop auto-recomputing it.
+  const [overridden, setOverridden] = useState(false);
+
+  /** The auto due date for a cycle + start, or "" when either is unusable. */
+  const autoDue = (c: BillingCycle | "", start: string): string => {
+    if (!c || !DATE_RE.test(start)) return "";
+    return addBillingCycle(new Date(`${start}T00:00:00.000Z`), c).toISOString().slice(0, 10);
+  };
+
+  const handleCycle = (next: BillingCycle | "") => {
+    setCycle(next);
+    // Choosing a cycle is an explicit "recompute" intent — clear any override.
+    setOverridden(false);
+    setEndsAt(autoDue(next, startsAt));
+  };
+
+  const handleStart = (next: string) => {
+    setStartsAt(next);
+    if (!overridden) setEndsAt(autoDue(cycle, next));
+  };
+
+  const handleEnds = (next: string) => {
+    setEndsAt(next);
+    setOverridden(true);
+  };
+
+  const dueBeforeStart =
+    DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && endsAt <= startsAt;
+  const canSave = !!cycle && DATE_RE.test(startsAt) && DATE_RE.test(endsAt) && !dueBeforeStart;
+  const hasWindow = !!tenant.subscriptionCycle;
+
+  const save = () => {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setSubscriptionWindowAction(tenant.slug, {
+        cycle: cycle || null,
+        startsAt,
+        endsAt,
+      });
+      if ("error" in res) setErr(res.error);
+      else {
+        showToast("Subscription window saved.");
+        router.refresh();
+      }
+    });
+  };
+
+  const clear = () => {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setSubscriptionWindowAction(tenant.slug, { cycle: null });
+      if ("error" in res) setErr(res.error);
+      else {
+        setCycle("");
+        setStartsAt("");
+        setEndsAt("");
+        setOverridden(false);
+        showToast("Subscription window cleared.");
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h3 className="card-title">Subscription window</h3>
+          <div className="card-sub">
+            Pick a billing cycle and start date — the due date fills in automatically and can be adjusted.
+          </div>
+        </div>
+      </div>
+      <div className="card-body" style={{ display: "grid", gap: 10, padding: 16 }}>
+        <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
+          Billing cycle
+          <select value={cycle} onChange={(e) => handleCycle(e.target.value as BillingCycle | "")} style={inputStyle}>
+            <option value="">— none —</option>
+            {BILLING_CYCLES.map((c) => (
+              <option key={c} value={c}>
+                {BILLING_CYCLE_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
+            Start date
+            <input type="date" value={startsAt} onChange={(e) => handleStart(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
+            Due date {overridden ? "(manual)" : "(auto)"}
+            <input type="date" value={endsAt} onChange={(e) => handleEnds(e.target.value)} style={inputStyle} />
+          </label>
+        </div>
+        {tenant.status === "trial" && (
+          <div style={{ fontSize: 12, color: "var(--ink-400)" }}>
+            This tenant is on a trial — the window activates once they move to a paid plan.
+          </div>
+        )}
+        {dueBeforeStart && (
+          <div style={{ fontSize: 12, color: "var(--danger)" }}>The due date must be after the start date.</div>
+        )}
+        {err && <div style={{ fontSize: 12, color: "var(--danger)" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn btn-sm" onClick={save} disabled={pending || !canSave}>
+            {pending ? "Saving…" : hasWindow ? "Update window" : "Set window"}
+          </button>
+          {hasWindow && (
+            <button type="button" className="btn btn-sm" onClick={clear} disabled={pending}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ActionRow({ icon, label, sub, href, external }: { icon: string; label: string; sub: string; href: string; external?: boolean }) {
   const IconCmp = Ic[icon];
   const inner = (
@@ -717,7 +872,7 @@ function BillingPanel({ tenant }: { tenant: TenantDetail }) {
               <div>
                 <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em" }}>{pm.label}</div>
                 <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                  {tenant.status === "trial" ? "Free trial · 14 days" : `${formatPesos(priceCents)} · one-time`}
+                  {tenant.status === "trial" ? "Free trial" : `${formatPesos(priceCents)} · one-time`}
                 </div>
               </div>
               <Link className="btn" href={`/tenants/${tenant.slug}/settings`}>
@@ -727,8 +882,34 @@ function BillingPanel({ tenant }: { tenant: TenantDetail }) {
             <div className="divider" />
             <ReviewRow k="Status" v={<StatusBadge status={tenant.status} />} />
             <ReviewRow k="Billing email" v={tenant.email} />
+            {tenant.subscriptionCycle && (
+              <ReviewRow k="Type" v={BILLING_CYCLE_LABELS[tenant.subscriptionCycle]} />
+            )}
+            {tenant.subscriptionStartsAt && (
+              <ReviewRow k="Start date" v={subEndLabel(tenant.subscriptionStartsAt)} />
+            )}
+            {tenant.subscription &&
+              (tenant.subscription.expired ? (
+                <>
+                  <ReviewRow k="Due date" v={subEndLabel(tenant.subscription.endsAt)} />
+                  <ReviewRow
+                    k="Days remaining"
+                    v={<span style={{ color: "var(--danger, #c0392b)" }}>Ended {subEndLabel(tenant.subscription.endsAt)}</span>}
+                  />
+                </>
+              ) : (
+                <>
+                  <ReviewRow k="Due date" v={subEndLabel(tenant.subscription.endsAt)} />
+                  <ReviewRow
+                    k="Days remaining"
+                    v={`${tenant.subscription.daysLeft} ${tenant.subscription.daysLeft === 1 ? "day" : "days"} left (day ${tenant.subscription.dayNum} of ${tenant.subscription.totalDays})`}
+                  />
+                </>
+              ))}
           </div>
         </div>
+
+        <SubscriptionWindowCard tenant={tenant} />
 
         <div className="card">
           <div className="card-head">

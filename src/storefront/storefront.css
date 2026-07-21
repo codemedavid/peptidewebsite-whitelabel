@@ -6910,6 +6910,69 @@
   text-decoration: underline;
 }
 
+/* Subscription-duration chrome (SubscriptionBanner) — the paid sibling of the
+   trial bar. Slate/blue palette keeps it visually distinct from the trial's
+   green/gold while sharing the same layout, so a store never confuses "trial
+   ending" with "subscription renewing". */
+.sf-root .admin-sub {
+  background: #1f2733;
+  color: #e8edf4;
+  padding: 14px var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.sf-root .admin-sub__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+.sf-root .admin-sub__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5b9bd5;
+}
+.sf-root .admin-sub__title {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.3px;
+}
+.sf-root .admin-sub__sep { color: #8a93a0; font-size: 13px; }
+.sf-root .admin-sub__left { font-size: 14px; font-weight: 500; color: #cdd6e2; }
+.sf-root .admin-sub__left b { color: #7cb8f2; }
+.sf-root .admin-sub__progress { flex: 1; min-width: 180px; max-width: 420px; }
+.sf-root .admin-sub__track {
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.sf-root .admin-sub__fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #4a86c7, #7cb8f2);
+  transition: width 0.6s ease;
+}
+.sf-root .admin-sub__scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #939caa;
+  margin-top: 4px;
+}
+.sf-root .admin-sub__note {
+  font-size: 12.5px;
+  color: #b3bccb;
+  line-height: 1.45;
+  margin-left: auto;
+}
+.sf-root .admin-sub--expired { background: #6b4a1e; color: #f7ecdc; }
+.sf-root .admin-sub--expired .admin-sub__dot { background: #e0a94a; }
+.sf-root .admin-sub--expired .admin-sub__note { color: #ecd6b4; }
+
 /* New-feature spotlight — gold strip at the top of the trial dashboard */
 .sf-root .admin-spotlight {
   background: linear-gradient(120deg, #fffdf7, #fdf6e6);

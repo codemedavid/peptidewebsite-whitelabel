@@ -9,6 +9,7 @@ import { planMeta, formatPesosCompact } from "@/lib/admin/plans";
 import { suspendTenantAction, deleteTenantAction } from "@/actions/admin";
 import { buildWaLink } from "@/lib/admin/whatsapp";
 import type { AdminTenantRow } from "@/lib/admin/data";
+import type { FlaggedUrgency } from "@/lib/subscription/near-due";
 
 const STATUS_FILTERS = [
   { id: "all", label: "All" },
@@ -162,7 +163,10 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                     <div className="tenant-cell">
                       <TenantAvatar name={t.name} logoUrl={t.logoUrl} />
                       <div>
-                        <div className="tenant-name">{t.name}</div>
+                        <div className="tenant-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {t.name}
+                          {t.subscriptionUrgency && <UrgencyBadge u={t.subscriptionUrgency} />}
+                        </div>
                         <div className="tenant-domain">{t.slug}</div>
                       </div>
                     </div>
@@ -245,6 +249,33 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Compact near-due / overdue chip shown beside a tenant's name in the list. */
+function UrgencyBadge({ u }: { u: FlaggedUrgency }) {
+  const overdue = u.level === "overdue";
+  const label = overdue ? "Overdue" : `${u.daysLeft}d left`;
+  return (
+    <span
+      title={overdue ? "Subscription lapsed" : "Subscription due soon"}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "1px 7px",
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 600,
+        lineHeight: 1.6,
+        whiteSpace: "nowrap",
+        color: overdue ? "var(--danger)" : "var(--warn)",
+        background: overdue ? "var(--danger-soft, rgba(192,57,43,0.12))" : "var(--warn-soft, rgba(214,158,46,0.14))",
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor" }} aria-hidden />
+      {label}
+    </span>
   );
 }
 

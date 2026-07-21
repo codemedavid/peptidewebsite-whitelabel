@@ -26,6 +26,7 @@ import { AdminAccessCode } from "./AdminAccessCode";
 import { AdminCheckoutRules } from "./AdminCheckoutRules";
 import { AdminFeeSettings } from "./AdminFeeSettings";
 import { AdminGroupBuys } from "./AdminGroupBuys";
+import { AdminGroupBuyRules } from "./AdminGroupBuyRules";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
@@ -34,6 +35,7 @@ import { AdminBannerSettings } from "./AdminBannerSettings";
 import { isAdminViewVisible, isAdminModuleLocked } from "../visibility";
 import { AdminUpgrade } from "./AdminUpgrade";
 import { TrialBanner } from "./TrialBanner";
+import { SubscriptionBanner } from "./SubscriptionBanner";
 import { TrialPlansScreen } from "./TrialPlansScreen";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminStaffForm } from "./AdminStaffForm";
@@ -63,6 +65,7 @@ type View =
   | "checkout"
   | "fee"
   | "groupbuys"
+  | "groupbuy"
   | "hero"
   | "banner"
   | "account"
@@ -139,18 +142,24 @@ export function AdminPage({
 
   // Trial chrome: the countdown / expired bar tops EVERY admin view while the
   // tenant is trial-governed (brand.trial is projected server-side).
-  const trialChrome = brand.trial ? (
+  // Trial and subscription chrome are mutually exclusive by construction — the
+  // server only projects brand.subscription for status != "trial" tenants — so a
+  // store never shows both. The subscription banner is display-only (no gating);
+  // only the trial-expired path below locks the whole admin.
+  const headerChrome = brand.trial ? (
     <TrialBanner
       trial={brand.trial}
       onUpgrade={() => setView("upgrade")}
       onPreviewStore={onExitToSite}
     />
+  ) : brand.subscription ? (
+    <SubscriptionBanner subscription={brand.subscription} />
   ) : null;
 
   if (activeView === "upgrade") {
     return (
       <>
-        {trialChrome}
+        {headerChrome}
         <AdminUpgrade brand={brand} onBack={() => setView("dashboard")} />
       </>
     );
@@ -162,7 +171,7 @@ export function AdminPage({
   if (brand.trial?.expired) {
     return (
       <div className="admin">
-        {trialChrome}
+        {headerChrome}
         <TrialPlansScreen onUpgrade={() => setView("upgrade")} />
       </div>
     );
@@ -249,6 +258,7 @@ export function AdminPage({
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "groupbuy") return <AdminGroupBuyRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
@@ -305,7 +315,7 @@ export function AdminPage({
   if (subView) {
     return (
       <>
-        {trialChrome}
+        {headerChrome}
         {subView}
       </>
     );
@@ -341,6 +351,7 @@ export function AdminPage({
     { id: "access-code", label: "Access Code", hint: "Private store gate", icon: "shield", tint: "red" },
     { id: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan" },
     { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
+    { id: "groupbuy", label: "Order Ratio Control", hint: "Peptide ↔ bac water ratio", icon: "shield", tint: "cyan" },
     { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
     ...(isOwner
       ? [
@@ -403,7 +414,7 @@ export function AdminPage({
         </button>
       </header>
 
-      {trialChrome}
+      {headerChrome}
 
       <main className="admin__inner">
         {brand.featureSpotlight && (
@@ -477,6 +488,7 @@ export function AdminPage({
                     if (q.id === "access-code") return setView("access-code");
                     if (q.id === "checkout") return setView("checkout");
                     if (q.id === "groupbuys") return setView("groupbuys");
+                    if (q.id === "groupbuy") return setView("groupbuy");
                     if (q.id === "account") return setView("account");
                     if (q.id === "staff") return setView("staff");
                     if (q.id === "notify") return setView("notify");

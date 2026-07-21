@@ -19,6 +19,8 @@ import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { getTrialState } from "@/lib/trial/trial-info";
 import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
+import { getSubscriptionState } from "@/lib/subscription/subscription-info";
+import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -176,6 +178,12 @@ export default async function HomePage() {
   // gate the expired state. Server-computed here — the client never does date math
   // against its own clock. Locks are re-checked server-side on every write.
   brand.trial = brandTrialFrom(await getTrialState(tenantId));
+
+  // Subscription duration: project the JSON-safe paid window (or nothing) so the
+  // store admin can render the countdown banner for a paying tenant. Mutually
+  // exclusive with brand.trial by construction — computeSubscriptionState only
+  // governs status != "trial" tenants, so a store never shows both banners.
+  brand.subscription = brandSubscriptionFrom(await getSubscriptionState(tenantId));
 
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at

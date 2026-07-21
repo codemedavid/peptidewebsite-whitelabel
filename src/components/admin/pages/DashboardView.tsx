@@ -215,6 +215,8 @@ export function DashboardView({ data }: { data: OverviewData }) {
         </div>
       </div>
 
+      {data.expiringTenants.length > 0 && <ExpiringPanel tenants={data.expiringTenants} />}
+
       <div className="grid-2">
         <div className="card">
           <div className="card-head">
@@ -288,6 +290,58 @@ export function DashboardView({ data }: { data: OverviewData }) {
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** "Expiring soon" panel — tenants whose paid subscription is near due or
+ *  lapsed, most-urgent first. Only rendered when non-empty. */
+function ExpiringPanel({ tenants }: { tenants: OverviewData["expiringTenants"] }) {
+  const dueLabel = (iso: string): string => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? "—"
+      : d.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+  };
+  return (
+    <div className="card mb-4">
+      <div className="card-head">
+        <div>
+          <h3 className="card-title">Expiring soon</h3>
+          <div className="card-sub">Subscriptions due within 7 days or already lapsed</div>
+        </div>
+        <span className="badge badge-warn">{tenants.length}</span>
+      </div>
+      <div>
+        {tenants.map((t, i) => {
+          const u = t.subscriptionUrgency!;
+          const overdue = u.level === "overdue";
+          const tone = overdue ? "var(--danger)" : "var(--warn)";
+          const daysText = overdue
+            ? "Overdue"
+            : `${u.daysLeft} ${u.daysLeft === 1 ? "day" : "days"} left`;
+          return (
+            <Link
+              key={t.id}
+              href={`/tenants/${t.slug}`}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderBottom: i < tenants.length - 1 ? "1px solid var(--border-soft)" : "none" }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0 }} aria-hidden />
+              <TenantAvatar name={t.name} logoUrl={t.logoUrl} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="tenant-name">{t.name}</div>
+                <div className="tenant-domain">{t.slug}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: tone }}>{daysText}</div>
+                <div style={{ fontSize: 11, color: "var(--ink-400)" }} className="tnum">
+                  {overdue ? "ended" : "due"} {dueLabel(u.endsAt)}
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
