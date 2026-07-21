@@ -886,7 +886,9 @@ function fmtDateTime(iso: string | null): string {
 function BillingPanel({ tenant }: { tenant: TenantDetail }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const payments = tenant.subscriptionPayments;
-  const summary = summarizeSubscriptionPayments(payments);
+  // Lifetime metrics come from the server, computed over the WHOLE ledger — the
+  // `payments` array here is only the capped display slice.
+  const summary = tenant.subscriptionPaymentSummary;
   const selected = payments.find((p) => p.id === selectedId) ?? null;
 
   return (

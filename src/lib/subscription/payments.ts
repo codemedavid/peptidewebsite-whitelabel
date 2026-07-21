@@ -86,12 +86,24 @@ export function normalizePaymentMethod(raw: string): SubscriptionPaymentMethod {
   return match ?? "Other";
 }
 
+/** A short, stable, deterministic suffix from a payment id — so two payments in
+ *  the same month get distinct invoice codes. Deterministic (no Date/random), so
+ *  it's render- and resume-stable. */
+function invoiceSuffix(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36).toUpperCase().slice(0, 4).padStart(4, "0");
+}
+
 /** Display invoice code for a payment, keyed to the UTC month it covers:
- *  "INV-YYYYMM". Stable across renders (no local-time drift). */
-export function subscriptionInvoiceCode(date: Date): string {
+ *  "INV-YYYYMM". Stable across renders (no local-time drift). When a payment `id`
+ *  is supplied the code carries a stable per-payment suffix ("INV-YYYYMM-XXXX")
+ *  so multiple payments in the same month don't collide on one code. */
+export function subscriptionInvoiceCode(date: Date, id?: string): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `INV-${y}${m}`;
+  const base = `INV-${y}${m}`;
+  return id ? `${base}-${invoiceSuffix(id)}` : base;
 }
 
 export type SubscriptionPaymentLedgerEntry = {
@@ -145,5 +157,22 @@ export function summarizeSubscriptionPayments(
     avgMonthlyCents: confirmedCount > 0 ? Math.round(lifetimeConfirmedCents / confirmedCount) : 0,
     paidPct: total > 0 ? (confirmedCount / total) * 100 : 0,
     pendingPct: total > 0 ? (pendingCount / total) * 100 : 0,
+  };
+}
+
+/**
+ * Split a full payment ledger into a capped DISPLAY slice (the invoice table only
+ * needs to show the most-recent rows) and a SUMMARY computed over the WHOLE
+ * ledger. Keeps the lifetime metrics honest even when the table is capped —
+ * summarizing only the displayed slice would under-report lifetime revenue once a
+ * tenant exceeds the cap.
+ */
+export function buildPaymentsView<T extends SubscriptionPaymentLedgerEntry>(
+  ledger: readonly T[],
+  displayLimit: number,
+): { display: T[]; summary: SubscriptionPaymentSummary } {
+  return {
+    display: ledger.slice(0, Math.max(0, displayLimit)),
+    summary: summarizeSubscriptionPayments(ledger),
   };
 }

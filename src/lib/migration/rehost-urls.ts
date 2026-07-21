@@ -38,6 +38,20 @@ export function isForeignHostUrl(value: string, foreignHost: string): boolean {
 }
 
 /**
+ * A collision-proof file name for a re-hosted image. Two DISTINCT foreign URLs
+ * can share a basename (…/folder1/image.png and …/folder2/image.png); naming the
+ * backup/upload by basename alone lets the second overwrite the first on disk and
+ * on ImageKit. Prefixing the per-URL `index` guarantees uniqueness while keeping
+ * the original extension. The result is filesystem-safe: the query string is
+ * stripped and any other character is replaced, so there are no path separators.
+ */
+export function backupFileName(url: string, index: number): string {
+  const raw = url.split("/").pop() || "image";
+  const base = (raw.split("?")[0] || "image").replace(/[^A-Za-z0-9._-]/g, "_");
+  return `${index}-${base}`;
+}
+
+/**
  * Deep-walk a JSON value and return the de-duplicated list of string leaves that
  * satisfy `match`. Order follows first appearance. Used to discover every
  * foreign URL to download before anything is rewritten.

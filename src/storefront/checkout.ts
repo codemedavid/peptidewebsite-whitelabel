@@ -7,7 +7,7 @@
 
 import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product } from "./types";
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
-import { isGroupBuyProduct, groupBuyLine } from "@/lib/storefront/two-ways";
+import { isGroupBuyProduct, groupBuyLine, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
@@ -155,15 +155,10 @@ export function isResellerQty(p: Product, qty: number): boolean {
  * above retail/discount is ignored). Otherwise the active discount price, else
  * retail. Defaults to qty 1 so existing single-unit callers are unchanged.
  */
-export function unitPrice(p: Product, qty = 1, groupBuyLive = false): number {
-  // While a group buy is live, a group-buy product (productType "gb") is sold at
-  // its gbPrice — the single price the page advertises and the customer pays.
-  // groupBuyLine clamps a missing/misconfigured gbPrice back to the regular
-  // price, so this never invents a discount. GB pricing is the round price: it
-  // deliberately overrides the discount/wholesale legs below.
-  if (groupBuyLive && isGroupBuyProduct(p)) {
-    return groupBuyLine(p).gbPrice;
-  }
+/** The non-group-buy per-unit price: bulk wholesale when it qualifies AND is
+ *  cheaper, else the active discount, else retail. This is the price a line pays
+ *  when no live group-buy round covers it. */
+function regularUnitPrice(p: Product, qty: number): number {
   const base = basePrice(p);
   if (qty >= resellerMinQty(p)) {
     const wholesale = resellerUnitPrice(p);
@@ -172,8 +167,25 @@ export function unitPrice(p: Product, qty = 1, groupBuyLive = false): number {
   return base;
 }
 
-export function cartTotal(lines: CartLine[], groupBuyLive = false): number {
-  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, groupBuyLive) * l.qty, 0);
+export function unitPrice(
+  p: Product,
+  qty = 1,
+  scope: GroupBuyPriceScope | null = null,
+): number {
+  const regular = regularUnitPrice(p, qty);
+  // A group-buy product IN the live round's scope is sold at its gbPrice — the
+  // single price the group-buy page advertises. Scope keeps a gb product OUTSIDE
+  // the round (or any gb product when no round is live) at its regular price.
+  // Math.min guarantees the group price never RAISES the line above what it would
+  // otherwise pay, so a bulk reseller keeps the cheaper wholesale price.
+  if (scope && isGroupBuyProduct(p) && isInGroupBuyScope(baseProductId(p), scope)) {
+    return Math.min(groupBuyLine(p).gbPrice, regular);
+  }
+  return regular;
+}
+
+export function cartTotal(lines: CartLine[], scope: GroupBuyPriceScope | null = null): number {
+  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, scope) * l.qty, 0);
 }
 
 // ── Always-live pricing ───────────────────────────────────────────────────────
@@ -220,15 +232,21 @@ export function liveCartLines(cart: Product[], catalog: Product[]): CartLine[] {
 export function authoritativeItemPrice(
   item: { productId?: string; name: string; qty: number; variation?: string },
   catalog: Product[],
-  groupBuyLive = false,
+  scope: GroupBuyPriceScope | null = null,
 ): number | null {
   const live = catalog.find((p) => (item.productId ? p.id === item.productId : p.name === item.name));
   if (!live) return null;
   if (item.variation) {
+    // Re-clone the chosen option exactly as the cart does (makeVariationEntry),
+    // then price it through unitPrice — so a variation of a live group-buy
+    // product gets the SAME gbPrice the cart charged, instead of diverging to the
+    // raw variation price. Non-gb / off-round variations still price at the
+    // option's own price (unitPrice returns regular for them).
     const variation = (live.variations ?? []).find((v) => v.name === item.variation);
-    return variation ? Math.max(0, Number(variation.price) || 0) : null;
+    if (!variation) return null;
+    return unitPrice(makeVariationEntry(live, variation), item.qty, scope);
   }
-  return unitPrice(live, item.qty, groupBuyLive);
+  return unitPrice(live, item.qty, scope);
 }
 
 /** The channels that are enabled AND have a destination set. */

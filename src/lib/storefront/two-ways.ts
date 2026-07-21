@@ -42,6 +42,27 @@ export function isGroupBuyProduct(p: Pick<TwoWaysInput, "productType">): boolean
   return p.productType === "gb";
 }
 
+/** Which products the LIVE round prices at their group-buy price. `coversAll`
+ *  means the whole catalog is in the round (no per-product assignment), else
+ *  only the ids in `productIds`. A null scope means no live round, so no product
+ *  is group-buy-priced — this is what keeps a gb product OUTSIDE the round at its
+ *  regular price rather than pricing every gb product the moment any round runs. */
+export type GroupBuyPriceScope = {
+  coversAll: boolean;
+  productIds: readonly string[];
+};
+
+/** Whether `productId` is inside the live round's pricing scope. A group-buy
+ *  product only gets its gbPrice when it is in scope; out-of-round gb products
+ *  (and every product when there is no live round) keep their regular price. */
+export function isInGroupBuyScope(
+  productId: string,
+  scope: GroupBuyPriceScope | null | undefined,
+): boolean {
+  if (!scope) return false;
+  return scope.coversAll || scope.productIds.includes(productId);
+}
+
 /** Resolve a product's group-buy pricing. `gbPrice` applies only when it is a
  *  positive number strictly below the regular price; otherwise the regular price
  *  stands and the line shows no saving. Guards against a misconfigured GB price

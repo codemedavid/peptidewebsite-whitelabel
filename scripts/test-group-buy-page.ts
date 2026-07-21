@@ -40,6 +40,7 @@ import {
   liveCartLines,
 } from "../src/storefront/checkout";
 import { normalizeGroupBuy, type GroupBuy } from "../src/lib/storefront/group-buy";
+import type { GroupBuyPriceScope } from "../src/lib/storefront/two-ways";
 import {
   buildGroupBuyBanner,
   type GroupBuyBanner,
@@ -125,23 +126,25 @@ function main() {
 
   const gbProduct = product({ id: "gb-1", price: 700, gbPrice: 560, productType: "gb" });
   const onHand = product({ id: "oh-1", price: 850, productType: "onhand" });
+  // A live round covering the whole catalog (every gb product is in scope).
+  const LIVE: GroupBuyPriceScope = { coversAll: true, productIds: [] };
 
   check("GB product + round live → gbPrice", () => {
-    assert.equal(unitPrice(gbProduct, 1, true), 560);
+    assert.equal(unitPrice(gbProduct, 1, LIVE), 560);
   });
   check("GB product + NO live round → regular price (default flag off)", () => {
-    assert.equal(unitPrice(gbProduct, 1, false), 700);
+    assert.equal(unitPrice(gbProduct, 1, null), 700);
     assert.equal(unitPrice(gbProduct, 1), 700);
   });
   check("on-hand product is never GB-priced, live or not", () => {
-    assert.equal(unitPrice(onHand, 1, true), 850);
-    assert.equal(unitPrice(onHand, 1, false), 850);
+    assert.equal(unitPrice(onHand, 1, LIVE), 850);
+    assert.equal(unitPrice(onHand, 1, null), 850);
   });
   check("GB product with no/invalid gbPrice → stays at regular even when live", () => {
     const noGb = product({ id: "gb-2", price: 700, productType: "gb" });
     const badGb = product({ id: "gb-3", price: 700, gbPrice: 900, productType: "gb" });
-    assert.equal(unitPrice(noGb, 1, true), 700);
-    assert.equal(unitPrice(badGb, 1, true), 700);
+    assert.equal(unitPrice(noGb, 1, LIVE), 700);
+    assert.equal(unitPrice(badGb, 1, LIVE), 700);
   });
 
   console.log("\ncartTotal / authoritativeItemPrice honor the live GB price\n");
@@ -149,15 +152,15 @@ function main() {
   check("cartTotal sums the live group-buy prices", () => {
     const lines = liveCartLines([gbProduct, gbProduct, onHand], [gbProduct, onHand]);
     // 2×560 (gb) + 1×850 (on-hand) = 1970
-    assert.equal(cartTotal(lines, true), 1970);
+    assert.equal(cartTotal(lines, LIVE), 1970);
     // Not live: 2×700 + 850 = 2250
-    assert.equal(cartTotal(lines, false), 2250);
+    assert.equal(cartTotal(lines, null), 2250);
   });
 
   check("authoritativeItemPrice re-derives the GB price server-side when live", () => {
     const item = { productId: "gb-1", name: "Product", qty: 1 };
-    assert.equal(authoritativeItemPrice(item, [gbProduct, onHand], true), 560);
-    assert.equal(authoritativeItemPrice(item, [gbProduct, onHand], false), 700);
+    assert.equal(authoritativeItemPrice(item, [gbProduct, onHand], LIVE), 560);
+    assert.equal(authoritativeItemPrice(item, [gbProduct, onHand], null), 700);
   });
 
   console.log("\nbuildGroupBuyBanner surfaces endsAt for the countdown\n");

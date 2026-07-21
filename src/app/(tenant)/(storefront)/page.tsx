@@ -3,7 +3,7 @@ import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
 import { resolveAdminLoginMode } from "@/lib/storefront/admin-login-mode";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders } from "@/lib/demo/fixtures";
-import { orderCountsAsDemand } from "@/lib/storefront/group-buy";
+import { orderCountsAsDemand, DEMAND_EXCLUDED_STATUS_LIST } from "@/lib/storefront/group-buy";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
@@ -264,7 +264,9 @@ export default async function HomePage() {
               where: {
                 tenantId,
                 groupBuyId: bannerId,
-                status: { notIn: ["cancelled", "canceled", "refunded"] },
+                // Same demand definition the demo path uses (orderCountsAsDemand)
+                // — one shared list so the two never drift.
+                status: { notIn: [...DEMAND_EXCLUDED_STATUS_LIST] },
               },
             }),
           );

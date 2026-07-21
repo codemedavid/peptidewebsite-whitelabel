@@ -17,6 +17,7 @@ import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
+import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import {
   activeChannels,
   activePaymentMethods,
@@ -103,13 +104,18 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // re-applies the same resolution at placement). The snapshot total is kept
   // only to detect — and gently flag — that a price moved since the item was
   // added.
-  // While a group buy is live (brand.groupBuyBanner present), group-buy products
-  // are priced at their gbPrice — the same single price the group-buy page shows
-  // and the server charges at placement (orders.ts repriceItems).
-  const groupBuyLive = !!brand.groupBuyBanner;
+  // While a group buy is live (brand.groupBuyBanner present), the group-buy
+  // products ASSIGNED to that round are priced at their gbPrice — the same single
+  // price the group-buy page shows and the server charges at placement (orders.ts
+  // repriceItems). The scope (round's productIds, or coversAll) keeps a gb product
+  // that is NOT in the live round at its regular price.
+  const groupBuyScope: GroupBuyPriceScope | null = useMemo(() => {
+    const b = brand.groupBuyBanner;
+    return b ? { coversAll: b.coversAll, productIds: b.productIds } : null;
+  }, [brand.groupBuyBanner]);
   const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
-  const subtotal = useMemo(() => cartTotal(lines, groupBuyLive), [lines, groupBuyLive]);
-  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart), groupBuyLive), [cart, groupBuyLive]);
+  const subtotal = useMemo(() => cartTotal(lines, groupBuyScope), [lines, groupBuyScope]);
+  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart), groupBuyScope), [cart, groupBuyScope]);
   const pricesUpdated = cart.length > 0 && snapshotSubtotal !== subtotal;
   const channels = useMemo(() => activeChannels(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
@@ -388,7 +394,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         productId: baseProductId(l.product),
         name: l.product.name,
         qty: l.qty,
-        price: unitPrice(l.product, l.qty, groupBuyLive),
+        price: unitPrice(l.product, l.qty, groupBuyScope),
         ...(l.product.variantName ? { variation: l.product.variantName } : {}),
       })),
       // Echo the fee this checkout DISPLAYED (zero when none was shown). The
@@ -557,7 +563,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
                 const reseller = isResellerQty(l.product, l.qty);
-                const up = unitPrice(l.product, l.qty, groupBuyLive);
+                const up = unitPrice(l.product, l.qty, groupBuyScope);
                 // How many more units of THIS product unlock the wholesale price.
                 const toReseller =
                   !reseller && resellerUnitPrice(l.product) != null

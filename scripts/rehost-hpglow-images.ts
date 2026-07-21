@@ -29,6 +29,7 @@ import {
   collectMatchingUrls,
   rewriteJsonUrls,
   isForeignHostUrl,
+  backupFileName,
 } from "../src/lib/migration/rehost-urls";
 
 // ── args ─────────────────────────────────────────────────────────────────────
@@ -42,10 +43,6 @@ const OLD_HOST = arg("host", "rtsnxmatvbabdylsnuuh.supabase.co");
 const BACKUP_DIR = path.join(process.cwd(), ".rehost-backup", TENANT_ID);
 
 const isForeign = (s: string) => isForeignHostUrl(s, OLD_HOST);
-const fileNameFromUrl = (url: string) => {
-  const base = url.split("/").pop() || "image";
-  return base.split("?")[0] || "image";
-};
 
 async function main() {
   console.log(`\n▶ Re-host images for tenant "${TENANT_ID}" off ${OLD_HOST}`);
@@ -87,7 +84,7 @@ async function main() {
     ({ uploadTenantMedia } = await import("../src/lib/imagekit/server"));
   }
 
-  for (const url of urls) {
+  for (const [i, url] of urls.entries()) {
     try {
       const res = await fetch(url);
       if (!res.ok) {
@@ -95,7 +92,8 @@ async function main() {
         continue;
       }
       const buf = Buffer.from(await res.arrayBuffer());
-      const fileName = fileNameFromUrl(url);
+      // Index-prefixed so two URLs sharing a basename never overwrite each other.
+      const fileName = backupFileName(url, i);
       await writeFile(path.join(BACKUP_DIR, fileName), buf);
       downloaded++;
 

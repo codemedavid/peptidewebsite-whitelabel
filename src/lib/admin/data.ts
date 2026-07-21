@@ -22,7 +22,10 @@ import { isBillingCycle, type BillingCycle } from "@/lib/subscription/billing-cy
 import {
   subscriptionInvoiceCode,
   isSubscriptionPaymentStatus,
+  buildPaymentsView,
+  summarizeSubscriptionPayments,
   type SubscriptionPaymentStatus,
+  type SubscriptionPaymentSummary,
 } from "@/lib/subscription/payments";
 import { subscriptionUrgency, type FlaggedUrgency } from "@/lib/subscription/near-due";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
@@ -135,10 +138,13 @@ export type TenantDetail = AdminTenantRow & {
   subscriptionStartsAt?: string;
   // What the tenant paid for the current term (centavos); undefined when unset.
   subscriptionAmountCents?: number;
-  // Tenant-filed proof-of-payment ledger (newest first), fail-open to [] when the
-  // table isn't on the DB yet or in demo mode. Drives the operator Billing tab's
-  // invoice history, review drawer, and lifetime metrics.
+  // Tenant-filed proof-of-payment ledger (newest first), CAPPED for display,
+  // fail-open to [] when the table isn't on the DB yet or in demo mode. Drives the
+  // operator Billing tab's invoice history + review drawer.
   subscriptionPayments: TenantSubscriptionPayment[];
+  // Lifetime metrics rolled up over the WHOLE ledger (not just the displayed
+  // slice), so "Subscription revenue" stays correct once payments exceed the cap.
+  subscriptionPaymentSummary: SubscriptionPaymentSummary;
 };
 
 /** One filed subscription payment, shaped for the client boundary (dates → ISO). */
@@ -155,6 +161,12 @@ export type TenantSubscriptionPayment = {
   cycle: BillingCycle | null;
 };
 
+// Safety bound on the ledger fetch: a per-tenant subscription ledger is naturally
+// small, so this never truncates a real tenant, yet caps a pathological read.
+const SUBSCRIPTION_PAYMENT_FETCH_CAP = 2000;
+// How many invoice rows the Billing table shows at once (metrics still cover all).
+const SUBSCRIPTION_PAYMENT_DISPLAY_LIMIT = 60;
+
 /** Fail-open read of a tenant's payment ledger for the operator Billing tab.
  *  Any error (pending db:push, connection blip) yields [] so the tenant-detail
  *  page never 500s on the billing join. */
@@ -163,7 +175,10 @@ async function loadTenantSubscriptionPayments(tenantId: string): Promise<TenantS
     const rows = await prisma.subscriptionPayment.findMany({
       where: { tenantId },
       orderBy: { submittedAt: "desc" },
-      take: 60,
+      // Fetch the whole ledger (bounded by a sane safety cap) so lifetime metrics
+      // roll up over ALL payments; the invoice TABLE caps its own display slice
+      // (buildPaymentsView) rather than the metrics being capped here.
+      take: SUBSCRIPTION_PAYMENT_FETCH_CAP,
       select: {
         id: true,
         amountCents: true,
@@ -178,7 +193,7 @@ async function loadTenantSubscriptionPayments(tenantId: string): Promise<TenantS
     });
     return rows.map((r) => ({
       id: r.id,
-      invoiceCode: subscriptionInvoiceCode(r.paidAt ?? r.submittedAt),
+      invoiceCode: subscriptionInvoiceCode(r.paidAt ?? r.submittedAt, r.id),
       amountCents: r.amountCents,
       status: isSubscriptionPaymentStatus(r.status) ? r.status : "pending",
       method: r.method,
@@ -812,7 +827,7 @@ function demoActivity(rows: AdminTenantRow[]): ActivityItem[] {
 }
 
 const _cachedTenantDetail = unstable_cache(
-  async (slug: string): Promise<Omit<TenantDetail, "planPriceCents" | "subscriptionPayments"> | null> => {
+  async (slug: string): Promise<Omit<TenantDetail, "planPriceCents" | "subscriptionPayments" | "subscriptionPaymentSummary"> | null> => {
     const t = await prisma.tenant.findUnique({
       where: { slug },
       select: {
@@ -953,6 +968,7 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
       audit: demoAudit(row),
       planPriceCents: planConfigPriceCents(planConfig, row.planKey),
       subscriptionPayments: [],
+      subscriptionPaymentSummary: summarizeSubscriptionPayments([]),
     };
   }
   const detail = await _cachedTenantDetail(slug);
@@ -966,6 +982,13 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
     getSubscriptionMeta(detail.id),
     loadTenantSubscriptionPayments(detail.id),
   ]);
+  // Cap the invoice TABLE to a display slice, but roll the lifetime metrics up
+  // over the WHOLE ledger — summarizing only the shown rows would under-report
+  // revenue once a tenant's payments exceed the display limit.
+  const { display, summary } = buildPaymentsView(
+    subscriptionPayments,
+    SUBSCRIPTION_PAYMENT_DISPLAY_LIMIT,
+  );
   return {
     ...detail,
     planPriceCents: planConfigPriceCents(planConfig, detail.planKey),
@@ -973,7 +996,8 @@ export async function getAdminTenantDetail(slug: string): Promise<TenantDetail |
     subscriptionCycle: meta.cycle ?? undefined,
     subscriptionStartsAt: meta.startsAt?.toISOString(),
     subscriptionAmountCents: meta.amountCents ?? undefined,
-    subscriptionPayments,
+    subscriptionPayments: display,
+    subscriptionPaymentSummary: summary,
   };
 }
 

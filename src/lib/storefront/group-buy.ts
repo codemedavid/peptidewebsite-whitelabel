@@ -390,8 +390,12 @@ type ReportOrder = {
   items: Array<{ name: string; qty: number; price: number; productId?: string }>;
 };
 
-// Excluded from demand entirely. Both English spellings + refunds.
-const DEMAND_EXCLUDED_STATUSES = new Set(["cancelled", "canceled", "refunded"]);
+// Excluded from demand entirely. Both English spellings + refunds. Exported as
+// the single source of truth so every "counts as demand" surface — the supplier
+// report here AND the storefront's live-round filled-slot count (page.tsx) —
+// shares one list instead of re-hardcoding it and silently drifting.
+export const DEMAND_EXCLUDED_STATUS_LIST = ["cancelled", "canceled", "refunded"] as const;
+const DEMAND_EXCLUDED_STATUSES = new Set<string>(DEMAND_EXCLUDED_STATUS_LIST);
 // Order statuses that mark an order committed regardless of payment.
 const COMMITTED_STATUSES = new Set(["confirmed", "processing", "shipped", "delivered", "completed"]);
 

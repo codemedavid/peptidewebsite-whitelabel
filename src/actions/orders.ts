@@ -74,6 +74,7 @@ import {
 } from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 import { authoritativeItemPrice } from "@/storefront/checkout";
+import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { sendAdminOrderNotification } from "@/lib/analytics/admin-notify";
@@ -218,9 +219,13 @@ function itemsSubtotal(items: OrderItem[]): number {
  * order object is local to this request. Must run BEFORE the fee/discount stamps
  * so they compute against the authoritative subtotal.
  */
-function repriceItems(items: OrderItem[], catalog: Product[], groupBuyLive = false): void {
+function repriceItems(
+  items: OrderItem[],
+  catalog: Product[],
+  groupBuyScope: GroupBuyPriceScope | null = null,
+): void {
   for (const it of items) {
-    const live = authoritativeItemPrice(it, catalog, groupBuyLive);
+    const live = authoritativeItemPrice(it, catalog, groupBuyScope);
     if (live != null) it.price = live;
   }
 }
@@ -363,23 +368,33 @@ async function applyOrderStockMove(
  * client. The name is snapshotted alongside the id so supplier reports survive
  * later renames. No-ops (stamps null) when the tenant lacks groupbuy.module.
  */
-async function stampGroupBuy(p: Order, tenantId: string, demoSlug: string): Promise<void> {
+async function stampGroupBuy(
+  p: Order,
+  tenantId: string,
+  demoSlug: string,
+): Promise<GroupBuyPriceScope | null> {
   p.groupBuyId = null;
   p.groupBuyName = null;
   try {
     const caps = await resolveGroupBuyCaps(tenantId);
-    if (!caps.enabled) return;
+    if (!caps.enabled) return null;
     const groupBuys = await loadGroupBuys(tenantId, demoSlug);
     const orderedIds = p.items
       .map((it) => it.productId)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
     const gb = groupBuyForOrder(groupBuys, caps, orderedIds);
-    if (gb) {
-      p.groupBuyId = gb.id;
-      p.groupBuyName = gb.name;
-    }
+    if (!gb) return null;
+    p.groupBuyId = gb.id;
+    p.groupBuyName = gb.name;
+    // Pricing scope for THIS attributed round: only its assigned products (or the
+    // whole catalog when assignment is off / the round covers all) get gbPrice.
+    // Returned so repriceItems prices exactly the round's products — never an
+    // off-round gb product that merely rode along in the same order.
+    const coversAll = !caps.productAssignment || gb.productIds.length === 0;
+    return { coversAll, productIds: coversAll ? [] : gb.productIds };
   } catch {
     /* attribution is best-effort — never block checkout on it */
+    return null;
   }
 }
 
@@ -738,14 +753,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
         dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
       );
     // Group-buy attribution FIRST — it decides whether this order is in a live
-    // round, which drives whether GB products re-price at their gbPrice below.
-    await stampGroupBuy(p, tenantId, slug);
+    // round AND returns that round's pricing scope, which drives whether GB
+    // products re-price at their gbPrice below.
+    const demoGbScope = await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative item prices: re-read each line from the live catalog
     // so a price the owner changed (or a tampered client) can't be stored. When
-    // the order belongs to a live round, group-buy products charge their gbPrice
-    // (the single price the group-buy page advertised). Runs before the
-    // fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, demoProducts, !!p.groupBuyId);
+    // the order belongs to a live round, that round's group-buy products charge
+    // their gbPrice (the single price the group-buy page advertised). Runs before
+    // the fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, demoProducts, demoGbScope);
     const demoViolation = stockViolation(demoProducts, p.items);
     if (demoViolation) return { error: demoViolation };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
@@ -821,14 +837,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // Tenant slug (used for group-buy attribution + the on-hand gate below).
     const slug = (await getTenantSlug()) ?? tenantId;
     // Group-buy attribution FIRST — it decides whether this order is in a live
-    // round, which drives whether GB products re-price at their gbPrice below.
-    await stampGroupBuy(p, tenantId, slug);
+    // round AND returns that round's pricing scope, which drives whether GB
+    // products re-price at their gbPrice below.
+    const gbScope = await stampGroupBuy(p, tenantId, slug);
     // Server-authoritative item prices: re-read each line from the live catalog
     // so a price the owner changed (or a tampered client) can't be stored. When
-    // the order belongs to a live round, group-buy products charge their gbPrice
-    // (the single price the group-buy page advertised). Runs before the
-    // fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, catalog, !!p.groupBuyId);
+    // the order belongs to a live round, that round's group-buy products charge
+    // their gbPrice (the single price the group-buy page advertised). Runs before
+    // the fee/discount stamps below so they charge the current subtotal.
+    repriceItems(p.items, catalog, gbScope);
 
     // Admin fee is operator-revocable per tenant (admin → Features) AND
     // Business-exclusive under the trial system: when the tenant isn't entitled
