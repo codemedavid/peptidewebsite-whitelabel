@@ -84,6 +84,8 @@ function supportLink(
       }
       case "messenger":
         return { supportUrl: `https://m.me/${dest.replace(/^@/, "")}`, supportLabel: "Messenger" };
+      case "instagram":
+        return { supportUrl: `https://ig.me/m/${dest.replace(/^@/, "")}`, supportLabel: "Instagram" };
       case "gmail":
         return { supportUrl: `mailto:${dest}`, supportLabel: "email" };
       default:

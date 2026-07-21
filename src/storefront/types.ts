@@ -252,7 +252,7 @@ export type Review = {
 /** Messaging channels the customer can complete an order through. The set of
  *  enabled channels + their destinations is configured per tenant by the
  *  super admin (BrandingEditor → storefront config). */
-export type ContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber" | "gmail";
+export type ContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber" | "gmail" | "instagram";
 
 export type ContactChannel = {
   type: ContactChannelType;

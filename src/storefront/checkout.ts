@@ -42,6 +42,7 @@ export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
   messenger: "Messenger",
   viber: "Viber",
   gmail: "Gmail",
+  instagram: "Instagram",
 };
 
 /** The underlying catalog product id for a cart entry — the real id for a
@@ -350,6 +351,12 @@ export function channelUrl(channel: ContactChannel, message: string): string {
     }
     case "messenger":
       return `https://m.me/${dest.replace(/^@/, "")}`;
+    case "instagram":
+      // Instagram's click-to-DM deep link (the IG analog of Messenger's m.me).
+      // Opens a direct-message thread with the store; it cannot carry a
+      // prefilled message, so channelPrefills() stays false and the checkout
+      // copies the order summary to the clipboard as a paste-in fallback.
+      return `https://ig.me/m/${dest.replace(/^@/, "")}`;
     case "viber":
       // Viber deep links are phone-number based: viber://chat?number=<digits>.
       return `viber://chat?number=${dest.replace(/[^\d]/g, "")}`;
