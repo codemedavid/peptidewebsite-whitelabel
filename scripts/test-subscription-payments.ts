@@ -34,6 +34,7 @@ import {
   normalizePaymentMethod,
   subscriptionInvoiceCode,
   summarizeSubscriptionPayments,
+  buildPaymentsView,
   type SubscriptionPaymentStatus,
 } from "../src/lib/subscription/payments";
 
@@ -138,6 +139,21 @@ check("subscriptionInvoiceCode formats a UTC month as INV-YYYYMM", () => {
   assert.strictEqual(subscriptionInvoiceCode(new Date("2025-12-31T23:00:00Z")), "INV-202512");
 });
 
+// #6 — two payments in the SAME month must not collide on their invoice code:
+// with a per-payment id the code carries a stable suffix that disambiguates them.
+check("subscriptionInvoiceCode disambiguates same-month payments by id", () => {
+  const date = new Date("2026-08-10T00:00:00Z");
+  const a = subscriptionInvoiceCode(date, "ckpaymentaaaa1111");
+  const b = subscriptionInvoiceCode(date, "ckpaymentbbbb2222");
+  assert.ok(a.startsWith("INV-202608-"), `expected INV-202608-… got ${a}`);
+  assert.notStrictEqual(a, b); // distinct payments → distinct codes
+  // Stable: same id → same code across calls.
+  assert.strictEqual(a, subscriptionInvoiceCode(date, "ckpaymentaaaa1111"));
+});
+check("subscriptionInvoiceCode without an id keeps the plain month code", () => {
+  assert.strictEqual(subscriptionInvoiceCode(new Date("2026-08-10T00:00:00Z")), "INV-202608");
+});
+
 // ─────────────────────────── metrics summary ────────────────────────────────
 const LEDGER: { amountCents: number; status: SubscriptionPaymentStatus }[] = [
   { amountCents: 149900, status: "confirmed" },
@@ -179,6 +195,26 @@ check("an empty ledger summarizes to all-zero without dividing by zero", () => {
   assert.strictEqual(s.avgMonthlyCents, 0);
   assert.strictEqual(s.paidPct, 0);
   assert.strictEqual(s.pendingPct, 0);
+});
+
+// #2 — the Billing page's lifetime metrics must roll up from the WHOLE ledger,
+// even though the invoice table only shows a capped slice. buildPaymentsView
+// splits a full ledger into a display slice + a summary computed over ALL rows.
+check("buildPaymentsView summarizes the full ledger while capping the display slice", () => {
+  const big = Array.from({ length: 65 }, () => ({
+    amountCents: 149900,
+    status: "confirmed" as SubscriptionPaymentStatus,
+  }));
+  const view = buildPaymentsView(big, 60);
+  assert.strictEqual(view.display.length, 60); // table shows at most 60 rows
+  assert.strictEqual(view.summary.confirmedCount, 65); // …but metrics count all 65
+  assert.strictEqual(view.summary.lifetimeConfirmedCents, 65 * 149900);
+});
+
+check("buildPaymentsView returns the whole ledger when it fits under the cap", () => {
+  const view = buildPaymentsView(LEDGER, 60);
+  assert.strictEqual(view.display.length, LEDGER.length);
+  assert.strictEqual(view.summary.total, LEDGER.length);
 });
 
 // ─────────────────────────────── summary ────────────────────────────────────

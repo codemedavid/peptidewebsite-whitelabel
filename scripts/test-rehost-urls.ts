@@ -20,6 +20,7 @@ import {
   collectMatchingUrls,
   rewriteJsonUrls,
   isForeignHostUrl,
+  backupFileName,
 } from "../src/lib/migration/rehost-urls";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -125,6 +126,23 @@ check("rewriteJsonUrls handles null / undefined / primitives safely", () => {
 check("rewriteJsonUrls counts every occurrence, even duplicates", () => {
   const { replaced } = rewriteJsonUrls([u1, u1, { a: u1 }], mapping);
   assert.strictEqual(replaced, 3);
+});
+
+// ── backupFileName (#7 — collision-proof backup/upload names) ────────────────
+// Two DISTINCT foreign URLs can share a basename (…/folder1/image.png and
+// …/folder2/image.png). fileNameFromUrl alone collides, so the backup on disk
+// and the ImageKit upload overwrite each other. backupFileName threads the
+// per-URL index so every re-hosted image keeps a unique, safe name.
+check("backupFileName keeps distinct names when basenames collide", () => {
+  const a = backupFileName("https://old.example.co/folder1/image.png", 0);
+  const b = backupFileName("https://old.example.co/folder2/image.png", 1);
+  assert.notStrictEqual(a, b);
+});
+check("backupFileName preserves the original extension and is filesystem-safe", () => {
+  const name = backupFileName("https://old.example.co/menu-images/a.png?token=xyz", 3);
+  assert.ok(name.endsWith(".png"), `expected a .png name, got ${name}`);
+  assert.ok(!name.includes("?"), "query string must be stripped");
+  assert.ok(!name.includes("/"), "must not contain path separators");
 });
 
 // ──────────────────────────── summary ───────────────────────────────────────

@@ -36,6 +36,7 @@
     "test:gb-banner": "tsx scripts/test-gb-banner.ts",
     "test:two-ways": "tsx scripts/test-two-ways.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
+    "test:group-buy-pricing": "tsx scripts/test-group-buy-pricing.ts",
     "test:onhand-gate": "tsx scripts/test-onhand-gate.ts",
     "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",
