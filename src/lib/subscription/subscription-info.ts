@@ -19,8 +19,15 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo/fixtures";
-import { computeSubscriptionState, type SubscriptionState } from "./subscription-state";
+import {
+  computeSubscriptionState,
+  type SubscriptionState,
+  type BrandBillingTerms,
+} from "./subscription-state";
 import { isBillingCycle, type BillingCycle } from "./billing-cycle";
+import { effectivePlanFeeCents } from "./plan-fee";
+import { planConfigPriceCents } from "@/lib/platform/plan-config";
+import { getPlanConfig } from "@/lib/platform/plan-config-server";
 
 const NOT_ON_SUBSCRIPTION: SubscriptionState = { onSubscription: false, expired: false };
 
@@ -33,6 +40,9 @@ const LEGACY_WINDOW_SELECT = {
   subscriptionStartsAt: true,
   subscriptionEndsAt: true,
   subscriptionAmountCents: true,
+  // Plan relation (always present) — the list-price fallback for the tenant's
+  // amount due when no per-tenant price override is set.
+  plan: { select: { key: true } },
 } as const;
 
 const loadSubscriptionWindow = (tenantId: string) =>
@@ -94,6 +104,29 @@ const NO_SUBSCRIPTION_META: SubscriptionMeta = {
   amountCents: null,
   priceCents: null,
 };
+
+/** The tenant-facing billing terms for the Billing page: what this tenant owes
+ *  per term (operator-set "Monthly price due", falling back to the plan-config
+ *  list price — the same effectivePlanFeeCents rule the platform admin's Plan
+ *  fee tile shows) plus the operator-chosen billing cycle. Reuses the cached
+ *  window read; fails open to nulls so the page renders without a figure rather
+ *  than 500ing. */
+export const getSubscriptionBilling = cache(async (tenantId: string): Promise<BrandBillingTerms> => {
+  if (isDemoMode()) return { amountDueCents: null, cycle: null };
+  try {
+    const [tenant, planConfig] = await Promise.all([loadSubscriptionWindow(tenantId), getPlanConfig()]);
+    if (!tenant) return { amountDueCents: null, cycle: null };
+    return {
+      amountDueCents: effectivePlanFeeCents(
+        tenant.subscriptionPriceCents,
+        planConfigPriceCents(planConfig, tenant.plan.key),
+      ),
+      cycle: isBillingCycle(tenant.subscriptionCycle) ? tenant.subscriptionCycle : null,
+    };
+  } catch {
+    return { amountDueCents: null, cycle: null };
+  }
+});
 
 export const getSubscriptionMeta = cache(async (tenantId: string): Promise<SubscriptionMeta> => {
   if (isDemoMode()) return NO_SUBSCRIPTION_META;

@@ -17,12 +17,18 @@ import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
 import { submitSubscriptionPaymentAction } from "@/actions/subscription-payments";
 import { SUBSCRIPTION_PAYMENT_METHODS, parsePaymentAmountCents } from "@/lib/subscription/payments";
+import { BILLING_CYCLE_LABELS } from "@/lib/subscription/billing-cycle";
 
 /** ISO → "Aug 10, 2026" for the due-window summary. */
 function fmtDate(iso?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** Centavos → "₱1,499" (drops trailing .00, keeps real centavos). */
+function fmtPesos(cents: number): string {
+  return `₱${(cents / 100).toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 }
 
 export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => void }) {
@@ -41,6 +47,12 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
 
   const amountValid = parsePaymentAmountCents(amount) != null;
   const canSave = amountValid && !saving && !uploading;
+
+  // What the provider set up for this tenant (super-admin "Monthly price due",
+  // falling back to the plan list price) — projected server-side into
+  // brand.subscription. Absent → no figure is shown.
+  const amountDueCents = sub?.onSubscription ? sub.amountDueCents : undefined;
+  const cycleLabel = sub?.onSubscription && sub.cycle ? BILLING_CYCLE_LABELS[sub.cycle].toLowerCase() : null;
 
   const pickProof = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -132,6 +144,24 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
               to your account.
             </div>
           )}
+          {typeof amountDueCents === "number" && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: "var(--sf-surface-2, #f8fafc)",
+                border: "1px solid var(--sf-border, #e2e8f0)",
+                display: "flex",
+                alignItems: "baseline",
+                gap: 8,
+              }}
+            >
+              <span className="admin-field__label" style={{ margin: 0 }}>Amount due</span>
+              <b style={{ fontSize: 18 }}>{fmtPesos(amountDueCents)}</b>
+              {cycleLabel && <span className="admin-field__hint" style={{ margin: 0 }}>· billed {cycleLabel}</span>}
+            </div>
+          )}
         </div>
 
         {/* File a payment */}
@@ -157,7 +187,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
               className="admin-input"
               inputMode="decimal"
               value={amount}
-              placeholder="e.g. 1499"
+              placeholder={typeof amountDueCents === "number" ? String(amountDueCents / 100) : "e.g. 1499"}
               onChange={(e) => setAmount(e.target.value)}
             />
             <div className="admin-field__hint">

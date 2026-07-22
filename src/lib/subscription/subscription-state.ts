@@ -18,6 +18,8 @@
  * as ISO strings after the brand JSON round-trip.
  */
 
+import type { BillingCycle } from "./billing-cycle";
+
 export const DEFAULT_SUBSCRIPTION_DAYS = 30;
 
 const DAY_MS = 86_400_000;
@@ -68,14 +70,41 @@ export type BrandSubscription = {
   totalDays: number;
   pctUsed: number;
   endsAt: string;
+  /** What the tenant owes for the term (centavos) — the operator-set monthly
+   *  price, falling back to the plan list price (effectivePlanFeeCents). Absent
+   *  when no valid amount resolves, so the Billing page simply shows no figure. */
+  amountDueCents?: number;
+  /** The operator-chosen billing cycle, for the "due monthly/quarterly…" label. */
+  cycle?: BillingCycle;
+};
+
+/** Resolved billing terms the server passes alongside the window state — null
+ *  fields mean "unset" and are omitted from the projection. */
+export type BrandBillingTerms = {
+  amountDueCents: number | null;
+  cycle: BillingCycle | null;
 };
 
 /** Serialize a SubscriptionState for brand.subscription — undefined when not
- *  governed, so legacy brands stay byte-identical and no banner renders. */
-export function brandSubscriptionFrom(state: SubscriptionState): BrandSubscription | undefined {
+ *  governed, so legacy brands stay byte-identical and no banner renders.
+ *  Billing terms ride along only when valid: 0 is a real (comped) amount, but
+ *  negative or non-finite values are never shown to the tenant. */
+export function brandSubscriptionFrom(
+  state: SubscriptionState,
+  billing?: BrandBillingTerms,
+): BrandSubscription | undefined {
   if (!state.onSubscription) return undefined;
   const { endsAt, ...rest } = state;
-  return { ...rest, endsAt: endsAt.toISOString() };
+  const projected: BrandSubscription = { ...rest, endsAt: endsAt.toISOString() };
+  if (
+    billing?.amountDueCents != null &&
+    Number.isFinite(billing.amountDueCents) &&
+    billing.amountDueCents >= 0
+  ) {
+    projected.amountDueCents = billing.amountDueCents;
+  }
+  if (billing?.cycle != null) projected.cycle = billing.cycle;
+  return projected;
 }
 
 export function computeSubscriptionState(

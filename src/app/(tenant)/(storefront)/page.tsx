@@ -20,7 +20,7 @@ import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { getTrialState } from "@/lib/trial/trial-info";
 import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
-import { getSubscriptionState } from "@/lib/subscription/subscription-info";
+import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
@@ -187,7 +187,13 @@ export default async function HomePage() {
   // store admin can render the countdown banner for a paying tenant. Mutually
   // exclusive with brand.trial by construction — computeSubscriptionState only
   // governs status != "trial" tenants, so a store never shows both banners.
-  brand.subscription = brandSubscriptionFrom(await getSubscriptionState(tenantId));
+  // The Billing page also shows what the tenant owes for the term — the
+  // operator-set "Monthly price due" (or the plan list price) plus the cycle,
+  // resolved server-side alongside the window.
+  brand.subscription = brandSubscriptionFrom(
+    await getSubscriptionState(tenantId),
+    await getSubscriptionBilling(tenantId),
+  );
 
   // The `#admin` login only asks for a USERNAME once the store actually has
   // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
