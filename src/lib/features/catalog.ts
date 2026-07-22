@@ -87,6 +87,10 @@ export const FEATURES = {
   GB_PRODUCT_ASSIGNMENT: "groupbuy.product_assignment",
   GB_SUPPLIER_REPORTS: "groupbuy.supplier_reports",
   GB_RULES: "groupbuy.rules",
+  // Storefront "two ways to order" home (on-hand list + live group-buy card;
+  // design "K Glow Store.dc.html"). Operator-grantable per tenant, default OFF —
+  // turns the storefront home into the two-ways layout (resolveHomeLayout).
+  GB_TWO_WAYS_HOME: "groupbuy.two_ways_home",
   // Excel & Supplier Reports — granular controls under "Supplier reports"
   GB_REPORT_EXCEL: "groupbuy.reports.excel",
   GB_REPORT_CSV: "groupbuy.reports.csv",
@@ -262,6 +266,11 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // the operator grants them per tenant from admin → Features.
   FEATURES.GB_MODULE,
   FEATURES.GB_RULES,
+  // The "two ways to order" storefront home — sold per tenant by the operator on
+  // any plan, default OFF everywhere. Standalone (not ANDed with GB_MODULE): a
+  // tenant can run the two-ways home for on-hand products even without the GB
+  // manager, and the live group-buy card only appears when a round is actually live.
+  FEATURES.GB_TWO_WAYS_HOME,
   // Staff Accounts is a Business/Automated plan feature (default ON there), but
   // also operator-grantable so a Starter tenant can be switched on individually
   // without upgrading. For Starter it stays OFF until the operator grants it.
@@ -364,6 +373,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.GB_PRODUCT_ASSIGNMENT]: { label: "Product assignment", description: "Assign specific products to each group buy; unassigned products fall outside it.", group: "Group Buy" },
   [FEATURES.GB_SUPPLIER_REPORTS]: { label: "Supplier reports", description: "Aggregated per-product order quantities for a group buy — the list to send the supplier.", group: "Group Buy" },
   [FEATURES.GB_RULES]: { label: "Group buy rules engine", description: "Order rules for group buys: admin fee (fixed/percentage), per-product and total vial minimums, bac water limits, cart & checkout validation.", group: "Group Buy" },
+  [FEATURES.GB_TWO_WAYS_HOME]: { label: '"Two ways to order" home', description: "Storefront home becomes the on-hand + live group-buy split (ships-now list plus a live-round card with per-item savings). White-label — uses the tenant's theme colours. Default off.", group: "Group Buy" },
   [FEATURES.GB_REPORT_EXCEL]: { label: "Excel export", description: "Download group-buy reports as Excel (.xlsx) workbooks. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_CSV]: { label: "CSV export", description: "Download group-buy reports as CSV files. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_PDF]: { label: "PDF export", description: "Download group-buy reports as print-ready PDFs. Applies when Supplier reports is on.", group: "Group Buy" },

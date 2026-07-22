@@ -23,6 +23,7 @@ import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/tr
 import { getSubscriptionState } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -236,6 +237,12 @@ export default async function HomePage() {
   // default on). Resolve the gate server-side so the cart can disable blocked
   // add-to-cart and placeStorefrontOrderAction can re-check it. Only the GB
   // module needs the extra group-buys read; it's operator-grant, default OFF.
+  // "Two ways to order" home — the operator grant (Super Admin → Features → Group
+  // Buy) is the toggle; the owner's config.homeLayout can still opt in or force
+  // classic. Resolved server-side so StorefrontApp just branches on brand.homeLayout.
+  const twoWaysHomeEntitled = await hasFeature(tenantId, FEATURES.GB_TWO_WAYS_HOME);
+  brand.homeLayout = resolveHomeLayout(twoWaysHomeEntitled, config.homeLayout);
+
   brand.groupBuyAllowOnHand = config.groupBuyAllowOnHand !== false;
   if (brand.groupBuyCaps.enabled) {
     const slug = (await getTenantSlug()) ?? tenantId;

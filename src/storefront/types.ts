@@ -357,6 +357,13 @@ export type Brand = {
   // .sf-root[data-sf-frame="on"] in storefront.css.
   siteBorder?: boolean;
 
+  // Home layout style. "two-ways" renders the "two ways to order" home — the
+  // on-hand product list + live group-buy card split (design "K Glow Store.dc.html")
+  // — driven entirely by the --brand-* vars, so any tenant can opt in. Absent /
+  // "classic" = the default hero → categories → catalog home, so existing tenants
+  // are unaffected. Toggled per tenant in the store-admin Hero editor.
+  homeLayout?: "classic" | "two-ways";
+
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;
   showHero: boolean;
