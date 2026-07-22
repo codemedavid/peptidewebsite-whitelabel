@@ -252,7 +252,7 @@ check("upcoming renewals are windowed tenants sorted soonest-first with urgency 
   assert.strictEqual(out.upcoming[1].urgency, "due_soon");
   assert.strictEqual(out.upcoming[2].urgency, "scheduled");
   assert.strictEqual(out.upcoming[1].initials, "SS");
-  assert.strictEqual(out.upcoming[1].planLabel, "Pro");
+  assert.strictEqual(out.upcoming[1].planLabel, "Business"); // planMeta("pro").label
   assert.strictEqual(out.upcoming[1].monthlyCents, PRO);
   // 30-day roll-up excludes the September renewal.
   assert.strictEqual(out.upcoming30dCount, 2);
