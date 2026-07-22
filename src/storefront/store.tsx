@@ -44,6 +44,11 @@ import {
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import {
+  gbScopeFromBanner,
+  isGroupBuyPreorder,
+  twoWaysAddViolation,
+} from "@/lib/storefront/two-ways-cart";
 import { baseProductId, makeVariationEntry } from "./checkout";
 import {
   normalizeGroupBuyRules,
@@ -433,6 +438,19 @@ export function StoreProvider({
         toast(`${product.name} isn't part of the current group buy.`);
         return;
       }
+      // Two-ways split: on-hand items ship now, group-buy items ship after the
+      // round closes — one cart never mixes the two paths. Rejected here (the
+      // friendliest spot); placeStorefrontOrderAction re-checks server-side.
+      const gbScope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
+      const mixViolation = twoWaysAddViolation(
+        baseProductId(product),
+        cart.map(baseProductId),
+        gbScope,
+      );
+      if (mixViolation) {
+        toast(mixViolation);
+        return;
+      }
       // Smart Checkout cart restriction: with mixed-cart prevention on, a
       // product from a second category is rejected here (the friendliest spot —
       // before it's in the cart). Checkout re-validates server-side regardless.
@@ -447,6 +465,14 @@ export function StoreProvider({
       // count every entry that resolves to the same base product.
       const entry = variation ? makeVariationEntry(product, variation) : product;
       const n = Math.max(1, Math.floor(qty));
+      // Live-round group-buy products are PRE-ORDERS — the supplier order is
+      // placed after the round closes, so on-hand stock never caps them (a
+      // round of stock-0 products would otherwise render a dead "Join GB").
+      // placeStorefrontOrderAction applies the same exemption server-side.
+      if (isGroupBuyPreorder(baseProductId(product), gbScope)) {
+        setCart((c) => [...c, ...Array.from({ length: n }, () => entry)]);
+        return;
+      }
       const stock = Math.max(0, product.stock || 0);
       const inCart = cart.filter((p) => baseProductId(p) === baseProductId(product)).length;
       const room = Math.max(0, stock - inCart);
@@ -460,7 +486,7 @@ export function StoreProvider({
       if (room <= 0) return;
       setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
     },
-    [cart, toast, brand.checkoutRules, brand.groupBuyGate],
+    [cart, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner],
   );
 
   const decrementCart = useCallback((productId: string) => {

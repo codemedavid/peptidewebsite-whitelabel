@@ -76,6 +76,7 @@ import {
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 import { authoritativeItemPrice } from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { sendAdminOrderNotification } from "@/lib/analytics/admin-notify";
@@ -138,16 +139,21 @@ function normalizeItems(input: unknown): OrderItem[] {
 /** The first line in the cart that asks for more than the product has in
  *  stock, as a customer-facing error — or null when the whole cart fits.
  *  Lines match by productId (stamped at checkout) or exact name; lines that
- *  match no product aren't stock-checked. */
+ *  match no product aren't stock-checked. Products inside the live round's
+ *  scope (`gbScope`, from stampGroupBuy) are PRE-ORDERS — the supplier order
+ *  is placed after the round closes — so they're exempt, mirroring the cart
+ *  (store.tsx → isGroupBuyPreorder). */
 function stockViolation(
   products: Array<{ id: string; name: string; stock?: number | null }>,
   items: OrderItem[],
+  gbScope: GroupBuyPriceScope | null = null,
 ): string | null {
   for (const it of items) {
     const prod = products.find((x) =>
       it.productId ? x.id === it.productId : x.name === it.name,
     );
     if (!prod) continue;
+    if (isGroupBuyPreorder(prod.id, gbScope)) continue;
     const stock = Math.max(0, prod.stock ?? 0);
     if (it.qty > stock) {
       return stock === 0
@@ -156,6 +162,22 @@ function stockViolation(
     }
   }
   return null;
+}
+
+/** The catalog ids the order's lines resolve to — productId first, exact-name
+ *  fallback, unmatched lines skipped: the same matching rule stockViolation
+ *  uses, so the two-ways mixing re-check judges exactly the lines the other
+ *  guards saw. */
+function matchedProductIds(
+  products: Array<{ id: string; name: string }>,
+  items: OrderItem[],
+): string[] {
+  return items.flatMap((it) => {
+    const prod = products.find((x) =>
+      it.productId ? x.id === it.productId : x.name === it.name,
+    );
+    return prod ? [prod.id] : [];
+  });
 }
 
 /**
@@ -771,8 +793,16 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // their gbPrice (the single price the group-buy page advertised). Runs before
     // the fee/discount stamps below so they charge the current subtotal.
     repriceItems(p.items, demoProducts, demoGbScope);
-    const demoViolation = stockViolation(demoProducts, p.items);
+    const demoViolation = stockViolation(demoProducts, p.items, demoGbScope);
     if (demoViolation) return { error: demoViolation };
+    // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
+    // lines — the cart blocks it, and this re-check (against the SAME scope the
+    // re-price used) stops a stale/tampered client from sneaking a mix through.
+    const demoMix = twoWaysOrderViolation(
+      matchedProductIds(demoProducts, p.items),
+      demoGbScope,
+    );
+    if (demoMix) return { error: demoMix };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
     // branding config at placement (any client-supplied value is discarded) and
     // snapshotted on the order so a later config change never rewrites it.
@@ -886,9 +916,16 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
-    // order the inventory can't cover.
-    const violation = stockViolation(catalog, p.items);
+    // order the inventory can't cover. Live-round group-buy lines are
+    // pre-orders and exempt (gbScope).
+    const violation = stockViolation(catalog, p.items, gbScope);
     if (violation) return { error: violation };
+
+    // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
+    // lines — the cart blocks it, and this re-check (against the SAME scope the
+    // re-price used) stops a stale/tampered client from sneaking a mix through.
+    const mixViolation = twoWaysOrderViolation(matchedProductIds(catalog, p.items), gbScope);
+    if (mixViolation) return { error: mixViolation };
 
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     // Entitlement-gated, same as the demo path above.
