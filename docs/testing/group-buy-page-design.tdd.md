@@ -79,3 +79,28 @@ The `#groupbuy` route already rendered a simplified page (one price per card, ca
 - **RED:** `10 passed, 3 failed` (`groupBuyCtaTarget is not a function`). **GREEN:** `13 passed, 0 failed`. Typecheck `tsc --noEmit` → 0 errors.
 - Commits: `a1f887d` (RED), `7c38750` (GREEN + wiring).
 - **Note:** the two-ways home only shows the GB card/CTA when a round is live (`brand.groupBuyBanner` non-null); the target `#groupbuy` page is the same one gated on that banner, so the button is visible exactly when its destination is live — the two stay consistent.
+
+---
+
+# Bug fix — home said "Open now" but the GB page said "No group buy right now"
+
+**Request (verbatim):** "it says Two ways to order … ● Open now / Group Buy … but after clicking the groupbuy it shows this No group buy right now / There isn't an open group-buy round at the moment."
+
+**Root cause (confirmed against live k-glow data + a rendered dump of the running app):**
+The two builders defined "what's in the group buy" **differently**:
+- `buildTwoWaysHomeView` (home) — a product is a GB line when it's in the **live round's scope** (`coversAll`, or `id ∈ banner.productIds`), regardless of `productType`.
+- `buildGroupBuyPageView` (page) — filtered by `isGroupBuyProduct` (`productType === "gb"`).
+
+k-glow's active round "june gb" assigns 3 products that have **no `productType:"gb"` tag and no `gbPrice`** (verified: catalog `productType` tally = `{"(none)":3}`). So the home listed them (in-round → "Open now") while the page filtered them all out → "No group buy right now". A rendered dump of the running app confirmed: `HOME openNow=1, #twh-gb section=1` vs `GROUPBUY noGbPage=1`.
+
+**Fix:** `buildGroupBuyPageView` now selects products by the **same round-membership rule** as the home (`coversAll || id ∈ productIds`), dropping the `productType` filter. Both surfaces now agree.
+
+| # | What is guaranteed | Test | Type | Result | Evidence |
+|---|--------------------|------|------|--------|----------|
+| 11 | Round's assigned products list on the page even when untagged | `scripts/test-group-buy-page.ts:lists the round's assigned products even when they are not tagged productType 'gb'` | unit | PASS | `npm run test:group-buy-page` |
+| 12 | Page and two-ways home agree on the round's products (no split) | `…:the page and the two-ways home agree on which products are in the round` | unit | PASS | same |
+| 13 | covers-all round → whole catalog is the run, matching the home | `…:covers-all round → the whole catalog is the run` | unit | PASS | same |
+
+- **RED:** `25 passed, 3 failed` (page returned `[]` for untagged round products; covers-all excluded on-hand). **GREEN:** `28 passed, 0 failed`; two-ways-home `13 passed, 0 failed`; `tsc --noEmit` → 0 errors.
+- **Live verification:** attempted a headless render of `k-glow.lvh.me:3100/#groupbuy` after the fix; the dev server was mid-recompile and the browser timed out. The fix is proven by the unit tests, which encode the exact k-glow scenario (scoped round of untagged products) and assert page == home. Re-check in the browser once the dev server settles.
+- **Data note:** the round's products still carry no `gbPrice`, so they list at their **regular price** with no "save" badge (the badge only shows a real saving). To offer group-buy discounts, set a `gbPrice` per product; the page will then show the strikethrough + save badge.
