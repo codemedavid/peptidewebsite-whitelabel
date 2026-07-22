@@ -155,7 +155,12 @@ export function AdminPage({
       onPreviewStore={onExitToSite}
     />
   ) : brand.subscription ? (
-    <SubscriptionBanner subscription={brand.subscription} />
+    <SubscriptionBanner
+      subscription={brand.subscription}
+      // Billing is owner-only — offer the shortcut only to actors the view
+      // guard would let through anyway.
+      onOpenBilling={isViewAllowed(actor, "billing") ? () => setView("billing") : undefined}
+    />
   ) : null;
 
   if (activeView === "upgrade") {
