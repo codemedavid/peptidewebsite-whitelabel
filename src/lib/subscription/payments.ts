@@ -106,6 +106,59 @@ export function subscriptionInvoiceCode(date: Date, id?: string): string {
   return id ? `${base}-${invoiceSuffix(id)}` : base;
 }
 
+/** Raw ledger row as read from the DB (or after a JSON round-trip) — the input
+ *  to the tenant-facing invoice-history projection. `status` is untrusted. */
+export type TenantInvoiceSource = {
+  id: string;
+  amountCents: number;
+  status: string;
+  method: string;
+  paidAt: Date | string | null | undefined;
+  submittedAt: Date | string | null | undefined;
+};
+
+/** JSON-safe display row for the store-admin Billing invoice table. */
+export type TenantInvoiceRow = {
+  id: string;
+  /** Stable display code, keyed to the invoice date's UTC month + payment id. */
+  code: string;
+  amountCents: number;
+  method: string;
+  status: SubscriptionPaymentStatus;
+  /** The date that matters for the row: paidAt, falling back to submittedAt. */
+  dateIso: string;
+};
+
+function toValidDate(value: Date | string | null | undefined): Date | null {
+  if (value == null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Project raw ledger rows into the tenant's invoice history: newest first,
+ * invoice-coded, with unknown DB statuses narrowed to "pending" (a row must
+ * never crash the page) and rows with no usable date dropped.
+ */
+export function tenantInvoiceRowsFrom(rows: readonly TenantInvoiceSource[]): TenantInvoiceRow[] {
+  return rows
+    .flatMap((row) => {
+      const date = toValidDate(row.paidAt) ?? toValidDate(row.submittedAt);
+      if (!date) return [];
+      return [
+        {
+          id: row.id,
+          code: subscriptionInvoiceCode(date, row.id),
+          amountCents: row.amountCents,
+          method: row.method,
+          status: isSubscriptionPaymentStatus(row.status) ? row.status : ("pending" as const),
+          dateIso: date.toISOString(),
+        },
+      ];
+    })
+    .sort((a, b) => (a.dateIso < b.dateIso ? 1 : a.dateIso > b.dateIso ? -1 : 0));
+}
+
 export type SubscriptionPaymentLedgerEntry = {
   amountCents: number;
   status: SubscriptionPaymentStatus;

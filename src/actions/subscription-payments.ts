@@ -26,7 +26,9 @@ import {
   isSubscriptionPaymentStatus,
   normalizePaymentMethod,
   parsePaymentAmountCents,
+  tenantInvoiceRowsFrom,
   type SubscriptionPaymentReview,
+  type TenantInvoiceRow,
 } from "@/lib/subscription/payments";
 
 export type SubscriptionPaymentActionResult = { ok: true } | { error: string };
@@ -103,6 +105,37 @@ export async function submitSubscriptionPaymentAction(
   revalidateTenant(tenantId);
   revalidateTag("admin:data");
   return { ok: true };
+}
+
+/** Most-recent rows the tenant invoice table shows (metrics are operator-side). */
+const INVOICE_HISTORY_LIMIT = 60;
+
+/**
+ * The tenant's own invoice history for the store-admin Billing page. Read-only
+ * and tenant-scoped (withTenant). Fails open to an empty list on read errors —
+ * e.g. the subscription_payments table not yet pushed ([[live-db-state]]) — so
+ * the Billing page renders without a history rather than erroring.
+ */
+export async function listMySubscriptionPaymentsAction(): Promise<
+  { payments: TenantInvoiceRow[] } | { error: string }
+> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Sign in to the store admin to view billing history." };
+  if (isDemoMode()) return { payments: [] };
+
+  try {
+    const rows = await withTenant(tenantId, (db) =>
+      db.subscriptionPayment.findMany({
+        where: { tenantId },
+        orderBy: { submittedAt: "desc" },
+        take: INVOICE_HISTORY_LIMIT,
+        select: { id: true, amountCents: true, status: true, method: true, paidAt: true, submittedAt: true },
+      }),
+    );
+    return { payments: tenantInvoiceRowsFrom(rows) };
+  } catch {
+    return { payments: [] };
+  }
 }
 
 /** Confirm / reject a filed payment. Shared operator-side core. */

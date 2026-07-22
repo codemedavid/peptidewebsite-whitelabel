@@ -11,12 +11,18 @@
 // Read side (the due window) comes from brand.subscription, projected
 // server-side in the storefront RSC — never computed against the browser clock.
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
-import { submitSubscriptionPaymentAction } from "@/actions/subscription-payments";
-import { SUBSCRIPTION_PAYMENT_METHODS, parsePaymentAmountCents } from "@/lib/subscription/payments";
+import { listMySubscriptionPaymentsAction, submitSubscriptionPaymentAction } from "@/actions/subscription-payments";
+import {
+  SUBSCRIPTION_PAYMENT_METHODS,
+  SUBSCRIPTION_PAYMENT_STATUS_LABELS,
+  SUBSCRIPTION_PAYMENT_STATUS_TONE,
+  parsePaymentAmountCents,
+  type TenantInvoiceRow,
+} from "@/lib/subscription/payments";
 import { BILLING_CYCLE_LABELS } from "@/lib/subscription/billing-cycle";
 
 /** ISO → "Aug 10, 2026" for the due-window summary. */
@@ -31,6 +37,13 @@ function fmtPesos(cents: number): string {
   return `₱${(cents / 100).toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 }
 
+/** Badge colors per status tone (matches the toast/success palette in use here). */
+const STATUS_BADGE_STYLE: Record<"success" | "warn" | "danger", { background: string; color: string }> = {
+  success: { background: "var(--sf-success-soft, #f0fdf4)", color: "var(--sf-success, #15803d)" },
+  warn: { background: "var(--sf-warn-soft, #fffbeb)", color: "var(--sf-warn, #b45309)" },
+  danger: { background: "var(--sf-danger-soft, #fef2f2)", color: "var(--sf-danger, #b91c1c)" },
+};
+
 export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { toast } = useStore();
   const sub = brand.subscription;
@@ -44,6 +57,20 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Invoice history — the tenant's own filed payments. null = still loading.
+  const [history, setHistory] = useState<TenantInvoiceRow[] | null>(null);
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await listMySubscriptionPaymentsAction();
+      setHistory("error" in res ? [] : res.payments);
+    } catch {
+      setHistory([]);
+    }
+  }, []);
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const amountValid = parsePaymentAmountCents(amount) != null;
   const canSave = amountValid && !saving && !uploading;
@@ -95,6 +122,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
       setPaidAt("");
       setProofUrl(null);
       toast("Payment submitted for review");
+      void loadHistory();
     } catch {
       toast("Couldn't submit — please sign in again and retry.");
     } finally {
@@ -255,6 +283,53 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
             )}
             <div className="admin-field__hint">A GCash/bank receipt screenshot helps your provider confirm faster. Optional but recommended.</div>
           </div>
+        </div>
+
+        {/* Invoice history — the tenant's own filed payments and their review status */}
+        <div className="admin-form__card" style={{ marginTop: 16 }}>
+          <h2 className="admin-form__section">📜 Invoice history</h2>
+          {history === null ? (
+            <div className="admin-field__hint" style={{ marginTop: -8 }}>Loading your payments…</div>
+          ) : history.length === 0 ? (
+            <div className="admin-field__hint" style={{ marginTop: -8 }}>
+              No payments filed yet — payments you submit above will appear here with their confirmation status.
+            </div>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {history.map((inv) => (
+                <li
+                  key={inv.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 2px",
+                    borderTop: "1px solid var(--sf-border, #e2e8f0)",
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{inv.code}</div>
+                    <div className="admin-field__hint" style={{ margin: 0 }}>
+                      {fmtDate(inv.dateIso)} · {inv.method}
+                    </div>
+                  </div>
+                  <b style={{ fontSize: 14, whiteSpace: "nowrap" }}>{fmtPesos(inv.amountCents)}</b>
+                  <span
+                    style={{
+                      ...STATUS_BADGE_STYLE[SUBSCRIPTION_PAYMENT_STATUS_TONE[inv.status]],
+                      padding: "3px 10px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {SUBSCRIPTION_PAYMENT_STATUS_LABELS[inv.status]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
