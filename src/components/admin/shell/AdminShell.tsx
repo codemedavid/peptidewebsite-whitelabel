@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "Platform" },
   { id: "plans", label: "Plans & Billing", href: "/plans", icon: "Card", group: "Platform" },
   { id: "analytics", label: "Analytics", href: "/analytics", icon: "Chart", group: "Insights" },
+  { id: "income", label: "My Income", href: "/income", icon: "DollarSign", group: "Insights" },
   { id: "settings", label: "Platform Settings", href: "/settings", icon: "Settings", group: "System" },
   { id: "audit", label: "Audit Logs", href: "/audit", icon: "History", group: "System" },
 ];
