@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { resolveTenantByHost } from "./resolve";
+import { storefrontBouncePath } from "./gate";
 import { isDemoMode, demoSlugFromHost } from "@/lib/demo/fixtures";
 
 /**
@@ -20,21 +21,21 @@ const resolveCurrent = cache(async () => {
   return resolveTenantByHost(host);
 });
 
-// Statuses whose storefront must NOT be publicly reachable. `suspended` is a
-// platform action; `pending_setup` is a freshly self-provisioned store that the
-// operator hasn't published yet — kept dark until the admin flips it to active.
-const HIDDEN_STATUSES = new Set(["suspended", "pending_setup"]);
-
-/** Tenant id for the current request. Redirects to /unknown-tenant if unresolved. */
+/**
+ * Tenant id for the current request. Bounces unresolved hosts to
+ * /unknown-tenant and deactivated (suspended) tenants to /site-unavailable —
+ * the split lives in lib/tenant/gate.ts.
+ */
 export async function getTenantId(): Promise<string> {
   const tenant = await resolveCurrent();
-  if (!tenant || HIDDEN_STATUSES.has(tenant.status)) redirect("/unknown-tenant");
+  const bounce = storefrontBouncePath(tenant);
+  if (!tenant || bounce) redirect(bounce ?? "/unknown-tenant");
   return tenant.id;
 }
 
 export async function getTenantIdOrNull(): Promise<string | null> {
   const tenant = await resolveCurrent();
-  return tenant && !HIDDEN_STATUSES.has(tenant.status) ? tenant.id : null;
+  return tenant && !storefrontBouncePath(tenant) ? tenant.id : null;
 }
 
 export async function getTenantSlug(): Promise<string | null> {
