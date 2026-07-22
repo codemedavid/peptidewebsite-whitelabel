@@ -29,3 +29,18 @@ bust via the self-fetching helper; `revalidateTenantVisibility` exists and
 self-fetches; resolver and bust tags share `normalizeHost` (plus a unit test);
 suspend flip is conditional; demo mode errors honestly; the unavailable page is
 noindexed and titled.
+
+## Round 2 (review of the fixes; RED `af6ed67`-era commit → GREEN `ce08a06`)
+
+6 findings; 5 fixed, 1 skipped (accepted tradeoff). RED: 16 passed / 5 failed;
+GREEN: `test:tenant-suspend` **21/21**, `test:tenant-unavailable` **10/10**,
+`tsc` no new errors.
+
+| Finding | Outcome |
+|---|---|
+| setTenantPlanAction fakes demo success | Fixed — honest "Changing built-in demo tenants isn't supported." error |
+| suspend/setPlan bypass the helper | Fixed — both now `await revalidateTenantVisibility(tenant.id)`; manual domains selects dropped (delete keeps pre-captured hosts by necessity) |
+| normalizeHost keeps trailing FQDN dots | Fixed — `.replace(/\.$/, "")`, unit-tested |
+| Dead `slug: true` selects in publish/unpublish | Fixed — selects fetch `tenantId` only; source assertion guards regressions |
+| Orphaned JSDoc in cache-tags | Fixed — comments re-attached per function |
+| Extra query per publish (self-fetch helper) | Skipped — deliberate cost of the can't-forget design on a rare operator action |
