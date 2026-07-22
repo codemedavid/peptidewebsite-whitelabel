@@ -1,5 +1,7 @@
 import { getTenantId } from "@/lib/tenant/headers";
+import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
+import { normalizeDefaultProductImage, resolveProductImage } from "@/lib/storefront/product-image";
 import { formatPrice } from "@/lib/utils";
 import { isDemoMode, findDemoProduct } from "@/lib/demo/fixtures";
 import { requireFeaturePage } from "@/lib/features/entitlements";
@@ -31,6 +33,13 @@ export default async function ProductPage({
   if (!product) notFound();
 
   const images = Array.isArray(product.images) ? (product.images as string[]) : [];
+  // Per-tenant default product image — same fallback the storefront cards use.
+  // getTenantContext is unstable_cache-deduped, so this adds no extra DB read.
+  const { branding } = await getTenantContext(tenantId);
+  const defaultImage = normalizeDefaultProductImage(
+    ((branding?.config ?? {}) as Record<string, unknown>).defaultProductImage,
+  );
+  const heroImage = resolveProductImage(images[0], defaultImage);
   const meta = (product.metadata ?? {}) as {
     purity?: string;
     coaUrl?: string;
@@ -43,10 +52,10 @@ export default async function ProductPage({
   return (
     <div className="container grid gap-10 py-16 md:grid-cols-2">
       <div>
-        {images[0] && (
+        {heroImage && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={images[0]}
+            src={heroImage}
             alt={product.name}
             className="aspect-square w-full rounded-[var(--radius)] object-cover"
           />

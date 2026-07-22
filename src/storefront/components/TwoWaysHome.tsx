@@ -13,6 +13,7 @@ import type { Brand } from "../types";
 import { useStore } from "../store";
 import { baseProductId } from "../checkout";
 import { buildTwoWaysHomeView, groupBuyCtaTarget } from "@/lib/storefront/two-ways-home";
+import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
 export function TwoWaysHome({
@@ -112,12 +113,14 @@ export function TwoWaysHome({
               const p = line.product;
               const qty = qtyOf(p.id);
               const canBuy = p.purchasable !== false && !p.priceOnRequest;
+              // Product photo, or the brand's default product image, or the monogram.
+              const image = resolveProductImage(p.image, brand.defaultProductImage);
               return (
                 <li key={p.id} className="sf-twh__row">
                   <span className="sf-twh__avatar font-display" aria-hidden>
-                    {p.image ? (
+                    {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.image} alt="" />
+                      <img src={image} alt="" />
                     ) : (
                       line.initial
                     )}

@@ -25,6 +25,7 @@ import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
+import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -77,6 +78,11 @@ export default async function HomePage() {
   // The reseller access code is validated server-side (verifyResellerCodeAction);
   // never ship it to the browser, even though the rest of `config` is public.
   delete (brand as Record<string, unknown>).resellerAccessCode;
+
+  // Per-tenant default product image — the fallback photo shown for products
+  // without an image of their own. Normalized here (hosted http(s) URLs only)
+  // so the raw config spread above can't put an unvetted value in <img src>.
+  brand.defaultProductImage = normalizeDefaultProductImage(config.defaultProductImage);
 
   // Card Studio and Sales Analytics are gated the same way: the platform
   // entitlement (admin → Features) AND the branding-editor toggle must both be

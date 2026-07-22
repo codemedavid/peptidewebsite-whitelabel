@@ -17,6 +17,7 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
+import { resolveProductImage } from "@/lib/storefront/product-image";
 import { verifyResellerCodeAction } from "@/actions/storefront-admin";
 
 // Per-tenant key so unlocking one store doesn't unlock another in the same browser.
@@ -81,16 +82,19 @@ function MerchantCard({
   money: (n?: number | null) => string;
   onAdd: (qty: number) => void;
 }) {
+  const { brand } = useStore();
   const applied = resellerTierLabel(product);
   const minQty = resellerMinQty(product);
   const hasReseller = !!(product.reseller && (product.reseller.vialsOnly || product.reseller.completeSet));
+  // Product photo, or the brand's default product image, or the SVG placeholder.
+  const image = resolveProductImage(product.image, brand.defaultProductImage);
 
   return (
     <article className="product-card merchant-card card">
       <div className="product-card__media">
-        {product.image ? (
+        {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt={product.name} />
+          <img src={image} alt={product.name} />
         ) : (
           <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />

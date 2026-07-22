@@ -304,6 +304,11 @@ export type Brand = {
   // explicitly by a Global Font Style preset or the "Button font" picker.
   buttonFont?: string;
 
+  // Per-tenant fallback photo for products with no image of their own (e.g. a
+  // branded vial shot). Normalized server-side (page.tsx) through
+  // @/lib/storefront/product-image; absent = the built-in SVG placeholder.
+  defaultProductImage?: string;
+
   adminPassword: string;
   adminLoginTitle: string;
   adminLoginSub: string;

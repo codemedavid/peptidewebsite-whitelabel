@@ -14,6 +14,7 @@ import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { baseProductId } from "../checkout";
 import { buildGroupBuyPageView, groupBuyCartSummary } from "@/lib/storefront/group-buy-page";
+import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
 export function GroupBuyPage({
@@ -107,12 +108,14 @@ export function GroupBuyPage({
           {view.lines.map((line) => {
             const p = line.product;
             const qty = cart.filter((c) => baseProductId(c) === p.id).length;
+            // Product photo, or the brand's default product image, or the monogram.
+            const image = resolveProductImage(p.image, brand.defaultProductImage);
             return (
               <article key={p.id} className="gbpage__card">
                 <div className="gbpage__card-media">
-                  {p.image ? (
+                  {image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt={p.name} />
+                    <img src={image} alt={p.name} />
                   ) : (
                     <span className="gbpage__monogram font-display" aria-hidden>
                       {line.initial}

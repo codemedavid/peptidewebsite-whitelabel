@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Brand, Product } from "../types";
 import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import { resolveProductImage } from "@/lib/storefront/product-image";
 import {
   buildProductOptions,
   optionLabel,
@@ -22,6 +23,7 @@ export function ProductCard({
   design,
   rating,
   gbBlocked,
+  defaultImage,
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
@@ -33,6 +35,10 @@ export function ProductCard({
    *  blocked from the cart by the owner's on-hand setting. Shows but disables
    *  buying — the store.addToCart gate and the server both re-check it. */
   gbBlocked?: boolean;
+  /** Brand-level fallback photo (brand.defaultProductImage) shown when the
+   *  product has no image of its own. Prop (not useStore) because the platform
+   *  admin's CardDesignPicker renders this card outside the StoreProvider. */
+  defaultImage?: string | null;
 }) {
   const [qty, setQty] = useState(1);
   // Per-product variations (e.g. 5mg / 10mg), each with its own price. When a
@@ -50,6 +56,8 @@ export function ProductCard({
   const showSelector = shouldShowOptionPicker(product);
   const displayPrice = selectedOpt ? selectedOpt.price : product.price;
   const cd = design ? cardDesignAttrs(design) : null;
+  // Product photo, or the brand's default product image, or the SVG placeholder.
+  const image = resolveProductImage(product.image, defaultImage);
   // Stock-aware buying: the stepper can't exceed what's left, and a product
   // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
   // server enforce the same cap — this is the first, visible line of defense.
@@ -77,9 +85,9 @@ export function ProductCard({
       )}
 
       <div className="product-card__media">
-        {product.image ? (
+        {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt={product.name} />
+          <img src={image} alt={product.name} />
         ) : (
           <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
@@ -308,6 +316,7 @@ export function Catalog({
               key={p.id}
               product={p}
               design={brand.cardDesign}
+              defaultImage={brand.defaultProductImage}
               gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
             />
