@@ -47,6 +47,9 @@ const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").th
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: PageSpinner });
 const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: PageSpinner });
 const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: PageSpinner });
+// Opt-in "two ways to order" home (brand.homeLayout === "two-ways"). Code-split so
+// the classic-home tenants never download it.
+const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) => m.TwoWaysHome), { ssr: false, loading: PageSpinner });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
@@ -239,7 +242,18 @@ function Shell() {
         <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && (
+      {/* Opt-in "two ways to order" home — a single scroll (hero + on-hand list +
+          live group-buy card), driven by the same brand vars. Replaces the classic
+          hero → categories → catalog composition below for tenants that enable it. */}
+      {(activePage === "home" || activePage === "catalog") && brand.homeLayout === "two-ways" && (
+        <TwoWaysHome
+          brand={brand}
+          onCheckout={() => setCartOpen(true)}
+          onOpenGroupBuy={() => goToRoute("groupbuy")}
+        />
+      )}
+
+      {(activePage === "home" || activePage === "catalog") && brand.homeLayout !== "two-ways" && (
         <>
           {brand.showHero !== false && <Hero brand={brand} onPrimary={heroCtaHandler(1)} onSecondary={heroCtaHandler(2)} />}
           {brand.showCategories !== false && (
