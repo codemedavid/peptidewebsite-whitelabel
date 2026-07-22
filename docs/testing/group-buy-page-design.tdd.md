@@ -56,3 +56,26 @@ The `#groupbuy` route already rendered a simplified page (one price per card, ca
 - `522258d` test: RED for GB page save badge, strikethrough & cart-bar total
 - `66c59b5` feat: GB page line carries regular price + saving; groupBuyCartSummary (GREEN core)
 - `172dcf1` feat: GB page matches Group Buy Page.dc.html — save badge, regular strikethrough, total+saving cart bar
+
+---
+
+# Follow-up — connect the two-ways home to the open group-buy page
+
+**Request (verbatim):** "connect this Join june gb → and open noe groupbuy connect these buttons so when its clicked it will direct to out groupbuy page that is open"
+
+**Journey:** As a K Glow shopper on the two-ways home, when I click the "Open now / Group Buy" way card or the live-round "Join june gb →" CTA, I land on the dedicated `#groupbuy` page (the open round), instead of just scrolling / opening the cart.
+
+**Change:**
+- `two-ways-home.ts` — new pure helper `groupBuyCtaTarget(cartCount)` → `"groupbuy"` when the cart is empty (invite to join the round), `"checkout"` once items are in the cart (review/open cart). Non-finite/negative reads as empty.
+- `TwoWaysHome.tsx` — the `sf-twh__way--gb` card and the `sf-twh__gb-cta` button now call `onOpenGroupBuy` (routed to `#groupbuy`) per the helper.
+- `StorefrontApp.tsx` — passes `onOpenGroupBuy={() => goToRoute("groupbuy")}`.
+
+| # | What is guaranteed | Test | Type | Result | Evidence |
+|---|--------------------|------|------|--------|----------|
+| 8 | Empty cart → CTA/card target is the group-buy page | `scripts/test-two-ways-home.ts:groupBuyCtaTarget: empty cart` | unit | PASS | `npm run test:two-ways-home` |
+| 9 | Items in cart → target is checkout (open the cart) | `…:groupBuyCtaTarget: items in cart` | unit | PASS | same |
+| 10 | Negative/NaN count reads as empty (→ group-buy page) | `…:negative/garbage count` | unit | PASS | same |
+
+- **RED:** `10 passed, 3 failed` (`groupBuyCtaTarget is not a function`). **GREEN:** `13 passed, 0 failed`. Typecheck `tsc --noEmit` → 0 errors.
+- Commits: `a1f887d` (RED), `7c38750` (GREEN + wiring).
+- **Note:** the two-ways home only shows the GB card/CTA when a round is live (`brand.groupBuyBanner` non-null); the target `#groupbuy` page is the same one gated on that banner, so the button is visible exactly when its destination is live — the two stay consistent.
