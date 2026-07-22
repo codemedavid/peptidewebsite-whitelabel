@@ -248,6 +248,65 @@ check("brandSubscriptionFrom serializes endsAt to an ISO string", () => {
   assert.strictEqual(brand.onSubscription, true);
 });
 
+// ───────────────────── billing projection (amount due) ──────────────────────
+// The tenant Billing page must show the amount the provider set up in the super
+// admin. brandSubscriptionFrom takes the resolved billing terms and carries
+// them into brand.subscription; invalid/unset values are omitted so legacy
+// brands stay byte-identical.
+
+const GOVERNED = computeSubscriptionState(
+  {
+    status: "active",
+    subscriptionStartsAt: new Date(NOW.getTime() - 7 * DAY),
+    subscriptionEndsAt: new Date(NOW.getTime() + 23 * DAY),
+  },
+  NOW,
+);
+
+check("billing terms project amountDueCents + cycle into brand.subscription", () => {
+  const brand = brandSubscriptionFrom(GOVERNED, { amountDueCents: 149_900, cycle: "monthly" });
+  assert.ok(brand, "expected a projected brand.subscription");
+  assert.strictEqual(brand.amountDueCents, 149_900);
+  assert.strictEqual(brand.cycle, "monthly");
+});
+
+check("a comped ₱0 price is a real amount and projects as 0", () => {
+  const brand = brandSubscriptionFrom(GOVERNED, { amountDueCents: 0, cycle: "monthly" });
+  assert.ok(brand);
+  assert.strictEqual(brand.amountDueCents, 0);
+});
+
+check("null/unset billing terms are omitted from the projection", () => {
+  const brand = brandSubscriptionFrom(GOVERNED, { amountDueCents: null, cycle: null });
+  assert.ok(brand);
+  assert.ok(!("amountDueCents" in brand), "amountDueCents omitted when null");
+  assert.ok(!("cycle" in brand), "cycle omitted when null");
+});
+
+check("negative or non-finite amounts are omitted (never shown to the tenant)", () => {
+  const negative = brandSubscriptionFrom(GOVERNED, { amountDueCents: -500, cycle: "monthly" });
+  assert.ok(negative);
+  assert.ok(!("amountDueCents" in negative), "negative omitted");
+  const nan = brandSubscriptionFrom(GOVERNED, { amountDueCents: Number.NaN, cycle: "monthly" });
+  assert.ok(nan);
+  assert.ok(!("amountDueCents" in nan), "NaN omitted");
+});
+
+check("calling without billing terms stays back-compatible (no new fields)", () => {
+  const brand = brandSubscriptionFrom(GOVERNED);
+  assert.ok(brand);
+  assert.ok(!("amountDueCents" in brand), "no amountDueCents without billing arg");
+  assert.ok(!("cycle" in brand), "no cycle without billing arg");
+});
+
+check("billing terms on a not-governed state still project nothing", () => {
+  const s = computeSubscriptionState(
+    { status: "active", subscriptionStartsAt: null, subscriptionEndsAt: null },
+    NOW,
+  );
+  assert.strictEqual(brandSubscriptionFrom(s, { amountDueCents: 149_900, cycle: "monthly" }), undefined);
+});
+
 // ──────────────────────────────────── summary ───────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);
