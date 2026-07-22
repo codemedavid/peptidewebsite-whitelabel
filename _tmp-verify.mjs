@@ -1,0 +1,13 @@
+import { chromium } from 'playwright-core';
+const ctx = await chromium.launchPersistentContext('/tmp/pw-verify2', { executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless:true, viewport:{width:430,height:1000} });
+const page = ctx.pages()[0] || await ctx.newPage();
+await page.goto('http://k-glow.lvh.me:3100/#groupbuy', { waitUntil:'domcontentloaded', timeout:60000 });
+await page.waitForTimeout(6000);
+const noGb = await page.getByText('No group buy right now', {exact:false}).count();
+const cards = await page.locator('.gbpage__card').count();
+const title = await page.getByText('Group buy pricing', {exact:false}).count();
+const names = await page.locator('.gbpage__card-name').allInnerTexts().catch(()=>[]);
+console.log(`noGbPage=${noGb} pricingTitle=${title} cards=${cards}`);
+console.log('names:', JSON.stringify(names));
+await page.screenshot({ path: process.env.SHOT + '/gb-page-live-fixed.png', fullPage:true });
+await ctx.close();
