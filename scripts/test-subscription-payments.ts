@@ -36,6 +36,8 @@ import {
   summarizeSubscriptionPayments,
   buildPaymentsView,
   tenantInvoiceRowsFrom,
+  paymentMethodOptions,
+  normalizePaymentMethodWith,
   type SubscriptionPaymentStatus,
 } from "../src/lib/subscription/payments";
 
@@ -280,6 +282,34 @@ check("accepts ISO-string dates (JSON round-trip) and drops rows with no usable 
 
 check("empty ledger projects to an empty history", () => {
   assert.deepStrictEqual(tenantInvoiceRowsFrom([]), []);
+});
+
+// ──────────── payment-method options from the SaaS payment settings ─────────
+// The Billing page's "Payment method" select is driven by the platform's own
+// receiving accounts (/admin/payments, package_payment PlatformSetting), not a
+// hardcoded list; the submit action normalizes against the same options.
+
+check("platform method names become the options, deduped case-insensitively, plus Other", () => {
+  const opts = paymentMethodOptions(["GCash", "  gcash ", "BPI Bank transfer", "Maya"]);
+  assert.deepStrictEqual(opts, ["GCash", "BPI Bank transfer", "Maya", "Other"]);
+});
+
+check("blank platform entries are dropped; an empty list falls back to the defaults", () => {
+  assert.deepStrictEqual(paymentMethodOptions(["", "   "]), [...SUBSCRIPTION_PAYMENT_METHODS]);
+  assert.deepStrictEqual(paymentMethodOptions([]), [...SUBSCRIPTION_PAYMENT_METHODS]);
+});
+
+check("a platform list already containing Other doesn't get a duplicate", () => {
+  assert.deepStrictEqual(paymentMethodOptions(["GCash", "other"]), ["GCash", "other"]);
+});
+
+check("normalizePaymentMethodWith matches case-insensitively and returns the canonical name", () => {
+  assert.strictEqual(normalizePaymentMethodWith("bpi bank transfer", ["GCash", "BPI Bank transfer", "Other"]), "BPI Bank transfer");
+  assert.strictEqual(normalizePaymentMethodWith(" GCASH ", ["GCash", "Other"]), "GCash");
+});
+
+check("an unknown submitted method narrows to Other", () => {
+  assert.strictEqual(normalizePaymentMethodWith("bitcoin", ["GCash", "Other"]), "Other");
 });
 
 // ─────────────────────────────── summary ────────────────────────────────────
