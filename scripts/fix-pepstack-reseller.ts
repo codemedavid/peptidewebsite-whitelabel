@@ -7,7 +7,7 @@
  *
  *   npx tsx scripts/fix-pepstack-reseller.ts
  */
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
 });
@@ -23,7 +23,10 @@ async function main() {
     if (!("reseller" in meta)) continue;
     console.log(`BEFORE ${p.name}: reseller=${JSON.stringify(meta.reseller)}`);
     const { reseller: _drop, ...rest } = meta;
-    await prisma.product.update({ where: { id: p.id }, data: { metadata: rest } });
+    await prisma.product.update({
+      where: { id: p.id },
+      data: { metadata: rest as Prisma.InputJsonValue },
+    });
     console.log(`AFTER  ${p.name}: reseller removed`);
   }
   console.log("done");

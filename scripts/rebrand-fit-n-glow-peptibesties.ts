@@ -30,6 +30,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "../src/lib/db/prisma";
 
 const OLD_SLUG = "fit-n-glow";
@@ -111,7 +113,7 @@ async function main() {
   config.defaultProductImage = up.url;
   await prisma.branding.update({
     where: { tenantId: tenant.id },
-    data: { config },
+    data: { config: config as Prisma.InputJsonValue },
   });
   console.log("  ✓ branding.config updated (name + defaultProductImage)");
 
