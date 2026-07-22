@@ -96,6 +96,13 @@ async function main() {
     assert.ok(/currently not available/i.test(src), "page copy doesn't say 'currently not available'");
   });
 
+  check("the page is noindexed and carries its own title", () => {
+    const src = readFileSync(pagePath, "utf8");
+    assert.ok(/export const metadata/.test(src), "page exports no metadata");
+    assert.ok(/index:\s*false/.test(src), "page isn't robots-noindexed — a suspended store can be indexed as 'not available'");
+    assert.ok(/title/.test(src), "page has no title — tab shows the root default");
+  });
+
   // ───────────── summary ─────────────
   console.log(`\n${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);

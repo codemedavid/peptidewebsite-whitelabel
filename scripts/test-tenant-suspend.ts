@@ -39,18 +39,21 @@ function check(name: string, fn: () => void) {
 }
 
 /**
- * Slice one exported function out of an actions source file. The body ends at
- * the next doc comment or export so a neighbouring function's JSDoc (which may
- * mention the same identifiers) can't produce a false pass.
+ * Slice one exported function out of an actions source file by matching the
+ * function's braces, so neither a neighbouring function's JSDoc nor a comment
+ * inside the function can truncate the slice or produce a false pass.
  */
 function fnBody(src: string, name: string): string {
   const start = src.indexOf(`export async function ${name}`);
   assert.notEqual(start, -1, `${name} not found`);
-  const rest = src.slice(start);
-  const ends = ["\n/**", "\nexport "]
-    .map((m) => rest.indexOf(m, 1))
-    .filter((i) => i !== -1);
-  return ends.length ? rest.slice(0, Math.min(...ends)) : rest;
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}") depth--;
+    if (depth === 0) return src.slice(start, i + 1);
+  }
+  return src.slice(start);
 }
 
 async function main() {
@@ -84,6 +87,48 @@ async function main() {
     );
   });
 
+  const del = fnBody(adminSrc, "deleteTenantAction");
+
+  check("deleteTenantAction busts the deleted tenant's host caches (hosts captured before delete)", () => {
+    assert.ok(
+      /revalidateTenant\(/.test(del) && /domains\s*:/.test(del),
+      "deleteTenantAction never busts tenant-host caches — a deleted tenant's hosts keep resolving (then 500) for up to 5 min",
+    );
+  });
+
+  check("suspend flip is conditional on the status it read (no concurrent double-flip)", () => {
+    assert.ok(
+      /updateMany/.test(suspend) && /status:\s*tenant\.status/.test(suspend),
+      "suspendTenantAction uses a blind read-then-write — two concurrent toggles can double-flip",
+    );
+  });
+
+  check("demo mode reports suspend as unsupported instead of a phantom 'active' status", () => {
+    assert.ok(
+      /demo tenants isn't supported/i.test(suspend) && !/status:\s*"active"\s*\}/.test(suspend),
+      "demo branch still fakes { ok, status: 'active' } — the UI toasts 'reactivated' after clicking Suspend",
+    );
+  });
+
+  // ───────────── publish/unpublish flips bust custom domains too ─────────────
+  console.log("actions/admin-onboarding.ts");
+
+  const onbSrc = readFileSync(join(ROOT, "src/actions/admin-onboarding.ts"), "utf8");
+
+  check("publishTenantAction busts every host via revalidateTenantVisibility", () => {
+    assert.ok(
+      /revalidateTenantVisibility\(/.test(fnBody(onbSrc, "publishTenantAction")),
+      "go-live still calls revalidateTenant(id, slug) — a tenant with a custom domain goes live there up to 5 min late",
+    );
+  });
+
+  check("unpublishTenantAction busts every host via revalidateTenantVisibility", () => {
+    assert.ok(
+      /revalidateTenantVisibility\(/.test(fnBody(onbSrc, "unpublishTenantAction")),
+      "unpublish still leaves custom-domain storefronts serving from cache",
+    );
+  });
+
   // ───────────── revalidateTenant covers custom hosts ─────────────
   console.log("lib/tenant/revalidate.ts");
 
@@ -92,6 +137,21 @@ async function main() {
   check("revalidateTenant accepts custom hostnames and derives tags from the pure core", () => {
     assert.ok(/customHosts/.test(revalidateSrc), "revalidateTenant has no customHosts parameter");
     assert.ok(/cache-tags/.test(revalidateSrc), "revalidateTenant doesn't use lib/tenant/cache-tags");
+  });
+
+  check("revalidateTenantVisibility self-fetches slug + domains so callers can't forget them", () => {
+    assert.ok(
+      /export async function revalidateTenantVisibility/.test(revalidateSrc) && /domains/.test(revalidateSrc),
+      "no self-fetching visibility helper — every future status-flipping action must remember to enumerate domains",
+    );
+  });
+
+  check("resolve.ts shares normalizeHost with cache-tags (cache key and bust tag can't drift)", () => {
+    const resolveSrc = readFileSync(join(ROOT, "src/lib/tenant/resolve.ts"), "utf8");
+    assert.ok(
+      /import \{[^}]*normalizeHost[^}]*\} from "\.\/cache-tags"/.test(resolveSrc),
+      "resolve.ts keeps its own host normalization — a divergence silently breaks cache busting",
+    );
   });
 
   // ───────────── pure core: tenantCacheTags ─────────────
@@ -104,6 +164,7 @@ async function main() {
       customHosts?: readonly string[],
       root?: string,
     ) => string[];
+    normalizeHost?: (host: string) => string;
   };
   const mod = (await import("../src/lib/tenant/cache-tags").catch(() => null)) as CacheTagsModule | null;
 
@@ -135,6 +196,11 @@ async function main() {
   check("deduplicates a custom host that equals the platform host", () => {
     const tags = mod!.tenantCacheTags("t1", "acme", ["acme.jonina.store"], "jonina.store");
     assert.equal(tags.filter((t) => t === "tenant-host:acme.jonina.store").length, 1);
+  });
+
+  check("exports normalizeHost (trim + lowercase + strip port)", () => {
+    assert.ok(mod?.normalizeHost, "normalizeHost is not exported from cache-tags");
+    assert.equal(mod!.normalizeHost!(" Shop.Acme.com:443 "), "shop.acme.com");
   });
 
   check("ignores blank custom-host entries", () => {
