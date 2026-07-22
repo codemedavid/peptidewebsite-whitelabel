@@ -8,7 +8,6 @@
 // trivially testable (npm run test:group-buy-page) and can drive an SSR compute.
 
 import {
-  isGroupBuyProduct,
   groupBuyLine,
   slotProgress,
   type SlotProgress,
@@ -163,12 +162,15 @@ export function groupBuyCartSummary<T extends GbPageProduct>(
 }
 
 /**
- * Build the group-buy page view-model. Lists only the round's GROUP-BUY products
- * (productType "gb"): when the round assigns a product subset (coversAll false)
- * the list is narrowed to those ids; otherwise every GB product in the catalog is
- * shown. On-hand products never appear here — this is the group-buy path. A null
- * banner (no live round) yields a not-live, empty shell the page renders as its
- * "no group buy right now" state. Order within each path is preserved.
+ * Build the group-buy page view-model. The LIVE ROUND is the source of truth for
+ * what's in the group buy — a product is listed when it's in the round's scope
+ * (coversAll, or its id is in the round's assigned productIds), regardless of the
+ * product's productType tag. This is the SAME membership rule the two-ways home
+ * uses (buildTwoWaysHomeView), so the home and this page never disagree about
+ * whether a round is open. Pricing still honours gbPrice (groupBuyLine): an
+ * assigned product with a gbPrice shows its saving, an untagged one lists at its
+ * regular price. A null banner (no live round) yields a not-live, empty shell the
+ * page renders as its "no group buy right now" state. Order is preserved.
  */
 export function buildGroupBuyPageView<T extends GbPageProduct>(
   products: T[],
@@ -188,12 +190,9 @@ export function buildGroupBuyPageView<T extends GbPageProduct>(
       lines: [],
     };
   }
-  let gbProducts = products.filter(isGroupBuyProduct);
-  if (!banner.coversAll) {
-    const covered = new Set(banner.productIds);
-    gbProducts = gbProducts.filter((p) => covered.has(p.id));
-  }
-  const lines = gbProducts.map((p) => pageLine(p, currency));
+  const covered = !banner.coversAll ? new Set(banner.productIds) : null;
+  const inRound = (p: T): boolean => banner.coversAll || (covered?.has(p.id) ?? false);
+  const lines = products.filter(inRound).map((p) => pageLine(p, currency));
   return {
     live: true,
     name: banner.name,
