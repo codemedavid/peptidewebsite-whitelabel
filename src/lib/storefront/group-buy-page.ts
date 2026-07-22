@@ -56,8 +56,11 @@ export type GbPageProduct = TwoWaysInput & {
   image?: string | null;
 };
 
-/** One product card on the group-buy page: the product, its monogram, and the
- *  single (group-buy) price shown — the same price the cart + server charge. */
+/** One product card on the group-buy page. `price`/`priceLabel` are the primary
+ *  (group-buy) price — the same price the cart + server charge. The design also
+ *  surfaces the regular price struck through and a "save ₱X" badge, so the line
+ *  carries the regular price and the saving too; `hasSavings` gates the badge +
+ *  strikethrough so a GB product with no valid gbPrice never shows a phantom cut. */
 export type GroupBuyPageLine<T extends GbPageProduct = GbPageProduct> = {
   product: T;
   initial: string;
@@ -65,6 +68,35 @@ export type GroupBuyPageLine<T extends GbPageProduct = GbPageProduct> = {
   price: number;
   /** "₱560" — display-ready. */
   priceLabel: string;
+  /** The regular / on-hand list price (product.price). */
+  regularPrice: number;
+  /** regularPrice − price, never negative. */
+  savings: number;
+  /** True only when there is a real saving (valid gbPrice below regular). */
+  hasSavings: boolean;
+  /** "₱700" — the regular price, shown struck through beside the GB price. */
+  regularLabel: string;
+  /** "₱140" — the per-unit saving, shown in the "save" badge. */
+  saveLabel: string;
+};
+
+/** The sticky cart bar's running summary for the group-buy page: how many of the
+ *  page's products are in the cart, the total at the GB prices, and the saving
+ *  vs the regular prices. Scoped to the products shown on THIS page (the round's
+ *  lines) — a cart entry for a product not on the page is ignored, so the bar's
+ *  total always matches what the page advertises. */
+export type GroupBuyCartSummary = {
+  totalQty: number;
+  /** Sum of price × qty across the page's lines. */
+  total: number;
+  /** Sum of regularPrice × qty — the "before" total. */
+  regularTotal: number;
+  /** regularTotal − total, never negative. */
+  savings: number;
+  totalLabel: string;
+  savingsLabel: string;
+  /** True when at least one of the page's products is in the cart. */
+  hasItems: boolean;
 };
 
 /** The full page view-model for a live round (or an empty, not-live shell). */
@@ -79,14 +111,54 @@ export type GroupBuyPageView<T extends GbPageProduct = GbPageProduct> = {
   lines: GroupBuyPageLine<T>[];
 };
 
-/** Resolve one product into its group-buy card line. */
+/** Resolve one product into its group-buy card line — the GB price is primary,
+ *  with the regular price + saving carried for the design's strikethrough + badge. */
 function pageLine<T extends GbPageProduct>(product: T, currency: string): GroupBuyPageLine<T> {
-  const price = groupBuyLine(product).gbPrice;
+  const line = groupBuyLine(product);
   return {
     product,
     initial: productInitial(product.name),
-    price,
-    priceLabel: formatGbMoney(currency, price),
+    price: line.gbPrice,
+    priceLabel: formatGbMoney(currency, line.gbPrice),
+    regularPrice: line.regularPrice,
+    savings: line.savings,
+    hasSavings: line.hasSavings,
+    regularLabel: formatGbMoney(currency, line.regularPrice),
+    saveLabel: formatGbMoney(currency, line.savings),
+  };
+}
+
+/**
+ * Roll the cart up into the sticky bar's summary. `qtyById` maps a product id to
+ * its quantity in the cart; only ids present in `lines` (the page's products)
+ * contribute, so a stray on-hand or out-of-round entry can't skew the total or
+ * the advertised saving. Quantities are clamped ≥ 0 and floored. Pure + JSON-safe.
+ */
+export function groupBuyCartSummary<T extends GbPageProduct>(
+  lines: GroupBuyPageLine<T>[],
+  qtyById: Record<string, number>,
+  currency: string,
+): GroupBuyCartSummary {
+  let totalQty = 0;
+  let total = 0;
+  let regularTotal = 0;
+  for (const line of lines) {
+    const raw = qtyById[line.product.id];
+    const qty = Math.max(0, Math.floor(Number.isFinite(raw) ? raw : 0));
+    if (qty <= 0) continue;
+    totalQty += qty;
+    total += line.price * qty;
+    regularTotal += line.regularPrice * qty;
+  }
+  const savings = Math.max(0, regularTotal - total);
+  return {
+    totalQty,
+    total,
+    regularTotal,
+    savings,
+    totalLabel: formatGbMoney(currency, total),
+    savingsLabel: formatGbMoney(currency, savings),
+    hasItems: totalQty > 0,
   };
 }
 
