@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP, heroFieldCss } from "@/lib/theme/tokens";
 import type { Brand } from "../types";
+import { logoCurveCss } from "@/lib/storefront/logo-curve";
 
 export function Hero({
   brand,
@@ -49,16 +50,22 @@ export function Hero({
   const cta2Style = heroFieldCss(fs.cta2);
 
   // A custom hero logo size enlarges the card (and trims its padding) so the
-  // logo fills the space instead of sitting in the default whitespace.
-  const logoCardStyle: CSSProperties = brand.heroLogoSize
-    ? { width: brand.heroLogoSize, height: brand.heroLogoSize, padding: Math.round(brand.heroLogoSize * 0.06) }
-    : {};
+  // logo fills the space instead of sitting in the default whitespace. A custom
+  // logo curve rounds both the card and the image inside it (unset = the CSS
+  // default 28px card radius, square image — the pre-feature look).
+  const logoCurve = logoCurveCss(brand.logoCurve);
+  const logoCardStyle: CSSProperties = {
+    ...(brand.heroLogoSize
+      ? { width: brand.heroLogoSize, height: brand.heroLogoSize, padding: Math.round(brand.heroLogoSize * 0.06) }
+      : {}),
+    ...(logoCurve ? { borderRadius: logoCurve } : {}),
+  };
 
   const logoCard = brand.heroShowLogo !== false && (
     <div className="hero__logo-card" style={logoCardStyle}>
       {brand.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={brand.logoUrl} alt={brand.name} />
+        <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurve }} />
       ) : (
         <div className="hero__logo-fallback">
           <span>{brand.name?.[0]?.toUpperCase() || "B"}</span>

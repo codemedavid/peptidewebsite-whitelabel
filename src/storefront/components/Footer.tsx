@@ -1,5 +1,6 @@
 import type { Brand } from "../types";
 import { isLinkHidden } from "../visibility";
+import { logoCurveCss } from "@/lib/storefront/logo-curve";
 
 function SocialIcon({ name }: { name: string }) {
   const props = {
@@ -81,7 +82,7 @@ export function Footer({ brand }: { brand: Brand }) {
               <div className="site-footer__brand-row">
                 {brand.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brand.logoUrl} alt={brand.name} className="site-footer__logo" />
+                  <img src={brand.logoUrl} alt={brand.name} className="site-footer__logo" style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
                 ) : (
                   <div className="site-footer__logo site-footer__logo--fallback">
                     {brand.name?.[0]?.toUpperCase() || "B"}

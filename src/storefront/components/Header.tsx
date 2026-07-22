@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Brand } from "../types";
 import { isLinkHidden } from "../visibility";
+import { logoCurveCss } from "@/lib/storefront/logo-curve";
 
 export function Header({
   brand,
@@ -60,7 +61,7 @@ export function Header({
         <a href="#top" className="site-header__logo">
           {brand.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logoUrl} alt={brand.name} />
+            <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
           ) : (
             <div className="site-header__logo-mark">
               {brand.name?.[0]?.toUpperCase() || "B"}

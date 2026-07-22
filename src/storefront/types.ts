@@ -279,6 +279,11 @@ export type NavItem = { label: string; href: string };
 export type Brand = {
   name: string;
   logoUrl: string;
+  // Corner rounding for the logo everywhere it renders (header, hero logo
+  // card, footer), as a border-radius percentage 0–50. Unset/0 = square (the
+  // pre-feature look). Edited via the branding editor's "Logo curve" presets;
+  // rendered through logoCurveCss() (src/lib/storefront/logo-curve.ts).
+  logoCurve?: number;
   ctaLabel: string;
   industry: string;
   currency?: string;

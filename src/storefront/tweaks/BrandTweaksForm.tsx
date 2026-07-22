@@ -34,6 +34,7 @@ import {
   type ImageUploader,
 } from "./controls";
 import { matchFontPreset } from "@/lib/theme/fontPresets";
+import { LOGO_CURVE_PRESETS, logoCurveLabel } from "@/lib/storefront/logo-curve";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
 
@@ -435,6 +436,15 @@ export function BrandTweaksForm({
       <TweakText label="Brand name" value={t.name} onChange={(v) => setTweak("name", v)} />
       <LogoUpload value={t.logoUrl} onChange={(v) => setTweak("logoUrl", v)} upload={uploadImage} />
       <TweakText label="Logo URL" value={t.logoUrl} placeholder="or paste a URL" onChange={(v) => setTweak("logoUrl", v)} />
+      {/* Corner rounding applied to the logo wherever it renders (header, hero
+          logo card, footer). "Square" stores undefined so existing tenants keep
+          the pre-feature look. */}
+      <TweakSelect
+        label="Logo curve"
+        value={logoCurveLabel(t.logoCurve)}
+        options={Object.keys(LOGO_CURVE_PRESETS)}
+        onChange={(v) => setTweak("logoCurve", LOGO_CURVE_PRESETS[v])}
+      />
 
       <TweakSection label="Colors" />
       <ColorField label="Main" value={t.main} onChange={(v) => setTweak("main", v)}
