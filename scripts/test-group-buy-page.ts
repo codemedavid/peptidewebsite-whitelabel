@@ -312,10 +312,16 @@ function main() {
 
   console.log("\ngroupBuyCartSummary — sticky cart bar total + saving\n");
 
+  // The summary now takes CART ENTRIES (one per unit, with the unit price the
+  // checkout actually charges + the entry's own regular price) instead of a
+  // qty-by-base-id map — so a variation clone (own price) is counted at ITS
+  // price, and the bar's total always matches what checkout charges.
+
   check("sums the live GB prices and the saving vs regular across the cart", () => {
     const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
-    // 2× Retatrutide (gb 560 / reg 700) in cart
-    const summary = groupBuyCartSummary(view.lines, { "gb-1": 2 }, "₱");
+    // 2× Retatrutide (gb 560 / reg 700) in cart — one entry per cart unit.
+    const entry = { id: "gb-1", unit: 560, regular: 700 };
+    const summary = groupBuyCartSummary(view.lines, [entry, entry], "₱");
     assert.equal(summary.totalQty, 2);
     assert.equal(summary.total, 1120); // 2 × 560
     assert.equal(summary.regularTotal, 1400); // 2 × 700
@@ -327,19 +333,42 @@ function main() {
 
   check("empty cart → zeroed summary, hasItems false (cart bar hidden)", () => {
     const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
-    const summary = groupBuyCartSummary(view.lines, {}, "₱");
+    const summary = groupBuyCartSummary(view.lines, [], "₱");
     assert.equal(summary.totalQty, 0);
     assert.equal(summary.total, 0);
     assert.equal(summary.savings, 0);
     assert.equal(summary.hasItems, false);
   });
 
-  check("ignores quantities for products not on the page (out-of-scope ids)", () => {
+  check("ignores entries for products not on the page (out-of-scope ids)", () => {
     const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
-    // gb-2 is not in the scoped round; a stray qty for it must not be counted.
-    const summary = groupBuyCartSummary(view.lines, { "gb-1": 1, "gb-2": 5 }, "₱");
+    // gb-2 is not in the scoped round; a stray entry for it must not be counted.
+    const summary = groupBuyCartSummary(
+      view.lines,
+      [
+        { id: "gb-1", unit: 560, regular: 700 },
+        { id: "gb-2", unit: 999, regular: 999 },
+      ],
+      "₱",
+    );
     assert.equal(summary.totalQty, 1);
     assert.equal(summary.total, 560);
+  });
+
+  check("a variation entry counts at ITS charged price, not the base line price", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
+    // A 10mg variation of Retatrutide priced ₱500 — checkout charges ₱500
+    // (min(gbPrice, variation price)); the bar must show the same, with the
+    // saving derived from the entry's own regular (₱500), not the base ₱700.
+    const summary = groupBuyCartSummary(
+      view.lines,
+      [{ id: "gb-1", unit: 500, regular: 500 }],
+      "₱",
+    );
+    assert.equal(summary.totalQty, 1);
+    assert.equal(summary.total, 500);
+    assert.equal(summary.regularTotal, 500);
+    assert.equal(summary.savings, 0);
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);

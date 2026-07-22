@@ -82,18 +82,33 @@ function main() {
 
   console.log("\nisGroupBuyPreorder (stock exemption)\n");
 
-  check("product inside the live scope is a pre-order (stock-exempt)", () => {
-    assert.equal(isGroupBuyPreorder("g1", gbScopeFromBanner(banner())), true);
+  // The exemption takes the PRODUCT (id + productType), not a bare id: under a
+  // coversAll round only gb-tagged products are pre-orders — mirroring exactly
+  // which products checkout re-prices at gbPrice (checkout.ts unitPrice). A
+  // catalog-wide coversAll round must never switch off stock enforcement for
+  // genuinely on-hand products.
+  const gbP = (id: string) => ({ id, productType: "gb" as const });
+  const onHandP = (id: string) => ({ id });
+
+  check("assigned round: an assigned product is a pre-order (stock-exempt)", () => {
+    assert.equal(isGroupBuyPreorder(gbP("g1"), gbScopeFromBanner(banner())), true);
+  });
+  check("assigned round: assignment wins even without the gb tag (round is source of truth)", () => {
+    assert.equal(isGroupBuyPreorder(onHandP("g2"), gbScopeFromBanner(banner())), true);
   });
   check("product outside the scope keeps its stock gate", () => {
-    assert.equal(isGroupBuyPreorder("onhand1", gbScopeFromBanner(banner())), false);
+    assert.equal(isGroupBuyPreorder(gbP("onhand1"), gbScopeFromBanner(banner())), false);
   });
   check("no live round → nothing is stock-exempt", () => {
-    assert.equal(isGroupBuyPreorder("g1", null), false);
+    assert.equal(isGroupBuyPreorder(gbP("g1"), null), false);
   });
-  check("coversAll round → every product is a pre-order", () => {
+  check("coversAll round: a gb-tagged product is a pre-order", () => {
     const scope = gbScopeFromBanner(banner({ coversAll: true, productIds: [] }));
-    assert.equal(isGroupBuyPreorder("anything", scope), true);
+    assert.equal(isGroupBuyPreorder(gbP("anything"), scope), true);
+  });
+  check("coversAll round: an on-hand product KEEPS its stock cap (no catalog-wide bypass)", () => {
+    const scope = gbScopeFromBanner(banner({ coversAll: true, productIds: [] }));
+    assert.equal(isGroupBuyPreorder(onHandP("onhand1"), scope), false);
   });
 
   console.log("\ntwoWaysAddViolation (no mixed carts at add time)\n");

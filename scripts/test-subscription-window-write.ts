@@ -113,6 +113,46 @@ async function run() {
     assert.strictEqual(seen[1].subscriptionCycle, null, "clear still nulls the core columns");
   });
 
+  await check("a transient first failure must NOT silently drop the price (no blind retry)", async () => {
+    // First write fails for a NON-column reason (connection blip, serialization
+    // conflict) and a second attempt would succeed. A blind retry would then
+    // persist the window WITHOUT the price and report success — silently losing
+    // the operator's Monthly price due. The error must propagate instead; only
+    // the missing-price-column failure earns the drop-and-retry.
+    let calls = 0;
+    let threw = false;
+    try {
+      await writeSubscriptionWindow(async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("connection refused");
+        return { id: "t1" };
+      }, FULL);
+    } catch (e) {
+      threw = true;
+      assert.match(e instanceof Error ? e.message : "", /connection refused/);
+    }
+    assert.ok(threw, "transient failure must propagate — a lossy retry hides the dropped price");
+  });
+
+  await check("still retries when the failure is the missing price column (Prisma P2022 code)", async () => {
+    // Same as the message-matched case above, but signalled via the Prisma
+    // error code alone — how PrismaClientKnownRequestError actually arrives.
+    const seen: Array<Record<string, unknown>> = [];
+    const outcome = await writeSubscriptionWindow(async (data) => {
+      seen.push(data);
+      if (Object.prototype.hasOwnProperty.call(data, "subscriptionPriceCents")) {
+        const err = new Error("The column does not exist in the current database.") as Error & {
+          code?: string;
+        };
+        err.code = "P2022";
+        throw err;
+      }
+      return { id: "t1" };
+    }, FULL);
+    assert.strictEqual(outcome, "without-price");
+    assert.strictEqual(seen.length, 2, "should attempt full, then retry once");
+  });
+
   await check("rethrows a genuine DB error the retry can't recover from", async () => {
     let threw = false;
     try {

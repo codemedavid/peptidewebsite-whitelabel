@@ -13,6 +13,8 @@
  */
 
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   buildTwoWaysHomeView,
@@ -194,14 +196,28 @@ check("initial uses first letter, falls back to a bullet", () => {
   assert.equal(view.onHand.lines[1].initial, "•");
 });
 
-// 8. The operator entitlement is the toggle: an entitled tenant gets the two-ways
-//    home; an explicit "classic" config opts out even when entitled.
-check("resolveHomeLayout: entitlement turns the two-ways home on", () => {
+// 8. The operator entitlement is the ONLY way in: the feature is sold per tenant
+//    (catalog.ts: operator-grantable, default OFF), so an owner-writable
+//    branding.config key must never self-enable it. Config can only opt OUT
+//    ("classic") while the grant is on.
+check("resolveHomeLayout: only the operator entitlement turns the two-ways home on", () => {
   assert.equal(resolveHomeLayout(true, undefined), "two-ways");
   assert.equal(resolveHomeLayout(true, "two-ways"), "two-ways");
-  assert.equal(resolveHomeLayout(false, "two-ways"), "two-ways"); // config opt-in still honoured
+  assert.equal(resolveHomeLayout(false, "two-ways"), "classic"); // config alone must NOT bypass the grant
   assert.equal(resolveHomeLayout(false, undefined), "classic");
   assert.equal(resolveHomeLayout(true, "classic"), "classic"); // explicit owner opt-out wins
+});
+
+// 8b. WIRING: the two-ways home must offer the same per-product variation picker
+//     the classic Catalog gives (5mg/10mg options with their own prices) — a
+//     variation product must never silently add at its base price.
+check("TwoWaysHome renders the variation picker for option products", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/storefront/components/TwoWaysHome.tsx"),
+    "utf8",
+  );
+  assert.match(src, /shouldShowOptionPicker/, "must gate a picker via shouldShowOptionPicker");
+  assert.match(src, /buildProductOptions/, "must build options via buildProductOptions");
 });
 
 // 9. The feature is registered in the Group Buy category and operator-grantable,

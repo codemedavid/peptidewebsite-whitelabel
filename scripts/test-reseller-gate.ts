@@ -20,7 +20,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { stripResellerPricing } from "../src/lib/storefront/reseller-gate";
+import { stripResellerPricing, preserveResellerMetadata } from "../src/lib/storefront/reseller-gate";
 import { isResellerQty, unitPrice, resellerUnitPrice } from "../src/storefront/checkout";
 import type { Product } from "../src/storefront/types";
 
@@ -102,11 +102,46 @@ check("gated: a stripped product prices at retail in bulk — no badge, no ₱2"
   assert.strictEqual(resellerUnitPrice(gated), null);
 });
 
+// ── Product-save preservation ────────────────────────────────────────────────
+// The strip feeds the store-admin editor too, so an UNENTITLED owner's product
+// save would otherwise write reseller zeros over the DB's dormant wholesale
+// data — breaking the "re-granting restores prices untouched" guarantee. The
+// save path must keep the EXISTING DB leg when the tenant isn't entitled.
+
+check("unentitled save: the DB's existing reseller leg is preserved verbatim", () => {
+  const incoming = { name: "GHK", reseller: { vialsOnly: 0, completeSet: 0 } };
+  const existing = { reseller: { vialsOnly: 2, minQty: 10 } };
+  const out = preserveResellerMetadata(incoming, existing, false);
+  assert.deepStrictEqual(out.reseller, { vialsOnly: 2, minQty: 10 });
+  assert.strictEqual(out.name, "GHK");
+});
+
+check("unentitled save: no existing leg → no reseller key is written", () => {
+  const out = preserveResellerMetadata({ reseller: { vialsOnly: 5 } }, {}, false);
+  assert.ok(!("reseller" in out), "must not invent a reseller leg");
+});
+
+check("entitled save: the incoming reseller value wins", () => {
+  const out = preserveResellerMetadata(
+    { reseller: { vialsOnly: 5 } },
+    { reseller: { vialsOnly: 2 } },
+    true,
+  );
+  assert.deepStrictEqual(out.reseller, { vialsOnly: 5 });
+});
+
+check("preservation is immutable — the incoming metadata object is unchanged", () => {
+  const incoming = { reseller: { vialsOnly: 5 } };
+  preserveResellerMetadata(incoming, { reseller: { vialsOnly: 2 } }, false);
+  assert.deepStrictEqual(incoming.reseller, { vialsOnly: 5 });
+});
+
 // ── Wiring: both server surfaces apply the gate ──────────────────────────────
 
 const ROOT = join(__dirname, "..");
 const pageSrc = readFileSync(join(ROOT, "src/app/(tenant)/(storefront)/page.tsx"), "utf8");
 const ordersSrc = readFileSync(join(ROOT, "src/actions/orders.ts"), "utf8");
+const productsSrc = readFileSync(join(ROOT, "src/actions/products.ts"), "utf8");
 
 check("page.tsx gates the rendered catalog on resellerEntitled", () => {
   assert.match(pageSrc, /stripResellerPricing\(\s*products,\s*resellerEntitled\s*\)/);
@@ -119,6 +154,21 @@ check("orders.ts gates BOTH placement catalogs (demo + DB) on the entitlement", 
     `expected stripResellerPricing on both catalog loads, found ${calls.length}`,
   );
   assert.match(ordersSrc, /STORE_RESELLER_PORTAL/);
+});
+
+check("products.ts strips the PUBLIC storefront refresh (getStorefrontProductsAction)", () => {
+  // The refresh action re-feeds the client catalog mid-session; without the
+  // strip, an unentitled storefront regains wholesale legs the render removed
+  // and the cart advertises prices checkout won't charge.
+  const start = productsSrc.indexOf("export async function getStorefrontProductsAction");
+  const end = productsSrc.indexOf("export async function", start + 1);
+  const body = productsSrc.slice(start, end === -1 ? undefined : end);
+  assert.ok(start >= 0, "getStorefrontProductsAction must exist");
+  assert.match(body, /stripResellerPricing/, "public refresh must apply the strip");
+});
+
+check("products.ts preserves existing reseller metadata on unentitled saves", () => {
+  assert.match(productsSrc, /preserveResellerMetadata/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
