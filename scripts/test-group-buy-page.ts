@@ -34,6 +34,7 @@ import {
   buildGroupBuyPageView,
   groupBuyCartSummary,
 } from "../src/lib/storefront/group-buy-page";
+import { buildTwoWaysHomeView } from "../src/lib/storefront/two-ways-home";
 import {
   unitPrice,
   cartTotal,
@@ -217,11 +218,18 @@ function main() {
     assert.equal(view.lines[0].initial, "R");
   });
 
-  check("covers-all round → every GB product, on-hand excluded", () => {
+  check("covers-all round → the whole catalog is the run (matches the two-ways home)", () => {
     const banner: GroupBuyBanner = { ...scopedBanner, productIds: [], coversAll: true };
     const view = buildGroupBuyPageView(catalog, banner, "₱", NOW);
-    assert.deepEqual(view.lines.map((l) => l.product.id), ["gb-1", "gb-2"]);
+    // coversAll means every product is part of the run — same as the home, which
+    // puts nothing on-hand when coversAll is true.
+    assert.deepEqual(view.lines.map((l) => l.product.id), ["gb-1", "gb-2", "oh-1"]);
     assert.equal(view.lines[1].priceLabel, "₱840");
+    const home = buildTwoWaysHomeView(catalog, banner, "₱", NOW);
+    assert.deepEqual(
+      view.lines.map((l) => l.product.id),
+      home.gb.lines.map((l) => l.product.id),
+    );
   });
 
   check("surfaces the round chrome: name, countdown, delivery, slot progress", () => {
@@ -240,6 +248,40 @@ function main() {
     assert.equal(view.live, false);
     assert.equal(view.count, 0);
     assert.deepEqual(view.lines, []);
+  });
+
+  console.log("\nlive-round membership drives the page (consistent with the two-ways home)\n");
+
+  // Reproduces the reported bug: the home advertises the round as open, but the
+  // dedicated page said "No group buy right now" because the round's assigned
+  // products were never tagged productType 'gb'. The page must list a round's
+  // assigned products by membership — exactly like the home — regardless of tag.
+  check("lists the round's assigned products even when they are not tagged productType 'gb'", () => {
+    const untagged = [
+      product({ id: "p1", name: "Tirzepatide 30mg", price: 1050 }), // no productType, no gbPrice
+      product({ id: "p2", name: "GHK-Cu 100mg", price: 700 }),
+      product({ id: "p3", name: "Bac Water", price: 120 }), // not in the round
+    ];
+    const banner: GroupBuyBanner = { ...scopedBanner, productIds: ["p1", "p2"], coversAll: false };
+    const view = buildGroupBuyPageView(untagged, banner, "₱", NOW);
+    assert.equal(view.live, true);
+    assert.deepEqual(view.lines.map((l) => l.product.id), ["p1", "p2"]); // p3 excluded (not assigned)
+  });
+
+  check("the page and the two-ways home agree on which products are in the round", () => {
+    const untagged = [
+      product({ id: "p1", name: "Tirzepatide 30mg", price: 1050 }),
+      product({ id: "p2", name: "GHK-Cu 100mg", price: 700 }),
+      product({ id: "p3", name: "Bac Water", price: 120 }),
+    ];
+    const banner: GroupBuyBanner = { ...scopedBanner, productIds: ["p1", "p2"], coversAll: false };
+    const page = buildGroupBuyPageView(untagged, banner, "₱", NOW);
+    const home = buildTwoWaysHomeView(untagged, banner, "₱", NOW);
+    assert.deepEqual(
+      page.lines.map((l) => l.product.id),
+      home.gb.lines.map((l) => l.product.id),
+    );
+    assert.ok(page.count > 0); // both non-empty → no "open on home, empty on page" split
   });
 
   console.log("\nline surfaces the regular-vs-GB saving (design: save badge + strikethrough)\n");
