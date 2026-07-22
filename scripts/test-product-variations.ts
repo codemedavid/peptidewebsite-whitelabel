@@ -176,6 +176,45 @@ check("a base price of 0 drops the Standard option instead of offering a free on
   ]);
 });
 
+// ── the hpglow "repeating the default" bug ──────────────────────────────────
+// Sellers routinely re-enter the base price as the first named variation
+// ("5mg · ₱1,099" on a ₱1,099 product). The synthetic "Standard" option then
+// duplicates that price with no size info — two pills, same price, one nameless.
+// When a named variation already carries the base price, it IS the standard:
+// the synthetic option must be dropped.
+
+check("a variation matching the base price replaces 'Standard' instead of duplicating it", () => {
+  const v = [
+    { name: "5mg", price: 1099 },
+    { name: "10mg", price: 2099 },
+  ];
+  assert.deepEqual(buildProductOptions(productWith(1099, v)), [
+    { name: "5mg", price: 1099, variation: v[0] },
+    { name: "10mg", price: 2099, variation: v[1] },
+  ]);
+});
+
+check("all variations at the base price (color options) never add a nameless duplicate", () => {
+  const v = [
+    { name: "Black", price: 1399 },
+    { name: "Coral", price: 1399 },
+    { name: "Pink", price: 1399 },
+  ];
+  assert.deepEqual(buildProductOptions(productWith(1399, v)), [
+    { name: "Black", price: 1399, variation: v[0] },
+    { name: "Coral", price: 1399, variation: v[1] },
+    { name: "Pink", price: 1399, variation: v[2] },
+  ]);
+});
+
+check("a base price distinct from every variation still leads as 'Standard'", () => {
+  const v = [{ name: "10mg", price: 2099 }];
+  assert.deepEqual(buildProductOptions(productWith(1099, v)), [
+    { name: "Standard", price: 1099 },
+    { name: "10mg", price: 2099, variation: v[0] },
+  ]);
+});
+
 check("each option carries the original variation object for the cart clone", () => {
   const v = [{ name: "Vials only", price: 900 }];
   const opts = buildProductOptions(productWith(0, v));
