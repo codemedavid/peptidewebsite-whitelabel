@@ -9,6 +9,7 @@ import { validateWhatsapp } from "@/lib/admin/whatsapp";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { addBillingCycle, isBillingCycle } from "@/lib/subscription/billing-cycle";
 import { resolvePriceCentsInput } from "@/lib/subscription/plan-fee";
+import { writeSubscriptionWindow, type WindowWrite } from "@/lib/subscription/persist-window";
 export type AdminActionResult = { ok: true; status?: string } | { error: string };
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
@@ -152,58 +153,68 @@ export async function setSubscriptionWindowAction(
   const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
+  // Build the exact write for both branches so a single resilient persist call
+  // covers clear and set. `subscriptionPriceCents` is a pending-db:push column
+  // ([[live-db-state]]) — persistWindow drops it on retry so a not-yet-migrated
+  // DB can't crash the save.
+  let data: WindowWrite;
+
   // Clear the window — no cycle chosen.
   if (!input.cycle) {
-    await prisma.tenant.update({
-      where: { id: tenant.id },
-      data: {
-        subscriptionCycle: null,
-        subscriptionStartsAt: null,
-        subscriptionEndsAt: null,
-        subscriptionAmountCents: null,
-        subscriptionPriceCents: null,
-      },
-    });
-    revalidateSubscriptionSurfaces(tenant.id, slug);
-    return { ok: true };
-  }
-
-  if (!isBillingCycle(input.cycle)) return { error: "Unknown billing cycle." };
-  const startsAt = parseDay(input.startsAt);
-  if (!startsAt) return { error: "Set a valid subscription start date." };
-  // Auto-calc the due date from the cycle; an explicit endsAt is the operator's
-  // manual override.
-  const endsAt = parseDay(input.endsAt) ?? addBillingCycle(startsAt, input.cycle);
-  if (endsAt.getTime() <= startsAt.getTime()) {
-    return { error: "The due date must be after the start date." };
-  }
-
-  // What the tenant paid for the term (centavos). Optional — null clears it.
-  let amountCents: number | null = null;
-  if (input.amountCents != null) {
-    if (!Number.isFinite(input.amountCents) || input.amountCents < 0) {
-      return { error: "Enter a valid subscription amount." };
+    data = {
+      subscriptionCycle: null,
+      subscriptionStartsAt: null,
+      subscriptionEndsAt: null,
+      subscriptionAmountCents: null,
+      subscriptionPriceCents: null,
+    };
+  } else {
+    if (!isBillingCycle(input.cycle)) return { error: "Unknown billing cycle." };
+    const startsAt = parseDay(input.startsAt);
+    if (!startsAt) return { error: "Set a valid subscription start date." };
+    // Auto-calc the due date from the cycle; an explicit endsAt is the operator's
+    // manual override.
+    const endsAt = parseDay(input.endsAt) ?? addBillingCycle(startsAt, input.cycle);
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      return { error: "The due date must be after the start date." };
     }
-    amountCents = Math.round(input.amountCents);
-  }
 
-  // The tenant's recurring monthly price / payment due (centavos). Optional —
-  // null clears it and the Plan fee / MRR fall back to the plan-config price.
-  // Validated + clamped centrally (0 is a valid comped value).
-  const priceResult = resolvePriceCentsInput(input.priceCents);
-  if ("error" in priceResult) return { error: priceResult.error };
-  const priceCents = priceResult.value;
+    // What the tenant paid for the term (centavos). Optional — null clears it.
+    let amountCents: number | null = null;
+    if (input.amountCents != null) {
+      if (!Number.isFinite(input.amountCents) || input.amountCents < 0) {
+        return { error: "Enter a valid subscription amount." };
+      }
+      amountCents = Math.round(input.amountCents);
+    }
 
-  await prisma.tenant.update({
-    where: { id: tenant.id },
-    data: {
+    // The tenant's recurring monthly price / payment due (centavos). Optional —
+    // null clears it and the Plan fee / MRR fall back to the plan-config price.
+    // Validated + clamped centrally (0 is a valid comped value).
+    const priceResult = resolvePriceCentsInput(input.priceCents);
+    if ("error" in priceResult) return { error: priceResult.error };
+
+    data = {
       subscriptionCycle: input.cycle,
       subscriptionStartsAt: startsAt,
       subscriptionEndsAt: endsAt,
       subscriptionAmountCents: amountCents,
-      subscriptionPriceCents: priceCents,
-    },
-  });
+      subscriptionPriceCents: priceResult.value,
+    };
+  }
+
+  try {
+    await writeSubscriptionWindow(
+      (patch) => prisma.tenant.update({ where: { id: tenant.id }, data: patch }),
+      data,
+    );
+  } catch (err) {
+    // Never let a write failure bubble as an uncaught Server Action error — that
+    // surfaces to the operator as the opaque "Server Components render" digest.
+    console.error("setSubscriptionWindowAction: write failed", err);
+    return { error: "Couldn't save the subscription window. Please try again." };
+  }
+
   revalidateSubscriptionSurfaces(tenant.id, slug);
   return { ok: true };
 }
