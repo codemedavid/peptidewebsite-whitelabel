@@ -66,24 +66,24 @@ async function main() {
   const suspend = fnBody(adminSrc, "suspendTenantAction");
   const setPlan = fnBody(adminSrc, "setTenantPlanAction");
 
-  check("suspendTenantAction busts the tenant + host-resolver caches (revalidateTenant)", () => {
+  check("suspendTenantAction busts every host via revalidateTenantVisibility", () => {
     assert.ok(
-      /revalidateTenant\(/.test(suspend),
-      "suspendTenantAction never calls revalidateTenant() — the storefront stays cached (live/dark) for up to 5 min after the toggle",
+      /revalidateTenantVisibility\(/.test(suspend),
+      "suspendTenantAction doesn't use the can't-forget helper — the storefront stays cached (live/dark) for up to 5 min after the toggle",
     );
   });
 
-  check("suspendTenantAction loads the tenant's custom-domain hostnames", () => {
+  check("setTenantPlanAction busts every host via revalidateTenantVisibility", () => {
     assert.ok(
-      /domains\s*:/.test(suspend),
-      "suspendTenantAction doesn't select domains — custom-domain storefronts are never busted",
+      /revalidateTenantVisibility\(/.test(setPlan),
+      "setTenantPlanAction doesn't use the can't-forget helper — a suspend via the status dropdown leaves custom domains stale",
     );
   });
 
-  check("setTenantPlanAction busts custom-domain hosts too", () => {
+  check("demo mode reports plan/status changes as unsupported (no phantom success)", () => {
     assert.ok(
-      /domains\s*:/.test(setPlan),
-      "setTenantPlanAction doesn't select domains — a suspend via the status dropdown leaves custom domains stale",
+      /demo tenants isn't supported/i.test(setPlan),
+      "setTenantPlanAction demo branch still fakes { ok, status } — the dropdown shows a suspend that never persisted",
     );
   });
 
@@ -126,6 +126,14 @@ async function main() {
     assert.ok(
       /revalidateTenantVisibility\(/.test(fnBody(onbSrc, "unpublishTenantAction")),
       "unpublish still leaves custom-domain storefronts serving from cache",
+    );
+  });
+
+  check("publish/unpublish no longer select the dead submission slug", () => {
+    assert.ok(
+      !/slug: true/.test(fnBody(onbSrc, "publishTenantAction")) &&
+        !/slug: true/.test(fnBody(onbSrc, "unpublishTenantAction")),
+      "the selects still fetch sub.slug whose only consumer was the replaced revalidateTenant call",
     );
   });
 
@@ -201,6 +209,14 @@ async function main() {
   check("exports normalizeHost (trim + lowercase + strip port)", () => {
     assert.ok(mod?.normalizeHost, "normalizeHost is not exported from cache-tags");
     assert.equal(mod!.normalizeHost!(" Shop.Acme.com:443 "), "shop.acme.com");
+  });
+
+  check("normalizeHost strips a trailing FQDN dot (matches admin's normalizeHostname)", () => {
+    assert.equal(
+      mod!.normalizeHost!("shop.acme.com."),
+      "shop.acme.com",
+      "'shop.acme.com.' resolves as a distinct cache key that misses the Domain lookup",
+    );
   });
 
   check("ignores blank custom-host entries", () => {
