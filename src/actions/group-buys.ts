@@ -48,11 +48,18 @@ import {
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
 import type { Order } from "@/storefront/types";
 
 export type ListGroupBuysResult =
-  | { ok: true; groupBuys: GroupBuy[]; caps: GroupBuyCapabilities; settings: GroupBuySettings }
+  | {
+      ok: true;
+      groupBuys: GroupBuy[];
+      caps: GroupBuyCapabilities;
+      settings: GroupBuySettings;
+      content: GroupBuyContent;
+    }
   | { error: string };
 export type SaveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: string };
 export type ArchiveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: string };
@@ -101,7 +108,8 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
     const groupBuys = await loadGroupBuys(tenantId, slug);
     const config = await readTenantConfig(tenantId);
     const settings = normalizeGroupBuySettings(config.groupBuySettings);
-    return { ok: true, groupBuys, caps, settings };
+    const content = normalizeGroupBuyContent(config.groupBuyContent);
+    return { ok: true, groupBuys, caps, settings, content };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load group buys." };
   }
@@ -238,6 +246,46 @@ export async function saveGroupBuyAllowOnHandAction(
     return { ok: true, allowOnHand: value };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't save the setting." };
+  }
+}
+
+// ── Storefront copy (store admin) ────────────────────────────────────────────
+
+/**
+ * Persist the owner-editable Group Buy storefront copy — the "How group buys
+ * work" section (title + steps) and the live-round terms line — into
+ * branding.config.groupBuyContent (read-modify-write so the rest of the config
+ * is untouched). Store-admin gated + module entitlement (requireGroupBuyAdmin),
+ * so a tampered client can't write copy without the Group Buy module. The input
+ * is normalized server-side (trim/caps/fallbacks) — the client preview and the
+ * storefront always agree because both render the normalized shape. Revalidates
+ * the tenant so the two-ways home and the GB page recompute.
+ */
+export async function saveGroupBuyContentAction(
+  input: unknown,
+): Promise<{ ok: true; content: GroupBuyContent } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const content = normalizeGroupBuyContent(input);
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: { ...current, groupBuyContent: content } });
+    } else {
+      const current = await readTenantConfig(tenantId);
+      const config = { ...current, groupBuyContent: content } as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId },
+        update: { config },
+        create: { tenantId, config },
+      });
+    }
+    revalidateTenant(tenantId, slug);
+    return { ok: true, content };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the storefront copy." };
   }
 }
 

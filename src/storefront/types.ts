@@ -17,6 +17,7 @@ import type {
   GroupBuyStorefrontGate,
 } from "@/lib/storefront/group-buy";
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
+import type { GroupBuyContent } from "@/lib/storefront/gb-content";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 
 export type Product = {
@@ -470,9 +471,16 @@ export type Brand = {
   groupBuyGate?: GroupBuyStorefrontGate;
   // Public banner for the live run: name/eta shown above the catalog plus the
   // products it covers, driving the "Explore GB #N" scope toggle. Computed
-  // server-side (buildGroupBuyBanner); absent = no live run / module off. Purely
-  // presentational — never gates what can be bought (that's groupBuyGate).
+  // server-side (buildGroupBuyBanner); absent = no live run / module off. Also
+  // feeds the cart's two-ways rules (two-ways-cart.ts: pre-order stock
+  // exemption + no mixed on-hand/GB carts) as a UX hint — the server re-derives
+  // the same scope at placement, so it still never decides what can be bought.
   groupBuyBanner?: GroupBuyBanner;
+  // Owner-editable Group Buy storefront copy: the "How group buys work" section
+  // (title + steps) and the live-round terms line, shared by the two-ways home
+  // and the group-buy page. Normalized server-side from
+  // branding.config.groupBuyContent; absent = the built-in default copy.
+  groupBuyContent?: GroupBuyContent;
   // Group buy slice of the Sales Analytics view. Derived server-side from
   // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
   // meaningful while the Sales Analytics module itself is on). Absent/false =

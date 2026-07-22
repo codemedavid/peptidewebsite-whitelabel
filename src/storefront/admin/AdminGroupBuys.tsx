@@ -26,8 +26,15 @@ import {
   setGroupBuyArchivedAction,
   getGroupBuySupplierReportAction,
   saveGroupBuyAllowOnHandAction,
+  saveGroupBuyContentAction,
   type GroupBuyCustomerLine,
 } from "@/actions/group-buys";
+import {
+  GB_CONTENT_LIMITS,
+  normalizeGroupBuyContent,
+  renderGbCopy,
+  type GroupBuyContent,
+} from "@/lib/storefront/gb-content";
 import { downloadSupplierWorkbook } from "@/storefront/admin/supplier-workbook";
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
@@ -549,6 +556,137 @@ function ReportModal({
   );
 }
 
+// ── StorefrontCopyModal ───────────────────────────────────────────────────────
+
+/**
+ * Editor for the owner-facing Group Buy storefront copy: the "How group buys
+ * work" section (title + steps) and the live-round terms line. What's saved is
+ * rendered verbatim on BOTH the two-ways home and the group-buy page; `{eta}`
+ * anywhere in the text becomes the live round's delivery ETA. Clearing a field
+ * resets it to the built-in default (per-field fallback in the normalizer).
+ */
+function StorefrontCopyModal({
+  initial,
+  busy,
+  error,
+  onCancel,
+  onSave,
+}: {
+  initial: GroupBuyContent;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSave: (content: GroupBuyContent) => void;
+}) {
+  const [howTitle, setHowTitle] = useState(initial.howTitle);
+  const [steps, setSteps] = useState<string[]>(initial.steps);
+  const [terms, setTerms] = useState(initial.terms);
+
+  const setStep = (i: number, value: string) =>
+    setSteps((cur) => cur.map((s, j) => (j === i ? value : s)));
+  const removeStep = (i: number) => setSteps((cur) => cur.filter((_, j) => j !== i));
+  const addStep = () => setSteps((cur) => (cur.length >= GB_CONTENT_LIMITS.maxSteps ? cur : [...cur, ""]));
+
+  // Live example of the terms line as the storefront would show it.
+  const termsPreview = renderGbCopy(
+    terms.trim() || normalizeGroupBuyContent(undefined).terms,
+    "3–4 weeks after the group buy closes",
+  );
+
+  return (
+    <div className="admin-modal" onClick={onCancel}>
+      <div
+        className="admin-modal__card"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: "86vh", overflowY: "auto" }}
+      >
+        <h2 className="admin-modal__title">Storefront copy</h2>
+        <p className="admin-field__hint" style={{ marginTop: -6 }}>
+          Shown on the store home and the group-buy page. Use <code>{"{eta}"}</code> anywhere
+          to insert the live round&apos;s delivery ETA. Clear a field to reset it to the
+          default copy.
+        </p>
+
+        <div className="admin-modal__row">
+          <label className="admin-field__label">Section title</label>
+          <input
+            className="admin-input"
+            value={howTitle}
+            maxLength={GB_CONTENT_LIMITS.maxTitleLen}
+            placeholder="How group buys work"
+            onChange={(e) => setHowTitle(e.target.value)}
+          />
+        </div>
+
+        <div className="admin-modal__row">
+          <label className="admin-field__label">Steps</label>
+          {steps.map((s, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
+              <span className="admin-field__hint" style={{ marginTop: 8, minWidth: 16 }}>{i + 1}.</span>
+              <textarea
+                className="admin-input"
+                rows={2}
+                value={s}
+                maxLength={GB_CONTENT_LIMITS.maxTextLen}
+                onChange={(e) => setStep(i, e.target.value)}
+              />
+              <button
+                className="admin-btn admin-btn--ghost"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                aria-label={`Remove step ${i + 1}`}
+                onClick={() => removeStep(i)}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {steps.length < GB_CONTENT_LIMITS.maxSteps && (
+            <button
+              className="admin-btn admin-btn--ghost"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+              onClick={addStep}
+            >
+              + Add step
+            </button>
+          )}
+        </div>
+
+        <div className="admin-modal__row">
+          <label className="admin-field__label">Live-round terms line</label>
+          <textarea
+            className="admin-input"
+            rows={2}
+            value={terms}
+            maxLength={GB_CONTENT_LIMITS.maxTextLen}
+            placeholder="Pay now to lock your slot. Ships {eta}. COA posted before shipping."
+            onChange={(e) => setTerms(e.target.value)}
+          />
+          <span className="admin-field__hint">Preview: {termsPreview}</span>
+        </div>
+
+        {error && (
+          <div className="admin-modal__row" role="alert" style={{ color: "#d33", fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+
+        <div className="admin-modal__actions">
+          <button className="admin-btn admin-btn--ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            className="admin-btn"
+            disabled={busy}
+            onClick={() => onSave(normalizeGroupBuyContent({ howTitle, steps, terms }))}
+          >
+            {busy ? "Saving…" : "Save copy"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── AdminGroupBuys ────────────────────────────────────────────────────────────
 
 export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => void }) {
@@ -567,6 +705,16 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
   // run covers the whole catalog, so there are no on-hand products to gate.
   const [allowOnHand, setAllowOnHand] = useState(brand.groupBuyAllowOnHand !== false);
   const [savingOnHand, setSavingOnHand] = useState(false);
+
+  // Owner-editable storefront copy ("How group buys work" + live-round terms) —
+  // loaded with the list, saved via saveGroupBuyContentAction into
+  // branding.config.groupBuyContent.
+  const [content, setContent] = useState<GroupBuyContent>(() =>
+    normalizeGroupBuyContent(brand.groupBuyContent),
+  );
+  const [editingContent, setEditingContent] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<GroupBuy | null>(null);
   const [creating, setCreating] = useState(false);
@@ -605,6 +753,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
       else {
         setGroupBuys(res.groupBuys);
         setSettings(res.settings);
+        setContent(res.content);
         maybeAutoReport(res.groupBuys);
       }
       setLoaded(true);
@@ -662,6 +811,20 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
         ? "On-hand products stay buyable during group buys."
         : "On-hand products are paused while a group buy is live.",
     );
+  };
+
+  const saveContent = async (next: GroupBuyContent) => {
+    setSavingContent(true);
+    setContentError(null);
+    const res = await saveGroupBuyContentAction(next);
+    setSavingContent(false);
+    if ("error" in res) {
+      setContentError(res.error);
+      return;
+    }
+    setContent(res.content);
+    setEditingContent(false);
+    toast("Storefront copy saved.");
   };
 
   const setArchived = async (gb: GroupBuy, archived: boolean) => {
@@ -760,6 +923,40 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
           </label>
         )}
 
+        {/* Owner-editable storefront copy — the "How group buys work" section and
+            the live-round terms line, shared by the store home + group-buy page. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+            margin: "4px 0 14px",
+            padding: "12px 14px",
+            border: "1px solid var(--brand-border, rgba(0,0,0,.12))",
+            borderRadius: 10,
+          }}
+        >
+          <span>
+            <span style={{ fontWeight: 600 }}>Storefront copy</span>
+            <span className="admin-field__hint" style={{ display: "block", marginTop: 2 }}>
+              “{content.howTitle}” — {content.steps.length} step
+              {content.steps.length === 1 ? "" : "s"} and the live-round terms line, shown on
+              the store home and the group-buy page.
+            </span>
+          </span>
+          <button
+            className="admin-btn admin-btn--ghost"
+            style={{ padding: "4px 10px", fontSize: 12, whiteSpace: "nowrap" }}
+            onClick={() => {
+              setContentError(null);
+              setEditingContent(true);
+            }}
+          >
+            Edit copy
+          </button>
+        </div>
+
         {!loaded && <div className="admin-empty-set">Loading group buys…</div>}
         {loadError && (
           <div className="admin-empty-set" role="alert">
@@ -854,6 +1051,16 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
               setCreating(false);
             }}
             onSave={save}
+          />
+        )}
+
+        {editingContent && (
+          <StorefrontCopyModal
+            initial={content}
+            busy={savingContent}
+            error={contentError}
+            onCancel={() => setEditingContent(false)}
+            onSave={saveContent}
           />
         )}
 

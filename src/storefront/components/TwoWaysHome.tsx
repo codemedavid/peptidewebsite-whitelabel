@@ -13,6 +13,7 @@ import type { Brand } from "../types";
 import { useStore } from "../store";
 import { baseProductId } from "../checkout";
 import { buildTwoWaysHomeView, groupBuyCtaTarget } from "@/lib/storefront/two-ways-home";
+import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
 export function TwoWaysHome({
   brand,
@@ -32,6 +33,11 @@ export function TwoWaysHome({
     brand.groupBuyBanner ?? null,
     currency,
   );
+
+  // Owner-editable GB copy (branding.config.groupBuyContent, normalized
+  // server-side onto the brand; normalize again so a missing field can't crash
+  // a stale client). {eta} in any line renders the live round's delivery ETA.
+  const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
 
   const gbLive = view.gb.open && view.gb.count > 0;
   const heroLine1 = brand.heroLine1 || brand.name;
@@ -171,9 +177,7 @@ export function TwoWaysHome({
               {view.gb.countdown && <span className="sf-twh__gb-countdown">{view.gb.countdown}</span>}
             </div>
             <div className="sf-twh__gb-name font-display">{view.gb.name}</div>
-            <p className="sf-twh__gb-terms">
-              {view.gb.deliveryEta ? `Delivery ${view.gb.deliveryEta}. ` : ""}Pay now to lock your slot.
-            </p>
+            <p className="sf-twh__gb-terms">{renderGbCopy(content.terms, view.gb.deliveryEta)}</p>
 
             {view.gb.slots.enabled && (
               <div className="sf-twh__gb-slots">
@@ -246,15 +250,10 @@ export function TwoWaysHome({
       {/* How it works */}
       <section className="sf-twh__section" aria-labelledby="twh-how-label">
         <div id="twh-how-label" className="sf-twh__eyebrow">
-          How group buys work
+          {content.howTitle}
         </div>
         <ol className="sf-twh__steps">
-          {[
-            "Browse what's on hand for instant shipping, or join the live group buy for a lower price.",
-            "Pay to lock your slot at the group price while the round is open.",
-            "When the round closes, we place one bulk order with the supplier.",
-            `Your order ships${view.gb.deliveryEta ? ` ${view.gb.deliveryEta}` : " after the round closes"}, COA posted before shipping.`,
-          ].map((text, i) => (
+          {content.steps.map((s) => renderGbCopy(s, view.gb.deliveryEta)).map((text, i) => (
             <li key={i} className="sf-twh__step">
               <span className="sf-twh__step-n">{i + 1}</span>
               <span>{text}</span>

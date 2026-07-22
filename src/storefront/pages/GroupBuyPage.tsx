@@ -14,6 +14,7 @@ import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { baseProductId } from "../checkout";
 import { buildGroupBuyPageView, groupBuyCartSummary } from "@/lib/storefront/group-buy-page";
+import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
 export function GroupBuyPage({
   brand,
@@ -32,6 +33,10 @@ export function GroupBuyPage({
     brand.groupBuyBanner ?? null,
     currency,
   );
+
+  // Owner-editable GB copy — the same content object the two-ways home renders
+  // (branding.config.groupBuyContent), so both surfaces stay in sync.
+  const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
 
   // The (defensive) empty state — the route is gated on a live round, but a
   // round with no assigned products, or a race where the banner cleared, lands
@@ -86,10 +91,7 @@ export function GroupBuyPage({
               </div>
             </div>
           )}
-          <p className="gbpage__terms">
-            Pay now to lock your slot.
-            {view.deliveryEta ? ` Ships ${view.deliveryEta}.` : ""} COA posted before shipping.
-          </p>
+          <p className="gbpage__terms">{renderGbCopy(content.terms, view.deliveryEta)}</p>
         </div>
 
         {/* Listing header */}
@@ -166,13 +168,9 @@ export function GroupBuyPage({
 
         {/* How it works */}
         <div className="gbpage__how">
-          <div className="gbpage__how-head">How it works</div>
+          <div className="gbpage__how-head">{content.howTitle}</div>
           <ol className="gbpage__how-list">
-            {[
-              "Add items at the GB price and pay to lock your slot before the round closes.",
-              "When the round closes, we place one bulk order — third-party tested, COA posted.",
-              `Ships to you${view.deliveryEta ? ` ${view.deliveryEta}` : " after the round closes"}, with tracking.`,
-            ].map((text, i) => (
+            {content.steps.map((s) => renderGbCopy(s, view.deliveryEta)).map((text, i) => (
               <li key={i} className="gbpage__how-step">
                 <span className="gbpage__how-n">{i + 1}</span>
                 <span>{text}</span>
