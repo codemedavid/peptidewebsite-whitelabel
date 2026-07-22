@@ -35,6 +35,7 @@ import {
   saveCardDesignAction,
   saveCardTemplatesAction,
   saveCategoriesAction,
+  saveCoaReportsAction,
   saveCouriersAction,
   saveFaqAction,
   savePaymentMethodsAction,
@@ -235,7 +236,12 @@ export function StoreProvider({
   const [couriers, setCouriersState] = useState<Courier[]>(
     brandSeed.couriers ?? SEED_COURIERS,
   );
-  const [coaReports, setCoaState] = useState<CoaReport[]>(SEED_COA_REPORTS);
+  // COA reports load from the DB server-side (page → branding.config spread into
+  // the brand prop), same as protocols, so the public Lab Reports page is
+  // identical on every device. Seed defaults apply only until the owner saves once.
+  const [coaReports, setCoaState] = useState<CoaReport[]>(
+    brandSeed.coaReports ?? SEED_COA_REPORTS,
+  );
   // Promo / discount codes load from the DB server-side (page → branding.config
   // spread into the brand prop), same as couriers, so the codes the owner created
   // are honored for every customer on every device — not just the editing
@@ -286,9 +292,12 @@ export function StoreProvider({
     // they come from the DB via the server-provided brand prop (branding.config),
     // same as couriers, so a stale local copy can't override what the owner saved
     // (the cross-device bug). They persist through saveShippingLocationsAction.
+    // NOTE: COA reports are intentionally NOT hydrated from localStorage — they
+    // come from the DB via the server-provided brand prop (branding.config), so
+    // a stale local copy can't override what the owner saved (the cross-device
+    // bug). They persist through saveCoaReportsAction instead.
     setOrdersState(load(NS + "orders", SEED_ORDERS));
     setMyOrdersState(load(NS + "myorders", [] as Order[]));
-    setCoaState(load(NS + "coa", SEED_COA_REPORTS));
     // NOTE: promo codes are intentionally NOT hydrated from localStorage — they
     // come from the DB via the server-provided brand prop (branding.config), so a
     // stale local copy can't hide a code the owner created on another device (and
@@ -398,8 +407,6 @@ export function StoreProvider({
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setCoaReports = useMemo(() => makeSetter<CoaReport[]>("coa", "COA_REPORTS", setCoaState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), [NS]);
 
@@ -607,6 +614,30 @@ export function StoreProvider({
         });
     },
     [toast, protocols],
+  );
+
+  // COA reports persist to the DB (branding.config), not localStorage, so every
+  // device/customer sees the owner's lab reports. Mirrors setProtocols: gated on
+  // the storefront-admin session; local state updates optimistically and we only
+  // surface failures.
+  const setCoaReports = useCallback(
+    (next: Updater<CoaReport[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: CoaReport[]) => CoaReport[])(coaReports)
+          : next;
+      setCoaState(value);
+      saveCoaReportsAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save lab reports: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save lab reports — please sign in again and retry.");
+        });
+    },
+    [toast, coaReports],
   );
 
   // FAQ groups persist to the DB (branding.config), not localStorage, so every

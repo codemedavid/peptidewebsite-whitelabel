@@ -696,6 +696,13 @@ export type Brand = {
   // to the seed FAQ.
   faqGroups?: FaqGroup[];
 
+  // Lab reports (COAs) shown on the public #coa page. Edited in the storefront
+  // #admin (Lab Results) and persisted server-side in branding.config (same
+  // mechanism as protocols) so the owner's reports show on every device/customer
+  // rather than only the editing browser. Absent until the owner saves once →
+  // storefront falls back to the seed reports.
+  coaReports?: CoaReport[];
+
   // Couriers the store ships with (the dropdown the admin picks from when
   // saving tracking info on an order). Edited in the storefront #admin and
   // persisted server-side in branding.config (same mechanism as categories) so
