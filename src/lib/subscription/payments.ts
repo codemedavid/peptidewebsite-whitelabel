@@ -86,6 +86,35 @@ export function normalizePaymentMethod(raw: string): SubscriptionPaymentMethod {
   return match ?? "Other";
 }
 
+/**
+ * The Billing page's method options, driven by the platform's own receiving
+ * accounts (/admin/payments → package_payment PlatformSetting). Blank names
+ * drop, duplicates dedupe case-insensitively (first spelling wins), and "Other"
+ * is appended unless already present. An empty platform list falls back to the
+ * default catalogue so the form always has options.
+ */
+export function paymentMethodOptions(platformNames: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const options: string[] = [];
+  for (const raw of platformNames) {
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    options.push(name);
+  }
+  if (options.length === 0) return [...SUBSCRIPTION_PAYMENT_METHODS];
+  if (!seen.has("other")) options.push("Other");
+  return options;
+}
+
+/** Normalize a submitted method against the live options: case-insensitive
+ *  match returns the canonical spelling; anything unrecognized is "Other". */
+export function normalizePaymentMethodWith(raw: string, allowed: readonly string[]): string {
+  const trimmed = raw.trim().toLowerCase();
+  return allowed.find((m) => m.toLowerCase() === trimmed) ?? "Other";
+}
+
 /** A short, stable, deterministic suffix from a payment id — so two payments in
  *  the same month get distinct invoice codes. Deterministic (no Date/random), so
  *  it's render- and resume-stable. */

@@ -24,12 +24,18 @@ import { isDemoMode } from "@/lib/demo/fixtures";
 import {
   applyReview,
   isSubscriptionPaymentStatus,
-  normalizePaymentMethod,
+  normalizePaymentMethodWith,
   parsePaymentAmountCents,
+  paymentMethodOptions,
   tenantInvoiceRowsFrom,
   type SubscriptionPaymentReview,
   type TenantInvoiceRow,
 } from "@/lib/subscription/payments";
+import { getPackagePayment } from "@/lib/platform/package-payment-server";
+import {
+  visiblePackagePaymentMethods,
+  type PackagePaymentMethod,
+} from "@/lib/platform/package-payment";
 
 export type SubscriptionPaymentActionResult = { ok: true } | { error: string };
 
@@ -68,7 +74,19 @@ export async function submitSubscriptionPaymentAction(
   const amountCents = parsePaymentAmountCents(input.amount ?? "");
   if (amountCents == null) return { error: "Enter a valid payment amount." };
 
-  const method = normalizePaymentMethod(input.method ?? "");
+  // Normalize the method against the platform's live receiving accounts
+  // (/admin/payments) — the same options the Billing form offers. Fail-open to
+  // the raw→Other rule if the platform config can't be read.
+  let method = "Other";
+  try {
+    const channels = visiblePackagePaymentMethods(await getPackagePayment());
+    method = normalizePaymentMethodWith(
+      input.method ?? "",
+      paymentMethodOptions(channels.map((m) => m.method)),
+    );
+  } catch {
+    method = normalizePaymentMethodWith(input.method ?? "", paymentMethodOptions([]));
+  }
   const reference = (input.reference ?? "").trim().slice(0, MAX_REFERENCE_LEN);
   const proofUrl = safeProofUrl(input.proofUrl);
 
@@ -105,6 +123,41 @@ export async function submitSubscriptionPaymentAction(
   revalidateTenant(tenantId);
   revalidateTag("admin:data");
   return { ok: true };
+}
+
+export type BillingPaymentChannel = Pick<
+  PackagePaymentMethod,
+  "id" | "method" | "account" | "number" | "note" | "qrUrl"
+>;
+
+/**
+ * The platform's receiving accounts for the tenant Billing page — how the store
+ * owner actually pays their provider. Same source the public /get-started
+ * checkout shows (package_payment PlatformSetting, operator-edited on
+ * /admin/payments). Fails open to an empty list; the form then falls back to
+ * the default method catalogue.
+ */
+export async function getBillingPaymentInfoAction(): Promise<
+  { instructions: string; channels: BillingPaymentChannel[] } | { error: string }
+> {
+  const tenantId = await requireStorefrontAdmin();
+  if (!tenantId) return { error: "Sign in to the store admin to view payment options." };
+  try {
+    const config = await getPackagePayment();
+    return {
+      instructions: config.instructions,
+      channels: visiblePackagePaymentMethods(config).map(({ id, method, account, number, note, qrUrl }) => ({
+        id,
+        method,
+        account,
+        number,
+        note,
+        qrUrl,
+      })),
+    };
+  } catch {
+    return { instructions: "", channels: [] };
+  }
 }
 
 /** Most-recent rows the tenant invoice table shows (metrics are operator-side). */

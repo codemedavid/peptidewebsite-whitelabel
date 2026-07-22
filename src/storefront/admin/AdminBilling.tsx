@@ -15,12 +15,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
-import { listMySubscriptionPaymentsAction, submitSubscriptionPaymentAction } from "@/actions/subscription-payments";
 import {
-  SUBSCRIPTION_PAYMENT_METHODS,
+  getBillingPaymentInfoAction,
+  listMySubscriptionPaymentsAction,
+  submitSubscriptionPaymentAction,
+  type BillingPaymentChannel,
+} from "@/actions/subscription-payments";
+import {
   SUBSCRIPTION_PAYMENT_STATUS_LABELS,
   SUBSCRIPTION_PAYMENT_STATUS_TONE,
   parsePaymentAmountCents,
+  paymentMethodOptions,
   type TenantInvoiceRow,
 } from "@/lib/subscription/payments";
 import { BILLING_CYCLE_LABELS } from "@/lib/subscription/billing-cycle";
@@ -48,8 +53,13 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
   const { toast } = useStore();
   const sub = brand.subscription;
 
+  // The provider's receiving accounts (/admin/payments) — drive both the "how
+  // to pay" card and the method dropdown. null = still loading (defaults shown).
+  const [payInfo, setPayInfo] = useState<{ instructions: string; channels: BillingPaymentChannel[] } | null>(null);
+  const methodOptions = paymentMethodOptions((payInfo?.channels ?? []).map((c) => c.method));
+
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<string>(SUBSCRIPTION_PAYMENT_METHODS[0]);
+  const [method, setMethod] = useState<string>(methodOptions[0]);
   const [reference, setReference] = useState("");
   const [paidAt, setPaidAt] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -70,6 +80,20 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
   }, []);
   useEffect(() => {
     void loadHistory();
+    void (async () => {
+      try {
+        const res = await getBillingPaymentInfoAction();
+        if (!("error" in res)) {
+          setPayInfo(res);
+          // Snap the selection to the provider's first channel so the submitted
+          // method always matches an offered option.
+          const opts = paymentMethodOptions(res.channels.map((c) => c.method));
+          setMethod((current) => (opts.includes(current) ? current : opts[0]));
+        }
+      } catch {
+        /* defaults stay in place */
+      }
+    })();
   }, [loadHistory]);
 
   const amountValid = parsePaymentAmountCents(amount) != null;
@@ -192,6 +216,46 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
           )}
         </div>
 
+        {/* How to pay — the provider's receiving accounts (/admin/payments) */}
+        {payInfo && payInfo.channels.length > 0 && (
+          <div className="admin-form__card" style={{ marginBottom: 16 }}>
+            <h2 className="admin-form__section">💳 Payment methods</h2>
+            <div className="admin-field__hint" style={{ marginTop: -8, marginBottom: 12 }}>
+              {payInfo.instructions.trim() || "Pay your provider through any of these accounts, then file your proof below."}
+            </div>
+            {payInfo.channels.map((ch) => (
+              <div
+                key={ch.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 2px",
+                  borderTop: "1px solid var(--sf-border, #e2e8f0)",
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{ch.method}</div>
+                  <div className="admin-field__hint" style={{ margin: 0 }}>
+                    {[ch.account, ch.number].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                  {ch.note.trim() && (
+                    <div className="admin-field__hint" style={{ margin: 0 }}>{ch.note}</div>
+                  )}
+                </div>
+                {ch.qrUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={ch.qrUrl}
+                    alt={`${ch.method} QR code`}
+                    style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 8, border: "1px solid var(--sf-border, #e2e8f0)" }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* File a payment */}
         <div className="admin-form__card">
           <h2 className="admin-form__section">🧾 Submit a payment</h2>
@@ -226,7 +290,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
           <div className="admin-field" style={{ marginBottom: 14 }}>
             <label className="admin-field__label">Payment method</label>
             <select className="admin-input" value={method} onChange={(e) => setMethod(e.target.value)}>
-              {SUBSCRIPTION_PAYMENT_METHODS.map((m) => (
+              {methodOptions.map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
