@@ -32,6 +32,7 @@ import {
   productInitial,
   formatGbMoney,
   buildGroupBuyPageView,
+  groupBuyCartSummary,
 } from "../src/lib/storefront/group-buy-page";
 import {
   unitPrice,
@@ -239,6 +240,64 @@ function main() {
     assert.equal(view.live, false);
     assert.equal(view.count, 0);
     assert.deepEqual(view.lines, []);
+  });
+
+  console.log("\nline surfaces the regular-vs-GB saving (design: save badge + strikethrough)\n");
+
+  check("each line exposes gb price, regular price and the saving, all labelled", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
+    const line = view.lines[0]; // gb-1: Retatrutide, price 700, gbPrice 560
+    assert.equal(line.price, 560);
+    assert.equal(line.priceLabel, "₱560"); // gb price is still the primary price
+    assert.equal(line.regularPrice, 700);
+    assert.equal(line.regularLabel, "₱700");
+    assert.equal(line.savings, 140);
+    assert.equal(line.saveLabel, "₱140");
+    assert.equal(line.hasSavings, true);
+  });
+
+  check("a GB product with no valid gbPrice shows no saving (badge hidden)", () => {
+    const noSaveCatalog = [
+      product({ id: "gb-x", name: "Flat", price: 700, productType: "gb" }),
+    ];
+    const banner: GroupBuyBanner = { ...scopedBanner, productIds: [], coversAll: true };
+    const view = buildGroupBuyPageView(noSaveCatalog, banner, "₱", NOW);
+    const line = view.lines[0];
+    assert.equal(line.hasSavings, false);
+    assert.equal(line.savings, 0);
+    assert.equal(line.price, line.regularPrice);
+  });
+
+  console.log("\ngroupBuyCartSummary — sticky cart bar total + saving\n");
+
+  check("sums the live GB prices and the saving vs regular across the cart", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
+    // 2× Retatrutide (gb 560 / reg 700) in cart
+    const summary = groupBuyCartSummary(view.lines, { "gb-1": 2 }, "₱");
+    assert.equal(summary.totalQty, 2);
+    assert.equal(summary.total, 1120); // 2 × 560
+    assert.equal(summary.regularTotal, 1400); // 2 × 700
+    assert.equal(summary.savings, 280); // 2 × 140
+    assert.equal(summary.totalLabel, "₱1,120");
+    assert.equal(summary.savingsLabel, "₱280");
+    assert.equal(summary.hasItems, true);
+  });
+
+  check("empty cart → zeroed summary, hasItems false (cart bar hidden)", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
+    const summary = groupBuyCartSummary(view.lines, {}, "₱");
+    assert.equal(summary.totalQty, 0);
+    assert.equal(summary.total, 0);
+    assert.equal(summary.savings, 0);
+    assert.equal(summary.hasItems, false);
+  });
+
+  check("ignores quantities for products not on the page (out-of-scope ids)", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW);
+    // gb-2 is not in the scoped round; a stray qty for it must not be counted.
+    const summary = groupBuyCartSummary(view.lines, { "gb-1": 1, "gb-2": 5 }, "₱");
+    assert.equal(summary.totalQty, 1);
+    assert.equal(summary.total, 560);
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
