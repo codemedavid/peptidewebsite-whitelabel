@@ -16,7 +16,12 @@
 // placeStorefrontOrderAction share one contract — the same pattern as
 // checkout-rules.ts. Tested by npm run test:two-ways-cart.
 
-import { isInGroupBuyScope, type GroupBuyPriceScope } from "./two-ways";
+import {
+  isGroupBuyProduct,
+  isInGroupBuyScope,
+  type GroupBuyPriceScope,
+  type TwoWaysInput,
+} from "./two-ways";
 import type { GroupBuyBanner } from "./group-buy-banner";
 
 /** The live round's pricing scope, derived from the storefront banner the page
@@ -30,14 +35,25 @@ export function gbScopeFromBanner(
     : { coversAll: false, productIds: [...banner.productIds] };
 }
 
-/** True when the product is a group-buy PRE-ORDER (inside the live round's
- *  scope): stock is ordered from the supplier after the round closes, so the
- *  on-hand stock cap must not apply to it. */
+/** The fields the pre-order rule reads off a product: its (base) id and the
+ *  gb tag. Matches what checkout.ts unitPrice discriminates on. */
+export type PreorderProduct = { id: string; productType?: TwoWaysInput["productType"] };
+
+/** True when the product is a group-buy PRE-ORDER: stock is ordered from the
+ *  supplier after the round closes, so the on-hand stock cap must not apply.
+ *
+ *  Mirrors EXACTLY which products checkout re-prices at gbPrice (unitPrice):
+ *  an explicitly ASSIGNED product is a pre-order (the round is the source of
+ *  truth), but under a coversAll round only gb-TAGGED products are — a
+ *  catalog-wide round must never switch off stock enforcement for genuinely
+ *  on-hand products that still charge (and ship at) their regular terms. */
 export function isGroupBuyPreorder(
-  productId: string,
+  product: PreorderProduct,
   scope: GroupBuyPriceScope | null | undefined,
 ): boolean {
-  return isInGroupBuyScope(productId, scope);
+  if (!scope) return false;
+  if (scope.coversAll) return isGroupBuyProduct(product);
+  return scope.productIds.includes(product.id);
 }
 
 /** Customer-facing copy for the mixing rule, per direction of the rejected add. */
@@ -59,9 +75,9 @@ export function twoWaysAddViolation(
   scope: GroupBuyPriceScope | null | undefined,
 ): string | null {
   if (!scope || scope.coversAll || cartProductIds.length === 0) return null;
-  const addingGb = isGroupBuyPreorder(productId, scope);
-  const cartHasGb = cartProductIds.some((id) => isGroupBuyPreorder(id, scope));
-  const cartHasOnHand = cartProductIds.some((id) => !isGroupBuyPreorder(id, scope));
+  const addingGb = isInGroupBuyScope(productId, scope);
+  const cartHasGb = cartProductIds.some((id) => isInGroupBuyScope(id, scope));
+  const cartHasOnHand = cartProductIds.some((id) => !isInGroupBuyScope(id, scope));
   if (addingGb && cartHasOnHand) return TWO_WAYS_MIX_MESSAGES.gbIntoOnHand;
   if (!addingGb && cartHasGb) return TWO_WAYS_MIX_MESSAGES.onHandIntoGb;
   return null;
@@ -78,8 +94,8 @@ export function twoWaysOrderViolation(
   scope: GroupBuyPriceScope | null | undefined,
 ): string | null {
   if (!scope || scope.coversAll) return null;
-  const hasGb = productIds.some((id) => isGroupBuyPreorder(id, scope));
-  const hasOnHand = productIds.some((id) => !isGroupBuyPreorder(id, scope));
+  const hasGb = productIds.some((id) => isInGroupBuyScope(id, scope));
+  const hasOnHand = productIds.some((id) => !isInGroupBuyScope(id, scope));
   return hasGb && hasOnHand
     ? "This order mixes group-buy and on-hand items — they ship separately, so please place them as two orders."
     : null;

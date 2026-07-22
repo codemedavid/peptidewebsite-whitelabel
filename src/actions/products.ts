@@ -34,6 +34,9 @@ import {
   uniqueize,
   type DbProductRow,
 } from "@/lib/storefront/product-mapping";
+import { stripResellerPricing, preserveResellerMetadata } from "@/lib/storefront/reseller-gate";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
 import type { Product } from "@/storefront/types";
 import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 
@@ -166,9 +169,16 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
 
+  // Reseller wholesale pricing is entitlement-gated — the SAME strip the
+  // storefront render (page.tsx) and order placement (orders.ts) apply. Without
+  // it, a mid-session refresh would hand the client a catalog with wholesale
+  // legs the render removed, and the cart would advertise prices checkout
+  // re-prices away.
+  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    return { ok: true, products: demoEffectiveProducts(slug, "₱") };
+    return { ok: true, products: stripResellerPricing(demoEffectiveProducts(slug, "₱"), resellerEntitled) };
   }
 
   try {
@@ -181,7 +191,13 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
         orderBy: { createdAt: "asc" },
       }),
     );
-    return { ok: true, products: rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)) };
+    return {
+      ok: true,
+      products: stripResellerPricing(
+        rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
+        resellerEntitled,
+      ),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load products." };
   }
@@ -245,13 +261,24 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
     }
   }
 
+  // Reseller wholesale data is entitlement-gated: an UNENTITLED tenant's editor
+  // is seeded from the stripped catalog (zeros), so persisting its `reseller`
+  // leg would wipe the DB's dormant wholesale prices — the data re-granting the
+  // feature is supposed to restore. Preserve the existing leg instead.
+  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+
   try {
     const saved = await withTenant(tenantId, async (db) => {
       const existing = p.id
-        ? await db.product.findFirst({ where: { id: p.id }, select: { id: true } })
+        ? await db.product.findFirst({ where: { id: p.id }, select: { id: true, metadata: true } })
         : null;
 
       if (existing) {
+        const metadata = preserveResellerMetadata(
+          write.metadata as Record<string, unknown>,
+          existing.metadata,
+          resellerEntitled,
+        );
         return db.product.update({
           where: { id: existing.id },
           data: {
@@ -263,7 +290,7 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
             status: write.status,
             active: write.active,
             images: write.images as unknown as Prisma.InputJsonValue,
-            metadata: write.metadata as unknown as Prisma.InputJsonValue,
+            metadata: metadata as unknown as Prisma.InputJsonValue,
           },
         });
       }
@@ -289,7 +316,13 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
           status: write.status,
           active: write.active,
           images: write.images as unknown as Prisma.InputJsonValue,
-          metadata: write.metadata as unknown as Prisma.InputJsonValue,
+          // New row: an unentitled tenant can't author a wholesale leg either
+          // (preserve with no existing metadata simply drops the key).
+          metadata: preserveResellerMetadata(
+            write.metadata as Record<string, unknown>,
+            undefined,
+            resellerEntitled,
+          ) as unknown as Prisma.InputJsonValue,
         },
       });
     });

@@ -12,8 +12,9 @@
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
-import { baseProductId } from "../checkout";
+import { baseProductId, unitPrice } from "../checkout";
 import { buildGroupBuyPageView, groupBuyCartSummary } from "@/lib/storefront/group-buy-page";
+import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
@@ -60,13 +61,17 @@ export function GroupBuyPage({
   }
 
   // Roll the cart into the sticky bar's total + saving, scoped to this page's
-  // products (a stray on-hand / out-of-round entry never skews the advertised total).
-  const qtyById: Record<string, number> = {};
-  for (const c of cart) {
-    const id = baseProductId(c);
-    qtyById[id] = (qtyById[id] ?? 0) + 1;
-  }
-  const summary = groupBuyCartSummary(view.lines, qtyById, currency);
+  // products (a stray on-hand / out-of-round entry never skews the advertised
+  // total). Each entry is priced with the SAME unitPrice the checkout charges,
+  // so a variation clone counts at its own price — the bar and the receipt
+  // can't disagree.
+  const scope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
+  const entries = cart.map((c) => ({
+    id: baseProductId(c),
+    unit: unitPrice(c, 1, scope),
+    regular: Math.max(0, c.price || 0),
+  }));
+  const summary = groupBuyCartSummary(view.lines, entries, currency);
 
   return (
     <section className="page gbpage" id="groupbuy">

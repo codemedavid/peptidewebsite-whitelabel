@@ -468,8 +468,10 @@ export function StoreProvider({
       // Live-round group-buy products are PRE-ORDERS — the supplier order is
       // placed after the round closes, so on-hand stock never caps them (a
       // round of stock-0 products would otherwise render a dead "Join GB").
+      // Judged on the product (id + gb tag) so a coversAll round exempts only
+      // gb-tagged products, exactly the set checkout re-prices at gbPrice.
       // placeStorefrontOrderAction applies the same exemption server-side.
-      if (isGroupBuyPreorder(baseProductId(product), gbScope)) {
+      if (isGroupBuyPreorder({ id: baseProductId(product), productType: product.productType }, gbScope)) {
         setCart((c) => [...c, ...Array.from({ length: n }, () => entry)]);
         return;
       }

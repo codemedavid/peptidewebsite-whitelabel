@@ -127,27 +127,35 @@ function pageLine<T extends GbPageProduct>(product: T, currency: string): GroupB
   };
 }
 
+/** One cart unit as the sticky bar counts it: the BASE product id it resolves
+ *  to, the unit price checkout actually charges for it (a variation clone's own
+ *  charged price, not the base line's), and the entry's own regular price. */
+export type GbCartEntry = { id: string; unit: number; regular: number };
+
 /**
- * Roll the cart up into the sticky bar's summary. `qtyById` maps a product id to
- * its quantity in the cart; only ids present in `lines` (the page's products)
- * contribute, so a stray on-hand or out-of-round entry can't skew the total or
- * the advertised saving. Quantities are clamped ≥ 0 and floored. Pure + JSON-safe.
+ * Roll the cart up into the sticky bar's summary from per-unit entries the
+ * caller prices with the SAME machinery checkout uses (unitPrice) — so a
+ * variation clone counts at its charged price and the bar's total always
+ * matches what checkout charges. Only entries whose base id is on the page (in
+ * `lines`) contribute, so a stray on-hand or out-of-round entry can't skew the
+ * total or the advertised saving. Non-finite prices clamp to 0. Pure + JSON-safe.
  */
 export function groupBuyCartSummary<T extends GbPageProduct>(
   lines: GroupBuyPageLine<T>[],
-  qtyById: Record<string, number>,
+  entries: readonly GbCartEntry[],
   currency: string,
 ): GroupBuyCartSummary {
+  const onPage = new Set(lines.map((l) => l.product.id));
   let totalQty = 0;
   let total = 0;
   let regularTotal = 0;
-  for (const line of lines) {
-    const raw = qtyById[line.product.id];
-    const qty = Math.max(0, Math.floor(Number.isFinite(raw) ? raw : 0));
-    if (qty <= 0) continue;
-    totalQty += qty;
-    total += line.price * qty;
-    regularTotal += line.regularPrice * qty;
+  for (const entry of entries) {
+    if (!onPage.has(entry.id)) continue;
+    const unit = Number.isFinite(entry.unit) ? Math.max(0, entry.unit) : 0;
+    const regular = Number.isFinite(entry.regular) ? Math.max(0, entry.regular) : unit;
+    totalQty += 1;
+    total += unit;
+    regularTotal += regular;
   }
   const savings = Math.max(0, regularTotal - total);
   return {

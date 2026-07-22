@@ -144,7 +144,7 @@ function normalizeItems(input: unknown): OrderItem[] {
  *  is placed after the round closes — so they're exempt, mirroring the cart
  *  (store.tsx → isGroupBuyPreorder). */
 function stockViolation(
-  products: Array<{ id: string; name: string; stock?: number | null }>,
+  products: Array<{ id: string; name: string; stock?: number | null; productType?: "gb" | "onhand" }>,
   items: OrderItem[],
   gbScope: GroupBuyPriceScope | null = null,
 ): string | null {
@@ -153,7 +153,7 @@ function stockViolation(
       it.productId ? x.id === it.productId : x.name === it.name,
     );
     if (!prod) continue;
-    if (isGroupBuyPreorder(prod.id, gbScope)) continue;
+    if (isGroupBuyPreorder(prod, gbScope)) continue;
     const stock = Math.max(0, prod.stock ?? 0);
     if (it.qty > stock) {
       return stock === 0

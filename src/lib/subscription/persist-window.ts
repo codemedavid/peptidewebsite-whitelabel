@@ -28,14 +28,28 @@ export type WindowWrite = {
 export type WindowWriteOutcome = "full" | "without-price";
 
 /**
+ * Does this failure look like the not-yet-migrated column? Only then may the
+ * retry drop `subscriptionPriceCents` — any OTHER failure (connection blip,
+ * serialization conflict) must propagate, because a blind drop-and-retry could
+ * succeed and silently lose the operator's Monthly price due behind an ok.
+ * Prisma surfaces a missing column as P2022 ("column does not exist"); the
+ * message check covers clients that stringify the error differently.
+ */
+function isMissingColumnError(err: unknown): boolean {
+  if ((err as { code?: unknown } | null)?.code === "P2022") return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /column/i.test(msg) && /does not exist/i.test(msg);
+}
+
+/**
  * Persist the window through `update`, tolerating a not-yet-migrated
  * `subscriptionPriceCents` column.
  *
- * Attempts the full write first. If it throws — the way it would when the price
- * column doesn't exist yet — it retries once with that key omitted so the core
- * window (cycle / start / end / amount, all columns that predate it) still
- * saves. If the retry also throws, the failure is a genuine DB error the drop
- * can't recover from, so it propagates to the caller.
+ * Attempts the full write first. If it throws WITH a missing-column signature,
+ * it retries once with the price key omitted so the core window (cycle / start
+ * / end / amount, all columns that predate it) still saves. Any other failure
+ * — and a retry that fails too — propagates to the caller: those are genuine
+ * DB errors the drop can't (and must not silently) recover from.
  *
  * @param update performs the real write (e.g. `(data) => prisma.tenant.update({ where, data })`)
  * @param data   the full window payload
@@ -49,7 +63,8 @@ export async function writeSubscriptionWindow(
   try {
     await update(data);
     return "full";
-  } catch {
+  } catch (err) {
+    if (!isMissingColumnError(err)) throw err;
     // Retry with the pending-migration column removed entirely. `rest` carries
     // no `subscriptionPriceCents` key, so Prisma never references the column.
     const { subscriptionPriceCents: _omit, ...rest } = data;

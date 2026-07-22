@@ -29,3 +29,27 @@ export function stripResellerPricing(products: Product[], entitled: boolean): Pr
     return rest;
   });
 }
+
+/**
+ * The save-side counterpart of the strip: because the stripped catalog also
+ * seeds the store-admin product editor, an UNENTITLED owner's save would write
+ * a zeroed `reseller` leg over the DB's dormant wholesale data — breaking the
+ * "re-granting restores prices untouched" guarantee above. Given the metadata
+ * the save is about to write and the row's EXISTING metadata, this keeps the
+ * existing reseller leg verbatim (or omits the key when there is none) unless
+ * the tenant is entitled to edit it. Immutable — neither input is mutated.
+ */
+export function preserveResellerMetadata(
+  incoming: Record<string, unknown>,
+  existingMetadata: unknown,
+  entitled: boolean,
+): Record<string, unknown> {
+  if (entitled) return incoming;
+  const existing =
+    existingMetadata && typeof existingMetadata === "object"
+      ? (existingMetadata as Record<string, unknown>).reseller
+      : undefined;
+  const { reseller: _drop, ...rest } = incoming;
+  void _drop;
+  return existing != null ? { ...rest, reseller: existing } : rest;
+}

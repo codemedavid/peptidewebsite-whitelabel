@@ -365,9 +365,10 @@ export type Brand = {
 
   // Home layout style. "two-ways" renders the "two ways to order" home — the
   // on-hand product list + live group-buy card split (design "K Glow Store.dc.html")
-  // — driven entirely by the --brand-* vars, so any tenant can opt in. Absent /
-  // "classic" = the default hero → categories → catalog home, so existing tenants
-  // are unaffected. Toggled per tenant in the store-admin Hero editor.
+  // — driven entirely by the --brand-* vars. Resolved server-side
+  // (resolveHomeLayout): the OPERATOR grant (FEATURES.GB_TWO_WAYS_HOME) is the
+  // only way in; branding.config.homeLayout can only opt back OUT ("classic").
+  // Absent / "classic" = the default hero → categories → catalog home.
   homeLayout?: "classic" | "two-ways";
 
   // Section + page visibility (driven by the branding editor)

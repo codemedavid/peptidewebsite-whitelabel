@@ -214,8 +214,9 @@ export async function setSubscriptionWindowAction(
     };
   }
 
+  let outcome: Awaited<ReturnType<typeof writeSubscriptionWindow>>;
   try {
-    await writeSubscriptionWindow(
+    outcome = await writeSubscriptionWindow(
       (patch) => prisma.tenant.update({ where: { id: tenant.id }, data: patch }),
       data,
     );
@@ -227,6 +228,12 @@ export async function setSubscriptionWindowAction(
   }
 
   revalidateSubscriptionSurfaces(tenant.id, slug);
+  // The core window saved but the price column isn't migrated yet — never let
+  // the operator's "Monthly price due" vanish behind an unqualified success.
+  if (outcome === "without-price" && data.subscriptionPriceCents != null) {
+    console.error("setSubscriptionWindowAction: price dropped — subscriptionPriceCents column missing (run db:push)");
+    return { ok: true, status: "without-price" };
+  }
   return { ok: true };
 }
 

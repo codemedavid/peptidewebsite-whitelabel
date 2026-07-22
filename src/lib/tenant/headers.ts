@@ -29,8 +29,10 @@ const resolveCurrent = cache(async () => {
 export async function getTenantId(): Promise<string> {
   const tenant = await resolveCurrent();
   const bounce = storefrontBouncePath(tenant);
-  if (!tenant || bounce) redirect(bounce ?? "/unknown-tenant");
-  return tenant.id;
+  if (bounce) redirect(bounce);
+  // A null tenant always yields a bounce (gate.ts), so past the redirect the
+  // tenant is present — the gate module stays the single owner of that rule.
+  return tenant!.id;
 }
 
 export async function getTenantIdOrNull(): Promise<string | null> {

@@ -70,18 +70,18 @@ export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
 
 /**
  * Resolve the effective home layout. The operator entitlement (Super Admin →
- * Features → Group Buy → "Two ways to order" home) is the toggle: when granted,
- * the tenant gets the two-ways home. The store owner's branding.config.homeLayout
- * can also opt in ("two-ways") or explicitly opt out ("classic") — an explicit
- * "classic" wins so an owner can turn it off even while the grant is on. Absent on
- * both → the default classic hero → catalog home.
+ * Features → Group Buy → "Two ways to order" home) is the ONLY way in — the
+ * feature is sold per tenant (catalog.ts: operator-grantable, default OFF), so
+ * the owner-writable branding.config.homeLayout must never self-enable it.
+ * Config can only opt OUT: an explicit "classic" wins even while the grant is
+ * on. Unentitled (whatever the config says) → the classic hero → catalog home.
  */
 export function resolveHomeLayout(
   entitled: boolean,
   configLayout: string | undefined | null,
 ): "classic" | "two-ways" {
-  if (configLayout === "classic") return "classic";
-  return entitled || configLayout === "two-ways" ? "two-ways" : "classic";
+  if (!entitled) return "classic";
+  return configLayout === "classic" ? "classic" : "two-ways";
 }
 
 /**

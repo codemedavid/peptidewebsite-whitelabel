@@ -9,10 +9,24 @@
 // theme drives the look while any tenant with the layout on gets the same home.
 // The Header/Footer/cart drawer are owned by the storefront Shell around this.
 
-import type { Brand } from "../types";
+import { useState } from "react";
+import type { Brand, Product } from "../types";
 import { useStore } from "../store";
-import { baseProductId } from "../checkout";
-import { buildTwoWaysHomeView, groupBuyCtaTarget } from "@/lib/storefront/two-ways-home";
+import { baseProductId, makeVariationEntry, unitPrice } from "../checkout";
+import {
+  buildTwoWaysHomeView,
+  groupBuyCtaTarget,
+  type GbHomeLine,
+  type OnHandLine,
+} from "@/lib/storefront/two-ways-home";
+import {
+  buildProductOptions,
+  optionLabel,
+  shouldShowOptionPicker,
+} from "@/lib/storefront/variations";
+import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
+import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 
@@ -48,6 +62,10 @@ export function TwoWaysHome({
     "Every batch third-party tested. Order what's on-hand today, or join the group buy and save.";
 
   const qtyOf = (id: string) => cart.filter((c) => baseProductId(c) === id).length;
+
+  // The live round's pricing scope — lets the GB card price a chosen variation
+  // exactly as checkout will charge it (unitPrice on the variation clone).
+  const gbScope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
 
   return (
     <div className="sf-twh" data-testid="two-ways-home">
@@ -109,64 +127,17 @@ export function TwoWaysHome({
           <p className="sf-twh__empty">Nothing on hand right now — check the group buy above.</p>
         ) : (
           <ul className="sf-twh__list">
-            {view.onHand.lines.map((line) => {
-              const p = line.product;
-              const qty = qtyOf(p.id);
-              const canBuy = p.purchasable !== false && !p.priceOnRequest;
-              // Product photo, or the brand's default product image, or the monogram.
-              const image = resolveProductImage(p.image, brand.defaultProductImage);
-              return (
-                <li key={p.id} className="sf-twh__row">
-                  <span className="sf-twh__avatar font-display" aria-hidden>
-                    {image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image} alt="" />
-                    ) : (
-                      line.initial
-                    )}
-                  </span>
-                  <div className="sf-twh__row-main">
-                    <div className="sf-twh__row-name">{p.name}</div>
-                    <div className="sf-twh__row-meta">
-                      {line.stockLabel && (
-                        <span
-                          className={`sf-twh__stock${line.inStock ? "" : " sf-twh__stock--out"}`}
-                        >
-                          {line.inStock ? line.stockLabel : "Out of stock"}
-                        </span>
-                      )}
-                      <span className="sf-twh__coa">COA ✓</span>
-                    </div>
-                  </div>
-                  <div className="sf-twh__row-buy">
-                    <div className="sf-twh__row-price">
-                      {p.priceOnRequest ? "Ask" : line.priceLabel}
-                    </div>
-                    {canBuy && line.inStock && (
-                      qty === 0 ? (
-                        <button
-                          type="button"
-                          className="sf-twh__add"
-                          onClick={() => addToCart(p)}
-                        >
-                          Add
-                        </button>
-                      ) : (
-                        <div className="sf-twh__stepper" aria-label={`Quantity of ${p.name}`}>
-                          <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
-                            −
-                          </button>
-                          <span aria-live="polite">{qty}</span>
-                          <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
-                            +
-                          </button>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+            {view.onHand.lines.map((line) => (
+              <OnHandRow
+                key={line.product.id}
+                line={line}
+                image={resolveProductImage(line.product.image, brand.defaultProductImage)}
+                currency={currency}
+                qty={qtyOf(line.product.id)}
+                addToCart={addToCart}
+                decrementCart={decrementCart}
+              />
+            ))}
           </ul>
         )}
       </section>
@@ -197,39 +168,17 @@ export function TwoWaysHome({
             )}
 
             <ul className="sf-twh__gb-items">
-              {view.gb.lines.map((line) => {
-                const p = line.product;
-                const qty = qtyOf(p.id);
-                return (
-                  <li key={p.id} className="sf-twh__gb-item">
-                    <div className="sf-twh__gb-item-main">
-                      <div className="sf-twh__gb-item-name">{p.name}</div>
-                      {line.hasSavings && (
-                        <div className="sf-twh__gb-item-reg">On-hand {line.regularLabel}</div>
-                      )}
-                    </div>
-                    <div className="sf-twh__gb-item-buy">
-                      <div className="sf-twh__gb-item-price font-display">{line.gbLabel}</div>
-                      {line.hasSavings && <div className="sf-twh__gb-save">save {line.saveLabel}</div>}
-                    </div>
-                    {qty === 0 ? (
-                      <button type="button" className="sf-twh__gb-add" onClick={() => addToCart(p)}>
-                        Join
-                      </button>
-                    ) : (
-                      <div className="sf-twh__stepper sf-twh__stepper--gb" aria-label={`Quantity of ${p.name}`}>
-                        <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
-                          −
-                        </button>
-                        <span aria-live="polite">{qty}</span>
-                        <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
-                          +
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              {view.gb.lines.map((line) => (
+                <GbItemRow
+                  key={line.product.id}
+                  line={line}
+                  currency={currency}
+                  scope={gbScope}
+                  qty={qtyOf(line.product.id)}
+                  addToCart={addToCart}
+                  decrementCart={decrementCart}
+                />
+              ))}
             </ul>
 
             <button
@@ -267,6 +216,190 @@ export function TwoWaysHome({
 
       <style>{twhCss}</style>
     </div>
+  );
+}
+
+// ── Rows ─────────────────────────────────────────────────────────────────────
+// Per-row components so variation products get the SAME option choice the
+// classic Catalog gives (5mg/10mg with their own prices) — a variation product
+// must never silently add at its base price. Option products keep a plain
+// "Add" (with an in-cart count) instead of the stepper: the stepper's minus
+// removes by base id, which can't target a variation clone's composite id —
+// quantities for those are managed in the cart drawer.
+
+type AddToCart = (product: Product, qty?: number, variation?: { name: string; price: number }) => void;
+
+function OnHandRow({
+  line,
+  image,
+  currency,
+  qty,
+  addToCart,
+  decrementCart,
+}: {
+  line: OnHandLine<Product>;
+  image: string | null;
+  currency: string;
+  qty: number;
+  addToCart: AddToCart;
+  decrementCart: (productId: string) => void;
+}) {
+  const p = line.product;
+  const options = buildProductOptions(p);
+  const showSelector = shouldShowOptionPicker(p);
+  const [optIdx, setOptIdx] = useState(0);
+  const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
+  const canBuy = p.purchasable !== false && !p.priceOnRequest;
+  const displayPrice =
+    showSelector && selectedOpt ? formatGbMoney(currency, selectedOpt.price) : line.priceLabel;
+  return (
+    <li className="sf-twh__row">
+      <span className="sf-twh__avatar font-display" aria-hidden>
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt="" />
+        ) : (
+          line.initial
+        )}
+      </span>
+      <div className="sf-twh__row-main">
+        <div className="sf-twh__row-name">{p.name}</div>
+        <div className="sf-twh__row-meta">
+          {line.stockLabel && (
+            <span className={`sf-twh__stock${line.inStock ? "" : " sf-twh__stock--out"}`}>
+              {line.inStock ? line.stockLabel : "Out of stock"}
+            </span>
+          )}
+          <span className="sf-twh__coa">COA ✓</span>
+        </div>
+        {showSelector && canBuy && line.inStock && (
+          <select
+            className="sf-twh__opts"
+            aria-label={`Options for ${p.name}`}
+            value={optIdx}
+            onChange={(e) => setOptIdx(Number(e.target.value))}
+          >
+            {options.map((o, i) => (
+              <option key={o.name} value={i}>
+                {optionLabel(o, p.currency || currency)}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="sf-twh__row-buy">
+        <div className="sf-twh__row-price">{p.priceOnRequest ? "Ask" : displayPrice}</div>
+        {canBuy && line.inStock && (
+          showSelector ? (
+            <>
+              <button
+                type="button"
+                className="sf-twh__add"
+                onClick={() => addToCart(p, 1, selectedOpt?.variation)}
+              >
+                Add
+              </button>
+              {qty > 0 && <span className="sf-twh__incart">{qty} in cart</span>}
+            </>
+          ) : qty === 0 ? (
+            <button type="button" className="sf-twh__add" onClick={() => addToCart(p)}>
+              Add
+            </button>
+          ) : (
+            <div className="sf-twh__stepper" aria-label={`Quantity of ${p.name}`}>
+              <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
+                −
+              </button>
+              <span aria-live="polite">{qty}</span>
+              <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
+                +
+              </button>
+            </div>
+          )
+        )}
+      </div>
+    </li>
+  );
+}
+
+function GbItemRow({
+  line,
+  currency,
+  scope,
+  qty,
+  addToCart,
+  decrementCart,
+}: {
+  line: GbHomeLine<Product>;
+  currency: string;
+  scope: GroupBuyPriceScope | null;
+  qty: number;
+  addToCart: AddToCart;
+  decrementCart: (productId: string) => void;
+}) {
+  const p = line.product;
+  const options = buildProductOptions(p);
+  const showSelector = shouldShowOptionPicker(p);
+  const [optIdx, setOptIdx] = useState(0);
+  const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
+  // Price the chosen option EXACTLY as checkout will charge it: a variation
+  // clone runs through the same unitPrice (gb min-rule included); the base
+  // option keeps the line's precomputed gb pricing.
+  const variation = showSelector ? selectedOpt?.variation : undefined;
+  const charged = variation ? unitPrice(makeVariationEntry(p, variation), 1, scope) : line.gbPrice;
+  const regular = variation ? variation.price : line.regularPrice;
+  const hasSavings = variation ? charged < regular : line.hasSavings;
+  return (
+    <li className="sf-twh__gb-item">
+      <div className="sf-twh__gb-item-main">
+        <div className="sf-twh__gb-item-name">{p.name}</div>
+        {hasSavings && (
+          <div className="sf-twh__gb-item-reg">On-hand {formatGbMoney(currency, regular)}</div>
+        )}
+        {showSelector && (
+          <select
+            className="sf-twh__opts sf-twh__opts--gb"
+            aria-label={`Options for ${p.name}`}
+            value={optIdx}
+            onChange={(e) => setOptIdx(Number(e.target.value))}
+          >
+            {options.map((o, i) => (
+              <option key={o.name} value={i}>
+                {optionLabel(o, p.currency || currency)}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="sf-twh__gb-item-buy">
+        <div className="sf-twh__gb-item-price font-display">{formatGbMoney(currency, charged)}</div>
+        {hasSavings && (
+          <div className="sf-twh__gb-save">save {formatGbMoney(currency, Math.max(0, regular - charged))}</div>
+        )}
+      </div>
+      {showSelector ? (
+        <span className="sf-twh__gb-item-add">
+          <button type="button" className="sf-twh__gb-add" onClick={() => addToCart(p, 1, variation)}>
+            Join
+          </button>
+          {qty > 0 && <span className="sf-twh__incart sf-twh__incart--gb">{qty} in cart</span>}
+        </span>
+      ) : qty === 0 ? (
+        <button type="button" className="sf-twh__gb-add" onClick={() => addToCart(p)}>
+          Join
+        </button>
+      ) : (
+        <div className="sf-twh__stepper sf-twh__stepper--gb" aria-label={`Quantity of ${p.name}`}>
+          <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
+            −
+          </button>
+          <span aria-live="polite">{qty}</span>
+          <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
+            +
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -335,6 +468,17 @@ const twhCss = `
 }
 .sf-root .sf-twh__stock--out { color: var(--brand-text-muted, #8a4a66); background: color-mix(in oklab, var(--brand-text-muted, #8a4a66) 14%, #fff); }
 .sf-root .sf-twh__coa { font-size: 11px; color: var(--brand-text-muted, #8a4a66); }
+.sf-root .sf-twh__opts {
+  margin-top: 8px; max-width: 100%; font: inherit; font-size: 12px; font-weight: 600;
+  padding: 4px 8px; border-radius: 8px; color: var(--brand-text, #3a1f2c);
+  border: 1px solid var(--hairline, #f6d9e7); background: var(--brand-surface, #fff);
+}
+.sf-root .sf-twh__opts--gb {
+  color: var(--brand-main, #c81e6e); border-color: color-mix(in oklab, #fff 40%, transparent);
+}
+.sf-root .sf-twh__incart { display: block; margin-top: 4px; font-size: 10px; font-weight: 700; color: var(--brand-text-muted, #8a4a66); }
+.sf-root .sf-twh__incart--gb { color: color-mix(in oklab, #fff 85%, var(--brand-main, #c81e6e)); text-align: center; }
+.sf-root .sf-twh__gb-item-add { display: flex; flex-direction: column; align-items: center; }
 .sf-root .sf-twh__row-buy { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .sf-root .sf-twh__row-price { font-weight: 700; font-size: 16px; color: var(--brand-text, #3a1f2c); }
 .sf-root .sf-twh__add {

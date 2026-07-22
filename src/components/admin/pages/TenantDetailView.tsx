@@ -537,7 +537,15 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         priceCents: price.trim() === "" ? null : Math.round(Number(price) * 100),
       });
       if ("error" in res) setErr(res.error);
-      else {
+      else if (res.status === "without-price") {
+        // Core window saved, but the price column isn't on the live DB yet —
+        // tell the operator instead of silently dropping their figure.
+        setErr(
+          "Window saved — but the monthly price wasn't stored: the subscriptionPriceCents column is missing on the database (run db:push), then save again.",
+        );
+        showToast("Saved without the monthly price.");
+        router.refresh();
+      } else {
         showToast("Subscription window saved.");
         router.refresh();
       }
