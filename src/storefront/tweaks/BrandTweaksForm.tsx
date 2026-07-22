@@ -35,6 +35,7 @@ import {
 } from "./controls";
 import { matchFontPreset } from "@/lib/theme/fontPresets";
 import { LOGO_CURVE_PRESETS, logoCurveLabel } from "@/lib/storefront/logo-curve";
+import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
 
@@ -272,6 +273,16 @@ export const HERO_LOGO_SIZES: Record<string, number | undefined> = {
 export const HERO_LOGO_SIZE_LABEL = (size?: number): string =>
   Object.entries(HERO_LOGO_SIZES).find(([, v]) => v === size)?.[0] ?? "Default";
 
+// Catalog sort dropdown styles — "Classic" is today's Name / Price low-high /
+// Price high-low menu; "Name · Price · Best Sellers" is the simple 3-option
+// menu where best sellers rank by real units sold (catalog-sort.ts).
+export const SORT_STYLES: Record<string, Brand["catalogSortStyle"]> = {
+  Classic: "classic",
+  "Name · Price · Best Sellers": "simple",
+};
+export const SORT_STYLE_LABEL = (style?: Brand["catalogSortStyle"]): string =>
+  Object.entries(SORT_STYLES).find(([, v]) => v === style)?.[0] ?? "Classic";
+
 // Local, no-network hero composer — picks a layout + copy from the industry tag.
 // (The design called window.claude.complete; this keeps the feature usable offline.)
 export function composeHero(industry: string, brandName: string): Partial<Brand> {
@@ -501,6 +512,28 @@ export function BrandTweaksForm({
       <TweakToggle label="Cart" value={t.headerShowCart !== false} onChange={(v) => setTweak("headerShowCart", v)} />
       <TweakToggle label="CTA button" value={t.headerShowCta !== false} onChange={(v) => setTweak("headerShowCta", v)} />
 
+      <TweakSection label="Borders" />
+      {/* Optional storefront-wide border overrides: color recolors every
+          --brand-border hairline/panel/card frame; width thickens the standard
+          1px borders. Unset = theme default at 1px, so existing tenants are
+          unaffected. Mirrors the platform editor's Brand-tab Border controls
+          and writes the same borderColor/borderWidth brand fields. */}
+      <ColorField
+        label="Border color"
+        value={t.borderColor}
+        optional
+        fallback="#E5E7EB"
+        inheritLabel="Inheriting theme border"
+        onChange={(v) => setTweak("borderColor", v)}
+        onClear={() => setTweak("borderColor", undefined)}
+        options={["#000000", "#1A1A1A", "#3A3A3A", "#6B6B6B", "#D8D7D3", "#E5E7EB", "#F5D9E3", "#C9A961", "#2A6FDB", "#22B07D", "#FFFFFF"]} />
+      <TweakSelect
+        label="Border width"
+        value={borderWidthLabel(t.borderWidth)}
+        options={Object.keys(BRAND_BORDER_WIDTH_PRESETS)}
+        onChange={(v) => setTweak("borderWidth", BRAND_BORDER_WIDTH_PRESETS[v])}
+      />
+
       <TweakSection label="Hero layout & elements" />
       <TweakSelect label="Layout variant" value={t.heroVariant || "centered"} onChange={(v) => setTweak("heroVariant", v as Brand["heroVariant"])} options={[...HERO_VARIANTS]} />
       <TweakToggle label="Show logo card" value={t.heroShowLogo !== false} onChange={(v) => setTweak("heroShowLogo", v)} />
@@ -529,6 +562,12 @@ export function BrandTweaksForm({
       <TweakText label="Title" value={t.catalogTitle} onChange={(v) => setTweak("catalogTitle", v)} />
       <TweakToggle label="Show search" value={t.catalogShowSearch !== false} onChange={(v) => setTweak("catalogShowSearch", v)} />
       <TweakToggle label="Show sort" value={t.catalogShowSort !== false} onChange={(v) => setTweak("catalogShowSort", v)} />
+      <TweakSelect
+        label="Sort menu"
+        value={SORT_STYLE_LABEL(t.catalogSortStyle)}
+        options={Object.keys(SORT_STYLES)}
+        onChange={(v) => setTweak("catalogSortStyle", SORT_STYLES[v])}
+      />
       <TweakToggle label="Show product count" value={t.catalogShowCount !== false} onChange={(v) => setTweak("catalogShowCount", v)} />
 
       <TweakSection label="Page: Track Order" />

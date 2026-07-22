@@ -36,6 +36,7 @@ import { TweaksStyle } from "@/storefront/tweaks/controls";
 import { StorefrontLivePreview } from "@/components/admin/StorefrontLivePreview";
 import { CardDesignPicker, cardDesignLabel } from "@/components/admin/CardDesignPicker";
 import { CARD_PRESETS } from "@/storefront/cardDesign";
+import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
 import { saveBrandingAction } from "@/actions/onboarding";
 import {
   uploadBrandingAssetAction,
@@ -392,6 +393,37 @@ export function BrandingEditor({
                       onReset={() => setTweak("headerText", undefined)}
                       resetLabel="Reset to brand colors"
                     />
+                  </div>
+                </div>
+
+                {/* Borders — storefront-wide overrides. Color recolors every
+                    --brand-border hairline/panel/card frame; width thickens the
+                    standard 1px borders. Stored on the Brand config; unset keeps
+                    the theme default at 1px (existing tenants unaffected). */}
+                <div className="mt-4 border-t border-border pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Borders</h3>
+                  <div className="mt-2 space-y-2">
+                    <HeaderColorField
+                      label="Border color"
+                      help="Hairlines, panels & card frames across the storefront. Defaults to the theme border."
+                      value={cfg.borderColor}
+                      fallback="#E5E7EB"
+                      onChange={(v) => setTweak("borderColor", v)}
+                      onReset={() => setTweak("borderColor", undefined)}
+                      resetLabel="Reset to theme border"
+                    />
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">Border width</span>
+                      <Select
+                        value={borderWidthLabel(cfg.borderWidth)}
+                        onChange={(e) => setTweak("borderWidth", BRAND_BORDER_WIDTH_PRESETS[e.target.value])}
+                        className="mt-1"
+                      >
+                        {Object.keys(BRAND_BORDER_WIDTH_PRESETS).map((label) => (
+                          <option key={label} value={label}>{label}</option>
+                        ))}
+                      </Select>
+                    </label>
                   </div>
                 </div>
               </div>

@@ -43,6 +43,7 @@ import {
   saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
+import { brandBorderVars } from "@/lib/storefront/brand-border";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import {
   gbScopeFromBanner,
@@ -175,6 +176,13 @@ function applyBrandStyle(b: Brand) {
   else r.removeProperty("--brand-header");
   if (b.headerText) r.setProperty("--brand-header-text", b.headerText);
   else r.removeProperty("--brand-header-text");
+  // Border overrides — normalized fail-closed (invalid config keeps the theme
+  // default). Remove when unset so a previous tenant's border can't linger.
+  const borderVars = brandBorderVars(b);
+  for (const varName of ["--brand-border", "--brand-border-width"]) {
+    if (borderVars[varName]) r.setProperty(varName, borderVars[varName]);
+    else r.removeProperty(varName);
+  }
   r.setProperty("--brand-heading-font", `"${b.headingFont}", Georgia, serif`);
   r.setProperty("--brand-body-font", `"${b.bodyFont}", system-ui, sans-serif`);
   // Button font is optional — remove (not set "") when unset so the CSS default

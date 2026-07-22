@@ -302,6 +302,13 @@ export type Brand = {
   // `text` per element), so existing tenants are unaffected. Both are hex.
   headerBg?: string;
   headerText?: string;
+  // Storefront border overrides — optional. `borderColor` (hex) recolors every
+  // --brand-border hairline/panel/card frame; `borderWidth` (px, 1–6) thickens
+  // the standard 1px borders via --brand-border-width. Unset = theme default
+  // border at 1px, so existing tenants are unaffected. Normalized fail-closed
+  // through @/lib/storefront/brand-border on render (applyBrandStyle).
+  borderColor?: string;
+  borderWidth?: number;
   headingFont: string;
   bodyFont: string;
   // CTA / button label font. Optional — unset means buttons follow the body
@@ -554,6 +561,15 @@ export type Brand = {
   catalogShowSearch: boolean;
   catalogShowSort: boolean;
   catalogShowCount: boolean;
+  /** Which sort dropdown the catalog renders — "classic" (default) is today's
+   *  Name / Price low-high / Price high-low menu; "simple" is the 3-option
+   *  Sort by Name / Sort by Price / Sort by Best Sellers menu (HP Glow).
+   *  Normalized server-side via normalizeCatalogSortStyle. */
+  catalogSortStyle?: "classic" | "simple";
+  /** Units sold per product id (server-computed from storefront orders via
+   *  buildBestSellerCounts) — powers "Sort by Best Sellers". Only shipped when
+   *  catalogSortStyle is "simple". */
+  bestSellerCounts?: Record<string, number>;
 
   footerShowBrand: boolean;
   footerShowBlurb: boolean;
