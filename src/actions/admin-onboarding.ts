@@ -55,7 +55,7 @@ export async function publishTenantAction(id: string): Promise<AdminOnboardingRe
 
   const sub = await prisma.onboardingSubmission.findUnique({
     where: { id },
-    select: { tenantId: true, slug: true },
+    select: { tenantId: true },
   });
   if (!sub?.tenantId) return { error: "No tenant linked to this submission." };
 
@@ -78,7 +78,7 @@ export async function unpublishTenantAction(id: string): Promise<AdminOnboarding
 
   const sub = await prisma.onboardingSubmission.findUnique({
     where: { id },
-    select: { tenantId: true, slug: true },
+    select: { tenantId: true },
   });
   if (!sub?.tenantId) return { error: "No tenant linked to this submission." };
 

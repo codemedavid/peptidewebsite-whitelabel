@@ -6,7 +6,7 @@ import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { isValidPlanKey, isValidStatus } from "@/lib/admin/plan-options";
 import { validateWhatsapp } from "@/lib/admin/whatsapp";
-import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { revalidateTenant, revalidateTenantVisibility } from "@/lib/tenant/revalidate";
 import { addBillingCycle, isBillingCycle } from "@/lib/subscription/billing-cycle";
 import { resolvePriceCentsInput } from "@/lib/subscription/plan-fee";
 import { writeSubscriptionWindow, type WindowWrite } from "@/lib/subscription/persist-window";
@@ -25,7 +25,7 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
   if (isDemoMode()) return { error: "Suspending built-in demo tenants isn't supported." };
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, status: true, domains: { select: { hostname: true } } },
+    select: { id: true, status: true },
   });
   if (!tenant) return { error: "Tenant not found." };
   const next = tenant.status === "suspended" ? "active" : "suspended";
@@ -36,10 +36,10 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
     data: { status: next },
   });
   if (flipped.count === 0) return { error: "The tenant's status just changed — refresh and try again." };
-  // Bust the host-resolver + tenant caches (custom domains included) so the
-  // kill-switch — and a reactivation — takes effect on the next storefront
-  // request instead of after the resolver's 5-minute TTL.
-  revalidateTenant(tenant.id, slug, tenant.domains.map((d) => d.hostname));
+  // Bust the host-resolver + tenant caches on every host (custom domains
+  // included) so the kill-switch — and a reactivation — takes effect on the
+  // next storefront request instead of after the resolver's 5-minute TTL.
+  await revalidateTenantVisibility(tenant.id);
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
@@ -64,16 +64,12 @@ export async function setTenantPlanAction(
   await requirePlatformUser();
   if (!isValidPlanKey(planKey)) return { error: "Unknown plan." };
   if (!isValidStatus(status)) return { error: "Unknown status." };
-  if (isDemoMode()) {
-    // Built-in demo tenants are immutable fixtures; report success without persisting.
-    return { ok: true, status };
-  }
+  // Built-in demo tenants are immutable fixtures — say so instead of faking a
+  // status change the UI would render as applied.
+  if (isDemoMode()) return { error: "Changing built-in demo tenants isn't supported." };
   // Independent reads — resolve the tenant and the target plan row in parallel.
   const [tenant, plan] = await Promise.all([
-    prisma.tenant.findUnique({
-      where: { slug },
-      select: { id: true, domains: { select: { hostname: true } } },
-    }),
+    prisma.tenant.findUnique({ where: { slug }, select: { id: true } }),
     prisma.plan.findUnique({ where: { key: planKey }, select: { id: true } }),
   ]);
   if (!tenant) return { error: "Tenant not found." };
@@ -81,7 +77,7 @@ export async function setTenantPlanAction(
   await prisma.tenant.update({ where: { id: tenant.id }, data: { planId: plan.id, status } });
   // Bust the storefront caches (entitlements re-gate, host resolver picks up a
   // suspend — custom domains included) in addition to the admin surface.
-  revalidateTenant(tenant.id, slug, tenant.domains.map((d) => d.hostname));
+  await revalidateTenantVisibility(tenant.id);
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
