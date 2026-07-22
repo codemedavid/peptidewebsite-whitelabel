@@ -24,10 +24,17 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
     // Built-in demo tenants are immutable fixtures; report success without persisting.
     return { ok: true, status: "active" };
   }
-  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true, status: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, status: true, domains: { select: { hostname: true } } },
+  });
   if (!tenant) return { error: "Tenant not found." };
   const next = tenant.status === "suspended" ? "active" : "suspended";
   await prisma.tenant.update({ where: { id: tenant.id }, data: { status: next } });
+  // Bust the host-resolver + tenant caches (custom domains included) so the
+  // kill-switch — and a reactivation — takes effect on the next storefront
+  // request instead of after the resolver's 5-minute TTL.
+  revalidateTenant(tenant.id, slug, tenant.domains.map((d) => d.hostname));
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
@@ -58,15 +65,18 @@ export async function setTenantPlanAction(
   }
   // Independent reads — resolve the tenant and the target plan row in parallel.
   const [tenant, plan] = await Promise.all([
-    prisma.tenant.findUnique({ where: { slug }, select: { id: true } }),
+    prisma.tenant.findUnique({
+      where: { slug },
+      select: { id: true, domains: { select: { hostname: true } } },
+    }),
     prisma.plan.findUnique({ where: { key: planKey }, select: { id: true } }),
   ]);
   if (!tenant) return { error: "Tenant not found." };
   if (!plan) return { error: `The "${planKey}" plan isn't set up in the database yet.` };
   await prisma.tenant.update({ where: { id: tenant.id }, data: { planId: plan.id, status } });
   // Bust the storefront caches (entitlements re-gate, host resolver picks up a
-  // suspend) in addition to the admin surface.
-  revalidateTenant(tenant.id, slug);
+  // suspend — custom domains included) in addition to the admin surface.
+  revalidateTenant(tenant.id, slug, tenant.domains.map((d) => d.hostname));
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
