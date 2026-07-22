@@ -11,7 +11,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode, updateDemoOnboarding } from "@/lib/demo/fixtures";
-import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { revalidateTenant, revalidateTenantVisibility } from "@/lib/tenant/revalidate";
 import { hashAdminPassword } from "@/lib/auth/tenant-admin";
 import { ONBOARDING_STATUSES, type OnboardingStatus } from "@/lib/admin/onboarding-data";
 
@@ -64,7 +64,8 @@ export async function publishTenantAction(id: string): Promise<AdminOnboardingRe
     prisma.onboardingSubmission.update({ where: { id }, data: { setupStatus: "completed" } }),
   ]);
 
-  revalidateTenant(sub.tenantId, sub.slug); // store goes live: bust host + tenant caches
+  // Store goes live: bust host + tenant caches on every host, custom domains included.
+  await revalidateTenantVisibility(sub.tenantId);
   bust();
   revalidatePath(`/admin/onboarding/${id}`);
   return { ok: true };
@@ -82,7 +83,7 @@ export async function unpublishTenantAction(id: string): Promise<AdminOnboarding
   if (!sub?.tenantId) return { error: "No tenant linked to this submission." };
 
   await prisma.tenant.update({ where: { id: sub.tenantId }, data: { status: "pending_setup" } });
-  revalidateTenant(sub.tenantId, sub.slug);
+  await revalidateTenantVisibility(sub.tenantId);
   bust();
   revalidatePath(`/admin/onboarding/${id}`);
   return { ok: true };

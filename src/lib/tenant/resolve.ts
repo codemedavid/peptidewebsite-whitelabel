@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { normalizeHost } from "./cache-tags";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
 
@@ -21,10 +22,6 @@ export type ResolvedTenant = { id: string; slug: string; status: string };
 export function storefrontOrigin(slug: string | null | undefined): string | undefined {
   const s = (slug ?? "").trim().toLowerCase();
   return s ? `https://${s}.${normalizeHost(ROOT)}` : undefined;
-}
-
-function normalizeHost(host: string) {
-  return host.replace(/:\d+$/, "").toLowerCase();
 }
 
 // Inner uncached lookup. Cached below by host with a per-host tag so actions

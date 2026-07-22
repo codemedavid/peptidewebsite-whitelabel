@@ -20,17 +20,22 @@ const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/
  */
 export async function suspendTenantAction(slug: string): Promise<AdminActionResult> {
   await requirePlatformUser();
-  if (isDemoMode()) {
-    // Built-in demo tenants are immutable fixtures; report success without persisting.
-    return { ok: true, status: "active" };
-  }
+  // Built-in demo tenants are immutable fixtures — say so instead of faking a
+  // status the UI would toast as "reactivated".
+  if (isDemoMode()) return { error: "Suspending built-in demo tenants isn't supported." };
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
     select: { id: true, status: true, domains: { select: { hostname: true } } },
   });
   if (!tenant) return { error: "Tenant not found." };
   const next = tenant.status === "suspended" ? "active" : "suspended";
-  await prisma.tenant.update({ where: { id: tenant.id }, data: { status: next } });
+  // Conditional flip: only apply if the status is still the one we read, so a
+  // concurrent toggle can't double-flip (same pattern as admin-upgrades).
+  const flipped = await prisma.tenant.updateMany({
+    where: { id: tenant.id, status: tenant.status },
+    data: { status: next },
+  });
+  if (flipped.count === 0) return { error: "The tenant's status just changed — refresh and try again." };
   // Bust the host-resolver + tenant caches (custom domains included) so the
   // kill-switch — and a reactivation — takes effect on the next storefront
   // request instead of after the resolver's 5-minute TTL.
@@ -233,9 +238,17 @@ export async function setSubscriptionWindowAction(
 export async function deleteTenantAction(slug: string): Promise<AdminActionResult> {
   await requirePlatformUser();
   if (isDemoMode()) return { error: "Deleting built-in demo tenants isn't supported." };
-  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, domains: { select: { hostname: true } } },
+  });
   if (!tenant) return { error: "Tenant not found." };
+  // Capture the hostnames BEFORE the delete cascades the Domain rows away,
+  // then bust — otherwise the host resolver keeps returning the dead tenant
+  // (→ 500s on its storefront) for up to 5 minutes.
+  const hostnames = tenant.domains.map((d) => d.hostname);
   await prisma.tenant.delete({ where: { id: tenant.id } });
+  revalidateTenant(tenant.id, slug, hostnames);
   revalidateTag("admin:data");
   revalidatePath("/admin");
   revalidatePath("/admin/tenants");
