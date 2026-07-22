@@ -10,6 +10,11 @@ import {
   optionLabel,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
+import {
+  catalogSortOptions,
+  normalizeCatalogSortStyle,
+  sortCatalogProducts,
+} from "@/lib/storefront/catalog-sort";
 
 /**
  * The storefront product card. Also rendered by the admin Card Studio for its
@@ -240,6 +245,13 @@ export function Catalog({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("name");
 
+  // Per-tenant sort menu: "classic" (default) or the "simple" 3-option menu
+  // (Sort by Name / Price / Best Sellers). Best sellers rank by the server-
+  // computed units-sold map — the sorter itself stays pure and covered by
+  // npm run test:catalog-sort.
+  const sortStyle = normalizeCatalogSortStyle(brand.catalogSortStyle);
+  const sortOptions = catalogSortOptions(sortStyle);
+
   const filtered = useMemo(() => {
     let list = products;
     if (category && category !== "all") {
@@ -253,13 +265,8 @@ export function Catalog({
           (p.description || "").toLowerCase().includes(q),
       );
     }
-    list = [...list].sort((a, b) => {
-      if (sort === "price-asc") return a.price - b.price;
-      if (sort === "price-desc") return b.price - a.price;
-      return a.name.localeCompare(b.name);
-    });
-    return list;
-  }, [products, category, query, sort]);
+    return sortCatalogProducts(list, sort, brand.bestSellerCounts);
+  }, [products, category, query, sort, brand.bestSellerCounts]);
 
   return (
     <section className="catalog section" id="catalog">
@@ -296,9 +303,11 @@ export function Catalog({
                   <line x1="10" y1="18" x2="20" y2="18" />
                 </svg>
                 <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                  <option value="name">Sort: Name</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
+                  {sortOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             )}

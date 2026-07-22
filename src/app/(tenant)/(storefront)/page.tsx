@@ -27,6 +27,11 @@ import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
+import {
+  normalizeCatalogSortStyle,
+  buildBestSellerCounts,
+  type BestSellerOrderInput,
+} from "@/lib/storefront/catalog-sort";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -335,6 +340,34 @@ export default async function HomePage() {
   // placement so a tampered client can't restore it. DB rows keep their data —
   // re-granting the feature brings the prices back untouched.
   products = stripResellerPricing(products, resellerEntitled);
+
+  // Catalog sort menu style — "simple" swaps the sort dropdown to the 3-option
+  // Sort by Name / Sort by Price / Sort by Best Sellers menu (HP Glow), where
+  // best sellers rank by real units sold. Counts are computed server-side from
+  // the store's orders (cancelled/refunded excluded) and shipped on the brand;
+  // a failed read degrades to no counts (best → name order) — the storefront
+  // never blocks on analytics.
+  brand.catalogSortStyle = normalizeCatalogSortStyle(config.catalogSortStyle);
+  if (brand.catalogSortStyle === "simple") {
+    try {
+      let orderRows: BestSellerOrderInput[];
+      if (isDemoMode()) {
+        const slug = (await getTenantSlug()) ?? tenantId;
+        orderRows = getDemoStoreOrders(slug);
+      } else {
+        const rows = await withTenant(tenantId, (db) =>
+          db.storefrontOrder.findMany({ select: { status: true, items: true } }),
+        );
+        orderRows = rows.map((r) => ({
+          status: r.status,
+          items: Array.isArray(r.items) ? (r.items as BestSellerOrderInput["items"]) : [],
+        }));
+      }
+      brand.bestSellerCounts = buildBestSellerCounts(orderRows);
+    } catch {
+      brand.bestSellerCounts = {};
+    }
+  }
 
   // "New functionality" tags: the operator's kept flags (persisted registry
   // newKeys), mapped to this store's admin modules. Detected-but-unsaved additions
