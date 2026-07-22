@@ -35,13 +35,22 @@ const variationsOf = (p: OptionSource): Variation[] =>
  * offers a genuine choice, and the variations follow in the order the seller
  * arranged them. A base price of 0 is skipped rather than offered: a "Standard"
  * option at zero would be a free checkout, not a choice.
+ *
+ * "Standard" is also skipped when a named variation already carries the base
+ * price. Sellers routinely re-enter the base price as the first variation
+ * ("5mg · ₱1,099" on a ₱1,099 product) — offering "Standard" alongside it just
+ * repeats the same price with no size info, and the customer can't tell what a
+ * nameless "Standard" would even ship.
  */
 export function buildProductOptions(product: OptionSource): ProductOption[] {
   const variations = variationsOf(product);
   if (variations.length === 0) return [];
 
+  const baseIsDistinct =
+    product.price > 0 && !variations.some((v) => v.price === product.price);
+
   return [
-    ...(product.price > 0 ? [{ name: "Standard", price: product.price }] : []),
+    ...(baseIsDistinct ? [{ name: "Standard", price: product.price }] : []),
     ...variations.map((v) => ({ name: v.name, price: v.price, variation: v })),
   ];
 }

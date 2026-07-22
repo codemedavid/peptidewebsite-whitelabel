@@ -45,7 +45,8 @@ export function ProductCard({
   // product has them, the customer picks an option; the chosen one drives the
   // price shown and what's added to the cart. The product's own base price stays
   // available as a default "Standard" option (so a single variation still gives a
-  // real choice) — skipped only when the seller left the base price at 0. No
+  // real choice) — skipped when the seller left the base price at 0, or when a
+  // named variation already carries the base price (it IS the standard). No
   // variations → unchanged single-price behavior.
   const options = buildProductOptions(product);
   const [optIdx, setOptIdx] = useState(0);
