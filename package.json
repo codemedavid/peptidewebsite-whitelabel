@@ -75,7 +75,8 @@
     "test:contact-channels": "tsx scripts/test-contact-channels.ts",
     "test:upload-limits": "tsx scripts/test-upload-limits.ts",
     "test:rehost-urls": "tsx scripts/test-rehost-urls.ts",
-    "test:plan-fee": "tsx scripts/test-plan-fee.ts"
+    "test:plan-fee": "tsx scripts/test-plan-fee.ts",
+    "test:subscription-window": "tsx scripts/test-subscription-window-write.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
