@@ -57,6 +57,7 @@
     "test:default-product-image": "tsx scripts/test-default-product-image.ts",
     "test:faq": "tsx scripts/test-faq.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
+    "test:coa": "tsx scripts/test-coa.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
     "test:coa-protocols-backfill": "tsx scripts/test-coa-protocols-backfill.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
