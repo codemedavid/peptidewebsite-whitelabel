@@ -84,7 +84,8 @@
     "test:subscription-window": "tsx scripts/test-subscription-window-write.ts",
     "test:tenant-suspend": "tsx scripts/test-tenant-suspend.ts",
     "test:tenant-unavailable": "tsx scripts/test-tenant-unavailable.ts",
-    "test:income": "tsx scripts/test-income-analytics.ts"
+    "test:income": "tsx scripts/test-income-analytics.ts",
+    "test:logo-curve": "tsx scripts/test-logo-curve.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
