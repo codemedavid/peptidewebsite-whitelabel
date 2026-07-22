@@ -35,6 +35,7 @@ import {
   subscriptionInvoiceCode,
   summarizeSubscriptionPayments,
   buildPaymentsView,
+  tenantInvoiceRowsFrom,
   type SubscriptionPaymentStatus,
 } from "../src/lib/subscription/payments";
 
@@ -215,6 +216,70 @@ check("buildPaymentsView returns the whole ledger when it fits under the cap", (
   const view = buildPaymentsView(LEDGER, 60);
   assert.strictEqual(view.display.length, LEDGER.length);
   assert.strictEqual(view.summary.total, LEDGER.length);
+});
+
+// ───────────────── tenant invoice history (Billing page) ────────────────────
+// The store-admin Billing page lists the tenant's own filed payments.
+// tenantInvoiceRowsFrom projects raw ledger rows into JSON-safe display rows:
+// stable invoice code, the date that matters (paidAt, else submittedAt),
+// newest-first order, and untrusted DB statuses narrowed safely.
+
+check("tenantInvoiceRowsFrom maps a row to code/amount/method/status", () => {
+  const rows = tenantInvoiceRowsFrom([
+    {
+      id: "pay_a1",
+      amountCents: 149_900,
+      status: "confirmed",
+      method: "GCash",
+      paidAt: new Date("2026-07-10T00:00:00.000Z"),
+      submittedAt: new Date("2026-07-11T00:00:00.000Z"),
+    },
+  ]);
+  assert.strictEqual(rows.length, 1);
+  assert.ok(rows[0].code.startsWith("INV-202607-"), `code carries the paid month + suffix (got ${rows[0].code})`);
+  assert.strictEqual(rows[0].amountCents, 149_900);
+  assert.strictEqual(rows[0].method, "GCash");
+  assert.strictEqual(rows[0].status, "confirmed");
+  assert.strictEqual(rows[0].dateIso, "2026-07-10T00:00:00.000Z");
+});
+
+check("falls back to submittedAt when paidAt is missing or invalid", () => {
+  const rows = tenantInvoiceRowsFrom([
+    { id: "p1", amountCents: 100, status: "pending", method: "Maya", paidAt: null, submittedAt: new Date("2026-06-05T00:00:00.000Z") },
+    { id: "p2", amountCents: 200, status: "pending", method: "Maya", paidAt: "not-a-date", submittedAt: new Date("2026-06-06T00:00:00.000Z") },
+  ]);
+  assert.strictEqual(rows.length, 2);
+  const isos = rows.map((r) => r.dateIso).sort();
+  assert.deepStrictEqual(isos, ["2026-06-05T00:00:00.000Z", "2026-06-06T00:00:00.000Z"]);
+});
+
+check("orders newest first regardless of input order", () => {
+  const rows = tenantInvoiceRowsFrom([
+    { id: "old", amountCents: 100, status: "confirmed", method: "GCash", paidAt: new Date("2026-01-01T00:00:00.000Z"), submittedAt: new Date("2026-01-01T00:00:00.000Z") },
+    { id: "new", amountCents: 100, status: "pending", method: "GCash", paidAt: new Date("2026-07-01T00:00:00.000Z"), submittedAt: new Date("2026-07-01T00:00:00.000Z") },
+    { id: "mid", amountCents: 100, status: "failed", method: "GCash", paidAt: new Date("2026-04-01T00:00:00.000Z"), submittedAt: new Date("2026-04-01T00:00:00.000Z") },
+  ]);
+  assert.deepStrictEqual(rows.map((r) => r.id), ["new", "mid", "old"]);
+});
+
+check("narrows an unknown DB status to pending (never crashes the page)", () => {
+  const rows = tenantInvoiceRowsFrom([
+    { id: "p1", amountCents: 100, status: "REFUNDED??", method: "Other", paidAt: null, submittedAt: new Date("2026-06-01T00:00:00.000Z") },
+  ]);
+  assert.strictEqual(rows[0].status, "pending");
+});
+
+check("accepts ISO-string dates (JSON round-trip) and drops rows with no usable date", () => {
+  const rows = tenantInvoiceRowsFrom([
+    { id: "ok", amountCents: 100, status: "pending", method: "Card", paidAt: "2026-05-02T00:00:00.000Z", submittedAt: "2026-05-01T00:00:00.000Z" },
+    { id: "bad", amountCents: 100, status: "pending", method: "Card", paidAt: "nope", submittedAt: "also-nope" },
+  ]);
+  assert.deepStrictEqual(rows.map((r) => r.id), ["ok"]);
+  assert.strictEqual(rows[0].dateIso, "2026-05-02T00:00:00.000Z");
+});
+
+check("empty ledger projects to an empty history", () => {
+  assert.deepStrictEqual(tenantInvoiceRowsFrom([]), []);
 });
 
 // ─────────────────────────────── summary ────────────────────────────────────
