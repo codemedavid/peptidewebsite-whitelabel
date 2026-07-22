@@ -23,6 +23,7 @@ import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/tr
 import { getSubscriptionState } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -301,6 +302,14 @@ export default async function HomePage() {
     );
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
+
+  // Reseller wholesale pricing is part of the SAME entitlement as the portal:
+  // an unentitled tenant's catalog ships with no reseller legs at all, so the
+  // cart can never flip a bulk line to a wholesale price / RESELLER badge on
+  // stray product data (test:reseller-gate). orders.ts re-applies this strip at
+  // placement so a tampered client can't restore it. DB rows keep their data —
+  // re-granting the feature brings the prices back untouched.
+  products = stripResellerPricing(products, resellerEntitled);
 
   // "New functionality" tags: the operator's kept flags (persisted registry
   // newKeys), mapped to this store's admin modules. Detected-but-unsaved additions

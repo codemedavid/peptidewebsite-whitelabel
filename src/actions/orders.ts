@@ -49,6 +49,7 @@ import {
 import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { evaluateOnHandGate } from "@/lib/storefront/on-hand-gate";
+import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
@@ -747,11 +748,19 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     if (existing) return { ok: true, order: existing };
     // Inventory guard: never store an order the stock can't cover. (After the
     // idempotent-retry check, so a committed order is still acknowledged.)
-    const demoProducts =
+    const demoProductsRaw =
       getDemoStoreProducts(slug) ??
       getDemoProducts(slug).map((dp) =>
         dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
       );
+    // Reseller wholesale pricing is entitlement-gated: strip the legs before
+    // ANY pricing/rules surface reads the catalog, so an unentitled tenant's
+    // re-price can never charge a wholesale tier a tampered client kept
+    // (test:reseller-gate) — the same strip page.tsx applies at render.
+    const demoProducts = stripResellerPricing(
+      demoProductsRaw,
+      await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
+    );
     // Group-buy attribution FIRST — it decides whether this order is in a live
     // round AND returns that round's pricing scope, which drives whether GB
     // products re-price at their gbPrice below.
@@ -831,8 +840,14 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const rows = await withTenant(tenantId, (db) =>
       db.product.findMany({ where: { status: { not: "archived" } } }),
     );
-    const catalog = rows.map((r) =>
+    const catalogRaw = rows.map((r) =>
       dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
+    );
+    // Same reseller entitlement gate as the demo path / storefront render —
+    // an unentitled tenant's placement catalog carries no wholesale legs.
+    const catalog = stripResellerPricing(
+      catalogRaw,
+      await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
     );
     // Tenant slug (used for group-buy attribution + the on-hand gate below).
     const slug = (await getTenantSlug()) ?? tenantId;
