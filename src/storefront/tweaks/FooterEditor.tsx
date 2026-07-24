@@ -135,6 +135,26 @@ export function FooterEditor({
 
   return (
     <div style={s.sub}>
+      {/* FOOTER STYLE — columns (default) vs compact dark footer */}
+      <div style={{ marginBottom: 8 }}>
+        <div style={s.tinyLabel}>Footer style</div>
+        <select
+          style={{ ...s.sel, width: "100%" }}
+          value={brand.footerStyle === "compact" ? "compact" : "columns"}
+          onChange={(e) => setTweak("footerStyle", e.target.value)}
+        >
+          <option value="columns">Columns (default)</option>
+          <option value="compact">Compact (dark, pill links)</option>
+        </select>
+        {brand.footerStyle === "compact" && (
+          <p style={{ fontSize: 10.5, color: "rgba(0,0,0,0.5)", margin: "6px 0 0", lineHeight: 1.5 }}>
+            Compact footer shows the tagline (Blurb below), plus pill links for Lab
+            Reports, FAQ and each active contact channel. Socials &amp; link columns
+            are hidden in this style.
+          </p>
+        )}
+      </div>
+
       {/* SOCIALS editor */}
       <div style={s.head} onClick={() => setOpenSocials((o) => !o)}>
         <span>
