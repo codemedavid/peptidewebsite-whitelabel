@@ -44,6 +44,7 @@
     "test:reseller-gate": "tsx scripts/test-reseller-gate.ts",
     "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",
+    "test:variant-inventory": "tsx scripts/test-variant-inventory.ts",
     "test:product-detail": "tsx scripts/test-product-detail.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
     "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
