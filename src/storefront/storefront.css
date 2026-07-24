@@ -7369,3 +7369,233 @@
   color: #1e3a2a;
 }
 .sf-root .admin-plans__cta:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ─────────────────────────── Product quick-view ──────────────────────────── */
+/* Clickable card affordances: the media + name open the detail modal. The media
+   button strips native button chrome so it looks exactly like the old div, then
+   nudges the photo on hover to signal it's interactive. */
+.sf-root .product-card__media--interactive {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+.sf-root .product-card__media--interactive img,
+.sf-root .product-card__media--interactive .product-card__media-placeholder {
+  transition: transform var(--duration-normal, 300ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.sf-root .product-card__media--interactive:hover img {
+  transform: scale(1.04);
+}
+.sf-root .product-card__media--interactive:focus-visible {
+  outline: 2px solid var(--brand-main, #7c5ca8);
+  outline-offset: -2px;
+}
+/* "View details" hint slides up over the photo on hover/focus. */
+.sf-root .product-card__view-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--duration-fast, 150ms) ease,
+    transform var(--duration-fast, 150ms) ease;
+  pointer-events: none;
+}
+.sf-root .product-card__media--interactive:hover .product-card__view-hint,
+.sf-root .product-card__media--interactive:focus-visible .product-card__view-hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Name-as-button: inherits the heading type, just becomes clickable. */
+.sf-root .product-card__name-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sf-root .product-card__name-btn:hover {
+  color: var(--brand-main, #7c5ca8);
+}
+.sf-root .product-card__name-btn:focus-visible {
+  outline: 2px solid var(--brand-main, #7c5ca8);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The modal itself — same overlay contract as the notice modal. */
+.sf-root .sf-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 15, 28, 0.55);
+  backdrop-filter: blur(3px);
+  animation: sf-notice-overlay-in 0.25s ease;
+}
+.sf-root .sf-detail {
+  position: relative;
+  width: 760px;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  animation: sf-notice-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.sf-root .sf-detail__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-detail__close:hover {
+  background: var(--brand-surface-2, #f6f2fb);
+}
+.sf-root .sf-detail__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 0;
+}
+.sf-root .sf-detail__media {
+  aspect-ratio: 1 / 1;
+  background: var(--brand-surface-2, #f6f2fb);
+  border-radius: 16px 0 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.sf-root .sf-detail__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sf-root .sf-detail__media .product-card__media-placeholder {
+  width: 40%;
+  height: 40%;
+  color: var(--brand-text-muted, #6b6474);
+}
+.sf-root .sf-detail__info {
+  padding: 28px 30px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sf-root .sf-detail__name {
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--brand-text, #241d2e);
+}
+.sf-root .sf-detail__price {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--brand-main, #7c5ca8);
+}
+.sf-root .sf-detail__desc {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--brand-text) 82%, transparent);
+  white-space: pre-line;
+}
+.sf-root .sf-detail__specs {
+  margin: 6px 0 0;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+}
+.sf-root .sf-detail__spec {
+  display: grid;
+  grid-template-columns: minmax(120px, 40%) 1fr;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--brand-border, rgba(0, 0, 0, 0.06));
+  font-size: 13.5px;
+}
+.sf-root .sf-detail__spec dt {
+  color: var(--brand-text-muted, #6b6474);
+  font-weight: 600;
+}
+.sf-root .sf-detail__spec dd {
+  margin: 0;
+  color: var(--brand-text, #241d2e);
+  word-break: break-word;
+}
+.sf-root .sf-detail__buy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.sf-root .sf-detail__buy .product-card__cta {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .sf-root .sf-detail__grid {
+    grid-template-columns: 1fr;
+  }
+  .sf-root .sf-detail__media {
+    border-radius: 16px 16px 0 0;
+    aspect-ratio: 16 / 10;
+  }
+  .sf-root .sf-detail__info {
+    padding: 22px 20px 20px;
+  }
+  .sf-root .sf-detail__name {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-detail-overlay,
+  .sf-root .sf-detail {
+    animation: none;
+  }
+  .sf-root .product-card__media--interactive:hover img {
+    transform: none;
+  }
+}

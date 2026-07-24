@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Brand, Product } from "../types";
 import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
@@ -10,6 +10,7 @@ import {
   optionLabel,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
+import { buildProductDetail } from "@/lib/storefront/product-detail";
 import {
   catalogSortOptions,
   normalizeCatalogSortStyle,
@@ -25,6 +26,7 @@ import {
 export function ProductCard({
   product,
   onAdd,
+  onOpenDetail,
   design,
   rating,
   gbBlocked,
@@ -32,6 +34,10 @@ export function ProductCard({
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
+  /** Open the full-detail quick-view modal for this product. Optional so the
+   *  admin Card Studio preview (which renders this card outside the catalog)
+   *  keeps working — there, the card's image/name are simply not clickable. */
+  onOpenDetail?: () => void;
   design?: CardDesign;
   /** Sample rating shown by Card Studio previews. The public catalog passes
    *  nothing — products carry no rating data, so none is invented. */
@@ -90,21 +96,60 @@ export function ProductCard({
         )
       )}
 
-      <div className="product-card__media">
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt={product.name} />
-        ) : (
-          <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
-            <path d="M6 16l26 12 26-12" />
-            <path d="M32 28v32" />
-          </svg>
-        )}
-      </div>
+      {/* The media + name open the full-detail modal. Rendered as a real
+          <button> (not an onClick div) so keyboard and screen-reader users get
+          the same "view details" affordance; falls back to a plain div in the
+          Card Studio preview where onOpenDetail is absent. */}
+      {onOpenDetail ? (
+        <button
+          type="button"
+          className="product-card__media product-card__media--interactive"
+          onClick={onOpenDetail}
+          aria-label={`View details for ${product.name}`}
+        >
+          {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt={product.name} />
+          ) : (
+            <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
+              <path d="M6 16l26 12 26-12" />
+              <path d="M32 28v32" />
+            </svg>
+          )}
+          <span className="product-card__view-hint" aria-hidden>
+            View details
+          </span>
+        </button>
+      ) : (
+        <div className="product-card__media">
+          {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt={product.name} />
+          ) : (
+            <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
+              <path d="M6 16l26 12 26-12" />
+              <path d="M32 28v32" />
+            </svg>
+          )}
+        </div>
+      )}
 
       <div className="product-card__body">
-        <h3 className="product-card__name font-display">{product.name}</h3>
+        {onOpenDetail ? (
+          <h3 className="product-card__name font-display">
+            <button
+              type="button"
+              className="product-card__name-btn"
+              onClick={() => onOpenDetail()}
+            >
+              {product.name}
+            </button>
+          </h3>
+        ) : (
+          <h3 className="product-card__name font-display">{product.name}</h3>
+        )}
         {rating && (
           <div
             className="product-card__rating"
@@ -231,6 +276,205 @@ export function ProductCard({
   );
 }
 
+/**
+ * Full-detail quick-view modal, opened by clicking a product card. Shows the
+ * whole (un-clamped) description plus the spec sheet the card has no room for,
+ * and carries a working option picker + qty stepper + Add to Cart so the
+ * customer can buy without closing it. View model comes from buildProductDetail
+ * so the modal and the card never disagree on price, image or options.
+ */
+function ProductDetailModal({
+  product,
+  onClose,
+  onAddToCart,
+  defaultImage,
+  gbBlocked,
+}: {
+  product: Product;
+  onClose: () => void;
+  onAddToCart: (
+    p: Product,
+    qty?: number,
+    variation?: { name: string; price: number },
+  ) => void;
+  defaultImage?: string | null;
+  gbBlocked?: boolean;
+}) {
+  const detail = buildProductDetail(product, defaultImage);
+  const [qty, setQty] = useState(1);
+  const [optIdx, setOptIdx] = useState(0);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  const selectedOpt = detail.options.length
+    ? detail.options[Math.min(optIdx, detail.options.length - 1)]
+    : null;
+  const displayPrice = selectedOpt ? selectedOpt.price : detail.basePrice;
+  const canBuy = !detail.outOfStock && !detail.priceOnRequest && !gbBlocked;
+
+  // Esc closes, body scroll locks, focus moves into the dialog — same modal
+  // contract as NoticeModal so keyboard + screen-reader users are covered.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="sf-detail-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="sf-detail"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sf-detail-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          ref={closeRef}
+          type="button"
+          className="sf-detail__close"
+          aria-label="Close product details"
+          onClick={onClose}
+        >
+          ×
+        </button>
+
+        <div className="sf-detail__grid">
+          <div className="sf-detail__media">
+            {detail.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={detail.image} alt={detail.name} />
+            ) : (
+              <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
+                <path d="M6 16l26 12 26-12" />
+                <path d="M32 28v32" />
+              </svg>
+            )}
+          </div>
+
+          <div className="sf-detail__info">
+            <h2 id="sf-detail-title" className="sf-detail__name font-display">
+              {detail.name}
+            </h2>
+            {detail.purity && (
+              <span className="badge badge-soft">{detail.purity} Purity</span>
+            )}
+
+            <div className="sf-detail__price font-display">
+              {detail.priceOnRequest ? (
+                <span className="product-card__price-poa">Message for price</span>
+              ) : (
+                <>
+                  {detail.currency}
+                  {displayPrice.toLocaleString()}
+                </>
+              )}
+            </div>
+
+            {detail.description && (
+              <p className="sf-detail__desc">{detail.description}</p>
+            )}
+
+            {detail.showOptions && !detail.priceOnRequest && (
+              <div
+                className="product-card__variations"
+                role="group"
+                aria-label={`Options for ${detail.name}`}
+                style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}
+              >
+                {detail.options.map((o, i) => {
+                  const active = i === optIdx;
+                  return (
+                    <button
+                      key={`${o.name}-${i}`}
+                      type="button"
+                      className="badge"
+                      aria-pressed={active}
+                      onClick={() => setOptIdx(i)}
+                      style={{
+                        cursor: "pointer",
+                        border: active
+                          ? "1px solid var(--brand-main, #111)"
+                          : "1px solid var(--hairline, rgba(0,0,0,.14))",
+                        background: active ? "var(--brand-main, #111)" : "transparent",
+                        color: active ? "var(--brand-button-text, #fff)" : "inherit",
+                        fontWeight: active ? 600 : 500,
+                      }}
+                    >
+                      {optionLabel(o, detail.currency)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {detail.specs.length > 0 && (
+              <dl className="sf-detail__specs">
+                {detail.specs.map((row) => (
+                  <div key={row.label} className="sf-detail__spec">
+                    <dt>{row.label}</dt>
+                    <dd>{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+
+            <div className="sf-detail__buy">
+              {canBuy && (
+                <div className="sf-qty product-card__qty">
+                  <button
+                    type="button"
+                    aria-label={`Remove one ${detail.name}`}
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    disabled={qty <= 1}
+                  >
+                    −
+                  </button>
+                  <span aria-live="polite">{qty}</span>
+                  <button
+                    type="button"
+                    aria-label={`Add one ${detail.name}`}
+                    onClick={() => setQty((q) => Math.min(detail.stock || 1, q + 1))}
+                    disabled={qty >= detail.stock}
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="btn btn-primary product-card__cta"
+                disabled={!canBuy}
+                onClick={() => {
+                  if (!canBuy) return;
+                  onAddToCart(product, qty, selectedOpt?.variation ?? undefined);
+                  onClose();
+                }}
+              >
+                {detail.priceOnRequest
+                  ? "Message to order"
+                  : gbBlocked
+                    ? "Available after group buy"
+                    : detail.outOfStock
+                      ? "Out of Stock"
+                      : "Add to Cart"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Catalog({
   products,
   category,
@@ -244,6 +488,8 @@ export function Catalog({
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("name");
+  // The product whose full-detail quick-view modal is open (null = closed).
+  const [selected, setSelected] = useState<Product | null>(null);
 
   // Per-tenant sort menu: "classic" (default) or the "simple" 3-option menu
   // (Sort by Name / Price / Best Sellers). Best sellers rank by the server-
@@ -329,6 +575,7 @@ export function Catalog({
               defaultImage={brand.defaultProductImage}
               gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
+              onOpenDetail={() => setSelected(p)}
             />
           ))}
           {filtered.length === 0 && (
@@ -343,6 +590,16 @@ export function Catalog({
           )}
         </div>
       </div>
+
+      {selected && (
+        <ProductDetailModal
+          product={selected}
+          onClose={() => setSelected(null)}
+          onAddToCart={onAddToCart}
+          defaultImage={brand.defaultProductImage}
+          gbBlocked={isOnHandBlocked(selected.id, brand.groupBuyGate)}
+        />
+      )}
     </section>
   );
 }
