@@ -10,6 +10,7 @@ import {
   optionLabel,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
+import { optionStock, isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
 import {
   catalogSortOptions,
@@ -73,8 +74,15 @@ export function ProductCard({
   // Stock-aware buying: the stepper can't exceed what's left, and a product
   // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
   // server enforce the same cap — this is the first, visible line of defense.
-  const stock = Math.max(0, product.stock || 0);
+  // Per-variation availability. The SELECTED option drives the stepper/CTA (you
+  // can't add the option in front of you once it's sold out, but you can switch
+  // to another); the whole card only reads "Out of stock" when EVERY option is
+  // gone (productOutOfStock). A single-price product resolves to the base stock.
+  const stock = selectedOpt
+    ? optionStock(product, selectedOpt)
+    : Math.max(0, product.stock || 0);
   const outOfStock = stock <= 0;
+  const productOut = productOutOfStock(product);
   // "Price on request": on hand but no fixed price. Show a label instead of a
   // price and block add-to-cart — the customer messages the store to order.
   const poa = product.priceOnRequest === true;
@@ -84,7 +92,7 @@ export function ProductCard({
   // resellers get wholesale at checkout without it being advertised here.
   return (
     <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
-      {outOfStock ? (
+      {productOut ? (
         <span className="product-card__badge badge badge-soft">Out of stock</span>
       ) : poa ? (
         <span className="product-card__badge badge badge-soft">On hand</span>
@@ -179,6 +187,7 @@ export function ProductCard({
           >
             {options.map((o, i) => {
               const active = i === optIdx;
+              const soldOut = isOptionOutOfStock(product, o);
               return (
                 <button
                   key={`${o.name}-${i}`}
@@ -186,6 +195,7 @@ export function ProductCard({
                   className="badge"
                   aria-pressed={active}
                   onClick={() => setOptIdx(i)}
+                  title={soldOut ? `${o.name} is out of stock` : undefined}
                   style={{
                     cursor: "pointer",
                     border: active
@@ -194,9 +204,12 @@ export function ProductCard({
                     background: active ? "var(--brand-main, #111)" : "transparent",
                     color: active ? "var(--brand-button-text, #fff)" : "inherit",
                     fontWeight: active ? 600 : 500,
+                    opacity: soldOut ? 0.5 : 1,
+                    textDecoration: soldOut ? "line-through" : "none",
                   }}
                 >
                   {optionLabel(o, product.currency)}
+                  {soldOut ? " · out" : ""}
                 </button>
               );
             })}
@@ -305,11 +318,16 @@ function ProductDetailModal({
   const [optIdx, setOptIdx] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const selectedOpt = detail.options.length
-    ? detail.options[Math.min(optIdx, detail.options.length - 1)]
-    : null;
+  const selectedIdx = detail.options.length
+    ? Math.min(optIdx, detail.options.length - 1)
+    : -1;
+  const selectedOpt = selectedIdx >= 0 ? detail.options[selectedIdx] : null;
   const displayPrice = selectedOpt ? selectedOpt.price : detail.basePrice;
-  const canBuy = !detail.outOfStock && !detail.priceOnRequest && !gbBlocked;
+  // Per-variation: the selected option's own available units (single-price
+  // products fall back to detail.stock). Drives the stepper cap + CTA.
+  const selectedStock = selectedIdx >= 0 ? detail.optionStock[selectedIdx] : detail.stock;
+  const selectedOut = selectedStock <= 0;
+  const canBuy = !selectedOut && !detail.priceOnRequest && !gbBlocked;
 
   // Esc closes, body scroll locks, focus moves into the dialog — same modal
   // contract as NoticeModal so keyboard + screen-reader users are covered.
@@ -392,6 +410,7 @@ function ProductDetailModal({
               >
                 {detail.options.map((o, i) => {
                   const active = i === optIdx;
+                  const soldOut = (detail.optionStock[i] ?? 0) <= 0;
                   return (
                     <button
                       key={`${o.name}-${i}`}
@@ -399,6 +418,7 @@ function ProductDetailModal({
                       className="badge"
                       aria-pressed={active}
                       onClick={() => setOptIdx(i)}
+                      title={soldOut ? `${o.name} is out of stock` : undefined}
                       style={{
                         cursor: "pointer",
                         border: active
@@ -407,9 +427,12 @@ function ProductDetailModal({
                         background: active ? "var(--brand-main, #111)" : "transparent",
                         color: active ? "var(--brand-button-text, #fff)" : "inherit",
                         fontWeight: active ? 600 : 500,
+                        opacity: soldOut ? 0.5 : 1,
+                        textDecoration: soldOut ? "line-through" : "none",
                       }}
                     >
                       {optionLabel(o, detail.currency)}
+                      {soldOut ? " · out" : ""}
                     </button>
                   );
                 })}
@@ -442,8 +465,8 @@ function ProductDetailModal({
                   <button
                     type="button"
                     aria-label={`Add one ${detail.name}`}
-                    onClick={() => setQty((q) => Math.min(detail.stock || 1, q + 1))}
-                    disabled={qty >= detail.stock}
+                    onClick={() => setQty((q) => Math.min(selectedStock || 1, q + 1))}
+                    disabled={qty >= selectedStock}
                   >
                     +
                   </button>
@@ -463,7 +486,7 @@ function ProductDetailModal({
                   ? "Message to order"
                   : gbBlocked
                     ? "Available after group buy"
-                    : detail.outOfStock
+                    : selectedOut
                       ? "Out of Stock"
                       : "Add to Cart"}
               </button>

@@ -131,7 +131,10 @@ function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {items.map((it, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 140px 36px", gap: 10 }}>
+        <div
+          key={i}
+          style={{ display: "grid", gridTemplateColumns: "1fr 130px 110px 36px", gap: 10 }}
+        >
           <input
             className="admin-input"
             placeholder="Variation (e.g. 5mg)"
@@ -146,6 +149,20 @@ function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) 
             value={it.price}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               upd(i, { price: e.target.value })
+            }
+          />
+          <input
+            className="admin-input"
+            type="number"
+            min="0"
+            step="1"
+            // Blank = this option shares the base product stock. A number tracks
+            // its own inventory (see effectiveStock in lib/storefront/inventory).
+            placeholder="Stock (shared)"
+            title="Leave blank to share the product's stock; enter a number to track this option separately."
+            value={it.stock ?? ""}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              upd(i, { stock: e.target.value })
             }
           />
           <button
@@ -308,7 +325,15 @@ export function AdminAddProduct({
       isSet,
       inclusions: setItems,
       variations: variations
-        .map((v) => ({ name: v.name.trim(), price: Number(v.price) || 0 }))
+        .map((v) => {
+          const base = { name: v.name.trim(), price: Number(v.price) || 0 };
+          // Forward a per-variation stock ONLY when the seller entered one; a
+          // blank field stays untracked (shares the base stock). Mirrors
+          // normalizeProductInput so the client and server agree.
+          const s = v.stock;
+          const tracked = typeof s === "number" || (typeof s === "string" && s.trim() !== "");
+          return tracked ? { ...base, stock: Math.max(0, Math.floor(Number(s) || 0)) } : base;
+        })
         .filter((v) => v.name),
       stock: Number(stock) || 0,
       featured,

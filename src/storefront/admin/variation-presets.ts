@@ -8,10 +8,12 @@
 // removed, and the storefront picker only appears when at least one is filled
 // in (see cleanVariations in src/lib/storefront/product-mapping.ts).
 
-/** An in-progress variation row. `price` stays `number | string` so the input
- *  can be cleared to "" while editing — the save path coerces it back. Mirrors
- *  the `Variation` type in AdminAddProduct.tsx. */
-export type VariationDraft = { name: string; price: number | string };
+/** An in-progress variation row. `price` and `stock` stay `number | string` so
+ *  the inputs can be cleared to "" while editing — the save path coerces them
+ *  back. `stock` left blank means "untracked → fall back to the base product
+ *  stock" (see effectiveStock in lib/storefront/inventory.ts); a number tracks
+ *  that option's own inventory. Mirrors the editor row in AdminAddProduct.tsx. */
+export type VariationDraft = { name: string; price: number | string; stock?: number | string };
 
 export const VARIATION_PRESETS = ["Vials only", "Complete set"] as const;
 

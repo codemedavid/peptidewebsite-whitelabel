@@ -52,6 +52,7 @@ import {
   twoWaysAddViolation,
 } from "@/lib/storefront/two-ways-cart";
 import { baseProductId, makeVariationEntry } from "./checkout";
+import { effectiveStock, variationStock } from "@/lib/storefront/inventory";
 import {
   normalizeGroupBuyRules,
   ratioCounts,
@@ -490,14 +491,21 @@ export function StoreProvider({
         setCart((c) => [...c, ...Array.from({ length: n }, () => entry)]);
         return;
       }
-      const stock = Math.max(0, product.stock || 0);
-      const inCart = cart.filter((p) => baseProductId(p) === baseProductId(product)).length;
+      // Per-variation cap: a TRACKED variation (its own numeric stock) counts
+      // only that option's own cart lines against its own pool; an untracked
+      // variation or a plain product keeps the historical shared count against
+      // the base column (effectiveStock resolves which applies).
+      const tracked = variationStock(product, variation?.name) !== undefined;
+      const stock = effectiveStock(product, variation?.name);
+      const inCart = tracked
+        ? cart.filter((p) => p.id === entry.id).length
+        : cart.filter((p) => baseProductId(p) === baseProductId(product)).length;
       const room = Math.max(0, stock - inCart);
       if (room < n) {
         toast(
           stock <= 0
-            ? `${product.name} is out of stock.`
-            : `Only ${stock} of ${product.name} in stock.`,
+            ? `${entry.name} is out of stock.`
+            : `Only ${stock} of ${entry.name} in stock.`,
         );
       }
       if (room <= 0) return;
