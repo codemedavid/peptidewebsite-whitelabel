@@ -6,11 +6,10 @@
 // effect on the next login — the current session cookie stays valid.
 
 import { useState } from "react";
-import type { Brand } from "../types";
 import { useStore } from "../store";
 import { changeStorefrontAdminPasswordAction } from "@/actions/storefront-admin";
 
-export function AdminAccountSettings({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+export function AdminAccountSettings({ onBack }: { onBack: () => void }) {
   const { toast } = useStore();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -76,9 +75,9 @@ export function AdminAccountSettings({ brand, onBack }: { brand: Brand; onBack: 
 
       <div className="admin-form__body">
         <div className="admin-form__card" style={{ maxWidth: 520 }}>
-          <h2 className="admin-form__section">🔒 Change Admin Password</h2>
+          <h2 className="admin-form__section">🔒 Change Your Password</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            This is the password you use to sign in to the {brand.name} store admin.
+            This is your password for signing in to the ADMIN DASHBOARD.
             The new password takes effect the next time you log in.
           </div>
 

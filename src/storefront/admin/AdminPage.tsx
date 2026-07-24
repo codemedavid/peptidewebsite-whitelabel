@@ -96,6 +96,7 @@ export function AdminPage({
   // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
   // suspended/removed staff session resolves to "none" and is logged out.
   const [actor, setActor] = useState<StaffActor | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export function AdminPage({
           ? { kind: "owner" }
           : { kind: "staff", id: info.id, permissions: info.permissions },
       );
+      setDisplayName(info.displayName);
       setSessionLoaded(true);
     });
     return () => {
@@ -269,7 +271,7 @@ export function AdminPage({
   if (activeView === "groupbuy") return <AdminGroupBuyRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
-  if (activeView === "account") return <AdminAccountSettings brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "account") return <AdminAccountSettings onBack={() => setView("dashboard")} />;
   if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
     return (
@@ -405,7 +407,7 @@ export function AdminPage({
         </a>
         <div className="admin__pill">
           <span className="admin__pill-dot" />
-          ADMIN DASHBOARD
+          {isOwner ? "ADMIN DASHBOARD" : `${displayName.toUpperCase()} · STAFF DASHBOARD`}
         </div>
         <div className="admin__bar-spacer" />
         <a
