@@ -994,6 +994,50 @@
   background: color-mix(in srgb, white 18%, transparent);
 }
 
+/* --- WORDMARK — the brand name AS the logo: one large, thin, wide-tracked
+   gold-gradient mark on a clean background (reference: luminara's gold logo).
+   No orb, no logo card, no chip — the wordmark carries the whole hero. --- */
+.sf-root .hero[data-variant="wordmark"] {
+  background: var(--brand-background);
+  padding-block: clamp(76px, 14vw, 184px);
+}
+.sf-root .hero[data-variant="wordmark"] .hero__inner { gap: 30px; }
+.sf-root .hero__wordmark {
+  margin: 0;
+  font-family: var(--brand-heading-font);
+  font-weight: 400;
+  font-size: clamp(56px, 15vw, 188px);
+  line-height: 0.95;
+  letter-spacing: 0.04em;
+  text-wrap: balance;
+  /* Metallic gold sheen — light↔deep stops give the brushed-gold shimmer of the
+     reference logo. A heroHighlight override (inline) collapses this to a solid
+     color via background:none + color. */
+  background: linear-gradient(
+    100deg,
+    #8a6a24 0%,
+    #e6c874 26%,
+    #b8892e 50%,
+    #f0d98f 72%,
+    #a67c28 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.sf-root .hero[data-variant="wordmark"] .hero__sub {
+  margin-top: 2px;
+  max-width: 520px;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: clamp(11px, 1.3vw, 13px);
+  color: color-mix(in srgb, var(--brand-accent) 78%, var(--brand-text));
+}
+@media (max-width: 600px) {
+  .sf-root .hero__wordmark { letter-spacing: 0.02em; }
+  .sf-root .hero[data-variant="wordmark"] .hero__sub { letter-spacing: 0.22em; }
+}
+
 /* --- HERO — small-screen polish (applies across variants) --- */
 @media (max-width: 600px) {
   .sf-root .hero { padding-block: clamp(40px, 12vw, 72px); }

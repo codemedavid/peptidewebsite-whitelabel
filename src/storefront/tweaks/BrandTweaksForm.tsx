@@ -35,6 +35,7 @@ import {
 } from "./controls";
 import { matchFontPreset } from "@/lib/theme/fontPresets";
 import { LOGO_CURVE_PRESETS, logoCurveLabel } from "@/lib/storefront/logo-curve";
+import { HERO_VARIANTS } from "@/lib/storefront/hero-style";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
@@ -252,14 +253,9 @@ function HeroCopyAccordion({
   );
 }
 
-export const HERO_VARIANTS: Brand["heroVariant"][] = [
-  "centered",
-  "split",
-  "editorial",
-  "card",
-  "minimal",
-  "spotlight",
-];
+// HERO_VARIANTS is imported from @/lib/storefront/hero-style (single source of
+// truth, shared with normalizeHeroVariant) and re-exported for existing callers.
+export { HERO_VARIANTS };
 
 // Friendly hero logo size presets (px). "Default" leaves heroLogoSize unset so
 // the storefront.css per-variant default applies. Larger sizes fill the hero

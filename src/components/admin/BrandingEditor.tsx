@@ -979,6 +979,34 @@ function StorefrontPreview({
         </div>
       </div>
     );
+  } else if (heroVariant === "wordmark") {
+    // Wordmark: the brand name as one large gold-gradient mark on a clean
+    // background — mirrors the storefront .hero__wordmark look.
+    heroNode = (
+      <div className="px-6 py-12 text-center" style={{ background: "hsl(var(--background))" }}>
+        <div className="flex flex-col items-center gap-4">
+          <span
+            className="font-normal"
+            style={{
+              fontFamily: titleFontFamily,
+              fontSize: "clamp(2.25rem, 9vw, 3.5rem)",
+              letterSpacing: "0.04em",
+              lineHeight: 0.95,
+              background: highlight
+                ? undefined
+                : "linear-gradient(100deg,#8a6a24 0%,#e6c874 26%,#b8892e 50%,#f0d98f 72%,#a67c28 100%)",
+              WebkitBackgroundClip: highlight ? undefined : "text",
+              backgroundClip: highlight ? undefined : "text",
+              color: highlight ?? "transparent",
+            }}
+          >
+            {(hero?.heroLine1 || "").trim() || name}
+          </span>
+          {renderSub()}
+          {renderCtas("center")}
+        </div>
+      </div>
+    );
   } else {
     // "centered" (default): radial glow + centered column.
     heroNode = (

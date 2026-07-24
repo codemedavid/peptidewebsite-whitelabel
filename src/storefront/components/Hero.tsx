@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP, heroFieldCss } from "@/lib/theme/tokens";
 import type { Brand } from "../types";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
+import { normalizeHeroVariant, wordmarkText } from "@/lib/storefront/hero-style";
 
 export function Hero({
   brand,
@@ -14,7 +15,7 @@ export function Hero({
   onSecondary: () => void;
   isGenerating?: boolean;
 }) {
-  const variant = brand.heroVariant || "centered";
+  const variant = normalizeHeroVariant(brand.heroVariant);
 
   // ── Hero typography overrides (admin "Hero" tab). Each is applied inline so it
   // wins over the base + per-variant storefront.css; unset fields stay undefined
@@ -163,6 +164,22 @@ export function Hero({
         {logoCard}
         {chip}
         {headline}
+        {sub}
+        {ctas}
+      </div>
+    );
+  } else if (variant === "wordmark") {
+    // The brand name IS the logo: one large gold-gradient wordmark on a clean
+    // background — no logo card, no chip. The gradient is painted by CSS
+    // (.hero__wordmark); a heroHighlight override collapses it to a solid color.
+    content = (
+      <div className="container hero__inner">
+        <h1
+          className="hero__wordmark"
+          style={{ ...headlineStyle, ...headlineSpanStyle, ...accentStyle, ...line1Style }}
+        >
+          {wordmarkText(brand) || brand.name || "Brand"}
+        </h1>
         {sub}
         {ctas}
       </div>
