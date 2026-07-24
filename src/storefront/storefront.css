@@ -1128,7 +1128,10 @@
   font-size: 20px;
   margin: 0 0 6px;
   color: var(--brand-main);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  /* Heavier than the .font-display default (500) so titles read bold like the
+     reference cards (Image #1). Inter is already the heading font. */
+  font-weight: 700;
 }
 .sf-root .product-card__desc {
   font-size: 13.5px;
@@ -1149,6 +1152,8 @@
 .sf-root .product-card__price {
   font-size: 22px;
   color: var(--brand-main);
+  /* Price is the loudest number on the card in the reference (Image #1). */
+  font-weight: 800;
 }
 /* "Price on request" label shown in place of a price for on-hand items with no
    fixed price. Smaller/muted so it reads as a status, not a headline number. */
@@ -1377,6 +1382,97 @@
 }
 .sf-root .site-footer__inner[data-brand="0"] { grid-template-columns: 1fr; }
 .sf-root .site-footer__inner[data-cols="0"] { grid-template-columns: 1fr; max-width: 600px; }
+
+/* ---------------------------------------------------------------
+   Compact footer (footerStyle: "compact") — HP Glow, Image #2.
+   A dark, single-row footer: logo + name + tagline on the left, pill
+   quick-links on the right, and a centered "Made with ♥ …" line. Dark
+   regardless of the brand palette, matching the reference exactly.
+   --------------------------------------------------------------- */
+.sf-root .site-footer--compact {
+  --cf-line: rgba(255, 255, 255, 0.08);
+  --cf-pill-border: rgba(201, 166, 107, 0.5);
+  --cf-pill-text: #ece6da;
+  background: #0b0b0d;
+  color: #f4f2ee;
+  border-top: 1px solid var(--cf-line);
+  margin-top: 40px;
+}
+.sf-root .site-footer__compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-block: clamp(28px, 4vw, 44px);
+}
+.sf-root .site-footer__compact .site-footer__brand-row { align-items: center; gap: 12px; }
+.sf-root .site-footer__compact .site-footer__logo {
+  width: 46px; height: 46px;
+}
+.sf-root .site-footer__compact-name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.sf-root .site-footer__compact-name strong {
+  font-family: var(--brand-heading-font);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+.sf-root .site-footer__compact-tagline {
+  font-size: 13px;
+  color: rgba(244, 242, 238, 0.55);
+}
+.sf-root .site-footer__quicklinks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sf-root .site-footer__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.sf-root .site-footer__pill svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.sf-root .site-footer__pill--outline {
+  border: 1px solid var(--cf-pill-border);
+  color: var(--cf-pill-text);
+  background: transparent;
+}
+.sf-root .site-footer__pill--outline:hover {
+  border-color: rgba(201, 166, 107, 0.9);
+  background: rgba(201, 166, 107, 0.08);
+}
+.sf-root .site-footer__pill--accent {
+  background: #7360f2;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+.sf-root .site-footer__pill--accent:hover { background: #5f4de0; transform: translateY(-1px); }
+.sf-root .site-footer__made {
+  border-top: 1px solid var(--cf-line);
+  padding-block: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(244, 242, 238, 0.5);
+}
+.sf-root .site-footer__made-heart { color: #ff7a59; margin-inline: 2px; }
+
+@media (max-width: 720px) {
+  .sf-root .site-footer__compact { justify-content: center; text-align: center; }
+  .sf-root .site-footer__quicklinks { justify-content: center; }
+}
 
 /* =========================================================
    SUB-PAGES (Track Order, FAQ, COA, Protocols, Reviews)

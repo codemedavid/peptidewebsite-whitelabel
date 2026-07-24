@@ -571,6 +571,11 @@ export type Brand = {
    *  catalogSortStyle is "simple". */
   bestSellerCounts?: Record<string, number>;
 
+  /** Footer layout — "columns" (default) is today's link-column footer;
+   *  "compact" is the dark, single-row footer (logo + tagline + pill
+   *  quick-links + centered "Made with ♥" line, HP Glow). Unset inherits
+   *  "columns" via normalizeFooterStyle, so existing tenants are unaffected. */
+  footerStyle?: "columns" | "compact";
   footerShowBrand: boolean;
   footerShowBlurb: boolean;
   footerShowSocials: boolean;
