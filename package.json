@@ -65,6 +65,7 @@
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:catalog-sort": "tsx scripts/test-catalog-sort.ts",
     "test:kglow-pricelist": "tsx scripts/test-kglow-pricelist.ts",
+    "test:kglow-onhand": "tsx scripts/test-kglow-onhand.ts",
     "test:admin-login-mode": "tsx scripts/test-admin-login-mode.ts",
     "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts",
     "test:notice-modal": "tsx scripts/test-notice-modal.ts",
