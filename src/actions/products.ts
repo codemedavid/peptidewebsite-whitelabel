@@ -70,7 +70,14 @@ function normalizeProductInput(input: unknown): Product {
     .slice(0, 100)
     .map((it) => {
       const x = (it ?? {}) as Record<string, unknown>;
-      return { name: str(x.name, 80).trim(), price: Math.max(0, num(x.price)) };
+      const base = { name: str(x.name, 80).trim(), price: Math.max(0, num(x.price)) };
+      // Preserve a per-variation stock ONLY when the seller actually entered one
+      // (a number, or a non-blank numeric field). A blank/absent value means
+      // "untracked → fall back to the base stock", so no `stock` key is added.
+      const raw = x.stock;
+      const tracked =
+        typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "");
+      return tracked ? { ...base, stock: Math.max(0, Math.round(num(raw))) } : base;
     })
     .filter((v) => v.name);
   return {

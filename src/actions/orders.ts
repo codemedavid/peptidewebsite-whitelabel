@@ -36,7 +36,16 @@ import {
   saveDemoStoreOrders,
   nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
-import { dbProductToStorefront, type DbProductRow as DbProductRowMap } from "@/lib/storefront/product-mapping";
+import {
+  dbProductToStorefront,
+  type DbProductRow as DbProductRowMap,
+  type ProductMetadata,
+} from "@/lib/storefront/product-mapping";
+import {
+  effectiveStock,
+  applyVariationStock,
+  applyStockMoveToProducts,
+} from "@/lib/storefront/inventory";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
@@ -144,7 +153,13 @@ function normalizeItems(input: unknown): OrderItem[] {
  *  is placed after the round closes — so they're exempt, mirroring the cart
  *  (store.tsx → isGroupBuyPreorder). */
 function stockViolation(
-  products: Array<{ id: string; name: string; stock?: number | null; productType?: "gb" | "onhand" }>,
+  products: Array<{
+    id: string;
+    name: string;
+    stock?: number | null;
+    variations?: { name: string; price: number; stock?: number }[];
+    productType?: "gb" | "onhand";
+  }>,
   items: OrderItem[],
   gbScope: GroupBuyPriceScope | null = null,
 ): string | null {
@@ -154,7 +169,9 @@ function stockViolation(
     );
     if (!prod) continue;
     if (isGroupBuyPreorder(prod, gbScope)) continue;
-    const stock = Math.max(0, prod.stock ?? 0);
+    // Per-variant: a tracked variation checks its OWN pool; anything else the
+    // base column (effectiveStock resolves the fallback).
+    const stock = effectiveStock(prod, it.variation);
     if (it.qty > stock) {
       return stock === 0
         ? `"${prod.name}" is out of stock.`
@@ -342,20 +359,15 @@ function groupBuyViolation(
 }
 
 /** Apply an order's line items to a product list (− on deduct, + on restock),
- *  clamping at zero. Lines match by productId when present, by exact name for
- *  legacy orders. */
+ *  clamping at zero. Delegates to the shared per-variation engine so the demo
+ *  path moves a tracked variation's own pool (and the base column otherwise)
+ *  exactly like the DB path. Lines match by productId else exact name. */
 function adjustProductStock(
   products: Product[],
   items: OrderItem[],
   move: Exclude<InventoryMove, null>,
 ): Product[] {
-  const dir = move === "deduct" ? -1 : 1;
-  return products.map((p) => {
-    const qty = items
-      .filter((it) => (it.productId ? it.productId === p.id : it.name === p.name))
-      .reduce((s, it) => s + (it.qty || 0), 0);
-    return qty > 0 ? { ...p, stock: Math.max(0, (p.stock || 0) + dir * qty) } : p;
-  });
+  return applyStockMoveToProducts(products, items, move);
 }
 
 /**
@@ -374,9 +386,27 @@ async function applyOrderStockMove(
   for (const it of items) {
     const prod = await db.product.findFirst({
       where: it.productId ? { id: it.productId } : { name: it.name },
-      select: { id: true, stock: true },
+      select: { id: true, stock: true, metadata: true },
     });
-    if (prod) {
+    if (!prod) continue;
+
+    const meta = (prod.metadata ?? {}) as unknown as ProductMetadata;
+    const variations = Array.isArray(meta.variations) ? meta.variations : [];
+    const tracked =
+      !!it.variation &&
+      variations.some((v) => v.name === it.variation && typeof v.stock === "number");
+
+    if (tracked) {
+      // Move the variation's OWN pool inside metadata; the base column is left
+      // untouched (that's what an untracked/no-variation line uses instead).
+      const nextVariations = applyVariationStock(variations, it.variation!, dir * it.qty);
+      await db.product.updateMany({
+        where: { id: prod.id },
+        data: {
+          metadata: { ...meta, variations: nextVariations } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } else {
       await db.product.updateMany({
         where: { id: prod.id },
         data: { stock: Math.max(0, (prod.stock ?? 0) + dir * it.qty) },

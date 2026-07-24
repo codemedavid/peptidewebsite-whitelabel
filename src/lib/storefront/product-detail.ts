@@ -15,6 +15,7 @@ import {
   shouldShowOptionPicker,
   type ProductOption,
 } from "./variations";
+import { optionStock, productOutOfStock } from "./inventory";
 
 /** One labelled line of the modal's spec sheet, e.g. "CAS Number → 2023788-19-2". */
 export type ProductSpecRow = { label: string; value: string };
@@ -57,12 +58,18 @@ export type ProductDetail = {
   /** Options a customer picks between (reuses the card's buildProductOptions so
    *  the modal and card never disagree on price/variation). Empty = single price. */
   options: ProductOption[];
+  /** Available units per option, aligned by index to `options` — the modal
+   *  disables an exhausted option's pill/CTA. A "Standard" (base-price) option
+   *  resolves to the base column; a variation to its own stock or the fallback. */
+  optionStock: number[];
   showOptions: boolean;
   purity: string | null;
   /** On hand but no fixed price — the modal hides the price and blocks buying. */
   priceOnRequest: boolean;
   /** Clamped to ≥ 0 so the stepper/CTA never see a negative stock. */
   stock: number;
+  /** True only when EVERY option is exhausted — one stocked variation keeps the
+   *  product buyable (see productOutOfStock). */
   outOfStock: boolean;
   specs: ProductSpecRow[];
 };
@@ -77,6 +84,7 @@ export function buildProductDetail(
   defaultImage?: string | null,
 ): ProductDetail {
   const stock = Math.max(0, product.stock || 0);
+  const options = buildProductOptions(product);
   return {
     id: product.id,
     name: product.name,
@@ -84,12 +92,13 @@ export function buildProductDetail(
     image: resolveProductImage(product.image, defaultImage),
     currency: product.currency,
     basePrice: product.price,
-    options: buildProductOptions(product),
+    options,
+    optionStock: options.map((o) => optionStock(product, o)),
     showOptions: shouldShowOptionPicker(product),
     purity: product.purity ?? null,
     priceOnRequest: product.priceOnRequest === true,
     stock,
-    outOfStock: stock <= 0,
+    outOfStock: productOutOfStock(product),
     specs: productSpecRows(product),
   };
 }

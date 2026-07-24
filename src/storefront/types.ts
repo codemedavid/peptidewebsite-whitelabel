@@ -44,8 +44,12 @@ export type Product = {
   /** Per-product variations (e.g. dosage/size options like "5mg", "10mg"), each
    *  with its own price in the storefront's major units. Empty/absent = the
    *  product is sold as a single option at the base `price`. Stored in
-   *  `metadata.variations`; the admin Products screen edits these. */
-  variations?: { name: string; price: number }[];
+   *  `metadata.variations`; the admin Products screen edits these.
+   *
+   *  `stock` is optional per variation: a number tracks that option's own
+   *  inventory; absent falls back to the base product `stock`. See
+   *  effectiveStock in lib/storefront/inventory.ts. */
+  variations?: { name: string; price: number; stock?: number }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
    *  underlying catalog product id — used so the shared product stock is counted
@@ -509,7 +513,7 @@ export type Brand = {
   headerShowCart: boolean;
   headerShowCta: boolean;
 
-  heroVariant: "centered" | "split" | "editorial" | "card" | "minimal" | "spotlight";
+  heroVariant: "centered" | "split" | "editorial" | "card" | "minimal" | "spotlight" | "wordmark";
   heroShowLogo: boolean;
   // Hero logo card size (px). Unset = the storefront.css default for the variant.
   // Larger values shrink the surrounding whitespace by enlarging the logo card.

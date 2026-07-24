@@ -7,8 +7,12 @@
 // the rules across the two is how a variation ends up sellable at a price the
 // editor never meant to allow.
 
-/** A saved variation: name plus its own price, in the storefront's major units. */
-export type Variation = { name: string; price: number };
+/** A saved variation: name plus its own price, in the storefront's major units.
+ *  `stock` is OPTIONAL and opt-in: when a seller sets a number the variation is
+ *  tracked independently; when absent the variation falls back to the base
+ *  product's `stock` (the historical shared-stock behavior). See
+ *  `variationStock` / `effectiveStock` in ./inventory. */
+export type Variation = { name: string; price: number; stock?: number };
 
 /** An option offered on the product card. `variation` is absent on the product's
  *  own base price ("Standard") and present on every real variation — the cart

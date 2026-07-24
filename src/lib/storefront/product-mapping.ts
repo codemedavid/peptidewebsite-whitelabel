@@ -43,8 +43,10 @@ export type ProductMetadata = {
   sequence?: string;
   sizes?: string;
   /** Per-product variations (dosage/size options + their price). Only present
-   *  when at least one named variation exists — see `cleanVariations`. */
-  variations?: { name: string; price: number }[];
+   *  when at least one named variation exists — see `cleanVariations`. `stock`
+   *  is present only when the option is tracked independently; absent = falls
+   *  back to the base `stock` column (see lib/storefront/inventory.ts). */
+  variations?: { name: string; price: number; stock?: number }[];
   /** Order Ratio Control classification (peptide / bacWater / other) set by the
    *  storefront admin. Absent → the ratio engine's name heuristic decides. */
   productClass?: ProductClass;
@@ -213,14 +215,21 @@ function cleanReseller(
  * survives so `compactMetadata` never persists an empty `[]`.
  */
 function cleanVariations(
-  v: { name?: string; price?: number }[] | undefined,
-): { name: string; price: number }[] | undefined {
+  v: { name?: string; price?: number; stock?: number }[] | undefined,
+): { name: string; price: number; stock?: number }[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out = v
-    .map((x) => ({
-      name: String(x?.name ?? "").trim(),
-      price: Math.max(0, Number(x?.price) || 0),
-    }))
+    .map((x) => {
+      const name = String(x?.name ?? "").trim();
+      const price = Math.max(0, Number(x?.price) || 0);
+      // Track stock ONLY when a number was actually set. Absent means "fall
+      // back to the base column" — injecting a 0 here would silently mark
+      // every legacy variation sold out, so the key must stay off.
+      const hasStock = typeof x?.stock === "number" && Number.isFinite(x.stock);
+      return hasStock
+        ? { name, price, stock: Math.max(0, Math.round(x!.stock as number)) }
+        : { name, price };
+    })
     .filter((x) => x.name);
   return out.length ? out : undefined;
 }
