@@ -319,6 +319,11 @@ export type Brand = {
   // font (the storefront.css default), so existing tenants are unaffected. Set
   // explicitly by a Global Font Style preset or the "Button font" picker.
   buttonFont?: string;
+  // Price font — the face prices render in (product cards + detail). Optional:
+  // unset means prices follow the body/sans font (the storefront.css default
+  // --brand-price-font: var(--brand-body-font)), which is the SaaS-wide default.
+  // Set to pin a distinct price face. Resolved via @/lib/storefront/price-font.
+  priceFont?: string;
 
   // Per-tenant fallback photo for products with no image of their own (e.g. a
   // branded vial shot). Normalized server-side (page.tsx) through

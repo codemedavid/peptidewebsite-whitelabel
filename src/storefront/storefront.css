@@ -28,6 +28,10 @@
   /* Fonts */
   --brand-heading-font: "Playfair Display", "DM Serif Display", Georgia, serif;
   --brand-body-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Prices render in their own face, defaulting to the body/sans font (bold sans
+     numerals read as prices better than the serif display). applyBrandStyle
+     overrides this with --brand-price-font when a tenant pins Brand.priceFont. */
+  --brand-price-font: var(--brand-body-font);
   /* Button label font. Defaults to the body font so an unset buttonFont keeps
      the historical look; a Global Font Style preset / Button-font picker sets
      --brand-button-font to override every .btn across the storefront. */
@@ -1198,6 +1202,9 @@
   color: var(--brand-main);
   /* Price is the loudest number on the card in the reference (Image #1). */
   font-weight: 800;
+  /* Prices use their own face (defaults to the body/sans font), not the serif
+     display font that .font-display would otherwise apply. */
+  font-family: var(--brand-price-font);
 }
 /* "Price on request" label shown in place of a price for on-hand items with no
    fixed price. Smaller/muted so it reads as a status, not a headline number. */
@@ -7672,6 +7679,7 @@
   font-size: 24px;
   font-weight: 800;
   color: var(--brand-main, #7c5ca8);
+  font-family: var(--brand-price-font);
 }
 .sf-root .sf-detail__desc {
   margin: 0;

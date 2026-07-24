@@ -45,6 +45,7 @@ import {
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { brandBorderVars } from "@/lib/storefront/brand-border";
+import { priceFontVar } from "@/lib/storefront/price-font";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import {
   gbScopeFromBanner,
@@ -192,6 +193,11 @@ function applyBrandStyle(b: Brand) {
   // tenant's value can't linger.
   if (b.buttonFont) r.setProperty("--brand-button-font", `"${b.buttonFont}", system-ui, sans-serif`);
   else r.removeProperty("--brand-button-font");
+  // Price font is optional too — set it only when pinned; unset removes the var
+  // so the CSS default (--brand-price-font: var(--brand-body-font)) applies.
+  const priceVar = priceFontVar(b);
+  if (priceVar) r.setProperty("--brand-price-font", priceVar);
+  else r.removeProperty("--brand-price-font");
 }
 
 export function StoreProvider({

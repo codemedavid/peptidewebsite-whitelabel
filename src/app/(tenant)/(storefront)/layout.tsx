@@ -84,6 +84,7 @@ export default async function StorefrontLayout({
     heroTitleFont?: string;
     heroBodyFont?: string;
     buttonFont?: string;
+    priceFont?: string;
     heroFieldStyles?: Record<string, { font?: string }>;
   };
   // Per-field hero text styling can each pick a distinct font — load them too,
@@ -103,6 +104,9 @@ export default async function StorefrontLayout({
     // Button font lives on the storefront Brand config (not the structured
     // fonts JSON); load it so CTAs render in the chosen face, not a fallback.
     heroConfig.buttonFont,
+    // Price font lives on the Brand config; load it so pinned price faces render
+    // instead of falling back. Unset tenants inherit the already-loaded body font.
+    heroConfig.priceFont,
     ...fieldFonts,
   );
 
