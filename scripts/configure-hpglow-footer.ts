@@ -18,9 +18,18 @@
  *   npx tsx scripts/configure-hpglow-footer.ts --verify   # gate: exit 1 on mismatch
  *   npx tsx scripts/configure-hpglow-footer.ts --apply    # write, then verify
  */
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import React, { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+// The storefront's tsconfig uses the automatic JSX runtime; under plain tsx the
+// components compile to classic React.createElement calls, so the components
+// need React on the global before they render outside Next.
+(globalThis as { React?: typeof React }).React = React;
 import { PrismaClient } from "@prisma/client";
 import type { Brand } from "../src/storefront/types";
 import { normalizeFooterStyle, buildFooterQuickLinks } from "../src/lib/storefront/footer-style";
+import { Footer } from "../src/storefront/components/Footer";
 
 const SLUG = "hpglow";
 
@@ -85,6 +94,22 @@ function verify(config: Config, brandName: string) {
     copyright === `© ${new Date().getFullYear()} ${brandName}. All rights reserved.`,
     copyright,
   );
+
+  // Render the REAL component with the stored config. The checks above prove the
+  // data; this proves the markup the shopper actually gets — independent of any
+  // dev server whose compiled bundle may be stale.
+  const html = renderToStaticMarkup(
+    createElement(Footer, { brand: { ...config, name: brandName } as unknown as Brand }),
+  );
+  check("markup uses the compact footer", html.includes("site-footer--compact"), html.slice(0, 120));
+  check("markup has the tagline", html.includes(REFERENCE.tagline));
+  check(
+    "markup has all three pills",
+    REFERENCE.pills.every((p) => html.includes(`>${p.label}</a>`) || html.includes(p.label)),
+    REFERENCE.pills.filter((p) => !html.includes(p.label)).map((p) => p.label),
+  );
+  check("markup has the viber:// deep link", html.includes(`href="viber://chat?number=${REFERENCE.viberNumber}"`));
+  check("markup has the 'Made with ♥' line", html.includes("Made with") && html.includes(copyright));
   console.log(`  (footer renders: "Made with ♥ ${copyright}")`);
 }
 
@@ -110,9 +135,29 @@ function referenceConfig(config: Config): Config {
   };
 }
 
+/** Write a standalone HTML preview of the footer (real component + real CSS). */
+function writePreview(config: Config, brandName: string, outPath: string) {
+  const html = renderToStaticMarkup(
+    createElement(Footer, { brand: { ...config, name: brandName } as unknown as Brand }),
+  );
+  const css = readFileSync(join(__dirname, "../src/storefront/storefront.css"), "utf8");
+  writeFileSync(
+    outPath,
+    `<!doctype html><meta charset="utf-8"><title>${brandName} footer preview</title>
+<style>${css}</style>
+<style>body{margin:0;background:#fff}.sf-root{--brand-heading-font:Inter,system-ui,sans-serif;font-family:Inter,system-ui,sans-serif}
+.container{max-width:1200px;margin:0 auto;padding-inline:24px}</style>
+<div class="sf-root">${html}</div>`,
+    "utf8",
+  );
+  console.log(`preview written: ${outPath}`);
+}
+
 async function main() {
   const apply = process.argv.includes("--apply");
   const verifyOnly = process.argv.includes("--verify");
+  const previewIdx = process.argv.indexOf("--preview");
+  const previewPath = previewIdx >= 0 ? process.argv[previewIdx + 1] : null;
 
   const tenant = await prisma.tenant.findUnique({ where: { slug: SLUG }, select: { id: true, name: true } });
   if (!tenant) {
@@ -125,6 +170,11 @@ async function main() {
 
   const config = (branding.config ?? {}) as Config;
   const brandName = typeof config.name === "string" && config.name ? config.name : tenant.name;
+
+  if (previewPath) {
+    writePreview(config, brandName, previewPath);
+    return;
+  }
 
   if (verifyOnly) {
     verify(config, brandName);
