@@ -44,6 +44,8 @@
     "test:reseller-gate": "tsx scripts/test-reseller-gate.ts",
     "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",
+    "test:product-add-gates": "tsx scripts/test-product-add-gates.ts",
+    "test:variation-price-reveal": "tsx scripts/test-variation-price-reveal.ts",
     "test:variant-inventory": "tsx scripts/test-variant-inventory.ts",
     "test:product-detail": "tsx scripts/test-product-detail.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
@@ -88,6 +90,7 @@
     "test:rehost-urls": "tsx scripts/test-rehost-urls.ts",
     "test:plan-fee": "tsx scripts/test-plan-fee.ts",
     "test:subscription-window": "tsx scripts/test-subscription-window-write.ts",
+    "test:tenant-presets": "tsx scripts/test-tenant-presets.ts",
     "test:tenant-suspend": "tsx scripts/test-tenant-suspend.ts",
     "test:tenant-unavailable": "tsx scripts/test-tenant-unavailable.ts",
     "test:income": "tsx scripts/test-income-analytics.ts",
@@ -95,7 +98,8 @@
     "test:brand-border": "tsx scripts/test-brand-border.ts",
     "test:footer-style": "tsx scripts/test-footer-style.ts",
     "test:price-font": "tsx scripts/test-price-font.ts",
-    "test:hero-wordmark": "tsx scripts/test-hero-wordmark.ts"
+    "test:hero-wordmark": "tsx scripts/test-hero-wordmark.ts",
+    "test:header-logo": "tsx scripts/test-header-logo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

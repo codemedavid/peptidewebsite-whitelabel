@@ -105,6 +105,16 @@ const NO_SUBSCRIPTION_META: SubscriptionMeta = {
   priceCents: null,
 };
 
+/** Re-hydrate a subscription-window date to a real Date. unstable_cache JSON-
+ *  serializes its payload, so on a cache HIT a Prisma Date returns as an ISO
+ *  string; `new Date()` accepts both a Date and that string. Invalid/blank →
+ *  null so the declared `Date | null` contract never leaks a bad value. */
+function toDateOrNull(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** The tenant-facing billing terms for the Billing page: what this tenant owes
  *  per term (operator-set "Monthly price due", falling back to the plan-config
  *  list price — the same effectivePlanFeeCents rule the platform admin's Plan
@@ -134,7 +144,11 @@ export const getSubscriptionMeta = cache(async (tenantId: string): Promise<Subsc
     const tenant = await loadSubscriptionWindow(tenantId);
     return {
       cycle: isBillingCycle(tenant?.subscriptionCycle) ? tenant.subscriptionCycle : null,
-      startsAt: tenant?.subscriptionStartsAt ?? null,
+      // unstable_cache JSON-serializes its payload, so on a cache HIT a Prisma
+      // Date comes back as an ISO string, not a Date. Re-hydrate to a real Date
+      // so the declared `startsAt: Date | null` contract holds and downstream
+      // `.toISOString()` (admin tenant detail) can't crash on a warm cache.
+      startsAt: toDateOrNull(tenant?.subscriptionStartsAt),
       amountCents: tenant?.subscriptionAmountCents ?? null,
       priceCents: tenant?.subscriptionPriceCents ?? null,
     };

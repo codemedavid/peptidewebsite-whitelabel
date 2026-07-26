@@ -12,6 +12,7 @@ import {
   type VariationDraft,
 } from "./variation-presets";
 import { unpricedVariationNames } from "@/lib/storefront/variations";
+import { resolveSelectableCategories } from "@/lib/storefront/categories";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -222,7 +223,7 @@ export function AdminAddProduct({
   const [name, setName]             = useState<string>(initial?.name || "");
   const [description, setDesc]      = useState<string>(initial?.description || "");
   const [category, setCategory]     = useState<string>(
-    initial?.category || (categories?.find((c) => c.id !== "all")?.id || ""),
+    initial?.category || resolveSelectableCategories(categories)[0].id,
   );
   const [price, setPrice]           = useState<number | string>(initial?.price ?? 0);
   const [purity, setPurity]         = useState<number | string>(
@@ -273,8 +274,10 @@ export function AdminAddProduct({
   );
 
   // Real categories the owner can assign (the synthetic "all" tab is a filter,
-  // not an assignable category).
-  const selectableCats = (categories || []).filter((c) => c.id !== "all");
+  // not an assignable category). Falls back to a single "Uncategorized" entry
+  // when the tenant has none, so deleting every category can't leave Save
+  // permanently disabled with no product ever addable — see categories.ts.
+  const selectableCats = resolveSelectableCategories(categories);
   // When editing a product whose category was since deleted, `category` holds an
   // id that no longer exists in the list. Keep it visible/selectable so touching
   // the dropdown doesn't silently reassign the product to a different category.
@@ -441,9 +444,6 @@ export function AdminAddProduct({
               <label className="admin-field__label">Category<span className="req">*</span></label>
               <select className="admin-select" value={category}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)}>
-                {selectableCats.length === 0 && (
-                  <option value="" disabled>No categories yet — add one first</option>
-                )}
                 {categoryOrphaned && (
                   <option value={category}>(removed) {category}</option>
                 )}
@@ -451,12 +451,6 @@ export function AdminAddProduct({
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
-              {selectableCats.length === 0 && (
-                <p className="admin-field__hint">
-                  Create a category in the <strong>Categories</strong> manager before
-                  adding products.
-                </p>
-              )}
             </div>
             <div className="admin-field">
               <label className="admin-field__label">Order ratio class</label>

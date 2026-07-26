@@ -10,6 +10,7 @@ import { FEATURE_GROUPS } from "@/lib/features/catalog";
 import { suspendTenantAction, setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
 import { confirmSubscriptionPaymentAction, rejectSubscriptionPaymentAction } from "@/actions/subscription-payments";
 import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
+import { ApplyTenantPresetCard } from "@/components/admin/tenant-presets/ApplyTenantPresetCard";
 import {
   summarizeSubscriptionPayments,
   canConfirm,
@@ -286,6 +287,8 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
         </div>
 
         <AdminPasswordCard slug={tenant.slug} />
+
+        <ApplyTenantPresetCard slug={tenant.slug} />
 
         <TenantWhatsappCard slug={tenant.slug} tenantName={tenant.name} current={tenant.ownerWhatsapp} />
 

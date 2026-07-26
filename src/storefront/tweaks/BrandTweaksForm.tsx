@@ -504,6 +504,7 @@ export function BrandTweaksForm({
         onChange={(v) => setTweak("headerText", v)}
         onClear={() => setTweak("headerText", undefined)}
         options={["#3B1F2A", "#1A1A1A", "#000000", "#2A2A33", "#3A3A3A", "#5A4A52", "#6B6B6B", "#EFEFEF", "#FFFFFF"]} />
+      <TweakToggle label="Logo in header" value={t.headerShowLogo !== false} onChange={(v) => setTweak("headerShowLogo", v)} />
       <TweakToggle label="Brand name in header" value={t.headerShowBrand !== false} onChange={(v) => setTweak("headerShowBrand", v)} />
       <TweakToggle label="Cart" value={t.headerShowCart !== false} onChange={(v) => setTweak("headerShowCart", v)} />
       <TweakToggle label="CTA button" value={t.headerShowCta !== false} onChange={(v) => setTweak("headerShowCta", v)} />

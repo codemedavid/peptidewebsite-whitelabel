@@ -26,6 +26,7 @@ import {
 import type { DemoFeatureMap } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { PLAN_FEATURES, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
+import { applyTenantPreset, getTenantPreset, TENANT_PRESETS } from "@/lib/tenant/presets";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(/:\d+$/, "");
 
@@ -40,6 +41,19 @@ const createTenantSchema = z.object({
   ownerUserId: z.string().min(1), // Supabase auth user id of the client owner
   ownerEmail: z.string().email(),
   orderNumberFormat: z.custom<OrderNumberFormat>().optional(),
+  // Optional store-shape preset (lib/tenant/presets.ts). When set, the new
+  // tenant is provisioned with that preset's branding.config + entitlements
+  // already in place — e.g. "K Glow — Two ways to order" yields a group-buy +
+  // on-hand storefront with no follow-up configure script. The preset's themeId
+  // wins over `themeId` above so the picked shape stays coherent.
+  //
+  // Validated against the registry rather than accepted as a free string: a
+  // stale form or renamed id would otherwise provision a plain storefront while
+  // reporting success, and the operator would not find out until they looked.
+  presetId: z
+    .string()
+    .refine((id) => id in TENANT_PRESETS, { message: "Unknown store preset." })
+    .optional(),
 });
 
 /**
@@ -58,6 +72,24 @@ export async function createTenant(input: z.infer<typeof createTenantSchema>) {
 
   const orderNumberFormat = normalizeOrderNumberFormat(data.orderNumberFormat ?? {}, data.name);
 
+  // Store-shape preset (optional). A brand-new tenant has no config and no
+  // overrides, so the applier runs against an empty target: its output is simply
+  // the preset's own config + its full grant list.
+  const preset = getTenantPreset(data.presetId);
+  const seeded = preset
+    ? applyTenantPreset({ themeId: data.themeId, config: {}, enabledFeatures: [] }, preset)
+    : null;
+
+  // Grants need seeded Feature rows (the override FK). Missing ones are skipped
+  // rather than aborting the create — the tenant still provisions, and the
+  // operator can re-apply the preset from the tenant page after db:sync-features.
+  const featureRows = seeded?.featuresToGrant.length
+    ? await prisma.feature.findMany({
+        where: { key: { in: [...seeded.featuresToGrant] } },
+        select: { id: true },
+      })
+    : [];
+
   const tenant = await prisma.$transaction(async (tx) => {
     const t = await tx.tenant.create({
       data: {
@@ -66,13 +98,26 @@ export async function createTenant(input: z.infer<typeof createTenantSchema>) {
         status: "trial",
         planId: plan.id,
         orderNumberFormat,
-        branding: { create: { themeId: data.themeId } },
+        branding: {
+          create: {
+            themeId: seeded?.themeId ?? data.themeId,
+            ...(seeded ? { config: seeded.config as Prisma.InputJsonValue } : {}),
+          },
+        },
         settings: { create: { storeName: data.name } },
         members: {
           create: { userId: data.ownerUserId, email: data.ownerEmail, role: "owner" },
         },
       },
     });
+
+    if (featureRows.length) {
+      await tx.tenantFeatureOverride.createMany({
+        data: featureRows.map((f) => ({ tenantId: t.id, featureId: f.id, enabled: true })),
+        skipDuplicates: true,
+      });
+    }
+
     return t;
   });
 
@@ -246,7 +291,14 @@ export async function createTenantAction(
   prev: CreateTenantState,
   formData: FormData,
 ): Promise<CreateTenantState> {
-  if (isDemoMode()) return createTenantDemoAction(prev, formData);
+  if (isDemoMode()) {
+    // The demo provisioner is file-backed and has no preset support. Fail loudly
+    // rather than silently creating a plain storefront the operator did not ask for.
+    if (String(formData.get("presetId") ?? "").trim()) {
+      return { error: "Store presets need a database — not available in demo mode." };
+    }
+    return createTenantDemoAction(prev, formData);
+  }
 
   const operator = await getPlatformUser();
   if (!operator) return { error: "Platform operators only." };
@@ -255,6 +307,8 @@ export async function createTenantAction(
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
   const planKey = String(formData.get("plan") ?? "starter");
   const themeId = String(formData.get("themeId") ?? "clinical-white");
+  // "" = no preset (the plain single-catalog storefront).
+  const presetId = String(formData.get("presetId") ?? "").trim();
 
   // Order-number format (same fields as the demo wizard).
   const prefix = String(formData.get("orderPrefix") ?? "").trim().toUpperCase();
@@ -278,6 +332,7 @@ export async function createTenantAction(
     ownerUserId: operator.id,
     ownerEmail: operator.email,
     orderNumberFormat,
+    presetId: presetId || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 

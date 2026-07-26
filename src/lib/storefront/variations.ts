@@ -71,11 +71,36 @@ export function shouldShowOptionPicker(product: OptionSource): boolean {
   return variationsOf(product).length > 0;
 }
 
-/** Label for one option pill, e.g. "Vials only · ₱2,500". The name alone isn't
- *  enough once a card offers several tiers — the whole point of the picker is
- *  comparing what each costs without clicking through them one at a time. */
+/** Label for one option pill, e.g. "Vials only · ₱2,500". Still used by the
+ *  Two-Ways home / group-buy rows, where prices sit inline on each option. The
+ *  catalog card + detail modal instead render the bare `option.name` and reveal
+ *  the price only once a pill is clicked (see resolveSelectedPrice). */
 export function optionLabel(option: ProductOption, currency: string): string {
   return `${option.name} · ${currency}${option.price.toLocaleString()}`;
+}
+
+/**
+ * The price the card shows for the current selection, or `null` when the product
+ * offers options but the customer hasn't picked one yet.
+ *
+ * This drives the "reveal price on click" rule: a product with variations shows
+ * no price until one of its option pills is clicked, so the price on screen
+ * always names the option the customer chose. A product with no variations has
+ * no picker and always resolves to its single base price, so its card is
+ * unchanged.
+ *
+ * `selectedIndex` is the picker's chosen option index; a value < 0 (the card's
+ * initial "nothing picked" state) or one at/past the end of the option list
+ * means no selection, hence `null`.
+ */
+export function resolveSelectedPrice(
+  product: OptionSource,
+  selectedIndex: number,
+): number | null {
+  const options = buildProductOptions(product);
+  if (options.length === 0) return product.price;
+  if (selectedIndex < 0 || selectedIndex >= options.length) return null;
+  return options[selectedIndex].price;
 }
 
 /**

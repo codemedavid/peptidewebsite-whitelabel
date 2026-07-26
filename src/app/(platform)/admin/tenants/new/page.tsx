@@ -6,6 +6,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { CreateTenantState } from "@/actions/demo";
 import { createTenantAction } from "@/actions/onboarding";
 import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
+import { TenantPresetPicker } from "@/components/admin/tenant-presets/TenantPresetPicker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -41,6 +42,8 @@ export default function NewTenantPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [themeId, setThemeId] = useState("clinical-white");
+  // "" = the plain single-catalog storefront (no preset).
+  const [presetId, setPresetId] = useState("");
 
   // Order-number format. Prefix auto-derives from the business name until edited.
   const [prefix, setPrefix] = useState("");
@@ -164,6 +167,16 @@ export default function NewTenantPage() {
             <ThemePresetPicker value={themeId} onChange={setThemeId} columns={3} />
           </div>
           <input type="hidden" name="themeId" value={themeId} />
+        </div>
+
+        {/* ── Store shape ── the theme picks how it looks, this picks how it works. */}
+        <div>
+          <span id="preset-label" className="block text-sm font-medium">
+            Store shape
+          </span>
+          <div className="mt-2" role="group" aria-labelledby="preset-label">
+            <TenantPresetPicker value={presetId} onChange={setPresetId} />
+          </div>
         </div>
 
         {/* ── Order-number format ── */}

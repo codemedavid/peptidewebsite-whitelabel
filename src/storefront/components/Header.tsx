@@ -59,14 +59,15 @@ export function Header({
       <div className="container site-header__row">
         {/* Logo */}
         <a href="#top" className="site-header__logo">
-          {brand.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
-          ) : (
-            <div className="site-header__logo-mark">
-              {brand.name?.[0]?.toUpperCase() || "B"}
-            </div>
-          )}
+          {brand.headerShowLogo !== false &&
+            (brand.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
+            ) : (
+              <div className="site-header__logo-mark">
+                {brand.name?.[0]?.toUpperCase() || "B"}
+              </div>
+            ))}
           {brand.headerShowBrand !== false && (
             <span className="site-header__brand">{brand.name}</span>
           )}

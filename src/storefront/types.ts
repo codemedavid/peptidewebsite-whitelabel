@@ -515,6 +515,11 @@ export type Brand = {
   showAnalyticsGroupBuys?: boolean;
 
   headerShowBrand: boolean;
+  // Show the upper-left logo mark (brand.logoUrl image, or the letter-tile
+  // fallback). Default-on: checked as !== false, so existing tenants keep their
+  // logo. Set false to render NO logo in the header while keeping the brand
+  // text (headerShowBrand), nav, cart, and CTA.
+  headerShowLogo?: boolean;
   headerShowCart: boolean;
   headerShowCta: boolean;
 

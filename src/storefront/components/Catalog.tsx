@@ -7,7 +7,7 @@ import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import {
   buildProductOptions,
-  optionLabel,
+  resolveSelectedPrice,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
 import { optionStock, isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
@@ -61,13 +61,21 @@ export function ProductCard({
   // named variation already carries the base price (it IS the standard). No
   // variations → unchanged single-price behavior.
   const options = buildProductOptions(product);
-  const [optIdx, setOptIdx] = useState(0);
-  const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
+  // Start with NOTHING selected (-1). A variation product then shows only its
+  // option names and no price until the customer clicks a pill — the price on
+  // screen always names the option they chose. A single-price product has no
+  // options, so this index never matters and its price shows immediately.
+  const [optIdx, setOptIdx] = useState(-1);
+  const selectedOpt =
+    optIdx >= 0 && optIdx < options.length ? options[optIdx] : null;
   // Any variation the seller priced earns a picker. Keying off the option count
   // instead used to hide a lone variation on a product with no base price — the
   // customer paid that price without ever seeing which option it was.
   const showSelector = shouldShowOptionPicker(product);
-  const displayPrice = selectedOpt ? selectedOpt.price : product.price;
+  // null = the product has options but none is picked yet → no price, and buying
+  // is blocked until the customer chooses. A single-price product is never null.
+  const displayPrice = resolveSelectedPrice(product, optIdx);
+  const needsSelection = displayPrice === null;
   const cd = design ? cardDesignAttrs(design) : null;
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, defaultImage);
@@ -208,7 +216,7 @@ export function ProductCard({
                     textDecoration: soldOut ? "line-through" : "none",
                   }}
                 >
-                  {optionLabel(o, product.currency)}
+                  {o.name}
                   {soldOut ? " · out" : ""}
                 </button>
               );
@@ -223,6 +231,8 @@ export function ProductCard({
         <div className="product-card__price font-display">
           {poa ? (
             <span className="product-card__price-poa">Message for price</span>
+          ) : needsSelection ? (
+            <span className="product-card__price-poa">Select an option</span>
           ) : (
             <>
               {product.currency}
@@ -269,8 +279,9 @@ export function ProductCard({
             </div>
             <button
               className="btn btn-primary product-card__cta"
-              disabled={outOfStock}
+              disabled={outOfStock || needsSelection}
               onClick={() => {
+                if (needsSelection) return;
                 onAdd(qty, selectedOpt?.variation ?? undefined);
                 setQty(1);
               }}
@@ -280,7 +291,7 @@ export function ProductCard({
                 <circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
               </svg>
-              {outOfStock ? "Out of Stock" : "Add to Cart"}
+              {needsSelection ? "Select an option" : outOfStock ? "Out of Stock" : "Add to Cart"}
             </button>
           </div>
         )}
@@ -315,19 +326,23 @@ function ProductDetailModal({
 }) {
   const detail = buildProductDetail(product, defaultImage);
   const [qty, setQty] = useState(1);
-  const [optIdx, setOptIdx] = useState(0);
+  // Nothing picked yet (-1): a product with options shows no price until the
+  // customer clicks one, same as the catalog card it opened from.
+  const [optIdx, setOptIdx] = useState(-1);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const selectedIdx = detail.options.length
-    ? Math.min(optIdx, detail.options.length - 1)
-    : -1;
+  const selectedIdx =
+    optIdx >= 0 && optIdx < detail.options.length ? optIdx : -1;
   const selectedOpt = selectedIdx >= 0 ? detail.options[selectedIdx] : null;
-  const displayPrice = selectedOpt ? selectedOpt.price : detail.basePrice;
+  // null = has options but none picked → show a prompt, not a price, and block
+  // buying until a pick. resolveSelectedPrice reuses the card's option list.
+  const displayPrice = resolveSelectedPrice(product, optIdx);
+  const needsSelection = displayPrice === null;
   // Per-variation: the selected option's own available units (single-price
   // products fall back to detail.stock). Drives the stepper cap + CTA.
   const selectedStock = selectedIdx >= 0 ? detail.optionStock[selectedIdx] : detail.stock;
   const selectedOut = selectedStock <= 0;
-  const canBuy = !selectedOut && !detail.priceOnRequest && !gbBlocked;
+  const canBuy = !selectedOut && !detail.priceOnRequest && !gbBlocked && !needsSelection;
 
   // Esc closes, body scroll locks, focus moves into the dialog — same modal
   // contract as NoticeModal so keyboard + screen-reader users are covered.
@@ -389,6 +404,8 @@ function ProductDetailModal({
             <div className="sf-detail__price font-display">
               {detail.priceOnRequest ? (
                 <span className="product-card__price-poa">Message for price</span>
+              ) : needsSelection ? (
+                <span className="product-card__price-poa">Select an option</span>
               ) : (
                 <>
                   {detail.currency}
@@ -431,7 +448,7 @@ function ProductDetailModal({
                         textDecoration: soldOut ? "line-through" : "none",
                       }}
                     >
-                      {optionLabel(o, detail.currency)}
+                      {o.name}
                       {soldOut ? " · out" : ""}
                     </button>
                   );
@@ -486,9 +503,11 @@ function ProductDetailModal({
                   ? "Message to order"
                   : gbBlocked
                     ? "Available after group buy"
-                    : selectedOut
-                      ? "Out of Stock"
-                      : "Add to Cart"}
+                    : needsSelection
+                      ? "Select an option"
+                      : selectedOut
+                        ? "Out of Stock"
+                        : "Add to Cart"}
               </button>
             </div>
           </div>
