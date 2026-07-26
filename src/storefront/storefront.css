@@ -1275,6 +1275,10 @@
   gap: 10px;
   /* Last resort before clipping: the CTA wraps under the stepper. */
   flex-wrap: wrap;
+  /* Multi-line flex defaults to align-content: stretch, which would inflate the
+     wrapped CTA line to fill the row's spare height — and .btn's pill radius
+     turns a tall button into an ellipse. Each line keeps its natural height. */
+  align-content: flex-start;
 }
 .sf-root .sf-qty {
   display: inline-flex;
@@ -1355,9 +1359,20 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    /* Column + wrap would wrap by HEIGHT (and stretch the columns). Once we are
+       deliberately stacking, one line is the whole point. */
+    flex-wrap: nowrap;
   }
   .sf-root .product-card__qty { align-self: center; justify-content: center; }
-  .sf-root .product-card__cta { width: 100%; }
+  /* flex: none, not the row's `flex: 1 1 130px` — in a column container that
+     basis is a HEIGHT, which inflates the button into a pill-radius ellipse.
+     Tighter side padding buys back the ~10px that keeps "Select an option" —
+     the label a variation product shows FIRST — on a single line. */
+  .sf-root .product-card__cta {
+    width: 100%;
+    flex: none;
+    padding-inline: 10px;
+  }
 }
 
 /* Catalog controls: on phones let search + sort each take a full row instead

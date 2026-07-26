@@ -250,6 +250,36 @@ check("the cart icon never shrinks away", () => {
   );
 });
 
+check("a wrapped CTA keeps its own height (no stretched pill blob)", () => {
+  const b = block(".sf-root .product-card__buy");
+  assert.match(
+    b,
+    /align-content:\s*flex-start/,
+    "multi-line flex defaults to align-content: stretch — the wrapped CTA line then fills the row's spare height and the pill radius turns it into an ellipse",
+  );
+});
+
+check("the stacked column state does not also wrap", () => {
+  const i = css.indexOf("@container (max-width:");
+  assert.notEqual(i, -1);
+  const stack = css.slice(i, css.indexOf("\n}\n", i));
+  assert.match(
+    stack,
+    /flex-wrap:\s*nowrap/,
+    "flex-direction: column + flex-wrap: wrap wraps by HEIGHT and stretches — the stacked row must opt out",
+  );
+});
+
+check("the stacked CTA drops its flex basis (it is a HEIGHT in a column)", () => {
+  const i = css.indexOf("@container (max-width:");
+  const stack = css.slice(i, css.indexOf("\n}\n", i));
+  assert.match(
+    stack,
+    /\.product-card__cta \{[^}]*flex:\s*none/,
+    "flex: 1 1 130px means a 130px-TALL button once the row becomes a column — .btn's pill radius then renders it as an ellipse",
+  );
+});
+
 check("narrow cards stack the stepper above a full-width CTA", () => {
   const m = css.match(/@container \(max-width:\s*(\d+)px\)/);
   assert.ok(m, "no @container query found for the buy row");
