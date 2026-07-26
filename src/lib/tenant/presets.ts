@@ -159,27 +159,39 @@ export type TenantPreset = {
 export const KGLOW_TWO_WAYS_ID = "kglow-two-ways";
 
 /**
- * Reproduces the K Glow storefront shape: the two-ways home (on-hand list that
- * ships now + the live group-buy card at the group price), the group-buy manager
- * and its analytics slice in the store admin, the order-ratio floor requiring one
- * bacteriostatic water per peptide vial, and the Lab Reports page.
+ * Reproduces the K Glow storefront shape: the group-buy manager and its analytics
+ * slice in the store admin, the order-ratio floor requiring one bacteriostatic
+ * water per peptide vial, the Lab Reports page, and on-hand products that stay
+ * buyable while a round is live.
  *
- * Values mirror the live k-glow tenant as of 2026-07-26 (homeLayout "two-ways",
- * groupBuyRules enabled with a strict 1:1 ratio); the group-buy settings and copy
- * are the shared defaults, which is what k-glow renders today since it stores
- * neither key. Products are NOT part of this preset — each tenant keeps its own
- * catalog; only the storefront's behaviour and layout are duplicated.
+ * The dual "two ways to order" HOME — the on-hand list beside the live group-buy
+ * card — is DEFAULT OFF (config.homeLayout "classic"). The entitlement is still
+ * granted, so switching it on is one config key, but stamping the preset never
+ * changes a storefront's home layout on its own: an operator applying it to a
+ * live store gets the group-buy machinery without a redesigned front page.
+ *
+ * Other values mirror the live k-glow tenant as of 2026-07-26 (groupBuyRules
+ * enabled with a strict 1:1 ratio); the group-buy settings and copy are the
+ * shared defaults, which is what k-glow renders today since it stores neither
+ * key. Products are NOT part of this preset — each tenant keeps its own catalog;
+ * only the storefront's behaviour is duplicated.
  */
 const KGLOW_TWO_WAYS: TenantPreset = {
   id: KGLOW_TWO_WAYS_ID,
-  name: "K Glow — Two ways to order",
-  tagline: "On-hand catalog that ships now, plus a live group buy at a lower price.",
+  name: "K Glow — Group buy + on-hand",
+  tagline:
+    "Group-buy rounds, ratio rules and Lab Reports on the classic home. The two-ways split home is included but off by default.",
   themeId: "kglow",
   config: {
-    // The storefront home becomes the on-hand + group-buy split. Inert unless
-    // GB_TWO_WAYS_HOME is also granted below (resolveHomeLayout: the grant is
-    // the only way in, config can only opt out) — so the two must ship together.
-    homeLayout: "two-ways",
+    // The dual "two ways to order" home ships OFF: a stamped store opens on the
+    // classic hero → catalog home, and the split layout is a deliberate second
+    // step. It must be an explicit "classic" rather than an absent key, because
+    // resolveHomeLayout reads absent-while-entitled as ON — leaving it out would
+    // switch the split layout on for every tenant the preset touches.
+    // Turn it on later with:
+    //   npx tsx scripts/enable-two-ways-home.ts <slug> two-ways
+    // No extra grant needed — GB_TWO_WAYS_HOME is already given below.
+    homeLayout: "classic",
     // On-hand products stay buyable while a round is live. K Glow's whole pitch
     // is the CHOICE between the two paths, so pausing on-hand would defeat it.
     groupBuyAllowOnHand: true,
@@ -212,7 +224,7 @@ const KGLOW_TWO_WAYS: TenantPreset = {
     },
   },
   features: [
-    FEATURES.GB_TWO_WAYS_HOME, // the two-ways home itself
+    FEATURES.GB_TWO_WAYS_HOME, // the two-ways home — granted, but left switched off
     FEATURES.GB_MODULE, // group-buy manager, live banner, order attribution
     FEATURES.GB_RULES, // the ratio / min-order engine configured above
     FEATURES.STORE_COA, // Lab Reports page + its store-admin manager

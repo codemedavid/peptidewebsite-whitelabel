@@ -21,7 +21,7 @@ K Glow's "two ways to order" storefront was assembled by hand and was not reprod
 
 | Piece | How it was done before |
 |---|---|
-| Two-ways home layout | `scripts/enable-two-ways-home.ts` (one-off) |
+| Two-ways home layout | `scripts/enable-two-ways-home.ts` (one-off — still the switch, now opt-in) |
 | Group-buy catalog (25 products) | `scripts/seed-kglow-products.ts` |
 | On-hand catalog (6 products) | `scripts/seed-kglow-onhand.ts` |
 | Lab reports (7 Janoshik) | `scripts/seed-kglow-coa.ts` |
@@ -66,9 +66,15 @@ Two invariants the gate enforces:
 
 `themeId: "kglow"`; grants `groupbuy.two_ways_home`, `groupbuy.module`, `groupbuy.rules`, `storefront.coa`; writes 8 config keys:
 
-`homeLayout: "two-ways"`, `groupBuyAllowOnHand: true`, `showAdminGroupBuy: true`, `showAnalyticsGroupBuys: true`, `showPageCOA: true`, plus `groupBuySettings` / `groupBuyContent` / `groupBuyRules` (ratio floor: 1 bac water per peptide, strict, enforced in cart *and* at checkout).
+`homeLayout: "classic"`, `groupBuyAllowOnHand: true`, `showAdminGroupBuy: true`, `showAnalyticsGroupBuys: true`, `showPageCOA: true`, plus `groupBuySettings` / `groupBuyContent` / `groupBuyRules` (ratio floor: 1 bac water per peptide, strict, enforced in cart *and* at checkout).
 
-The gate asserts the config and the grant **agree**: `resolveHomeLayout` treats the entitlement as the only way in, so shipping `homeLayout: "two-ways"` without `groupbuy.two_ways_home` would be inert.
+**The dual "two ways to order" home is DEFAULT OFF** (changed 2026-07-26). The preset sets up the group-buy machinery but leaves the storefront on the classic hero → catalog home, so stamping it onto a live store never redesigns that store's front page. `groupbuy.two_ways_home` is still granted, so switching the split home on afterwards is one config key and no second trip to admin → Features:
+
+```
+npx tsx scripts/enable-two-ways-home.ts <slug> two-ways
+```
+
+The `"classic"` must be written explicitly rather than omitted: `resolveHomeLayout` treats the entitlement as the only way in and reads an **absent** key while entitled as ON, so leaving `homeLayout` out of the preset would switch the split layout on for every tenant it touches. The gate asserts the resolved layout is `classic` both entitled and unentitled, and separately that the grant is still present.
 
 ### 3. Operator surfaces
 
@@ -90,9 +96,10 @@ Existing-tenant flow is **preview-then-confirm**: it rewrites config and grants 
 | 1 | Registry is non-empty and its keys match preset ids | `test-tenant-presets.ts` §1 | PASS |
 | 2 | `getTenantPreset` resolves by id, returns null for unknown/blank | §1 | PASS |
 | 3 | Every preset has id / name / tagline / themeId | §1 | PASS |
-| 4 | K Glow preset uses the `kglow` theme and `homeLayout: "two-ways"` | §2 | PASS |
+| 4 | K Glow preset uses the `kglow` theme and ships the two-ways home OFF (`homeLayout: "classic"`) | §2 | PASS |
 | 5 | Preset grants the 4 group-buy + on-hand entitlements | §2 | PASS |
-| 6 | Config and grant agree — `resolveHomeLayout` yields two-ways when entitled, classic when not | §2 | PASS |
+| 6 | An applied preset resolves to the classic home whether entitled or not | §2 | PASS |
+| 6b | The `groupbuy.two_ways_home` grant is still issued, so flipping `homeLayout` to `"two-ways"` is all it takes to switch on | §2 | PASS |
 | 7 | On-hand stays buyable during a live round; GB manager + analytics + COA page exposed | §2 | PASS |
 | 8 | Every preset feature is a real catalog key | §3 | PASS |
 | 9 | Every preset feature is `OPERATOR_GRANTABLE` — a preset can never bypass a plan ceiling | §3 | PASS |
@@ -103,7 +110,7 @@ Existing-tenant flow is **preview-then-confirm**: it rewrites config and grants 
 | 14 | Applying preserves unrelated config, secrets and owner content collections | §5 | PASS |
 | 15 | Applying overwrites the keys the preset owns, and the theme | §5 | PASS |
 | 16 | Applying never mutates the caller's config; returns a fresh object | §5 | PASS |
-| 17 | Empty config (new tenant) yields a complete two-ways setup | §6 | PASS |
+| 17 | Empty config (new tenant) yields a complete group-buy setup on the classic home | §6 | PASS |
 | 18 | Malformed current state (`null` / `undefined` / string / array) is tolerated | §6 | PASS |
 | 19 | Grants only what the tenant lacks; skips what it has | §7 | PASS |
 | 20 | Application is additive only — no revoke channel exists | §7 | PASS |

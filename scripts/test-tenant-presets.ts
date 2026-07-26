@@ -69,7 +69,9 @@ function livingTenant() {
       resellerAccessCode: "WHOLESALE-2026",
       coaReports: [{ id: "c1", name: "BPC-157", lab: "Janoshik" }],
       categories: ["Peptides", "Bac Water"],
-      homeLayout: "classic",
+      // Already running the two-ways home, so applying the preset is seen
+      // switching it back OFF — the preset owns homeLayout and ships it classic.
+      homeLayout: "two-ways",
       showPageCOA: false,
     } as Record<string, unknown>,
     enabledFeatures: [] as string[],
@@ -117,8 +119,12 @@ check("uses the kglow theme", () => {
   assert.equal(kglow.themeId, "kglow");
 });
 
-check("turns the storefront home into the two-ways layout", () => {
-  assert.equal(kglow.config.homeLayout, "two-ways");
+check("ships the two-ways home OFF — the storefront home stays classic", () => {
+  // The preset sets up the group-buy machinery, but the dual "two ways to order"
+  // home is opt-in: applying the preset must never flip a storefront onto the
+  // split layout on its own. An explicit "classic" (not an absent key) is what
+  // turns it off, because resolveHomeLayout reads absent-while-entitled as ON.
+  assert.equal(kglow.config.homeLayout, "classic");
 });
 
 check("grants the four entitlements group buy + on-hand needs", () => {
@@ -133,12 +139,22 @@ check("grants the four entitlements group buy + on-hand needs", () => {
   }
 });
 
-check("the granted entitlement actually unlocks the two-ways home", () => {
+check("the applied preset resolves to the classic home, entitled or not", () => {
   // resolveHomeLayout: the entitlement is the ONLY way in; config can only opt
-  // out. Preset config + preset grant must therefore agree.
+  // out. The preset grants the entitlement (so the store CAN run two-ways) but
+  // opts out in config, so a freshly-stamped store renders the classic home.
   const entitled = kglow.features.includes(FEATURES.GB_TWO_WAYS_HOME);
-  assert.equal(resolveHomeLayout(entitled, kglow.config.homeLayout as string), "two-ways");
+  assert.equal(resolveHomeLayout(entitled, kglow.config.homeLayout as string), "classic");
   assert.equal(resolveHomeLayout(false, kglow.config.homeLayout as string), "classic");
+});
+
+check("still grants the entitlement, so the owner can switch two-ways on later", () => {
+  // Off by default, one config key away: with the grant in place, flipping
+  // branding.config.homeLayout to "two-ways" (scripts/enable-two-ways-home.ts)
+  // is all it takes — no second trip to admin → Features.
+  const entitled = kglow.features.includes(FEATURES.GB_TWO_WAYS_HOME);
+  assert.ok(entitled, "preset must keep granting groupbuy.two_ways_home");
+  assert.equal(resolveHomeLayout(entitled, "two-ways"), "two-ways");
 });
 
 check("leaves on-hand products buyable while a round is live", () => {
@@ -250,7 +266,7 @@ check("never touches the tenant's own content collections", () => {
 
 check("overwrites the keys the preset does own", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
-  assert.equal(out.config.homeLayout, "two-ways", "homeLayout not switched");
+  assert.equal(out.config.homeLayout, "classic", "homeLayout not switched");
   assert.equal(out.config.showPageCOA, true, "showPageCOA not switched on");
 });
 
@@ -270,10 +286,10 @@ check("does not mutate the caller's config object", () => {
 // ── 6. Applying to a BRAND-NEW tenant (J1) ───────────────────────────────────
 console.log("\n6. Apply at tenant creation (J1)");
 
-check("an empty config yields a complete two-ways setup", () => {
+check("an empty config yields a complete group-buy setup on the classic home", () => {
   const out = applyTenantPreset({ themeId: "default", config: {}, enabledFeatures: [] }, kglow);
   assert.equal(out.themeId, "kglow");
-  assert.equal(out.config.homeLayout, "two-ways");
+  assert.equal(out.config.homeLayout, "classic");
   assert.equal(out.featuresToGrant.length, kglow.features.length);
 });
 
@@ -288,7 +304,7 @@ check("tolerates absent / malformed current state", () => {
   ];
   for (const current of cases) {
     const out = applyTenantPreset(current, kglow);
-    assert.equal(out.config.homeLayout, "two-ways");
+    assert.equal(out.config.homeLayout, "classic");
     assert.equal(out.themeId, "kglow");
   }
 });
@@ -327,7 +343,7 @@ check("reports the theme change", () => {
 check("reports each changed config key with its before/after", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
   const home = out.changes.find((c) => c.kind === "config" && c.key === "homeLayout");
-  assert.deepEqual(home, { kind: "config", key: "homeLayout", from: "classic", to: "two-ways" });
+  assert.deepEqual(home, { kind: "config", key: "homeLayout", from: "two-ways", to: "classic" });
   const coa = out.changes.find((c) => c.kind === "config" && c.key === "showPageCOA");
   assert.deepEqual(coa, { kind: "config", key: "showPageCOA", from: false, to: true });
 });
@@ -339,7 +355,7 @@ check("reports each feature that will be granted", () => {
 });
 
 check("reports no change for a config key that already matches", () => {
-  const current = { themeId: "kglow", config: { homeLayout: "two-ways" }, enabledFeatures: [] };
+  const current = { themeId: "kglow", config: { homeLayout: "classic" }, enabledFeatures: [] };
   const out = applyTenantPreset(current, kglow);
   assert.ok(
     !out.changes.some((c) => c.kind === "config" && c.key === "homeLayout"),
@@ -467,7 +483,7 @@ check("still switches the structural keys on a configured tenant", () => {
     config: { ...before.config, groupBuyRules: { enabled: true } },
   };
   const out = applyTenantPreset(current, kglow);
-  assert.equal(out.config.homeLayout, "two-ways");
+  assert.equal(out.config.homeLayout, "classic");
   assert.equal(out.config.showAdminGroupBuy, true);
 });
 
