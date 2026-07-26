@@ -585,6 +585,12 @@ export type Brand = {
    *  catalogSortStyle is "simple". */
   bestSellerCounts?: Record<string, number>;
 
+  /** How the "two ways to order" home orders its ON-HAND shelf — "catalog"
+   *  (default) is createdAt order; "per-vial-first" floats single per-vial
+   *  listings above the multi-vial kits (K Glow). Nothing is hidden either way.
+   *  Normalized server-side via normalizeOnHandOrder. */
+  onHandOrder?: "catalog" | "per-vial-first";
+
   /** Footer layout — "columns" (default) is today's link-column footer;
    *  "compact" is the dark, single-row footer (logo + tagline + pill
    *  quick-links + centered "Made with ♥" line, HP Glow). Unset inherits

@@ -17,6 +17,7 @@ import {
 } from "./two-ways";
 import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-page";
 import type { GroupBuyBanner } from "./group-buy-banner";
+import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
 
 /** The minimal product shape the home reads. Generic so the caller keeps its own
  *  concrete Product type through the view (id/name/image/stock for the rows). */
@@ -25,6 +26,9 @@ export type TwhProduct = TwoWaysInput & {
   name: string;
   image?: string | null;
   stock?: number;
+  /** Size/dosage options — read only to tell a per-vial listing from a
+   *  multi-vial kit when the shelf is ordered per-vial-first. */
+  variations?: { name: string; price: number }[];
 };
 
 /** One on-hand ("ships now") product row. */
@@ -133,19 +137,26 @@ function gbHomeLine<T extends TwhProduct>(product: T, currency: string): GbHomeL
  * the GB path. Pricing still honours gbPrice (groupBuyLine) so a round product with
  * a gbPrice shows its saving, while an untagged round product simply lists at its
  * regular price. Availability filtering is the caller's job. Order is preserved
- * within each path; the input is never mutated.
+ * within each path — except that `onHandOrder: "per-vial-first"` floats the
+ * on-hand shelf's single per-vial listings above its multi-vial kits (see
+ * ./on-hand-order); the GROUP BUY path is never re-ordered. The input is never
+ * mutated.
  */
 export function buildTwoWaysHomeView<T extends TwhProduct>(
   products: T[],
   banner: GroupBuyBanner | null,
   currency: string,
   now: Date = new Date(),
+  onHandOrder: OnHandOrder = "catalog",
 ): TwoWaysHomeView<T> {
   const covered = banner && !banner.coversAll ? new Set(banner.productIds) : null;
   const inRound = (p: T): boolean =>
     !!banner && (banner.coversAll || (covered?.has(p.id) ?? false));
 
-  const onHandLines = products.filter((p) => !inRound(p)).map((p) => onHandLine(p, currency));
+  const onHandLines = orderOnHandProducts(
+    products.filter((p) => !inRound(p)),
+    onHandOrder,
+  ).map((p) => onHandLine(p, currency));
   const gbLines = banner
     ? products.filter((p) => inRound(p)).map((p) => gbHomeLine(p, currency))
     : [];

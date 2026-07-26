@@ -18,6 +18,7 @@ import {
   normalizeCatalogSortStyle,
   sortCatalogProducts,
 } from "@/lib/storefront/catalog-sort";
+import { normalizeOnHandOrder, orderOnHandProducts } from "@/lib/storefront/on-hand-order";
 
 /**
  * The storefront product card. Also rendered by the admin Card Studio for its
@@ -536,8 +537,13 @@ export function Catalog({
           (p.description || "").toLowerCase().includes(q),
       );
     }
-    return sortCatalogProducts(list, sort, brand.bestSellerCounts);
-  }, [products, category, query, sort, brand.bestSellerCounts]);
+    // On a "per-vial-first" store the packaging tier outranks the chosen sort:
+    // single per-vial listings lead, multi-vial kits sit underneath, and the
+    // shopper's Name / Price / Best-Sellers choice orders within each tier
+    // (orderOnHandProducts is stable). Every other store is a pass-through.
+    const sorted = sortCatalogProducts(list, sort, brand.bestSellerCounts);
+    return orderOnHandProducts(sorted, normalizeOnHandOrder(brand.onHandOrder));
+  }, [products, category, query, sort, brand.bestSellerCounts, brand.onHandOrder]);
 
   return (
     <section className="catalog section" id="catalog">

@@ -43,10 +43,15 @@ export function TwoWaysHome({
 }) {
   const { products, cart, addToCart, decrementCart } = useStore();
   const currency = brand.currency || "₱";
+  // brand.onHandOrder decides whether the on-hand shelf leads with the store's
+  // single per-vial listings (K Glow) or keeps plain catalog order (everyone
+  // else). Either way the same products render — only their order changes.
   const view = buildTwoWaysHomeView(
     products.filter((p) => p.available !== false),
     brand.groupBuyBanner ?? null,
     currency,
+    new Date(),
+    brand.onHandOrder,
   );
 
   // Owner-editable GB copy (branding.config.groupBuyContent, normalized

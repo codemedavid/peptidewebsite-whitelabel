@@ -24,6 +24,7 @@ import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
+import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
@@ -260,6 +261,11 @@ export default async function HomePage() {
   // classic. Resolved server-side so StorefrontApp just branches on brand.homeLayout.
   const twoWaysHomeEntitled = await hasFeature(tenantId, FEATURES.GB_TWO_WAYS_HOME);
   brand.homeLayout = resolveHomeLayout(twoWaysHomeEntitled, config.homeLayout);
+
+  // On-hand shelf order — "per-vial-first" leads with the single per-vial
+  // listings and drops the multi-vial kits underneath (K Glow). Unset keeps
+  // today's catalog order for every other store; nothing is ever hidden.
+  brand.onHandOrder = normalizeOnHandOrder(config.onHandOrder);
 
   // Owner-editable Group Buy copy ("How group buys work" + terms line) — always
   // resolved (not gated on the GB module) because the two-ways home renders the
