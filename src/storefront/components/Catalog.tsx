@@ -10,7 +10,8 @@ import {
   resolveSelectedPrice,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
-import { optionStock, isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
+import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
+import { buildProductCta } from "@/lib/storefront/product-cta";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
 import {
   catalogSortOptions,
@@ -75,21 +76,16 @@ export function ProductCard({
   // null = the product has options but none is picked yet → no price, and buying
   // is blocked until the customer chooses. A single-price product is never null.
   const displayPrice = resolveSelectedPrice(product, optIdx);
-  const needsSelection = displayPrice === null;
   const cd = design ? cardDesignAttrs(design) : null;
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, defaultImage);
-  // Stock-aware buying: the stepper can't exceed what's left, and a product
-  // with nothing left renders a disabled "Out of Stock" CTA. The cart and the
-  // server enforce the same cap — this is the first, visible line of defense.
-  // Per-variation availability. The SELECTED option drives the stepper/CTA (you
-  // can't add the option in front of you once it's sold out, but you can switch
-  // to another); the whole card only reads "Out of stock" when EVERY option is
-  // gone (productOutOfStock). A single-price product resolves to the base stock.
-  const stock = selectedOpt
-    ? optionStock(product, selectedOpt)
-    : Math.max(0, product.stock || 0);
-  const outOfStock = stock <= 0;
+  // What the buy controls say and whether they work — one shared rule (the
+  // modal calls the same helper), so the card can never again invite a choice
+  // ("Select an option") on a product whose every option is sold out. It also
+  // carries the stock the stepper caps against: the SELECTED option's units,
+  // falling back to the base column for a single-price product.
+  const cta = buildProductCta(product, optIdx, { gbBlocked });
+  const { stock } = cta;
   const productOut = productOutOfStock(product);
   // "Price on request": on hand but no fixed price. Show a label instead of a
   // price and block add-to-cart — the customer messages the store to order.
@@ -229,21 +225,19 @@ export function ProductCard({
 
       <div className="product-card__foot">
         <div className="product-card__price font-display">
-          {poa ? (
-            <span className="product-card__price-poa">Message for price</span>
-          ) : needsSelection ? (
-            <span className="product-card__price-poa">Select an option</span>
+          {cta.priceLabel !== null ? (
+            <span className="product-card__price-poa">{cta.priceLabel}</span>
           ) : (
             <>
               {product.currency}
-              {displayPrice.toLocaleString()}
+              {displayPrice?.toLocaleString()}
             </>
           )}
         </div>
         {poa ? (
           <div className="product-card__buy">
             <button className="btn btn-primary product-card__cta" disabled>
-              Message to order
+              {cta.ctaLabel}
             </button>
           </div>
         ) : gbBlocked ? (
@@ -253,7 +247,7 @@ export function ProductCard({
               disabled
               title="On-hand products are paused while a group buy is open."
             >
-              Available after group buy
+              {cta.ctaLabel}
             </button>
           </div>
         ) : (
@@ -272,16 +266,16 @@ export function ProductCard({
                 type="button"
                 aria-label={`Add one ${product.name}`}
                 onClick={() => setQty((q) => Math.min(stock || 1, q + 1))}
-                disabled={outOfStock || qty >= stock}
+                disabled={stock <= 0 || qty >= stock}
               >
                 +
               </button>
             </div>
             <button
               className="btn btn-primary product-card__cta"
-              disabled={outOfStock || needsSelection}
+              disabled={cta.disabled}
               onClick={() => {
-                if (needsSelection) return;
+                if (cta.disabled) return;
                 onAdd(qty, selectedOpt?.variation ?? undefined);
                 setQty(1);
               }}
@@ -291,7 +285,7 @@ export function ProductCard({
                 <circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
               </svg>
-              {needsSelection ? "Select an option" : outOfStock ? "Out of Stock" : "Add to Cart"}
+              {cta.ctaLabel}
             </button>
           </div>
         )}
@@ -337,12 +331,11 @@ function ProductDetailModal({
   // null = has options but none picked → show a prompt, not a price, and block
   // buying until a pick. resolveSelectedPrice reuses the card's option list.
   const displayPrice = resolveSelectedPrice(product, optIdx);
-  const needsSelection = displayPrice === null;
-  // Per-variation: the selected option's own available units (single-price
-  // products fall back to detail.stock). Drives the stepper cap + CTA.
-  const selectedStock = selectedIdx >= 0 ? detail.optionStock[selectedIdx] : detail.stock;
-  const selectedOut = selectedStock <= 0;
-  const canBuy = !selectedOut && !detail.priceOnRequest && !gbBlocked && !needsSelection;
+  // Same shared rule the card runs, so the modal it opened from can't disagree
+  // about the label, the disabled state, or the stepper's cap.
+  const cta = buildProductCta(product, optIdx, { gbBlocked });
+  const selectedStock = cta.stock;
+  const canBuy = !cta.disabled;
 
   // Esc closes, body scroll locks, focus moves into the dialog — same modal
   // contract as NoticeModal so keyboard + screen-reader users are covered.
@@ -402,14 +395,12 @@ function ProductDetailModal({
             )}
 
             <div className="sf-detail__price font-display">
-              {detail.priceOnRequest ? (
-                <span className="product-card__price-poa">Message for price</span>
-              ) : needsSelection ? (
-                <span className="product-card__price-poa">Select an option</span>
+              {cta.priceLabel !== null ? (
+                <span className="product-card__price-poa">{cta.priceLabel}</span>
               ) : (
                 <>
                   {detail.currency}
-                  {displayPrice.toLocaleString()}
+                  {displayPrice?.toLocaleString()}
                 </>
               )}
             </div>
@@ -499,15 +490,7 @@ function ProductDetailModal({
                   onClose();
                 }}
               >
-                {detail.priceOnRequest
-                  ? "Message to order"
-                  : gbBlocked
-                    ? "Available after group buy"
-                    : needsSelection
-                      ? "Select an option"
-                      : selectedOut
-                        ? "Out of Stock"
-                        : "Add to Cart"}
+                {cta.ctaLabel}
               </button>
             </div>
           </div>

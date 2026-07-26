@@ -1251,13 +1251,30 @@
   color: var(--brand-accent);
 }
 .sf-root .product-card__reseller-active:empty { display: none; }
-.sf-root .product-card__cta { flex: 1; padding: 12px 18px; }
+/* The CTA label is variable-length — "Add to Cart" but also "Select an option"
+   and "Available after group buy". `.btn` is white-space: nowrap and a flex item
+   defaults to min-width: auto, so the button could not shrink OR wrap: the row
+   grew past the card and `.card { overflow: hidden }` sliced the button off.
+   min-width: 0 lets it shrink, white-space: normal lets the label wrap, and the
+   130px flex-basis makes it drop to its own full-width row (see flex-wrap below)
+   before it gets too cramped to read. */
+.sf-root .product-card__cta {
+  flex: 1 1 130px;
+  min-width: 0;
+  padding: 12px 18px;
+  white-space: normal;
+  text-align: center;
+}
+/* Shrinking must eat into the label, never the cart glyph. */
+.sf-root .product-card__cta svg { flex: none; }
 
 /* Quantity stepper + add-to-cart row on the product card. */
 .sf-root .product-card__buy {
   display: flex;
   align-items: stretch;
   gap: 10px;
+  /* Last resort before clipping: the CTA wraps under the stepper. */
+  flex-wrap: wrap;
 }
 .sf-root .sf-qty {
   display: inline-flex;
@@ -1326,11 +1343,14 @@
   .sf-root .product-card__media { aspect-ratio: 16 / 10; }
 }
 
-/* When a card is too narrow to fit the qty stepper + "Add to Cart" side by
-   side (~220px needed, and .card clips overflow so the button would otherwise
-   be cut off), stack them: full-width CTA under a centered stepper. Driven by
-   the card's own width so 2-up phone cards stack while wider cards don't. */
-@container (max-width: 240px) {
+/* When a card is too narrow to fit the qty stepper + CTA side by side, stack
+   them: full-width CTA under a centered stepper. The threshold is set by the
+   LONGEST label, not by "Add to Cart" — a 240px card fits "Add to Cart" beside
+   the stepper but not "Select an option", which is exactly the state a
+   variation product shows first. Driven by the card's own width (the grid hands
+   cards very different widths at the same viewport) so 2-up phone cards stack
+   while wider cards keep the compact single row. */
+@container (max-width: 320px) {
   .sf-root .product-card__buy {
     flex-direction: column;
     align-items: stretch;
