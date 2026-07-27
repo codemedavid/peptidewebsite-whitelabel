@@ -43,8 +43,6 @@
  * text as a fill rather than as ink.
  */
 import { PrismaClient, Prisma } from "@prisma/client";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { hexToHslTriple } from "../src/lib/theme/color";
 import { BRAND } from "../src/storefront/data";
 import type { Brand } from "../src/storefront/types";
@@ -65,7 +63,18 @@ const RADIUS = "1rem";
 /** Storefront #admin password. Change it in admin → Tenant → Settings. */
 const ADMIN_PASSWORD = "pepsy2026";
 
-const LOGO_URL = "/assets/logo.jpg";
+/**
+ * No logo is seeded. The owner uploads it from the white-label store admin,
+ * which writes an ImageKit URL — the way every other live tenant carries its
+ * logo. Blank renders the letter-tile fallback instead of a broken image.
+ * main() carries an already-uploaded logo forward, so re-running never clobbers
+ * one.
+ */
+const LOGO_URL = "";
+/** An earlier run of this script seeded this repo-relative path, but no such file
+ *  exists in public/ so it rendered a broken image. Treated as "no logo" by the
+ *  carry-forward below so the bad value is cleared instead of preserved. */
+const STALE_SEEDED_LOGO = "/assets/logo.jpg";
 const SUPPORT_EMAIL = "peptidewhisperer@gmail.com";
 const SECONDARY_EMAIL = "thepeptidepulse@gmail.com";
 const WHATSAPP = "639062349763";
@@ -200,9 +209,24 @@ async function main() {
   const plan = await prisma.plan.findUnique({ where: { key: PLAN_KEY } });
   if (!plan) throw new Error(`Plan not seeded: ${PLAN_KEY}. Run: npm run db:seed`);
 
-  const config = CONFIG as unknown as Prisma.InputJsonValue;
+  // The logo lives in two places and page.tsx resolves it as
+  // `config.logoUrl || branding.logoUrl`. Keep whichever real value is already
+  // stored — a re-run must never blank a logo the owner uploaded — but treat the
+  // stale placeholder an earlier run wrote as "no logo" so it gets cleared.
+  const existing = await prisma.branding.findFirst({
+    where: { tenant: { slug: SLUG } },
+    select: { config: true, logoUrl: true },
+  });
+  const real = (v: unknown): string =>
+    typeof v === "string" && v.trim() !== "" && v !== STALE_SEEDED_LOGO ? v : "";
+  const existingLogo =
+    real((existing?.config as { logoUrl?: unknown } | null)?.logoUrl) ||
+    real(existing?.logoUrl) ||
+    LOGO_URL;
+
+  const config = { ...CONFIG, logoUrl: existingLogo } as unknown as Prisma.InputJsonValue;
   const branding = {
-    logoUrl: LOGO_URL,
+    logoUrl: existingLogo,
     themeId: THEME_ID,
     colors: ROLE_COLORS,
     fonts: FONTS,
@@ -234,17 +258,11 @@ async function main() {
   console.log(`  live at   https://${SLUG}.${root}`);
   console.log(`  local at  http://${SLUG}.lvh.me:3100`);
   console.log(`  #admin password: ${ADMIN_PASSWORD}`);
-
-  // The brief names a repo-relative logo path. Warn rather than fail — the owner
-  // may instead upload the logo through store admin, which rewrites logoUrl to an
-  // ImageKit URL (how every other live tenant carries its logo).
-  if (!existsSync(join(process.cwd(), "public", "assets", "logo.jpg"))) {
-    console.warn(
-      `\n! logoUrl is "${LOGO_URL}" but public/assets/logo.jpg does not exist — the header\n` +
-        `  will render a broken image until you drop the file there or upload a logo\n` +
-        `  from the store admin.`,
-    );
-  }
+  console.log(
+    existingLogo
+      ? `  logo: kept the uploaded one (${existingLogo})`
+      : `  logo: none — upload it from the store admin (letter-tile fallback until then)`,
+  );
 
   await prisma.$disconnect();
 }
