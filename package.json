@@ -86,6 +86,7 @@
     "test:trial-expiry": "tsx scripts/test-trial-expiry.ts",
     "test:pepweb-landing": "tsx scripts/test-pepweb-landing.ts",
     "test:checkout-total": "tsx scripts/test-checkout-total.ts",
+    "test:yearly-subscription": "tsx scripts/test-yearly-subscription.ts",
     "test:contact-channels": "tsx scripts/test-contact-channels.ts",
     "test:upload-limits": "tsx scripts/test-upload-limits.ts",
     "test:rehost-urls": "tsx scripts/test-rehost-urls.ts",
