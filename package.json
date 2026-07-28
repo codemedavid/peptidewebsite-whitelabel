@@ -102,7 +102,8 @@
     "test:hero-wordmark": "tsx scripts/test-hero-wordmark.ts",
     "test:header-logo": "tsx scripts/test-header-logo.ts",
     "test:product-cta": "tsx scripts/test-product-cta.ts",
-    "test:gb-pricing": "tsx scripts/test-gb-pricing.ts"
+    "test:gb-pricing": "tsx scripts/test-gb-pricing.ts",
+    "test:hero-media": "tsx scripts/test-hero-media.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
