@@ -31,6 +31,14 @@ export function AdminIcon({ name }: { name: string }) {
     strokeLinejoin: "round" as const,
   };
   switch (name) {
+    case "home":
+      return (
+        <svg {...props}>
+          <path d="M3 10.5 12 3l9 7.5" />
+          <path d="M5.5 9.5V20h13V9.5" />
+          <path d="M9.5 20v-6h5v6" />
+        </svg>
+      );
     case "box":
       return (
         <svg {...props}>

@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import type { Brand, Order, Product } from "../types";
 import { useStore } from "../store";
-import { AdminIcon, tintStyle } from "./shared";
+import { AdminShell } from "./AdminShell";
+import { AdminDashboard } from "./AdminDashboard";
+import { dashboardCapabilities } from "@/lib/storefront/admin-dashboard";
 import { AdminAddProduct } from "./AdminAddProduct";
 import { AdminProductsList } from "./AdminProductsList";
 import { AdminCategoriesManager } from "./AdminCategoriesManager";
@@ -40,7 +42,7 @@ import { SubscriptionBanner } from "./SubscriptionBanner";
 import { TrialPlansScreen } from "./TrialPlansScreen";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminStaffForm } from "./AdminStaffForm";
-import { isViewAllowed, quickActionToView, type StaffActor } from "./staff-permissions";
+import { isViewAllowed, type StaffActor } from "./staff-permissions";
 import { getStorefrontAdminSessionAction, type StaffListItem } from "@/actions/storefront-staff";
 
 type View =
@@ -87,7 +89,7 @@ export function AdminPage({
   onLogout: () => void;
   onExitToSite: () => void;
 }) {
-  const { products, categories, toast, toastMsg } = useStore();
+  const { toast, toastMsg } = useStore();
   const [view, setView] = useState<View>("dashboard");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
@@ -119,8 +121,6 @@ export function AdminPage({
       cancelled = true;
     };
   }, [onLogout]);
-
-  const isOwner = actor?.kind === "owner";
 
   // Don't flash the full menu before we know who the actor is — a staff member
   // must never momentarily see modules they aren't permitted.
@@ -322,239 +322,46 @@ export function AdminPage({
   return null;
   };
   const subView = renderSubView();
-  if (subView) {
-    return (
-      <>
-        {headerChrome}
-        {subView}
-      </>
-    );
-  }
 
-  const stats = [
-    { label: "Total Products", value: products.length, icon: "box", tint: "pink" },
-    { label: "Available Stock", value: products.reduce((sum, p) => sum + (p.stock ?? 0), 0), icon: "trend", tint: "green" },
-    { label: "Featured Items", value: products.filter((p) => p.featured).length, icon: "sparkle", tint: "yellow" },
-    { label: "Categories", value: categories.filter((c) => c.id !== "all").length, icon: "users", tint: "cyan" },
-  ];
+  // What this actor may see on the dashboard — the tenant entitlement AND the
+  // staff grant, resolved in one place (lib/storefront/admin-dashboard).
+  const caps = dashboardCapabilities(brand, actor);
 
-  const quickActions = [
-    { id: "add", label: "Add Product", hint: "Create new item", icon: "plus", tint: "pink" },
-    { id: "manage", label: "Manage Products", hint: "Edit existing items", icon: "box", tint: "green" },
-    { id: "cats", label: "Categories", hint: "Organize items", icon: "folder", tint: "orange" },
-    { id: "hero", label: "Hero Section", hint: "Homepage headline & tagline", icon: "sparkle", tint: "yellow" },
-    { id: "banner", label: "Announcement Banner", hint: "Promo bar under the header", icon: "bell", tint: "orange" },
-    { id: "design", label: "Card Studio", hint: "Product card designs", icon: "palette", tint: "purple" },
-    { id: "orders", label: "Orders", hint: "View transactions", icon: "cart", tint: "yellow" },
-    { id: "analytics", label: "Sales Analytics", hint: "Revenue & insights", icon: "trend", tint: "cyan" },
-    { id: "inv", label: "Inventory", hint: "Track stock", icon: "inbox", tint: "orange" },
-    { id: "ship", label: "Shipping", hint: "Manage rates", icon: "pin", tint: "cyan" },
-    { id: "fee", label: "Checkout Fee", hint: "Shipping / service fee", icon: "tag", tint: "yellow" },
-    { id: "couriers", label: "Couriers", hint: "Manage couriers", icon: "truck", tint: "mint" },
-    { id: "lab", label: "Lab Results", hint: "Manage COAs", icon: "shield", tint: "pink" },
-    { id: "promo", label: "Promo Codes", hint: "Manage discounts", icon: "tag", tint: "red" },
-    { id: "pay", label: "Payments", hint: "Manage methods", icon: "card", tint: "purple" },
-    { id: "faq", label: "FAQ", hint: "Manage content", icon: "help", tint: "green" },
-    { id: "proto", label: "Protocols", hint: "Peptide guides", icon: "shield", tint: "pink" },
-    { id: "reviews", label: "Reviews", hint: "Manage testimonials", icon: "star", tint: "pink" },
-    { id: "reseller", label: "Reseller Portal", hint: "Wholesale page & prices", icon: "tag", tint: "purple" },
-    { id: "access-code", label: "Access Code", hint: "Private store gate", icon: "shield", tint: "red" },
-    { id: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan" },
-    { id: "groupbuys", label: "Group Buys", hint: "Buying windows & reports", icon: "users", tint: "mint" },
-    { id: "groupbuy", label: "Order Ratio Control", hint: "Peptide ↔ bac water ratio", icon: "shield", tint: "cyan" },
-    { id: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red" },
-    ...(isOwner
-      ? [
-          { id: "staff", label: "Staff Accounts", hint: "Team access & permissions", icon: "users", tint: "purple" },
-          { id: "billing", label: "Billing", hint: "Pay & submit proof", icon: "card", tint: "green" },
-          { id: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan" },
-          { id: "notice", label: "Notice Modal", hint: "Storefront pop-up notice", icon: "shield", tint: "orange" },
-          { id: "tracknote", label: "Delivery Note", hint: "Track-page delivery estimates", icon: "truck", tint: "mint" },
-        ]
-      : []),
-  ]
-    .filter((q) => isAdminViewVisible(brand, q.id) && isViewAllowed(actor, quickActionToView(q.id)))
-    // Business-exclusive teasers (trial system): locked tiles stay VISIBLE with
-    // a gold BUSINESS badge; clicking opens the Upgrade page, not the editor.
-    .map((q) => ({ ...q, locked: isAdminModuleLocked(brand, q.id) }));
-
-  const tints = ["green", "orange", "yellow", "cyan", "pink", "red"];
-  const catCounts = categories
-    .filter((c) => c.id !== "all")
-    .map((c, i) => ({
-      ...c,
-      count: products.filter((p) => p.category === c.id).length,
-      tint: tints[i % tints.length],
-    }));
+  // Every navigation the shell, the search field and the dashboard emit lands
+  // here. The activeView guard above still has the final say, so an unreachable
+  // id simply bounces back to the dashboard.
+  const openView = (next: string) => {
+    if (next === "add-product") setEditingProduct(null);
+    setView(next as View);
+  };
 
   return (
-    <div className="admin">
-      <header className="admin__bar">
-        <a
-          className="admin__brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            onExitToSite();
-          }}
-        >
-          {brand.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logoUrl} alt={brand.name} />
-          ) : (
-            <div className="admin__brand-mark">{brand.name?.[0]?.toUpperCase() || "B"}</div>
-          )}
-        </a>
-        <div className="admin__pill">
-          <span className="admin__pill-dot" />
-          {isOwner ? "ADMIN DASHBOARD" : `${displayName.toUpperCase()} · STAFF DASHBOARD`}
-        </div>
-        <div className="admin__bar-spacer" />
-        <a
-          className="admin__bar-link"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            onExitToSite();
-          }}
-        >
-          View Website
-        </a>
-        <button className="admin__logout" onClick={onLogout}>
-          Logout
-        </button>
-      </header>
-
-      {headerChrome}
-
-      <main className="admin__inner">
-        {brand.featureSpotlight && (
-          <div className="admin-spotlight">
-            <span className="admin-spotlight__badge">NEW FEATURE</span>
-            <span className="admin-spotlight__body">
-              <span className="admin-spotlight__name">
-                {brand.featureSpotlight.label}
-                <span className="admin-spotlight__tag">BUSINESS EXCLUSIVE</span>
-              </span>
-              <span className="admin-spotlight__desc">
-                {brand.featureSpotlight.description} Every new feature we release is included in
-                Business — automatically.
-              </span>
-            </span>
-            <button className="admin-spotlight__cta" onClick={() => setView("upgrade")}>
-              Unlock with Business
-            </button>
-          </div>
+    <>
+      <AdminShell
+        brand={brand}
+        actor={actor}
+        activeView={activeView}
+        displayName={displayName}
+        onNavigate={openView}
+        onLogout={onLogout}
+        onExitToSite={onExitToSite}
+      >
+        {headerChrome}
+        {subView ?? (
+          <AdminDashboard
+            brand={brand}
+            caps={caps}
+            greetingName={displayName}
+            onOpen={openView}
+            onAddProduct={() => {
+              setEditingProduct(null);
+              setView("add-product");
+            }}
+          />
         )}
-        <div className="admin__stats">
-          {stats.map((s) => (
-            <div key={s.label} className="admin-stat">
-              <div className="admin-stat__icon" style={tintStyle(s.tint, "bg")}>
-                <span style={tintStyle(s.tint, "fg")}>
-                  <AdminIcon name={s.icon} />
-                </span>
-              </div>
-              <div className="admin-stat__label">{s.label}</div>
-              <div className="admin-stat__value">{s.value}</div>
-              <div className="admin-stat__watermark" style={tintStyle(s.tint, "fg")}>
-                <AdminIcon name={s.icon} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="admin__row">
-          <div className="admin-card">
-            <h2 className="admin-card__title">Quick Actions</h2>
-            <div className="admin-quick">
-              {quickActions.map((q) => (
-                <button
-                  key={q.id}
-                  className={`admin-quick__btn${q.locked ? " is-locked" : ""}`}
-                  onClick={() => {
-                    if (q.locked) return setView("upgrade");
-                    if (q.id === "add") {
-                      setEditingProduct(null);
-                      setView("add-product");
-                      return;
-                    }
-                    if (q.id === "manage") return setView("products");
-                    if (q.id === "cats") return setView("categories");
-                    if (q.id === "hero") return setView("hero");
-                    if (q.id === "banner") return setView("banner");
-                    if (q.id === "design") return setView("design");
-                    if (q.id === "orders") return setView("orders");
-                    if (q.id === "analytics") return setView("analytics");
-                    if (q.id === "inv") return setView("inv");
-                    if (q.id === "ship") return setView("shipping");
-                    if (q.id === "fee") return setView("fee");
-                    if (q.id === "couriers") return setView("couriers");
-                    if (q.id === "lab") return setView("lab");
-                    if (q.id === "promo") return setView("promo");
-                    if (q.id === "pay") return setView("pay");
-                    if (q.id === "faq") return setView("faq");
-                    if (q.id === "proto") return setView("proto");
-                    if (q.id === "reviews") return setView("reviews");
-                    if (q.id === "reseller") return setView("reseller");
-                    if (q.id === "access-code") return setView("access-code");
-                    if (q.id === "checkout") return setView("checkout");
-                    if (q.id === "groupbuys") return setView("groupbuys");
-                    if (q.id === "groupbuy") return setView("groupbuy");
-                    if (q.id === "account") return setView("account");
-                    if (q.id === "staff") return setView("staff");
-                    if (q.id === "notify") return setView("notify");
-                    if (q.id === "billing") return setView("billing");
-                    if (q.id === "notice") return setView("notice");
-                    if (q.id === "tracknote") return setView("tracknote");
-                    toast(`"${q.label}" — wire to your backend`);
-                  }}
-                >
-                  <span className="admin-quick__icon" style={tintStyle(q.tint, "bg")}>
-                    <span style={tintStyle(q.tint, "fg")}>
-                      <AdminIcon name={q.icon} />
-                    </span>
-                  </span>
-                  <span>
-                    <span className="admin-quick__label">
-                      {q.label}
-                      {brand.newModules?.includes(q.id) && (
-                        <span className="admin-quick__new">New</span>
-                      )}
-                    </span>
-                    <span className="admin-quick__hint">{q.hint}</span>
-                    {q.locked && (
-                      <span className="admin-quick__lockhint">
-                        Business &amp; Automated exclusive — tap to upgrade
-                      </span>
-                    )}
-                  </span>
-                  {q.locked && <span className="admin-quick__badge">BUSINESS</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="admin-card">
-            <h2 className="admin-card__title">Categories</h2>
-            <div className="admin-cats">
-              {catCounts.map((c) => (
-                <div key={c.id} className="admin-cat" onClick={() => setView("categories")}>
-                  <span className="admin-cat__label">{c.label}</span>
-                  <span className="admin-cat__count" data-tint={c.tint}>
-                    {c.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="admin__tip">
-              <strong>Tip:</strong> Manage your categories, inventory, and product distribution from the
-              “Categories” tab.
-            </div>
-          </div>
-        </div>
-      </main>
+      </AdminShell>
 
       <div className={`admin-toast ${toastMsg ? "is-shown" : ""}`}>{toastMsg}</div>
-    </div>
+    </>
   );
 }
