@@ -167,6 +167,32 @@ Intentional gaps — untested by automation, verified by build/typecheck only:
 4. **Two-ways home layout** is out of scope by decision, not oversight;
    `TwoWaysHome.tsx` keeps its own hero and ignores `heroMedia`.
 
+## Post-review fixes (`/code-review`, same day)
+
+Three findings landed in this feature's code and were fixed; the review's other
+seven belong to the Group Buys → Pricing work earlier on this branch and were
+left for a separate decision.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| Overlay CTA clicks bubbled to the banner wrapper → double navigation, and `role="link"` illegally wrapped `<button>`s | HIGH | Overlay `stopPropagation`s clicks; the wrapper is only a focusable `role="link"` when the overlay is OFF (`Hero.tsx:keyboardLink`). With the overlay on, the CTA is the keyboard affordance. |
+| An over-cap `data:` URL (ImageKit unconfigured) was dropped silently — perfect preview, banner gone after Save | MEDIUM | New `heroMediaSrcIssue()`; `AdminHeroMedia` toasts "too large / unsupported" at upload time and refuses to store the value. |
+| `safeHttpUrl` **truncated** long CDN URLs to 500 chars, persisting a broken 404 URL | LOW | `safeImageSrc` no longer routes http through `safeHttpUrl`; it checks length against `HERO_MEDIA_MAX_HTTP_URL_LEN` (2000) and rejects rather than truncates. |
+
+Added 10 assertions (RED first: `42 passed, 10 failed` → GREEN `52 passed, 0 failed`),
+including the round-trip guarantee the editor depends on — *any src
+`heroMediaSrcIssue` clears is one `normalizeHeroMedia` keeps byte-exact*.
+
+```
+npm run test:hero-media → 52 passed, 0 failed
+npm run test:hero-links → 25 passed, 0 failed
+npx tsc --noEmit → clean
+npm run build → ✓ Compiled successfully
+```
+
+The `Hero.tsx` propagation fix is JSX and therefore still covered only by build +
+manual verification, per gap 1 below.
+
 ## Merge evidence
 
 If these checkpoints are squashed, preserve:

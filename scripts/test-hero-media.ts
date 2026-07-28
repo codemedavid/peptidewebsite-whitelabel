@@ -27,7 +27,9 @@ import {
   heroMediaPosition,
   heroMediaScrimAlpha,
   resolveHeroMediaLink,
+  heroMediaSrcIssue,
   HERO_MEDIA_MAX_URL_LEN,
+  HERO_MEDIA_MAX_HTTP_URL_LEN,
 } from "../src/lib/storefront/hero-media";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -188,6 +190,68 @@ check("normalizing its own output is stable (idempotent)", () => {
     heroMedia: { mode: "image", url: "https://x.io/a.jpg", ratio: "tall", focus: "left", scrim: 45, overlay: true },
   });
   assert.deepEqual(normalizeHeroMedia({ heroMedia: once }), once);
+});
+
+check("a long CDN URL is kept intact, not truncated into a broken one", () => {
+  // ImageKit transformation URLs get long; truncating one to 500 chars would
+  // persist a URL that 404s. Anything within the cap must survive byte-exact.
+  const long = "https://ik.imagekit.io/t/hero.webp?tr=" + "w-2000,".repeat(60);
+  assert.ok(long.length > 400 && long.length < HERO_MEDIA_MAX_HTTP_URL_LEN);
+  assert.equal(normalizeHeroMedia({ heroMedia: { url: long } }).url, long);
+});
+
+check("an http URL past the cap is REJECTED, never silently truncated", () => {
+  const tooLong = "https://ik.imagekit.io/t/hero.webp?tr=" + "a".repeat(HERO_MEDIA_MAX_HTTP_URL_LEN);
+  assert.equal(normalizeHeroMedia({ heroMedia: { url: tooLong } }).url, "");
+});
+
+// ──────────────────────────── heroMediaSrcIssue ──────────────────────────────
+// The editor asks this BEFORE storing an upload result, so an image the server
+// would silently drop is reported to the owner instead of vanishing on save.
+console.log("heroMediaSrcIssue");
+
+check("a good https URL has no issue", () => {
+  assert.equal(heroMediaSrcIssue("https://ik.imagekit.io/t/hero.webp"), null);
+});
+
+check("a small data:image URL has no issue", () => {
+  assert.equal(heroMediaSrcIssue("data:image/png;base64,iVBORw0KGgo="), null);
+});
+
+check("an oversized data: URL reports 'too-large' (not silently dropped)", () => {
+  const huge = "data:image/png;base64," + "A".repeat(HERO_MEDIA_MAX_URL_LEN + 10);
+  assert.equal(heroMediaSrcIssue(huge), "too-large");
+});
+
+check("an oversized http URL reports 'too-large'", () => {
+  assert.equal(
+    heroMediaSrcIssue("https://x.io/" + "a".repeat(HERO_MEDIA_MAX_HTTP_URL_LEN)),
+    "too-large",
+  );
+});
+
+check("a javascript: URL reports 'unsupported'", () => {
+  assert.equal(heroMediaSrcIssue("javascript:alert(1)"), "unsupported");
+});
+
+check("a non-image data: URL reports 'unsupported'", () => {
+  assert.equal(heroMediaSrcIssue("data:text/html;base64,PHNjcmlwdD4="), "unsupported");
+});
+
+check("an empty src reports no issue (nothing to complain about yet)", () => {
+  assert.equal(heroMediaSrcIssue(""), null);
+});
+
+check("every src heroMediaSrcIssue clears is one normalizeHeroMedia keeps", () => {
+  // The guarantee the editor relies on: no issue ⇒ the value survives the save.
+  for (const src of [
+    "https://ik.imagekit.io/t/hero.webp",
+    "http://shop.example.io/banner.jpg",
+    "data:image/png;base64,iVBORw0KGgo=",
+  ]) {
+    assert.equal(heroMediaSrcIssue(src), null);
+    assert.equal(normalizeHeroMedia({ heroMedia: { url: src } }).url, src);
+  }
 });
 
 // ──────────────────────────── resolveHeroMedia ───────────────────────────────

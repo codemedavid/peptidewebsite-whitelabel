@@ -14,6 +14,7 @@
 import { useRef, useState } from "react";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
+import { heroMediaSrcIssue } from "@/lib/storefront/hero-media";
 import type { HeroMedia, HeroMediaRatio, HeroMediaFocus } from "@/lib/storefront/hero-media";
 
 const RATIO_OPTIONS: { value: HeroMediaRatio; label: string }[] = [
@@ -96,6 +97,21 @@ export function AdminHeroMedia({
       const res = await uploadStorefrontImageAction(fd);
       if ("error" in res) {
         toast(res.error);
+        return;
+      }
+      // When ImageKit isn't configured the upload comes back as an inline data
+      // URL, which can exceed what we're willing to store in branding.config.
+      // Catch that HERE — otherwise the preview would look perfect and the
+      // banner would silently vanish the moment the owner hit Save.
+      const issue = heroMediaSrcIssue(res.url);
+      if (issue === "too-large") {
+        toast(
+          "That image is too large to store for this store. Please upload a smaller file (under ~375 KB) or ask your provider to enable image hosting.",
+        );
+        return;
+      }
+      if (issue === "unsupported") {
+        toast("That image couldn't be used. Please try a JPG, PNG or WebP.");
         return;
       }
       setFileInfo({ name: file.name, meta: fileMeta(file) });

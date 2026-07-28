@@ -46,6 +46,12 @@ export type HeroMedia = {
 // persisting a multi-megabyte string.
 export const HERO_MEDIA_MAX_URL_LEN = 512_000;
 
+// Hosted banner URLs get their own, much larger cap than hero CTA links: an
+// ImageKit transformation URL can run well past a few hundred characters. Past
+// the cap we REJECT rather than truncate — a shortened CDN URL is a broken one,
+// and silently persisting a 404 is worse than refusing the value.
+export const HERO_MEDIA_MAX_HTTP_URL_LEN = 2_000;
+
 const RATIOS: ReadonlySet<string> = new Set<HeroMediaRatio>(["wide", "standard", "tall"]);
 const FOCUSES: ReadonlySet<string> = new Set<HeroMediaFocus>([
   "center",
@@ -79,7 +85,37 @@ export function safeImageSrc(raw: unknown): string {
   if (s.toLowerCase().startsWith("data:")) {
     return s.length <= HERO_MEDIA_MAX_URL_LEN && DATA_IMAGE_RE.test(s) ? s : "";
   }
-  return safeHttpUrl(s);
+  // Not safeHttpUrl(): that one truncates to 500 chars before parsing, which
+  // would quietly turn a long CDN URL into a broken one. Length is checked
+  // first, then the scheme allowlist is reused on the untouched string.
+  if (s.length > HERO_MEDIA_MAX_HTTP_URL_LEN) return "";
+  try {
+    const u = new URL(s);
+    return u.protocol === "http:" || u.protocol === "https:" ? s : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Why an image source would be refused, or null when it is fine to store. */
+export type HeroMediaSrcIssue = "too-large" | "unsupported";
+
+/**
+ * Explain what safeImageSrc() would do to a source, so the editor can TELL the
+ * owner instead of accepting an upload that silently disappears on save. This
+ * matters most when ImageKit isn't configured: the upload action falls back to
+ * an inline data URL, which can easily exceed the storage cap even though the
+ * live preview (holding the full string in memory) looks perfect.
+ */
+export function heroMediaSrcIssue(raw: unknown): HeroMediaSrcIssue | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  if (safeImageSrc(s)) return null;
+  const isData = s.toLowerCase().startsWith("data:");
+  if (isData) {
+    return DATA_IMAGE_RE.test(s) ? "too-large" : "unsupported";
+  }
+  return s.length > HERO_MEDIA_MAX_HTTP_URL_LEN ? "too-large" : "unsupported";
 }
 
 /** Clamp to 0..70 and snap to the 5% step the editor's slider offers. */

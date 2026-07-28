@@ -220,6 +220,12 @@ export function Hero({
   if (media.mode === "image") {
     const clickable = Boolean(onMedia);
     const scrimAlpha = heroMediaScrimAlpha(media);
+    // With the overlay on, the CTA buttons ARE the banner's keyboard affordance,
+    // so the wrapper must not also be a focusable "link": role="link" may not
+    // contain buttons, and an Enter press on a CTA would otherwise bubble up and
+    // navigate a second time. Pointer clicks still work anywhere on the image —
+    // the overlay stops propagation so a CTA press fires its own handler only.
+    const keyboardLink = clickable && !media.overlay;
     return (
       <section
         className={`hero hero--media ${isGenerating ? "is-generating" : ""}`}
@@ -232,7 +238,7 @@ export function Hero({
           style={{ aspectRatio: heroMediaAspect(media.ratio) }}
           onClick={onMedia}
           onKeyDown={
-            clickable
+            keyboardLink
               ? (e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -241,8 +247,8 @@ export function Hero({
                 }
               : undefined
           }
-          role={clickable ? "link" : undefined}
-          tabIndex={clickable ? 0 : undefined}
+          role={keyboardLink ? "link" : undefined}
+          tabIndex={keyboardLink ? 0 : undefined}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -262,7 +268,12 @@ export function Hero({
             />
           )}
           {media.overlay && (
-            <div className="hero__media-overlay">
+            // Clicks on the overlay (its CTA buttons carry their own handlers)
+            // must not ALSO trigger the banner link behind them.
+            <div
+              className="hero__media-overlay"
+              onClick={(e) => e.stopPropagation()}
+            >
               {headline}
               {ctas}
             </div>
