@@ -28,7 +28,11 @@ import {
   resolveSelectableCategories,
 } from "../src/lib/storefront/categories";
 import { normalizeProductInput } from "../src/lib/storefront/product-input";
-import { productToDbWrite } from "../src/lib/storefront/product-mapping";
+import {
+  dbProductToStorefront,
+  productToDbWrite,
+  type DbProductRow,
+} from "../src/lib/storefront/product-mapping";
 import type { Category } from "../src/storefront/types";
 
 let passed = 0;
@@ -132,6 +136,85 @@ check("editing a classified product does not wipe its class", () => {
   const seeded = { name: "AOD-9604", category: "cat_pep", price: 5100, productClass: "peptide" };
   const write = productToDbWrite(normalizeProductInput(seeded), "PHP", "₱");
   assert.equal((write.metadata as Record<string, unknown>).productClass, "peptide");
+});
+
+console.log("\nnormalizeProductInput — the Group Buy Pricing flags must survive");
+
+/** Round-trip a storefront product through the full save pipeline and back, the
+ *  way an admin edit does: normalize → DB write → re-read. A key the normalizer
+ *  drops silently reverts to its default here. */
+function roundTrip(input: Record<string, unknown>) {
+  const write = productToDbWrite(normalizeProductInput(input), "PHP", "₱");
+  const row: DbProductRow = {
+    id: "prod_1",
+    sku: "SKU",
+    slug: "slug",
+    name: write.name,
+    description: write.description,
+    priceCents: write.priceCents,
+    currency: write.currency,
+    images: write.images,
+    stock: write.stock,
+    status: write.status,
+    active: write.active,
+    metadata: write.metadata,
+  };
+  return {
+    metadata: write.metadata as Record<string, unknown>,
+    product: dbProductToStorefront(row, "₱"),
+  };
+}
+
+check("purchasable:false survives normalization", () => {
+  assert.equal(normalizeProductInput({ name: "X", purchasable: false }).purchasable, false);
+});
+
+check("an absent purchasable stays orderable (true)", () => {
+  assert.equal(normalizeProductInput({ name: "X" }).purchasable, true);
+});
+
+check("purchasable:false reaches the DB metadata through the full save pipeline", () => {
+  assert.equal(roundTrip({ name: "BPC-157", purchasable: false }).metadata.purchasable, false);
+});
+
+check("an orderable product never persists a purchasable key", () => {
+  // Only the RESTRICTIVE value persists (product-mapping's compactMetadata keeps
+  // `false` but drops `undefined`), so the DB stays tidy for the common case.
+  assert.ok(!("purchasable" in roundTrip({ name: "BPC-157" }).metadata));
+});
+
+check("editing a not-available product does not silently make it buyable again", () => {
+  // The regression this gate exists for: the Group Buy Pricing tab sets
+  // purchasable:false, then the owner opens the same product in the normal
+  // editor and saves — a dropped key would quietly put it back on sale.
+  const out = roundTrip({ name: "BPC-157", category: "cat_pep", price: 1800, purchasable: false });
+  assert.equal(out.product.purchasable, false);
+});
+
+check("priceOnRequest:true survives the full save pipeline", () => {
+  const out = roundTrip({ name: "Mystery vial", priceOnRequest: true });
+  assert.equal(out.metadata.priceOnRequest, true);
+  assert.equal(out.product.priceOnRequest, true);
+});
+
+check("a normally-priced product never persists a priceOnRequest key", () => {
+  assert.ok(!("priceOnRequest" in roundTrip({ name: "BPC-157", price: 1800 }).metadata));
+});
+
+check("the group-buy price + tag survive alongside the availability flags", () => {
+  // All four Group Buy Pricing fields are written by the same tab, so they have
+  // to round-trip together — not just one at a time.
+  const out = roundTrip({
+    name: "BPC-157",
+    category: "cat_pep",
+    price: 1800,
+    productType: "gb",
+    gbPrice: 1200,
+    purchasable: false,
+  });
+  assert.equal(out.product.productType, "gb");
+  assert.equal(out.product.gbPrice, 1200);
+  assert.equal(out.product.purchasable, false);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

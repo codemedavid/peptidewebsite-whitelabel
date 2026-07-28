@@ -68,6 +68,15 @@ export function normalizeProductInput(input: unknown): Product {
     // persist (see product-mapping.productToDbWrite); anything else is on-hand.
     productType: o.productType === "gb" ? "gb" : undefined,
     gbPrice: o.productType === "gb" && num(o.gbPrice) > 0 ? num(o.gbPrice) : undefined,
+    // "Not available": still listed in the catalog, but not orderable. Set by the
+    // Group Buy Pricing tab and edited nowhere else — which is exactly why it has
+    // to round-trip here. Dropping the key made productToDbWrite persist
+    // `undefined`, compactMetadata then removed it, and ANY later save through the
+    // ordinary product editor silently put the item back on sale. Same class of
+    // regression as productClass above; covered by test-product-add-gates.
+    purchasable: o.purchasable !== false,
+    // Same round-trip contract for "message for price" on-hand items.
+    priceOnRequest: o.priceOnRequest === true,
     // The editor's "Order ratio class" tag. Narrowed to a real ProductClass, so
     // an unknown value becomes undefined and Order Ratio Control falls back to
     // its name heuristic — never passed through raw. Dropping this key silently

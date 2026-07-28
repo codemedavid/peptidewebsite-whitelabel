@@ -345,6 +345,12 @@ export function AdminAddProduct({
       discountEnabled: discountOn,
       productType: isGroupBuy ? "gb" : "onhand",
       gbPrice: isGroupBuy ? Number(gbPrice) || 0 : 0,
+      // Carried through untouched — this editor has no control for either flag
+      // (they're set in Group Buys → Pricing). Omitting them made every save here
+      // silently put a "not available" product back on sale, because the payload
+      // is the WHOLE product: a missing key reads as "cleared", not "unchanged".
+      purchasable: initial?.purchasable !== false,
+      priceOnRequest: initial?.priceOnRequest === true,
       reseller: {
         vialsOnly: Number(resellerVials) || 0,
         completeSet: Number(resellerSet) || 0,
