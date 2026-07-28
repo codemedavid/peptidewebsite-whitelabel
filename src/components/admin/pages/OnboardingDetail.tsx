@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { formatPesos } from "@/lib/admin/plans";
+import { buildWaLink, toWaDigits } from "@/lib/admin/whatsapp";
 import {
   ONBOARDING_STATUSES,
   ONBOARDING_STATUS_LABELS,
@@ -50,6 +51,13 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
   const router = useRouter();
   const { showToast } = useAdminUI();
   const [pending, startTransition] = useTransition();
+
+  // One-tap WhatsApp follow-up: Step 1 collects the client's number, so the
+  // operator can message them from here without copying it anywhere.
+  const waHref = buildWaLink(
+    toWaDigits(submission.whatsapp),
+    `Hi ${submission.businessName}! Quick update on your website.`,
+  );
 
   // optimistic status so the stepper responds immediately
   const [liveStatus, setLiveStatus] = useState(submission.setupStatus);
@@ -195,10 +203,17 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                 </span>
               )}
               <span>·</span>
-              <span>
-                <Ic.Mail style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
-                {submission.email}
-              </span>
+              {submission.whatsapp ? (
+                <a href={waHref} target="_blank" rel="noreferrer" title="Message them on WhatsApp">
+                  <Ic.External style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
+                  {submission.whatsapp}
+                </a>
+              ) : (
+                <span>
+                  <Ic.Mail style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
+                  {submission.email || "—"}
+                </span>
+              )}
               <span>·</span>
               <span>
                 <Ic.Calendar style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
@@ -230,9 +245,14 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
               sub:
                 liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
                   ? `${humanDate(liveTrial.startsAt)} → ${humanDate(liveTrial.endsAt)}`
-                  : isPro
-                    ? "Click to manage trial"
-                    : undefined,
+                  : // What they actually prepaid — the operator needs it to set the
+                    // subscription window (a yearly sign-up is not due next month).
+                    [
+                      submission.billingCycle === "yearly" ? "Yearly (prepaid)" : "Monthly",
+                      isPro ? "Click to manage trial" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
               onClick: isPro ? () => setTrialOpen((o) => !o) : undefined,
             },
             { label: "Products", v: String(submission.productCount) },
@@ -388,10 +408,19 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                 { k: "Business name", v: submission.businessName },
                 { k: "Type", v: submission.businessType },
                 { k: "Contact person", v: submission.contactPerson || "—" },
-                { k: "Email", v: submission.email },
                 ...(submission.whatsapp
-                  ? [{ k: "WhatsApp", v: submission.whatsapp }]
+                  ? [{
+                      k: "WhatsApp",
+                      v: (
+                        <a href={waHref} target="_blank" rel="noreferrer" title="Message them on WhatsApp">
+                          {submission.whatsapp}{" "}
+                          <Ic.External style={{ width: 12, height: 12, verticalAlign: "-2px" }} />
+                        </a>
+                      ),
+                    }]
                   : []),
+                // Legacy only — sign-ups since the WhatsApp-only Step 1 have none.
+                ...(submission.email ? [{ k: "Email", v: submission.email }] : []),
                 ...(submission.facebook
                   ? [{ k: "Facebook", v: submission.facebook }]
                   : []),
@@ -997,7 +1026,7 @@ function DetailCard({
   );
 }
 
-function InfoGrid({ items }: { items: { k: string; v: string }[] }) {
+function InfoGrid({ items }: { items: { k: string; v: React.ReactNode }[] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       {items.map(({ k, v }) => (

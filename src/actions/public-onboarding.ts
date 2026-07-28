@@ -16,7 +16,12 @@ import { prisma } from "@/lib/db/prisma";
 import { planMeta } from "@/lib/admin/plans";
 import { slugify, uniqueize } from "@/lib/storefront/product-mapping";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
-import { onboardingSchema, STARTER_FEATURE_LIMIT, type OnboardingPayload } from "@/lib/onboarding/schema";
+import {
+  onboardingSchema,
+  normalizeOnboardingCycle,
+  STARTER_FEATURE_LIMIT,
+  type OnboardingPayload,
+} from "@/lib/onboarding/schema";
 import { amountDueFromConfig } from "@/lib/onboarding/pricing";
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
 import { buildProvisioning } from "@/lib/onboarding/mapping";
@@ -101,6 +106,11 @@ export async function submitOnboardingAction(
   // trial machinery are untouched — only new intake is closed here.
   const trial = false;
 
+  // Billing cycle the sign-up prepays: monthly (the usual) or a full year.
+  // Re-narrowed here rather than trusted from the client — the amount stamped
+  // below and the tenant's subscription window both hang off it.
+  const billingCycle = normalizeOnboardingCycle(payload.billingCycle);
+
   // Starter must commit to at least N included add-on features (extras beyond N
   // are billed per STARTER_EXTRA_FEATURE_PRICE_CENTS; the schema caps the max at
   // the full feature set). Other tiers ignore the field.
@@ -141,6 +151,7 @@ export async function submitOnboardingAction(
   const amountDueCents = amountDueFromConfig(await getPlanConfig(), {
     planKey,
     trial,
+    billingCycle,
     extraFeatureCount:
       planKey === "starter"
         ? Math.max(0, selectedFeatures.length - STARTER_FEATURE_LIMIT)
@@ -170,6 +181,10 @@ export async function submitOnboardingAction(
             status: "pending_setup",
             planId: plan.id,
             orderNumberFormat,
+            // Seed the cycle the client actually paid for, so the operator's
+            // subscription-window setter pre-fills a year instead of a month.
+            // The window itself (start/end) stays operator-set on publish.
+            subscriptionCycle: billingCycle,
             branding: {
               create: {
                 themeId: payload.themeId,
@@ -211,6 +226,7 @@ export async function submitOnboardingAction(
             orderDestinationValue: payload.orderDestinationValue || null,
             paymentMethods: payload.paymentMethods as unknown as Prisma.InputJsonValue,
             packageKey: planKey,
+            billingCycle,
             trial,
             amountDueCents,
             selectedFeatures: selectedFeatures as unknown as Prisma.InputJsonValue,

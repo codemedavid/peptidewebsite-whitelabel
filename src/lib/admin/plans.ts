@@ -67,12 +67,18 @@ export function planPriceCents(key: string): number {
  *  landing design: monthly subscription prices + a one-time setup fee
  *  (waived on Business). The ₱699 / 1-month Business trial offer was retired
  *  (2026-07) — no default first-month `discountPriceCents`. An operator can
- *  still set a first-month promo per plan on /admin/plans if desired. */
+ *  still set a first-month promo per plan on /admin/plans if desired.
+ *
+ *  `yearlyPriceCents` is the prepaid 12-month price offered alongside monthly
+ *  at get-started checkout (2026-07). It is a flat term price, NOT priceCents
+ *  × 12 — the saving is the whole point — and the one-time setup fee applies
+ *  to it exactly as it does monthly. */
 export const PLAN_CARDS = [
   {
     key: "starter",
     name: "Starter",
     priceCents: 79900,
+    yearlyPriceCents: 589900,
     setupFeeCents: 49900,
     setupFeeWaived: false,
     blurb: "Perfect for new peptide sellers who want a simple way to start accepting orders.",
@@ -90,6 +96,7 @@ export const PLAN_CARDS = [
     key: "pro",
     name: "Business",
     priceCents: 149900,
+    yearlyPriceCents: 989900,
     setupFeeCents: 99900,
     setupFeeWaived: true,
     blurb: "Everything you need to run a professional peptide storefront.",
@@ -111,6 +118,7 @@ export const PLAN_CARDS = [
     key: "enterprise",
     name: "Automated",
     priceCents: 299900,
+    yearlyPriceCents: 1589900,
     setupFeeCents: 199900,
     setupFeeWaived: false,
     blurb: "Scale your business with analytics and automation.",

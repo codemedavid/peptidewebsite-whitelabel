@@ -8,6 +8,7 @@
 
 import { PLAN_META, formatPesos } from "@/lib/admin/plans";
 import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
+import { yearlySavingsCents, yearlySavingsPercent } from "@/lib/onboarding/pricing";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
 
@@ -66,6 +67,10 @@ export type Package = {
   priceLabel: string; // list price (monthly)
   discountLabel?: string; // first-month promo price when set; show as the headline with priceLabel as "then …/month"
   priceCents: number; // effective price (discount when set, else list) — used for checkout totals
+  yearlyPriceCents: number; // flat prepaid 12-month term price
+  yearlyPriceLabel: string; // formatted yearly price, e.g. ₱9,899
+  yearlySavingsCents: number; // what the year saves vs 12 × the list price (0 = none to advertise)
+  yearlySavingsPercent: number; // the same saving as a whole percent, for the badge
   setupFeeCents: number; // one-time setup fee (0 = none)
   setupFeeWaived: boolean; // fee shown struck through as FREE setup
   blurb: string;
@@ -83,6 +88,12 @@ export function packagesFrom(plans: EditablePlanCard[]): Package[] {
       priceLabel: formatPesos(p.priceCents),
       discountLabel: discounted ? formatPesos(p.discountPriceCents as number) : undefined,
       priceCents: discounted ? (p.discountPriceCents as number) : p.priceCents,
+      yearlyPriceCents: p.yearlyPriceCents,
+      yearlyPriceLabel: formatPesos(p.yearlyPriceCents),
+      // Savings are measured against the LIST monthly price: a first-month promo
+      // is a one-off, so pricing the year against it would overstate the deal.
+      yearlySavingsCents: yearlySavingsCents(p.priceCents, p.yearlyPriceCents),
+      yearlySavingsPercent: yearlySavingsPercent(p.priceCents, p.yearlyPriceCents),
       setupFeeCents: p.setupFeeCents,
       setupFeeWaived: p.setupFeeWaived,
       blurb: p.blurb,

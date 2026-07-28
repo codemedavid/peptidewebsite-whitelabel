@@ -15,6 +15,7 @@ export type EditablePlanCard = {
   name: string; // display label — fixed, mirrors planMeta
   priceCents: number; // monthly (list) price in PHP centavos
   discountPriceCents?: number; // optional first-month promo price (< priceCents); display only — MRR/billing use priceCents
+  yearlyPriceCents: number; // prepaid 12-month term price in PHP centavos (flat, not priceCents × 12)
   setupFeeCents: number; // one-time setup fee in PHP centavos (0 = no fee)
   setupFeeWaived: boolean; // show the fee struck through as "FREE setup"
   blurb: string; // short pitch under the price
@@ -43,6 +44,7 @@ export function defaultPlanConfig(): PlanConfig {
         name: p.name,
         priceCents: p.priceCents,
         ...(card.discountPriceCents ? { discountPriceCents: card.discountPriceCents } : {}),
+        yearlyPriceCents: p.yearlyPriceCents,
         setupFeeCents: p.setupFeeCents,
         setupFeeWaived: p.setupFeeWaived,
         blurb: p.blurb,
@@ -77,6 +79,12 @@ export function normalizePlanConfig(input: unknown): PlanConfig {
       const discount = Math.round(Number(r.discountPriceCents));
       const discountPriceCents =
         Number.isFinite(discount) && discount > 0 && discount < priceCents ? discount : undefined;
+      // Yearly term price: a flat prepaid amount, deliberately unconstrained
+      // against the monthly price (the operator may price a year above or below
+      // 12 months). Anything malformed or non-positive falls back per-plan.
+      const yearly = Math.round(Number(r.yearlyPriceCents));
+      const yearlyPriceCents =
+        Number.isFinite(yearly) && yearly > 0 ? Math.min(yearly, MAX_PRICE_CENTS) : d.yearlyPriceCents;
       // Setup fee: 0 is a valid "no fee"; anything malformed falls back per-plan.
       const setup = Math.round(Number(r.setupFeeCents));
       const setupFeeCents =
@@ -87,6 +95,7 @@ export function normalizePlanConfig(input: unknown): PlanConfig {
         name: d.name,
         priceCents,
         ...(discountPriceCents ? { discountPriceCents } : {}),
+        yearlyPriceCents,
         setupFeeCents,
         setupFeeWaived: typeof r.setupFeeWaived === "boolean" ? r.setupFeeWaived : d.setupFeeWaived,
         blurb: typeof r.blurb === "string" ? r.blurb.slice(0, 300) : d.blurb,

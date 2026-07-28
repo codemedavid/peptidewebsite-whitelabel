@@ -217,7 +217,13 @@ check("amountDueFromConfig: monthly totals are untouched by this change", () => 
 // ──────────────────────────── payload plumbing ──────────────────────────────
 check("the onboarding payload carries billingCycle, defaulting to monthly", () => {
   assert.deepStrictEqual([...ONBOARDING_BILLING_CYCLES], ["monthly", "yearly"]);
-  const base = { businessName: "Peptide Co", email: "a@b.com", termsAccepted: true };
+  // Minimum valid sign-up: everything else on the schema is defaulted.
+  const base = {
+    businessName: "Peptide Co",
+    email: "a@b.com",
+    whatsapp: "639171234567",
+    termsAccepted: true,
+  };
   assert.strictEqual(onboardingSchema.parse(base).billingCycle, "monthly");
   assert.strictEqual(onboardingSchema.parse({ ...base, billingCycle: "yearly" }).billingCycle, "yearly");
   assert.strictEqual(onboardingSchema.safeParse({ ...base, billingCycle: "weekly" }).success, false);

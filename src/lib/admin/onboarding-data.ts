@@ -15,7 +15,11 @@ import {
   type OnboardingSummary,
   type OnboardingDetailView,
 } from "@/lib/admin/onboarding-types";
-import { STARTER_FEATURE_LABELS, type StarterFeatureKey } from "@/lib/onboarding/schema";
+import {
+  STARTER_FEATURE_LABELS,
+  normalizeOnboardingCycle,
+  type StarterFeatureKey,
+} from "@/lib/onboarding/schema";
 
 /* ============================================================
    Self-serve onboarding submissions — read models for the
@@ -101,6 +105,7 @@ type DbRow = {
   orderDestinationValue: string | null;
   paymentMethods: unknown;
   packageKey: string;
+  billingCycle: string;
   trial: boolean;
   trialStartsAt: Date | null;
   trialEndsAt: Date | null;
@@ -121,11 +126,13 @@ function summaryFromDb(r: DbRow): OnboardingSummary {
     id: r.id,
     businessName: r.businessName,
     email: r.email,
+    whatsapp: r.whatsapp ?? "",
     contactPerson: r.contactPerson ?? "",
     slug: r.slug,
     url: `${r.slug}.${ROOT}`,
     packageKey: pm.key,
     packageLabel: pm.label,
+    billingCycle: normalizeOnboardingCycle(r.billingCycle),
     trial: r.trial,
     trialStartsAt: r.trialStartsAt?.toISOString() ?? null,
     trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
@@ -146,7 +153,6 @@ function detailFromDb(r: DbRow): OnboardingDetailView {
     ...summaryFromDb(r),
     businessType: r.businessType,
     description: r.description ?? "",
-    whatsapp: r.whatsapp ?? "",
     facebook: r.facebook ?? "",
     themeStyle: r.themeStyle,
     themeId: r.themeId,
@@ -173,11 +179,13 @@ function summaryFromDemo(s: DemoOnboardingSubmission): OnboardingSummary {
     id: s.id,
     businessName: str(d.businessName),
     email: str(d.email),
+    whatsapp: str(d.whatsapp),
     contactPerson: str(d.contactPerson),
     slug: s.slug,
     url: `${s.slug}.${ROOT}`,
     packageKey: pm.key,
     packageLabel: pm.label,
+    billingCycle: normalizeOnboardingCycle(d.billingCycle),
     trial: pm.key === "pro" && Boolean(d.trial),
     // Demo submissions have no operator-managed trial window or stamped total.
     trialStartsAt: null,
@@ -199,7 +207,6 @@ function detailFromDemo(s: DemoOnboardingSubmission): OnboardingDetailView {
     ...summaryFromDemo(s),
     businessType: str(d.businessType),
     description: str(d.description),
-    whatsapp: str(d.whatsapp),
     facebook: str(d.facebook),
     themeStyle: str(d.themeStyle) || null,
     themeId: str(d.themeId) || "clinical-white",
@@ -240,6 +247,7 @@ const SELECT = {
   orderDestinationValue: true,
   paymentMethods: true,
   packageKey: true,
+  billingCycle: true,
   trial: true,
   trialStartsAt: true,
   trialEndsAt: true,

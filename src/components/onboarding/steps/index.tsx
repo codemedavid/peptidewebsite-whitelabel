@@ -156,19 +156,16 @@ export function BusinessStep({ draft, update, errors }: StepProps) {
           onChange={(e) => update({ description: e.target.value })} />
       </Field>
       <div className="mk-field-row">
-        <Field label="Email address" htmlFor="biz-email" required error={errors.email}>
-          <Text id="biz-email" type="email" value={draft.email} error={!!errors.email}
-            placeholder="you@business.com" onChange={(v) => update({ email: v })} />
+        <Field label="WhatsApp number" htmlFor="biz-wa" required error={errors.whatsapp}
+          hint="International format, digits only — we'll message you here once your website is ready.">
+          <Text id="biz-wa" value={draft.whatsapp} error={!!errors.whatsapp}
+            placeholder="639171234567" onChange={(v) => update({ whatsapp: v })} />
         </Field>
-        <Field label="WhatsApp number" htmlFor="biz-wa" hint="International format, digits only.">
-          <Text id="biz-wa" value={draft.whatsapp} placeholder="639171234567"
-            onChange={(v) => update({ whatsapp: v })} />
+        <Field label="Facebook / Messenger link" htmlFor="biz-fb">
+          <Text id="biz-fb" value={draft.facebook} placeholder="https://facebook.com/yourpage"
+            onChange={(v) => update({ facebook: v })} />
         </Field>
       </div>
-      <Field label="Facebook / Messenger link" htmlFor="biz-fb">
-        <Text id="biz-fb" value={draft.facebook} placeholder="https://facebook.com/yourpage"
-          onChange={(v) => update({ facebook: v })} />
-      </Field>
     </div>
   );
 }
@@ -391,6 +388,10 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
   const picked = draft.selectedFeatures;
   const extras = Math.max(0, picked.length - STARTER_FEATURE_LIMIT);
   const addonCents = extras * STARTER_EXTRA_FEATURE_PRICE_CENTS;
+  const yearly = draft.billingCycle === "yearly";
+  // Headline for the Yearly tab: the biggest saving on offer across the tiers.
+  const bestSavingPercent = packages.reduce((best, p) => Math.max(best, p.yearlySavingsPercent), 0);
+  const business = packages.find((p) => p.key === "pro");
 
   function toggleFeature(id: StarterFeatureKey) {
     if (picked.includes(id)) {
@@ -403,6 +404,33 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
 
   return (
     <div className="mk-choices">
+      <div className="mk-cycle-toggle" role="radiogroup" aria-label="Billing cycle">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={!yearly}
+          data-selected={!yearly}
+          onClick={() => update({ billingCycle: "monthly" })}
+        >
+          Monthly
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={yearly}
+          data-selected={yearly}
+          onClick={() => update({ billingCycle: "yearly" })}
+        >
+          Yearly
+          {bestSavingPercent > 0 && <em>save up to {bestSavingPercent}%</em>}
+        </button>
+      </div>
+      <p className="mk-hint" style={{ gridColumn: "1 / -1", marginTop: -4 }}>
+        {yearly
+          ? "Pay for a full year up front and keep the same one-time setup fee."
+          : "Billed every month. Switch to yearly to pay less overall."}
+      </p>
+
       {packages.map((p) => {
         const selected = draft.packageKey === p.key;
         return (
@@ -414,16 +442,21 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
               </b>
               <small style={{ display: "block", margin: "4px 0 8px" }}>{p.blurb}</small>
               <span style={{ fontFamily: "var(--font-head)", fontSize: 22, color: "var(--green)" }}>
-                {p.discountLabel ?? p.priceLabel}
-                {p.discountLabel && (
+                {yearly ? p.yearlyPriceLabel : (p.discountLabel ?? p.priceLabel)}
+                {!yearly && p.discountLabel && (
                   <s style={{ marginLeft: 8, fontSize: 16, opacity: 0.5, fontWeight: 400, color: "inherit" }}>
                     {p.priceLabel}
                   </s>
                 )}
                 <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--muted)" }}>
-                  /month
+                  {yearly ? "/year" : "/month"}
                 </span>
               </span>
+              {yearly && p.yearlySavingsCents > 0 && (
+                <small style={{ display: "block", marginTop: 2, color: "var(--green)", fontWeight: 600 }}>
+                  Save {peso(p.yearlySavingsCents)} vs {p.priceLabel}/month
+                </small>
+              )}
               {p.setupFeeCents > 0 && (
                 <small
                   style={{
@@ -490,10 +523,32 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
             })}
           </div>
           {extras > 0 && (
-            <p className="mk-hint" style={{ marginTop: 12, fontWeight: 600, color: "var(--ink)" }}>
-              {extras} extra feature{extras > 1 ? "s" : ""} × {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
-              <span style={{ color: "var(--green)" }}>{peso(addonCents)}</span> added to your one-time setup.
-            </p>
+            <>
+              <p className="mk-hint" style={{ marginTop: 12, fontWeight: 600, color: "var(--ink)" }}>
+                {extras} extra feature{extras > 1 ? "s" : ""} × {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
+                <span style={{ color: "var(--green)" }}>{peso(addonCents)}</span> added to your one-time setup.
+              </p>
+              {business && (
+                // Past the included allotment, Business is the better buy: every
+                // add-on page is bundled, plus the full storefront + cart.
+                <div className="mk-upsell">
+                  <b>Business already includes all of these — and more.</b>
+                  <p>
+                    You&apos;re paying {peso(addonCents)} extra on Starter. Business bundles every
+                    add-on page, the full online storefront + cart, and sales analytics for{" "}
+                    {yearly ? `${business.yearlyPriceLabel}/year` : `${business.priceLabel}/month`} —
+                    with FREE setup.
+                  </p>
+                  <button
+                    type="button"
+                    className="mk-btn mk-btn-primary"
+                    onClick={() => update({ packageKey: "pro" })}
+                  >
+                    Switch to Business
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {errors.selectedFeatures && <p className="mk-error">{errors.selectedFeatures}</p>}
         </div>
@@ -512,9 +567,10 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
       ? Math.max(0, draft.selectedFeatures.length - STARTER_FEATURE_LIMIT)
       : 0;
   const quote = checkoutQuote(
-    pkg ?? { priceCents: 0, setupFeeCents: 0, setupFeeWaived: false },
-    { trial: false, extraFeatureCount },
+    pkg ?? { priceCents: 0, yearlyPriceCents: 0, setupFeeCents: 0, setupFeeWaived: false },
+    { trial: false, extraFeatureCount, billingCycle: draft.billingCycle },
   );
+  const yearly = quote.billingCycle === "yearly";
   return (
     <div>
       <div className="mk-paybox">
@@ -522,7 +578,9 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
         <p className="mk-hint" style={{ marginTop: 2 }}>{packagePayment.instructions}</p>
         <div style={{ marginTop: 10 }}>
           <div className="mk-payrow">
-            <span>{packageLabel(draft.packageKey)} — first month</span>
+            <span>
+              {packageLabel(draft.packageKey)} — {yearly ? "1 year (prepaid)" : "first month"}
+            </span>
             <span style={{ textAlign: "right" }}>{peso(quote.baseCents)}</span>
           </div>
           {quote.addonCents > 0 && (
@@ -596,6 +654,10 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
           <div className="mk-review-item">
             <span>Package</span>
             <b>{packageLabel(draft.packageKey)}</b>
+          </div>
+          <div className="mk-review-item">
+            <span>Billing</span>
+            <b>{yearly ? "Yearly (prepaid)" : "Monthly"}</b>
           </div>
           <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
           <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>

@@ -699,6 +699,11 @@ model OnboardingSubmission {
   // Step 6 — package (DB plan key: starter | pro | enterprise)
   packageKey String @default("starter")
 
+  // Step 6 — billing cycle the sign-up prepaid: monthly | yearly
+  // (lib/onboarding/schema.ts ONBOARDING_BILLING_CYCLES). Drives amountDueCents
+  // and seeds the tenant's subscriptionCycle. Rows predating it read "monthly".
+  billingCycle String @default("monthly")
+
   // Step 6 — signed up on the ₱699 1-month Business trial (pro only)
   trial Boolean @default(false)
   // Operator-managed trial window (Super Admin → Onboarding → Package stat)

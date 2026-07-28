@@ -9,6 +9,8 @@
    server-only / Prisma imports.
    ============================================================ */
 
+import type { OnboardingBillingCycle } from "@/lib/onboarding/schema";
+
 // The operator's setup workflow (per the product spec). Shared by the UI + actions.
 export const ONBOARDING_STATUSES = [
   "payment_received",
@@ -45,12 +47,18 @@ export type OnboardingPaymentView = {
 export type OnboardingSummary = {
   id: string;
   businessName: string;
+  // Legacy contact — sign-ups since the WhatsApp-only Step 1 leave this blank.
   email: string;
+  // The one contact channel we collect at sign-up; the operator messages it
+  // straight from the onboarding list/detail (wa.me click-to-chat).
+  whatsapp: string;
   contactPerson: string;
   slug: string;
   url: string;
   packageKey: string;
   packageLabel: string;
+  // What the sign-up prepaid: monthly (the usual) or a full year
+  billingCycle: OnboardingBillingCycle;
   // Signed up on the ₱699 1-month Business trial (pro only)
   trial: boolean;
   // Operator-managed trial window (ISO dates, null until set)
@@ -72,7 +80,6 @@ export type OnboardingSummary = {
 export type OnboardingDetailView = OnboardingSummary & {
   businessType: string;
   description: string;
-  whatsapp: string;
   facebook: string;
   themeStyle: string | null;
   themeId: string;

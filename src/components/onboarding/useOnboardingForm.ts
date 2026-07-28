@@ -11,9 +11,12 @@ import {
   STARTER_FEATURE_LABELS,
   STARTER_FEATURE_LIMIT,
   STARTER_EXTRA_FEATURE_PRICE_CENTS,
+  normalizeOnboardingCycle,
+  type OnboardingBillingCycle,
   type OnboardingPayload,
   type StarterFeatureKey,
 } from "@/lib/onboarding/schema";
+import { validateWhatsapp } from "@/lib/admin/whatsapp";
 
 export { STARTER_FEATURE_LIMIT, STARTER_EXTRA_FEATURE_PRICE_CENTS };
 
@@ -39,7 +42,6 @@ export type Draft = {
   businessType: string;
   description: string;
   contactPerson: string;
-  email: string;
   whatsapp: string;
   facebook: string;
   // 2 — branding
@@ -60,6 +62,8 @@ export type Draft = {
   paymentMethods: DraftPayment[];
   // 6 — package
   packageKey: string;
+  // 6 — monthly (the usual list price) or a prepaid year
+  billingCycle: OnboardingBillingCycle;
   // 6 — ₱699 1-month Business trial (only meaningful when packageKey === "pro")
   trial: boolean;
   // 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT; extras billed per feature)
@@ -84,7 +88,6 @@ export const INITIAL_DRAFT: Draft = {
   businessType: "",
   description: "",
   contactPerson: "",
-  email: "",
   whatsapp: "",
   facebook: "",
   themeStyle: "minimal",
@@ -100,6 +103,7 @@ export const INITIAL_DRAFT: Draft = {
   orderDestinationValue: "",
   paymentMethods: [],
   packageKey: "starter",
+  billingCycle: "monthly",
   trial: false,
   selectedFeatures: [],
   paymentProofUrl: "",
@@ -149,14 +153,14 @@ export const STARTER_FEATURE_OPTIONS: {
   { id: "coa", label: STARTER_FEATURE_LABELS.coa, desc: "Publish certificates of analysis (lab results).", icon: "ShieldCheck" },
 ];
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /** Per-step validation. Returns a field→message map (empty = valid). */
 export function validateStep(step: number, d: Draft): Record<string, string> {
   const e: Record<string, string> = {};
   if (step === 0) {
     if (d.businessName.trim().length < 2) e.businessName = "Please enter your business name.";
-    if (!EMAIL_RE.test(d.email.trim())) e.email = "Please enter a valid email address.";
+    // WhatsApp replaced email as the one contact channel, so it has to be dialable.
+    const wa = validateWhatsapp(d.whatsapp);
+    if ("error" in wa) e.whatsapp = wa.error;
   }
   if (step === 2) {
     d.products.forEach((p, i) => {
@@ -188,7 +192,6 @@ export function draftToPayload(d: Draft): OnboardingPayload {
     businessType: d.businessType.trim(),
     description: d.description.trim(),
     contactPerson: d.contactPerson.trim(),
-    email: d.email.trim(),
     whatsapp: d.whatsapp.trim(),
     facebook: d.facebook.trim(),
     themeStyle: (d.themeStyle as OnboardingPayload["themeStyle"]) ?? undefined,
@@ -218,6 +221,9 @@ export function draftToPayload(d: Draft): OnboardingPayload {
       instructions: m.instructions.trim(),
     })),
     packageKey: d.packageKey,
+    // A stale/hand-edited localStorage draft can carry anything here; the server
+    // re-narrows it too, but keep the payload we send honest.
+    billingCycle: normalizeOnboardingCycle(d.billingCycle),
     // The ₱699 1-month trial only exists for the Business (pro) package.
     trial: d.packageKey === "pro" && d.trial,
     // Only Starter carries feature picks; other tiers ship with all pages on.

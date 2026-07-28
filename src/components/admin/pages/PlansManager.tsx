@@ -29,6 +29,7 @@ type PlanDraft = {
   name: string;
   priceText: string; // pesos, free-form while typing
   discountText: string; // optional first-month promo price in pesos ("" = none)
+  yearlyText: string; // prepaid 12-month term price in pesos (get-started yearly option)
   setupFeeText: string; // one-time setup fee in pesos ("" or 0 = no fee)
   setupFeeWaived: boolean; // show the fee struck through as FREE setup
   blurb: string;
@@ -42,6 +43,7 @@ function toDrafts(config: PlanConfig): PlanDraft[] {
     name: p.name,
     priceText: String(p.priceCents / 100),
     discountText: p.discountPriceCents ? String(p.discountPriceCents / 100) : "",
+    yearlyText: String(p.yearlyPriceCents / 100),
     setupFeeText: p.setupFeeCents ? String(p.setupFeeCents / 100) : "",
     setupFeeWaived: p.setupFeeWaived,
     blurb: p.blurb,
@@ -53,6 +55,13 @@ function toDrafts(config: PlanConfig): PlanDraft[] {
 function draftPriceCents(d: PlanDraft): number {
   const pesos = Number(d.priceText);
   return Number.isFinite(pesos) ? Math.round(pesos * 100) : 0;
+}
+
+// The prepaid-year price. 0 (empty/invalid) makes normalizePlanConfig keep the
+// plan's code default rather than sell a year for nothing.
+function draftYearlyCents(d: PlanDraft): number {
+  const pesos = Number(d.yearlyText);
+  return Number.isFinite(pesos) && pesos > 0 ? Math.round(pesos * 100) : 0;
 }
 
 // 0 = no discount (empty/invalid field).
@@ -192,6 +201,7 @@ export function PlansManager({
             name: p.name,
             priceCents: draftPriceCents(p),
             ...(discount > 0 ? { discountPriceCents: discount } : {}),
+            yearlyPriceCents: draftYearlyCents(p),
             setupFeeCents: draftSetupFeeCents(p),
             setupFeeWaived: p.setupFeeWaived,
             blurb: p.blurb,
@@ -317,6 +327,18 @@ export function PlansManager({
                     placeholder="Leave blank for no promo"
                     value={p.discountText}
                     onChange={(e) => patchPlan(p.key, { discountText: e.target.value })}
+                  />
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label className="field-label">Yearly price (₱) — prepaid 12 months</label>
+                  <input
+                    className="input"
+                    style={{ width: "100%", marginTop: 4 }}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={p.yearlyText}
+                    onChange={(e) => patchPlan(p.key, { yearlyText: e.target.value })}
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>

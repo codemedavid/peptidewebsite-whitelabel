@@ -793,6 +793,37 @@
 .mk-payrow:first-of-type { border-top: none; }
 .mk-payrow b { color: var(--green); }
 
+/* billing-cycle switch on the package step (Monthly | Yearly) */
+.mk-cycle-toggle {
+  grid-column: 1 / -1;
+  display: inline-flex; gap: 4px; padding: 4px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--paper-deep);
+  justify-self: start;
+}
+.mk-cycle-toggle button {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 18px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--muted);
+  font: inherit; font-size: 14px; font-weight: 600;
+  transition: background 180ms ease, color 180ms ease;
+}
+.mk-cycle-toggle button:hover { color: var(--ink); }
+.mk-cycle-toggle button[data-selected="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.mk-cycle-toggle button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.mk-cycle-toggle em {
+  font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 3px 8px; border-radius: 999px; background: var(--green); color: var(--paper);
+}
+
+/* "Business is the better buy" nudge under the Starter feature picker */
+.mk-upsell {
+  margin-top: 12px; padding: 14px 16px;
+  border: 1px solid var(--green); border-radius: var(--radius);
+  background: color-mix(in oklab, var(--green) 7%, var(--paper));
+}
+.mk-upsell b { display: block; font-size: 14.5px; color: var(--ink); }
+.mk-upsell p { margin: 4px 0 12px; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
 /* wizard footer nav */
 .mk-wizard-foot {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;

@@ -5,10 +5,25 @@
 // well under the server-action body-size limit.
 
 import { z } from "zod";
+import { validateWhatsapp } from "@/lib/admin/whatsapp";
 
 export const THEME_STYLES = ["minimal", "luxury", "ecommerce", "dark", "custom"] as const;
 export const ORDER_DESTINATIONS = ["whatsapp", "messenger", "telegram", "email"] as const;
 export const PACKAGE_KEYS = ["starter", "pro", "enterprise"] as const;
+
+// Billing cycles a self-serve sign-up may choose. Monthly is the usual list
+// price; yearly is a flat prepaid 12-month term (EditablePlanCard.yearlyPriceCents).
+// Deliberately narrower than the operator-side BILLING_CYCLES in
+// lib/subscription/billing-cycle.ts — quarterly / semi-annual are operator-set
+// on an existing tenant, never offered at the public checkout.
+export const ONBOARDING_BILLING_CYCLES = ["monthly", "yearly"] as const;
+export type OnboardingBillingCycle = (typeof ONBOARDING_BILLING_CYCLES)[number];
+
+/** Narrow untrusted input (query string, stored draft, crafted payload) to a
+ *  cycle we actually sell; anything unrecognized bills monthly. */
+export function normalizeOnboardingCycle(value: unknown): OnboardingBillingCycle {
+  return value === "yearly" ? "yearly" : "monthly";
+}
 
 // Starter add-on features: the storefront ships with ordering/catalog always on;
 // a Starter client gets STARTER_FEATURE_LIMIT of these included, and may add more
@@ -54,8 +69,18 @@ export const onboardingSchema = z.object({
   businessType: z.string().trim().max(80).optional().default(""),
   description: z.string().trim().max(2000).optional().default(""),
   contactPerson: z.string().trim().max(120).optional().default(""),
-  email: z.string().trim().email("A valid email is required.").max(200),
-  whatsapp: z.string().trim().max(40).optional().default(""),
+  // Step 1 no longer asks for an email — WhatsApp is how we reach the client.
+  // The key is kept (optional) so submissions predating the change still parse.
+  email: z.string().trim().max(200).optional().default(""),
+  // Required: it's the only contact channel, and the operator messages it from
+  // the Super Admin. Any human format is fine — it's normalized to dial digits.
+  whatsapp: z
+    .string()
+    .trim()
+    .max(40)
+    .refine((v) => "digits" in validateWhatsapp(v), {
+      message: "A WhatsApp number we can reach you on is required.",
+    }),
   facebook: z.string().trim().max(300).optional().default(""),
 
   // Step 2 — branding & design
@@ -80,6 +105,10 @@ export const onboardingSchema = z.object({
 
   // Step 6 — package selection (marketing label or alias → normalized server-side)
   packageKey: z.string().trim().min(1).max(40).default("starter"),
+
+  // Step 6 — billing cycle: monthly (the usual list price) or a prepaid year.
+  // Defaults to monthly so older drafts/payloads keep their meaning.
+  billingCycle: z.enum(ONBOARDING_BILLING_CYCLES).optional().default("monthly"),
 
   // Step 6 — 1-month Business trial (₱699, PRO_TRIAL_PRICE_CENTS). Only honored
   // when the normalized plan is "pro"; the server action drops it otherwise.
