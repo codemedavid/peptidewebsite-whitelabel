@@ -71,10 +71,6 @@ const ADMIN_PASSWORD = "pepsy2026";
  * one.
  */
 const LOGO_URL = "";
-/** An earlier run of this script seeded this repo-relative path, but no such file
- *  exists in public/ so it rendered a broken image. Treated as "no logo" by the
- *  carry-forward below so the bad value is cleared instead of preserved. */
-const STALE_SEEDED_LOGO = "/assets/logo.jpg";
 const SUPPORT_EMAIL = "peptidewhisperer@gmail.com";
 const SECONDARY_EMAIL = "thepeptidepulse@gmail.com";
 const WHATSAPP = "639062349763";
@@ -209,24 +205,25 @@ async function main() {
   const plan = await prisma.plan.findUnique({ where: { key: PLAN_KEY } });
   if (!plan) throw new Error(`Plan not seeded: ${PLAN_KEY}. Run: npm run db:seed`);
 
-  // The logo lives in two places and page.tsx resolves it as
-  // `config.logoUrl || branding.logoUrl`. Keep whichever real value is already
-  // stored — a re-run must never blank a logo the owner uploaded — but treat the
-  // stale placeholder an earlier run wrote as "no logo" so it gets cleared.
+  // ── Logo ownership: the Branding.logoUrl COLUMN, never the config blob ──────
+  // page.tsx resolves the header logo as `config.logoUrl || branding.logoUrl`,
+  // so a non-empty config.logoUrl silently shadows the column. The store-admin
+  // uploader (uploadBrandingAsset, actions/branding.ts) writes ONLY the column —
+  // so any value here makes uploads look broken. An earlier version of this
+  // script seeded "/assets/logo.jpg", which is exactly what shadowed two real
+  // uploads.
+  //
+  // Therefore: config.logoUrl is pinned empty and the column is left untouched
+  // on update. The column is the single source of truth, and every future upload
+  // shows up immediately.
   const existing = await prisma.branding.findFirst({
     where: { tenant: { slug: SLUG } },
-    select: { config: true, logoUrl: true },
+    select: { logoUrl: true },
   });
-  const real = (v: unknown): string =>
-    typeof v === "string" && v.trim() !== "" && v !== STALE_SEEDED_LOGO ? v : "";
-  const existingLogo =
-    real((existing?.config as { logoUrl?: unknown } | null)?.logoUrl) ||
-    real(existing?.logoUrl) ||
-    LOGO_URL;
+  const uploadedLogo = existing?.logoUrl ?? LOGO_URL;
 
-  const config = { ...CONFIG, logoUrl: existingLogo } as unknown as Prisma.InputJsonValue;
+  const config = { ...CONFIG, logoUrl: "" } as unknown as Prisma.InputJsonValue;
   const branding = {
-    logoUrl: existingLogo,
     themeId: THEME_ID,
     colors: ROLE_COLORS,
     fonts: FONTS,
@@ -242,8 +239,8 @@ async function main() {
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },
-    update: branding,
-    create: { tenantId: tenant.id, ...branding },
+    update: branding, // no logoUrl — the owner's upload owns that column
+    create: { tenantId: tenant.id, logoUrl: LOGO_URL, ...branding },
   });
 
   const settings = { storeName: NAME, supportEmail: SUPPORT_EMAIL, currency: "PHP" };
@@ -259,8 +256,8 @@ async function main() {
   console.log(`  local at  http://${SLUG}.lvh.me:3100`);
   console.log(`  #admin password: ${ADMIN_PASSWORD}`);
   console.log(
-    existingLogo
-      ? `  logo: kept the uploaded one (${existingLogo})`
+    uploadedLogo
+      ? `  logo: branding.logoUrl = ${uploadedLogo} (config.logoUrl cleared so it shows)`
       : `  logo: none — upload it from the store admin (letter-tile fallback until then)`,
   );
 
