@@ -589,9 +589,17 @@ check("a hidden module (super-admin toggle off) drops out of the sidebar", () =>
 
 check("business-exclusive modules stay visible but flagged locked during a trial", () => {
   const trialBrand = brandOf({
-    trial: { active: true, expired: false, daysLeft: 3, plan: "trial" },
+    trial: {
+      onTrial: true,
+      expired: false,
+      daysLeft: 3,
+      dayNum: 4,
+      totalDays: 7,
+      pctUsed: 57,
+      endsAt: NOW.toISOString(),
+    },
     adminFeeEntitled: true,
-  } as Partial<Brand>);
+  });
   const fee = visibleNavGroups(trialBrand, OWNER)
     .flatMap((g) => g.items)
     .find((i) => i.view === "fee");
