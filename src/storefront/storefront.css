@@ -3500,6 +3500,307 @@
   padding: 0 4px;
   line-height: 1.55;
 }
+
+/* --- HERO EDITOR — image mode -------------------------------------------- */
+
+/* Mode picker: two radio-ish cards, written vs uploaded image. */
+.sf-root .hero-editor__mode-tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-accent) 16%, var(--brand-surface));
+  color: var(--brand-accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.sf-root .hero-editor__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 20px;
+}
+.sf-root .hero-editor__mode {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  grid-template-areas: "dot title" ". desc";
+  align-items: center;
+  gap: 6px 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.1));
+  border-radius: 18px;
+  background: var(--brand-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.sf-root .hero-editor__mode:hover {
+  border-color: var(--brand-accent);
+}
+.sf-root .hero-editor__mode.is-active {
+  border-color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 8%, var(--brand-surface));
+}
+.sf-root .hero-editor__mode-dot {
+  grid-area: dot;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.18));
+  background: var(--brand-surface);
+  box-shadow: inset 0 0 0 4px var(--brand-surface);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.sf-root .hero-editor__mode.is-active .hero-editor__mode-dot {
+  border-color: var(--brand-accent);
+  background: var(--brand-accent);
+}
+.sf-root .hero-editor__mode-title {
+  grid-area: title;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand-text);
+}
+.sf-root .hero-editor__mode-desc {
+  grid-area: desc;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--brand-text-muted);
+}
+
+/* Upload dropzone (shown until a banner exists). */
+.sf-root .hero-editor__drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  border: 2px dashed var(--brand-border, rgba(0, 0, 0, 0.16));
+  border-radius: 20px;
+  background: var(--brand-surface);
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.sf-root .hero-editor__drop:hover,
+.sf-root .hero-editor__drop.is-dragging,
+.sf-root .hero-editor__drop:focus-visible {
+  border-color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 7%, var(--brand-surface));
+}
+.sf-root .hero-editor__drop-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-accent) 15%, var(--brand-surface));
+  color: var(--brand-accent);
+}
+.sf-root .hero-editor__drop-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand-text);
+}
+
+/* Uploaded-file row: thumb, name/size, replace + remove. */
+.sf-root .hero-editor__filecard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.1));
+  border-radius: 18px;
+  background: var(--brand-surface);
+}
+.sf-root .hero-editor__filecard-thumb {
+  width: 132px;
+  height: 84px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--brand-surface));
+}
+.sf-root .hero-editor__filecard-meta {
+  flex: 1;
+  min-width: 0;
+}
+.sf-root .hero-editor__filecard-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sf-root .hero-editor__filecard-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.sf-root .hero-editor__ghost-btn {
+  padding: 10px 18px;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.14));
+  border-radius: 999px;
+  background: var(--brand-surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sf-root .hero-editor__ghost-btn:hover {
+  border-color: var(--brand-accent);
+}
+.sf-root .hero-editor__ghost-btn--danger {
+  color: var(--brand-danger, #b4405a);
+}
+
+/* Overlay toggle + scrim slider. */
+.sf-root .hero-editor__switchrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.sf-root .hero-editor__switchrow-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.sf-root .hero-editor__switch {
+  position: relative;
+  flex: none;
+  width: 60px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand-border, rgba(0, 0, 0, 0.18));
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.sf-root .hero-editor__switch.is-on {
+  background: var(--brand-accent);
+}
+.sf-root .hero-editor__switch-knob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.24);
+  transition: transform 0.2s ease;
+}
+.sf-root .hero-editor__switch.is-on .hero-editor__switch-knob {
+  transform: translateX(26px);
+}
+.sf-root .hero-editor__scrim {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+}
+.sf-root .hero-editor__scrim-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.sf-root .hero-editor__scrim input[type="range"] {
+  width: 100%;
+  accent-color: var(--brand-accent);
+}
+.sf-root .hero-editor__counter {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Preview: device toggle, image stage, empty state. */
+.sf-root .hero-editor__device {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--brand-surface));
+}
+.sf-root .hero-editor__device button {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--brand-text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sf-root .hero-editor__device button.is-active {
+  background: var(--brand-surface);
+}
+.sf-root .hero-editor__preview-stage {
+  margin: 0 auto;
+  transition: max-width 0.25s ease;
+}
+.sf-root .hero-editor__pv-media {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--brand-surface));
+}
+.sf-root .hero-editor__pv-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sf-root .hero-editor__pv-media-scrim {
+  position: absolute;
+  inset: 0;
+}
+.sf-root .hero-editor__pv-media-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: center;
+}
+.sf-root .hero-editor__pv-media-overlay .hero-editor__pv-headline {
+  color: #fff;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.34);
+}
+.sf-root .hero-editor__pv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 72px 40px;
+  border: 1px dashed var(--brand-border, rgba(0, 0, 0, 0.16));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--brand-accent) 5%, var(--brand-surface));
+  text-align: center;
+}
+.sf-root .hero-editor__pv-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand-text);
+}
+
+@media (max-width: 720px) {
+  .sf-root .hero-editor__modes { grid-template-columns: 1fr; }
+  .sf-root .hero-editor__filecard { flex-wrap: wrap; }
+  .sf-root .hero-editor__filecard-thumb { width: 100%; height: 140px; }
+}
 @media (max-width: 960px) {
   .sf-root .hero-editor__body {
     grid-template-columns: 1fr;

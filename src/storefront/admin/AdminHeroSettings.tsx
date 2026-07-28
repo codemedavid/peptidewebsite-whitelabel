@@ -19,6 +19,14 @@ import type { Brand } from "../types";
 import { useStore } from "../store";
 import { isPageVisible } from "../visibility";
 import { saveHeroContentAction } from "@/actions/storefront-admin";
+import { AdminHeroMedia } from "./AdminHeroMedia";
+import {
+  normalizeHeroMedia,
+  heroMediaAspect,
+  heroMediaPosition,
+  heroMediaScrimAlpha,
+  type HeroMedia,
+} from "@/lib/storefront/hero-media";
 
 type LinkType = "page" | "custom";
 
@@ -35,6 +43,9 @@ interface HeroFields {
   cta2LinkType: LinkType;
   cta2LinkPage: string;
   cta2LinkUrl: string;
+  // Image-hero config. `media.mode` is what the owner PICKED; the storefront
+  // still falls back to the written hero until an image is actually uploaded.
+  media: HeroMedia;
 }
 
 // Every storefront page a CTA can point at, with a friendly label. Home and the
@@ -70,6 +81,7 @@ function fieldsFromBrand(brand: Brand): HeroFields {
     cta2LinkType: brand.heroCta2LinkType === "custom" ? "custom" : "page",
     cta2LinkPage: brand.heroCta2LinkPage ?? "reviews",
     cta2LinkUrl: brand.heroCta2LinkUrl ?? "",
+    media: normalizeHeroMedia(brand),
   };
 }
 
@@ -87,6 +99,7 @@ function toPayload(f: HeroFields) {
     heroCta2LinkType: f.cta2LinkType,
     heroCta2LinkPage: f.cta2LinkPage,
     heroCta2LinkUrl: f.cta2LinkType === "custom" ? f.cta2LinkUrl.trim() : "",
+    heroMedia: f.media,
   };
 }
 
@@ -101,6 +114,9 @@ function linkFieldsFromPayload(p: ReturnType<typeof toPayload>): Partial<HeroFie
     cta2LinkType: p.heroCta2LinkType,
     cta2LinkPage: p.heroCta2LinkPage,
     cta2LinkUrl: p.heroCta2LinkUrl,
+    // Run the media block through the SAME normalizer the server applies, so a
+    // trimmed alt or a dropped custom URL doesn't leave the form looking dirty.
+    media: normalizeHeroMedia(p),
   };
 }
 
@@ -200,6 +216,8 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
   const [fields, setFields] = useState<HeroFields>(() => fieldsFromBrand(brand));
   const [saving, setSaving] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+  // Preview-only: which viewport the right-hand column mimics.
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   // Snapshot of the last-saved state, used to detect unsaved changes.
   const savedRef = useRef<HeroFields>(fieldsFromBrand(brand));
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -242,8 +260,19 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
     }
   };
 
+  const setMedia = (patch: Partial<HeroMedia>) => {
+    setShowSaved(false);
+    setFields((prev) => ({ ...prev, media: { ...prev.media, ...patch } }));
+  };
+
   const previewBadge = (fields.chip || brand.name || "").toUpperCase();
   const accentColor = brand.heroHighlight || "var(--brand-accent)";
+
+  const isText = fields.media.mode === "text";
+  // What a customer would actually SEE: image mode only wins once an image
+  // exists, matching resolveHeroMedia() on the storefront.
+  const showsImage = !isText && Boolean(fields.media.url);
+  const scrimAlpha = heroMediaScrimAlpha(fields.media);
 
   return (
     <div className="admin hero-editor">
@@ -255,6 +284,7 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
         <h1 className="admin-form__title">
           <span style={{ fontSize: 20 }}>✨</span>
           Hero Section
+          <span className="hero-editor__mode-tag">{isText ? "Written" : "Image"}</span>
           {isDirty && <span className="hero-editor__pill">Unsaved changes</span>}
         </h1>
         <div className="admin-form__bar-spacer" />
@@ -271,12 +301,46 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
           <div className="hero-editor__intro">
             <h2 className="admin-form__section" style={{ margin: "0 0 8px" }}>Homepage Hero</h2>
             <p className="admin-field__hint" style={{ fontSize: 14, lineHeight: 1.6 }}>
-              The big banner at the top of your storefront homepage. Edit the copy
-              below — colors, fonts and layout are set by your provider.
+              The big banner at the top of your storefront homepage. Choose how it
+              looks — write your own copy, or upload a single image and use that
+              instead. Colors, fonts and layout are set by your provider.
             </p>
+
+            <div className="hero-editor__modes">
+              <button
+                type="button"
+                className={`hero-editor__mode${isText ? " is-active" : ""}`}
+                aria-pressed={isText}
+                onClick={() => setMedia({ mode: "text" })}
+              >
+                <span className="hero-editor__mode-dot" aria-hidden="true" />
+                <span className="hero-editor__mode-title">Written hero</span>
+                <span className="hero-editor__mode-desc">
+                  Headline, tagline and buttons styled by your theme.
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`hero-editor__mode${!isText ? " is-active" : ""}`}
+                aria-pressed={!isText}
+                onClick={() => setMedia({ mode: "image" })}
+              >
+                <span className="hero-editor__mode-dot" aria-hidden="true" />
+                <span className="hero-editor__mode-title">Uploaded image</span>
+                <span className="hero-editor__mode-desc">
+                  Use one full-width image as the whole banner.
+                </span>
+              </button>
+            </div>
           </div>
 
-          {/* Content */}
+          {!isText && (
+            <AdminHeroMedia media={fields.media} onChange={setMedia} pageOptions={pageOptions} />
+          )}
+
+          {/* Content — the written hero's copy. Still editable in image mode when
+              the overlay is on, since the overlay reuses this headline + CTA. */}
+          {(isText || fields.media.overlay) && (
           <div className="hero-editor__card">
             <div className="hero-editor__eyebrow"><span /> Content</div>
 
@@ -332,11 +396,16 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
                 placeholder="A short sentence describing what your store offers."
                 onChange={(e) => set("sub", e.target.value)}
               />
-              <div className="admin-field__hint">The supporting text under the headline.</div>
+              <div className="hero-editor__counter">
+                <span className="admin-field__hint">The supporting text under the headline.</span>
+                <span className="admin-field__hint">{fields.sub.length} / {CAP_LONG}</span>
+              </div>
             </div>
           </div>
+          )}
 
           {/* Call to action */}
+          {(isText || fields.media.overlay) && (
           <div className="hero-editor__card">
             <div className="hero-editor__eyebrow"><span /> Call to action</div>
 
@@ -384,15 +453,77 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Preview column */}
         <aside className="hero-editor__preview-col">
           <div className="hero-editor__preview-head">
             <span className="hero-editor__eyebrow" style={{ margin: 0 }}><span /> Live preview</span>
-            <span className="hero-editor__preview-tag">as seen by customers</span>
+            <div className="hero-editor__device" role="group" aria-label="Preview width">
+              <button
+                type="button"
+                className={device === "desktop" ? "is-active" : ""}
+                aria-pressed={device === "desktop"}
+                onClick={() => setDevice("desktop")}
+              >
+                Desktop
+              </button>
+              <button
+                type="button"
+                className={device === "mobile" ? "is-active" : ""}
+                aria-pressed={device === "mobile"}
+                onClick={() => setDevice("mobile")}
+              >
+                Mobile
+              </button>
+            </div>
           </div>
           <div className="hero-editor__preview-frame">
+            <div
+              className="hero-editor__preview-stage"
+              style={{ maxWidth: device === "mobile" ? 380 : "100%" }}
+            >
+            {showsImage ? (
+              <div
+                className="hero-editor__pv-media"
+                style={{
+                  aspectRatio: device === "mobile" ? "4 / 3" : heroMediaAspect(fields.media.ratio),
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fields.media.url}
+                  alt={fields.media.alt}
+                  style={{ objectPosition: heroMediaPosition(fields.media.focus) }}
+                />
+                {scrimAlpha > 0 && (
+                  <div
+                    className="hero-editor__pv-media-scrim"
+                    style={{ background: `rgba(0,0,0,${scrimAlpha})` }}
+                  />
+                )}
+                {fields.media.overlay && (
+                  <div className="hero-editor__pv-media-overlay">
+                    <h3 className="hero-editor__pv-headline">
+                      {fields.line1 || "Premium products,"}
+                      {fields.line2 && <> <em>{fields.line2}</em></>}
+                    </h3>
+                    <span className="hero-editor__pv-btn hero-editor__pv-btn--primary">
+                      {fields.cta1 || "Shop Now"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : !isText ? (
+              <div className="hero-editor__pv-empty">
+                <div className="hero-editor__pv-empty-title">No image uploaded yet</div>
+                <div className="admin-field__hint">
+                  Upload one on the left and it appears here instantly. Until then your
+                  storefront keeps showing the written hero.
+                </div>
+              </div>
+            ) : (
             <div className="hero-editor__preview-hero">
               {previewBadge && <span className="hero-editor__pv-chip">{previewBadge}</span>}
               <h3 className="hero-editor__pv-headline">
@@ -415,6 +546,8 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
                   <span className="hero-editor__pv-btn hero-editor__pv-btn--secondary">{fields.cta2}</span>
                 )}
               </div>
+            </div>
+            )}
             </div>
           </div>
           <p className="hero-editor__preview-note">
