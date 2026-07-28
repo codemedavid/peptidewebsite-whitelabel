@@ -103,7 +103,8 @@
     "test:header-logo": "tsx scripts/test-header-logo.ts",
     "test:product-cta": "tsx scripts/test-product-cta.ts",
     "test:gb-pricing": "tsx scripts/test-gb-pricing.ts",
-    "test:hero-media": "tsx scripts/test-hero-media.ts"
+    "test:hero-media": "tsx scripts/test-hero-media.ts",
+    "test:admin-dashboard": "tsx scripts/test-admin-dashboard.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
