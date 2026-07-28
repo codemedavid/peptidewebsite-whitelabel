@@ -453,6 +453,14 @@ export function StoreProvider({
         toast(`${product.name} is on hand — message us for the price.`);
         return;
       }
+      // Owner paused this product (Group Buys → Pricing): still listed, not
+      // orderable. buildProductCta already disables the button, but a stale tab
+      // or a re-add from the cart can still reach here — and
+      // placeStorefrontOrderAction re-checks it server-side regardless.
+      if (product.purchasable === false) {
+        toast(`${product.name} isn't available right now.`);
+        return;
+      }
       // Group buy gate: while a run is live and the owner has on-hand sales
       // turned off, on-hand (non-group-buy) products can't be added — only the
       // group-buy products. placeStorefrontOrderAction re-checks this server-side.

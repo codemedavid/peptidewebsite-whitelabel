@@ -22,6 +22,7 @@ export const CTA_COPY = {
   messageToOrder: "Message to order",
   messageForPrice: "Message for price",
   afterGroupBuy: "Available after group buy",
+  notAvailable: "Not available",
 } as const;
 
 export type ProductCta = {
@@ -45,17 +46,22 @@ export type ProductCta = {
  * Precedence, highest first:
  *
  *  1. `priceOnRequest` — on hand but unpriced; the customer messages the store.
- *  2. `gbBlocked` — the owner paused on-hand selling while a group buy is live.
+ *  2. `purchasable === false` — the owner paused THIS product (Group Buys →
+ *     Pricing). Above the gate and sold-out because both of those clear on their
+ *     own: a round closes, stock arrives, and a product the owner deliberately
+ *     took off sale would quietly go back on it. Below price-on-request, which
+ *     is also owner-set but says something more specific about the price.
+ *  3. `gbBlocked` — the owner paused on-hand selling while a group buy is live.
  *     Kept above "sold out" so the on-hand gate's message is never masked by an
  *     inventory state that stops mattering once the run closes.
- *  3. Every option exhausted — "Sold out". This is the case the old ternaries
+ *  4. Every option exhausted — "Sold out". This is the case the old ternaries
  *     got wrong: it must beat "Select an option", because there is nothing left
  *     to select.
- *  4. Nothing picked yet — "Select an option".
- *  5. The picked option is exhausted — "Sold out", but the price the customer
+ *  5. Nothing picked yet — "Select an option".
+ *  6. The picked option is exhausted — "Sold out", but the price the customer
  *     just revealed stays on screen so they can compare it with the option they
  *     switch to.
- *  6. Otherwise — buyable.
+ *  7. Otherwise — buyable.
  */
 export function buildProductCta(
   product: Product,
@@ -83,6 +89,18 @@ export function buildProductCta(
   // null = has options but none picked yet → show a prompt, not a price.
   const price = resolveSelectedPrice(product, selectedIndex);
   const needsSelection = price === null;
+
+  // The owner took this product off sale but left it listed. The price stays on
+  // screen (it is paused, not unpriced) — unless options exist and none is
+  // picked, where there is no single price to show yet.
+  if (product.purchasable === false) {
+    return {
+      priceLabel: needsSelection ? CTA_COPY.selectOption : null,
+      ctaLabel: CTA_COPY.notAvailable,
+      disabled: true,
+      stock,
+    };
+  }
 
   if (opts.gbBlocked) {
     return {

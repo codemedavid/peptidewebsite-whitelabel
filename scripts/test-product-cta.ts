@@ -289,5 +289,107 @@ check("narrow cards stack the stepper above a full-width CTA", () => {
   );
 });
 
+console.log('\n"Not available" (purchasable: false) — set in Group Buys → Pricing\n');
+
+// The owner's own decision to pause a product. It has to outrank inventory and
+// the group-buy gate: those are states that clear on their own, and letting them
+// mask the pause would put a paused product back on sale the moment stock
+// arrived or a round closed. Only price-on-request (also owner-set, and more
+// specific about WHY there is no price) stays above it.
+check("purchasable:false → Not available, disabled, even with stock", () => {
+  const cta = buildProductCta(P({ price: 1799, stock: 25, purchasable: false }), -1);
+  assert.equal(cta.ctaLabel, "Not available");
+  assert.equal(cta.disabled, true);
+});
+
+check("purchasable:false keeps the price on screen (it is paused, not unpriced)", () => {
+  const cta = buildProductCta(P({ price: 1799, stock: 25, purchasable: false }), -1);
+  assert.equal(cta.priceLabel, null, "a paused product still shows what it costs");
+});
+
+check("purchasable:false beats the group-buy on-hand gate", () => {
+  const cta = buildProductCta(P({ price: 1799, stock: 5, purchasable: false }), -1, {
+    gbBlocked: true,
+  });
+  assert.equal(cta.ctaLabel, "Not available");
+  assert.equal(cta.disabled, true);
+});
+
+check("purchasable:false beats sold-out", () => {
+  const cta = buildProductCta(P({ price: 1799, stock: 0, purchasable: false }), -1);
+  assert.equal(cta.ctaLabel, "Not available");
+});
+
+check("price-on-request still outranks purchasable:false", () => {
+  const cta = buildProductCta(P({ priceOnRequest: true, purchasable: false }), -1);
+  assert.equal(cta.ctaLabel, "Message to order");
+});
+
+check("purchasable:false blocks a variation product before any option is picked", () => {
+  const p = P({
+    price: 0,
+    purchasable: false,
+    variations: [{ name: "10mg", price: 2100, stock: 4 }],
+  });
+  assert.equal(buildProductCta(p, -1).ctaLabel, "Not available");
+  assert.equal(buildProductCta(p, 0).ctaLabel, "Not available");
+});
+
+check("an ordinary product is untouched by the new branch", () => {
+  const cta = buildProductCta(P({ price: 1799, stock: 3 }), -1);
+  assert.equal(cta.ctaLabel, "Add to Cart");
+  assert.equal(cta.disabled, false);
+});
+
+check("purchasable:true is treated as buyable", () => {
+  assert.equal(
+    buildProductCta(P({ price: 1799, stock: 3, purchasable: true }), -1).ctaLabel,
+    "Add to Cart",
+  );
+});
+
+console.log("\nEnforcement — a paused product must be unbuyable, not just unclickable\n");
+
+const groupBuyPage = readFileSync(
+  join(root, "src/storefront/pages/GroupBuyPage.tsx"),
+  "utf8",
+);
+const store = readFileSync(join(root, "src/storefront/store.tsx"), "utf8");
+const ordersAction = readFileSync(join(root, "src/actions/orders.ts"), "utf8");
+
+check("the group-buy page blocks paused products", () => {
+  // It used to render a bare `onClick={() => addToCart(p)}` with no guard at
+  // all, so a paused product stayed fully buyable on the group-buy page.
+  //
+  // Deliberately NOT asserting buildProductCta here: that helper gates on stock,
+  // and group-buy lines are PRE-ORDERS exempt from stock (isGroupBuyPreorder).
+  // Routing this page through it would render every stock-0 round product as
+  // "Sold out" — the exact bug test:kglow-onhand and the GB pre-order exemption
+  // exist to prevent. The requirement is the pause guard, not the helper.
+  assert.match(
+    groupBuyPage,
+    /purchasable === false/,
+    "GroupBuyPage.tsx does not guard purchasable — its Join GB button bypasses the pause",
+  );
+});
+
+check("the cart guards purchasable, next to the price-on-request guard", () => {
+  assert.match(
+    store,
+    /purchasable === false/,
+    "store.tsx addToCart has no purchasable guard — the CTA is cosmetic without it",
+  );
+});
+
+check("order placement re-checks purchasable server-side", () => {
+  // The client guard is UX. This is the boundary: a stale tab, a replayed
+  // request, or a hand-rolled POST must not be able to buy a paused product.
+  assert.match(
+    ordersAction,
+    /purchasable/,
+    "orders.ts never re-checks purchasable — the server would accept the order",
+  );
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

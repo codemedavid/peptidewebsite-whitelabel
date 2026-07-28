@@ -17,6 +17,7 @@ import { buildGroupBuyPageView, groupBuyCartSummary } from "@/lib/storefront/gro
 import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
+import { CTA_COPY } from "@/lib/storefront/product-cta";
 
 export function GroupBuyPage({
   brand,
@@ -113,6 +114,13 @@ export function GroupBuyPage({
           {view.lines.map((line) => {
             const p = line.product;
             const qty = cart.filter((c) => baseProductId(c) === p.id).length;
+            // Products the owner paused (Group Buys → Pricing) stay listed here
+            // — the round still advertises them — but can't be joined. This page
+            // previously had no guard at all, so a paused product was fully
+            // buyable from it. Stock is deliberately NOT consulted: group-buy
+            // lines are pre-orders (isGroupBuyPreorder), so a stock-0 round
+            // product must keep its live "Join GB".
+            const blocked = p.purchasable === false || p.priceOnRequest === true;
             // Product photo, or the brand's default product image, or the monogram.
             const image = resolveProductImage(p.image, brand.defaultProductImage);
             return (
@@ -141,7 +149,11 @@ export function GroupBuyPage({
                       <span className="gbpage__card-regular">{line.regularLabel}</span>
                     )}
                   </div>
-                  {qty === 0 ? (
+                  {blocked ? (
+                    <button type="button" className="gbpage__join" disabled>
+                      {p.priceOnRequest ? CTA_COPY.messageToOrder : CTA_COPY.notAvailable}
+                    </button>
+                  ) : qty === 0 ? (
                     <button
                       type="button"
                       className="gbpage__join"

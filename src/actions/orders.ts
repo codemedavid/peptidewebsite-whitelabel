@@ -181,6 +181,33 @@ function stockViolation(
   return null;
 }
 
+/**
+ * Reject lines for products the owner took off sale (`purchasable: false`, set
+ * in Group Buys → Pricing). The storefront disables the button
+ * (product-cta.buildProductCta) and the cart refuses the add (store.tsx), but
+ * both are UX: this is the boundary a stale tab, a re-add from a long-lived
+ * cart, or a hand-rolled request has to clear.
+ *
+ * No group-buy pre-order exemption here, unlike stockViolation: "paused" is the
+ * owner's explicit decision about the product itself, not a stock state a round
+ * is expected to outlive. Lines matching no product are skipped — the same rule
+ * stockViolation uses, so every guard judges the same set of lines.
+ */
+function purchasableViolation(
+  products: Array<{ id: string; name: string; purchasable?: boolean }>,
+  items: OrderItem[],
+): string | null {
+  for (const it of items) {
+    const prod = products.find((x) =>
+      it.productId ? x.id === it.productId : x.name === it.name,
+    );
+    if (prod?.purchasable === false) {
+      return `"${prod.name}" isn't available right now — please remove it from your cart.`;
+    }
+  }
+  return null;
+}
+
 /** The catalog ids the order's lines resolve to — productId first, exact-name
  *  fallback, unmatched lines skipped: the same matching rule stockViolation
  *  uses, so the two-ways mixing re-check judges exactly the lines the other
@@ -823,6 +850,8 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // their gbPrice (the single price the group-buy page advertised). Runs before
     // the fee/discount stamps below so they charge the current subtotal.
     repriceItems(p.items, demoProducts, demoGbScope);
+    const demoPaused = purchasableViolation(demoProducts, p.items);
+    if (demoPaused) return { error: demoPaused };
     const demoViolation = stockViolation(demoProducts, p.items, demoGbScope);
     if (demoViolation) return { error: demoViolation };
     // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
@@ -948,6 +977,8 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // than the product has in stock, so the admin never has to confirm an
     // order the inventory can't cover. Live-round group-buy lines are
     // pre-orders and exempt (gbScope).
+    const paused = purchasableViolation(catalog, p.items);
+    if (paused) return { error: paused };
     const violation = stockViolation(catalog, p.items, gbScope);
     if (violation) return { error: violation };
 
