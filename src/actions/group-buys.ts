@@ -48,6 +48,28 @@ import {
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import {
+  applyGbPrice,
+  gbPriceError,
+  removeFromGroupBuy,
+  setPurchasable,
+} from "@/lib/storefront/gb-pricing";
+import {
+  currencySymbolToIso,
+  dbProductToStorefront,
+  productToDbWrite,
+  type DbProductRow,
+} from "@/lib/storefront/product-mapping";
+import { preserveResellerMetadata } from "@/lib/storefront/reseller-gate";
+import { hasFeature } from "@/lib/features/entitlements";
+import { FEATURES } from "@/lib/features/catalog";
+import {
+  getDemoProducts,
+  getDemoStoreProducts,
+  saveDemoStoreProducts,
+} from "@/lib/demo/fixtures";
+import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
+import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
 import type { Order } from "@/storefront/types";
@@ -473,6 +495,189 @@ export async function getGroupBuySupplierReportAction(
 }
 
 // ── Platform operator: per-tenant defaults (Features page) ──────────────────
+
+// ── Group Buy Pricing (store admin → Group Buys → Pricing tab) ──────────────
+
+export type GbPricingOp =
+  | { op: "price"; productId: string; price: number }
+  | { op: "remove"; productId: string }
+  | { op: "availability"; productId: string; available: boolean };
+
+export type SaveGbPricingResult =
+  | { ok: true; product: Product; groupBuys: GroupBuy[]; warning?: string }
+  | { error: string };
+
+/** Coerce the untrusted client payload into one of the three operations. */
+function normalizeGbPricingOp(input: unknown): GbPricingOp | null {
+  const x = (input ?? {}) as Record<string, unknown>;
+  const productId = typeof x.productId === "string" ? x.productId.slice(0, 64) : "";
+  if (!productId) return null;
+  if (x.op === "price") return { op: "price", productId, price: Number(x.price) };
+  if (x.op === "remove") return { op: "remove", productId };
+  if (x.op === "availability") {
+    return { op: "availability", productId, available: x.available !== false };
+  }
+  return null;
+}
+
+/**
+ * One product's group-buy pricing: set/replace its GB price, retire it from the
+ * group buy, or pause/resume it.
+ *
+ * Deliberately ONE action rather than reusing saveProductAction +
+ * saveGroupBuyAction, because "remove from the group buy" is a two-table write —
+ * the product's metadata AND every round that assigns it. Split across two
+ * client calls, a failure of the second would leave a product untagged but still
+ * listed in a live round, which prices it at full price inside a group buy.
+ *
+ * Gating is the intersection of both surfaces: the Group Buy module entitlement
+ * plus `groupbuy.can_edit` (this changes what a round sells), AND a catalog
+ * grant — it writes the Product row, so a staff member with only "groupbuys"
+ * must not reach it. Every check is re-run here; the tab hiding a button is UX.
+ */
+export async function saveGroupBuyProductPricingAction(
+  input: unknown,
+): Promise<SaveGbPricingResult> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug, caps } = gate;
+  if (!caps.canEdit) return { error: "Your plan doesn't allow editing group buys." };
+  // Writes the catalog, so a catalog grant is required on top of "groupbuys".
+  if (!(await requireAnyStaffPermission(["products", "add-product"]))) {
+    return { error: "You don't have permission to edit products." };
+  }
+
+  const op = normalizeGbPricingOp(input);
+  if (!op) return { error: "Nothing to save." };
+
+  const config = await readTenantConfig(tenantId);
+  const displaySymbol = String(config.currency ?? "") || "₱";
+
+  try {
+    const rounds = await loadGroupBuys(tenantId, slug);
+
+    // ── Demo mode: same operations against the file-backed store ──
+    if (isDemoMode()) {
+      const list =
+        getDemoStoreProducts(slug) ??
+        getDemoProducts(slug).map((dp) =>
+          dbProductToStorefront(dp as unknown as DbProductRow, displaySymbol),
+        );
+      const current = list.find((p) => p.id === op.productId);
+      if (!current) return { error: "That product no longer exists." };
+
+      const applied = applyOp(op, current, rounds);
+      if ("error" in applied) return applied;
+
+      saveDemoStoreProducts(
+        slug,
+        list.map((p) => (p.id === applied.product.id ? applied.product : p)),
+      );
+      if (applied.roundUpdates.length) {
+        const byId = new Map(applied.roundUpdates.map((u) => [u.id, u.productIds]));
+        await persistDemo(
+          slug,
+          rounds.map((gb) =>
+            byId.has(gb.id) ? { ...gb, productIds: byId.get(gb.id)! } : gb,
+          ),
+        );
+      }
+      revalidateTenant(tenantId, slug);
+      return {
+        ok: true,
+        product: applied.product,
+        groupBuys: await loadGroupBuys(tenantId, slug),
+        ...(applied.warning ? { warning: applied.warning } : {}),
+      };
+    }
+
+    // ── DB path ──
+    const row = await withTenant(tenantId, (db) =>
+      db.product.findFirst({ where: { id: op.productId } }),
+    );
+    if (!row) return { error: "That product no longer exists." };
+    const current = dbProductToStorefront(row as DbProductRow, displaySymbol);
+
+    const applied = applyOp(op, current, rounds);
+    if ("error" in applied) return applied;
+
+    // Reseller wholesale data is entitlement-gated: an unentitled tenant's
+    // catalog is served stripped, so writing back what we just read would wipe
+    // the DB's dormant wholesale legs. Same preserve saveProductAction applies.
+    const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+    const write = productToDbWrite(
+      applied.product,
+      currencySymbolToIso(displaySymbol),
+      displaySymbol,
+    );
+
+    await withTenant(tenantId, async (db) => {
+      await db.product.update({
+        where: { id: row.id },
+        data: {
+          metadata: preserveResellerMetadata(
+            write.metadata as Record<string, unknown>,
+            row.metadata,
+            resellerEntitled,
+          ) as unknown as Prisma.InputJsonValue,
+        },
+      });
+      for (const u of applied.roundUpdates) {
+        await db.groupBuy.update({
+          where: { id: u.id },
+          data: { productIds: u.productIds as unknown as Prisma.InputJsonValue },
+        });
+      }
+    });
+
+    revalidateTenant(tenantId, slug);
+    return {
+      ok: true,
+      product: applied.product,
+      groupBuys: await loadGroupBuys(tenantId, slug),
+      ...(applied.warning ? { warning: applied.warning } : {}),
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the pricing." };
+  }
+}
+
+/**
+ * Resolve one operation into the product to store plus any round rewrites.
+ * Pure apart from the error strings — the real logic lives in lib/gb-pricing so
+ * the admin UI, this action and the test all agree.
+ */
+function applyOp(
+  op: GbPricingOp,
+  current: Product,
+  rounds: GroupBuy[],
+):
+  | { product: Product; roundUpdates: { id: string; productIds: string[] }[]; warning?: string }
+  | { error: string } {
+  if (op.op === "price") {
+    const invalid = gbPriceError(current, op.price);
+    if (invalid) return { error: invalid };
+    return { product: applyGbPrice(current, op.price), roundUpdates: [] };
+  }
+  if (op.op === "availability") {
+    return { product: setPurchasable(current, op.available), roundUpdates: [] };
+  }
+  const removal = removeFromGroupBuy(current, rounds);
+  return {
+    product: removal.product,
+    roundUpdates: removal.roundUpdates,
+    // An emptied round covers the WHOLE catalog everywhere else in the group-buy
+    // code, so silently letting it empty would widen the round from one product
+    // to everything. The write still goes through — the owner asked for it — but
+    // they are told, rather than finding out from the storefront.
+    ...(removal.emptiesRound
+      ? {
+          warning:
+            "That was the last product assigned to a group buy — the round now covers your whole catalog. Assign products to it, or close it.",
+        }
+      : {}),
+  };
+}
 
 async function readTenantConfig(tenantId: string): Promise<Record<string, unknown>> {
   if (isDemoMode()) {
