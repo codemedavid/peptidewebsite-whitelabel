@@ -1042,6 +1042,67 @@
   .sf-root .hero[data-variant="wordmark"] .hero__sub { letter-spacing: 0.22em; }
 }
 
+/* --- HERO — image mode (one uploaded banner replaces the written hero) ---
+   The owner picks the banner height; the box declares that aspect-ratio inline
+   so the space is reserved before the image loads (no layout shift). Padding is
+   dropped entirely — an image hero is meant to run edge to edge. */
+.sf-root .hero--media {
+  padding: 0;
+  background: none;
+}
+.sf-root .hero__media {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--brand-surface));
+}
+.sf-root .hero__media--clickable {
+  cursor: pointer;
+}
+.sf-root .hero__media--clickable:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: -4px;
+}
+.sf-root .hero__media-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* object-position comes from the owner's focus point (inline style). */
+}
+.sf-root .hero__media-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sf-root .hero__media-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: clamp(20px, 5vw, 56px);
+  text-align: center;
+}
+/* Overlay copy sits on a photo, so it inverts to light and picks up a soft
+   shadow — the owner's scrim slider handles the rest. */
+.sf-root .hero__media-overlay .hero__headline {
+  margin: 0;
+  color: #fff;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.34);
+}
+.sf-root .hero__media-overlay .hero__ctas {
+  margin: 0;
+}
+/* A 3:1 strip is unreadably short on a phone — every ratio relaxes to 4:3. */
+@media (max-width: 600px) {
+  .sf-root .hero__media {
+    aspect-ratio: 4 / 3 !important;
+  }
+}
+
 /* --- HERO — small-screen polish (applies across variants) --- */
 @media (max-width: 600px) {
   .sf-root .hero { padding-block: clamp(40px, 12vw, 72px); }

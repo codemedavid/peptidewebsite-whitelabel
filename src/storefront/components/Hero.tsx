@@ -3,19 +3,31 @@ import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP, heroFieldCss }
 import type { Brand } from "../types";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
 import { normalizeHeroVariant, wordmarkText } from "@/lib/storefront/hero-style";
+import {
+  resolveHeroMedia,
+  heroMediaAspect,
+  heroMediaPosition,
+  heroMediaScrimAlpha,
+} from "@/lib/storefront/hero-media";
 
 export function Hero({
   brand,
   onPrimary,
   onSecondary,
+  onMedia,
   isGenerating,
 }: {
   brand: Brand;
   onPrimary: () => void;
   onSecondary: () => void;
+  /** Whole-banner click in image mode. Omitted / undefined = inert banner. */
+  onMedia?: () => void;
   isGenerating?: boolean;
 }) {
   const variant = normalizeHeroVariant(brand.heroVariant);
+  // The EFFECTIVE hero mode — image mode with no (or an unsafe) banner resolves
+  // back to "text", so the written hero below stays the universal fallback.
+  const media = resolveHeroMedia(brand);
 
   // ── Hero typography overrides (admin "Hero" tab). Each is applied inline so it
   // wins over the base + per-variant storefront.css; unset fields stay undefined
@@ -197,6 +209,66 @@ export function Hero({
           {ctas}
         </div>
       </>
+    );
+  }
+
+  // ── Image mode ─────────────────────────────────────────────────────────────
+  // One uploaded banner replaces the whole written hero. The box declares its
+  // aspect-ratio up front so the image reserves its space before it loads (no
+  // CLS), and the banner is the page's LCP element — hence eager + high fetch
+  // priority rather than the lazy defaults used below the fold.
+  if (media.mode === "image") {
+    const clickable = Boolean(onMedia);
+    const scrimAlpha = heroMediaScrimAlpha(media);
+    return (
+      <section
+        className={`hero hero--media ${isGenerating ? "is-generating" : ""}`}
+        id="top"
+        data-variant="media"
+        style={sectionStyle}
+      >
+        <div
+          className={`hero__media${clickable ? " hero__media--clickable" : ""}`}
+          style={{ aspectRatio: heroMediaAspect(media.ratio) }}
+          onClick={onMedia}
+          onKeyDown={
+            clickable
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onMedia?.();
+                  }
+                }
+              : undefined
+          }
+          role={clickable ? "link" : undefined}
+          tabIndex={clickable ? 0 : undefined}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="hero__media-img"
+            src={media.url}
+            alt={media.alt}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            style={{ objectPosition: heroMediaPosition(media.focus) }}
+          />
+          {scrimAlpha > 0 && (
+            <div
+              className="hero__media-scrim"
+              aria-hidden="true"
+              style={{ background: `rgba(0,0,0,${scrimAlpha})` }}
+            />
+          )}
+          {media.overlay && (
+            <div className="hero__media-overlay">
+              {headline}
+              {ctas}
+            </div>
+          )}
+        </div>
+      </section>
     );
   }
 

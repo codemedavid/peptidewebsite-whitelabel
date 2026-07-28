@@ -23,7 +23,8 @@ import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { ADMIN_AUTH_KEY } from "./admin/authKey";
 import { isPageVisible } from "./visibility";
-import { resolveHeroCtaLink } from "@/lib/storefront/hero-links";
+import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
+import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
 import { hasStorefrontAdminSessionAction } from "@/actions/storefront-admin";
 
 // Spinner shown while any lazy page chunk is downloading for the first time.
@@ -162,12 +163,10 @@ function Shell() {
   // route through the hash router (the catalog link scrolls to the catalog on
   // home). Defaults mirror the store-admin editor: primary → catalog, secondary
   // → reviews, so legacy tenants keep a sensible primary "shop" action.
-  const heroCtaHandler = (n: 1 | 2): (() => void) => {
-    const cfg =
-      n === 1
-        ? { type: brand.heroCta1LinkType, page: brand.heroCta1LinkPage, url: brand.heroCta1LinkUrl }
-        : { type: brand.heroCta2LinkType, page: brand.heroCta2LinkPage, url: brand.heroCta2LinkUrl };
-    const target = resolveHeroCtaLink(cfg, n);
+  // Turn a resolved link target into the click handler that performs it. Shared
+  // by the hero CTA buttons and the image-hero banner so both obey identical
+  // navigation rules.
+  const targetHandler = (target: HeroCtaTarget): (() => void) => {
     switch (target.kind) {
       case "external":
         return () => window.open(target.url, "_blank", "noopener,noreferrer");
@@ -187,6 +186,26 @@ function Shell() {
         return () => {};
     }
   };
+
+  const heroCtaHandler = (n: 1 | 2): (() => void) =>
+    targetHandler(
+      resolveHeroCtaLink(
+        n === 1
+          ? { type: brand.heroCta1LinkType, page: brand.heroCta1LinkPage, url: brand.heroCta1LinkUrl }
+          : { type: brand.heroCta2LinkType, page: brand.heroCta2LinkPage, url: brand.heroCta2LinkUrl },
+        n,
+      ),
+    );
+
+  // Whole-banner click in image mode. An owner who picked "not clickable" (or a
+  // custom link whose URL was stripped) resolves to `none` — we pass undefined
+  // so <Hero> renders a plain, non-interactive banner rather than a dead link.
+  const heroMediaHandler = ((): (() => void) | undefined => {
+    const media = resolveHeroMedia(brand);
+    if (media.mode !== "image") return undefined;
+    const target = resolveHeroMediaLink(media);
+    return target.kind === "none" ? undefined : targetHandler(target);
+  })();
 
   // Admin — password-gated, no site chrome (branding editor still available).
   if (activePage === "admin") {
@@ -255,7 +274,14 @@ function Shell() {
 
       {(activePage === "home" || activePage === "catalog") && brand.homeLayout !== "two-ways" && (
         <>
-          {brand.showHero !== false && <Hero brand={brand} onPrimary={heroCtaHandler(1)} onSecondary={heroCtaHandler(2)} />}
+          {brand.showHero !== false && (
+            <Hero
+              brand={brand}
+              onPrimary={heroCtaHandler(1)}
+              onSecondary={heroCtaHandler(2)}
+              onMedia={heroMediaHandler}
+            />
+          )}
           {brand.showCategories !== false && (
             <Categories categories={categories} active={category} onChange={setCategory} />
           )}
