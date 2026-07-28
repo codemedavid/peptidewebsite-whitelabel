@@ -124,7 +124,8 @@ export function OnboardingWizard({
               <div className="mk-success-url">{done.url}</div>
               <p className="mk-step-sub" style={{ maxWidth: 480, margin: "0 auto 8px" }}>
                 Our team is now setting up and customizing your website. We&apos;ll confirm and
-                publish it, then email <b>{draft.email || "you"}</b> with your login details.
+                publish it, then message you on WhatsApp at <b>{draft.whatsapp || "the number you gave us"}</b>{" "}
+                with your login details.
               </p>
               <Link href="/" className="mk-btn mk-btn-primary" style={{ marginTop: 8 }}>
                 Back to {SITE.brand}

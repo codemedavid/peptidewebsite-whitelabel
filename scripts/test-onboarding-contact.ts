@@ -188,9 +188,16 @@ check("the submission detail renders a wa.me click-to-chat link", () => {
   assert.ok(/submission\.whatsapp/.test(detailSrc), "the detail view does not read submission.whatsapp");
 });
 
-check("the submission detail header no longer leads with the email address", () => {
+check("the submission detail header leads with WhatsApp, email only as a legacy fallback", () => {
   const header = between(detailSrc, "{submission.url}", "Submitted {humanDate");
-  assert.ok(!header.includes("submission.email"), "the header still shows the email address");
+  assert.ok(
+    /submission\.whatsapp\s*\?/.test(header),
+    "the header does not branch on the WhatsApp number",
+  );
+  const wa = header.indexOf("submission.whatsapp");
+  const mail = header.indexOf("submission.email");
+  assert.ok(wa >= 0, "the header does not show the WhatsApp number at all");
+  assert.ok(mail < 0 || wa < mail, "the header still leads with the email address");
 });
 
 // ─────────────────────────────────── result ─────────────────────────────────

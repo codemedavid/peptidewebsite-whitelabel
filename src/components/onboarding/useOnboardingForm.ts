@@ -13,6 +13,7 @@ import {
   STARTER_EXTRA_FEATURE_PRICE_CENTS,
   normalizeOnboardingCycle,
   type OnboardingBillingCycle,
+  type OnboardingInput,
   type OnboardingPayload,
   type StarterFeatureKey,
 } from "@/lib/onboarding/schema";
@@ -186,7 +187,7 @@ export function validateStep(step: number, d: Draft): Record<string, string> {
 }
 
 /** Map the UI draft into the server action payload. */
-export function draftToPayload(d: Draft): OnboardingPayload {
+export function draftToPayload(d: Draft): OnboardingInput {
   return {
     businessName: d.businessName.trim(),
     businessType: d.businessType.trim(),

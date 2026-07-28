@@ -128,5 +128,8 @@ export const onboardingSchema = z.object({
 });
 
 export type OnboardingPayload = z.infer<typeof onboardingSchema>;
+/** What the wizard SENDS (pre-defaults) — e.g. no `email` since Step 1 dropped it.
+ *  The server action parses this into the fully-defaulted OnboardingPayload. */
+export type OnboardingInput = z.input<typeof onboardingSchema>;
 export type OnboardingProductInput = z.infer<typeof onboardingProductSchema>;
 export type OnboardingPaymentMethodInput = z.infer<typeof onboardingPaymentMethodSchema>;

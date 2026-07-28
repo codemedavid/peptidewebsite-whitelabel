@@ -52,6 +52,9 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
         !q ||
         s.businessName.toLowerCase().includes(q.toLowerCase()) ||
         s.email.toLowerCase().includes(q.toLowerCase()) ||
+        // Digits-only compare so "0917 123 4567" finds "639171234567". Guarded
+        // on the query having digits — otherwise every row would match "".
+        (/\d/.test(q) && s.whatsapp.replace(/\D/g, "").includes(q.replace(/\D/g, ""))) ||
         s.contactPerson.toLowerCase().includes(q.toLowerCase()),
     );
 
@@ -185,7 +188,7 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                       <BusinessAvatar name={s.businessName} />
                       <div>
                         <div className="tenant-name">{s.businessName}</div>
-                        <div className="tenant-domain">{s.email}</div>
+                        <div className="tenant-domain">{s.whatsapp || s.email || "—"}</div>
                       </div>
                     </div>
                   </td>

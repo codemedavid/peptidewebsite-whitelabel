@@ -20,6 +20,7 @@ import {
   onboardingSchema,
   normalizeOnboardingCycle,
   STARTER_FEATURE_LIMIT,
+  type OnboardingInput,
   type OnboardingPayload,
 } from "@/lib/onboarding/schema";
 import { amountDueFromConfig } from "@/lib/onboarding/pricing";
@@ -78,7 +79,9 @@ function productCreates(payload: OnboardingPayload) {
 }
 
 export async function submitOnboardingAction(
-  input: OnboardingPayload,
+  // Pre-defaults shape — the wizard omits keys the schema fills in (e.g. `email`,
+  // which Step 1 no longer collects). Validated into an OnboardingPayload below.
+  input: OnboardingInput,
 ): Promise<SubmitOnboardingResult> {
   // 1. Host guard — only accept from the apex marketing host.
   const host = ((await headers()).get("x-tenant-host") ?? "").replace(/:\d+$/, "").toLowerCase();
