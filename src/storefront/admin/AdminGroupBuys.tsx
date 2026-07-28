@@ -35,6 +35,7 @@ import {
   renderGbCopy,
   type GroupBuyContent,
 } from "@/lib/storefront/gb-content";
+import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
 import { downloadSupplierWorkbook } from "@/storefront/admin/supplier-workbook";
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
@@ -716,6 +717,11 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
   const [savingContent, setSavingContent] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
+  // Two tabs: the rounds themselves, and the per-product group-buy pricing.
+  // Pricing is a separate panel component — this file is already long, and the
+  // two views share only the loaded rounds.
+  const [tab, setTab] = useState<"rounds" | "pricing">("rounds");
+
   const [editing, setEditing] = useState<GroupBuy | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -864,7 +870,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
             </span>
           </h1>
           <span style={{ display: "inline-flex", gap: 8 }}>
-            {archivedCount > 0 && (
+            {tab === "rounds" && archivedCount > 0 && (
               <button
                 className="admin-btn admin-btn--ghost"
                 onClick={() => setShowArchived((v) => !v)}
@@ -872,7 +878,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
                 {showArchived ? "Back to list" : `Archived (${archivedCount})`}
               </button>
             )}
-            {caps.canCreate && !showArchived && (
+            {tab === "rounds" && caps.canCreate && !showArchived && (
               <button
                 className="admin-btn"
                 onClick={() => {
@@ -890,7 +896,43 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
           </span>
         </div>
 
-        {caps.productAssignment && (
+        <div className="gbtabs" role="tablist" aria-label="Group buy sections">
+          <button
+            type="button"
+            role="tab"
+            id="gbtab-rounds"
+            aria-selected={tab === "rounds"}
+            aria-controls="gbpanel-rounds"
+            className={`gbtabs__tab${tab === "rounds" ? " is-active" : ""}`}
+            onClick={() => setTab("rounds")}
+          >
+            Rounds
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="gbtab-pricing"
+            aria-selected={tab === "pricing"}
+            aria-controls="gbpanel-pricing"
+            className={`gbtabs__tab${tab === "pricing" ? " is-active" : ""}`}
+            onClick={() => setTab("pricing")}
+          >
+            Pricing
+          </button>
+        </div>
+
+        {tab === "pricing" && (
+          <div id="gbpanel-pricing" role="tabpanel" aria-labelledby="gbtab-pricing">
+            <AdminGroupBuyPricing
+              brand={brand}
+              caps={caps}
+              groupBuys={groupBuys}
+              onGroupBuysChange={setGroupBuys}
+            />
+          </div>
+        )}
+
+        {tab === "rounds" && caps.productAssignment && (
           <label
             className="admin-check"
             style={{
@@ -925,6 +967,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
 
         {/* Owner-editable storefront copy — the "How group buys work" section and
             the live-round terms line, shared by the store home + group-buy page. */}
+        {tab === "rounds" && (
         <div
           style={{
             display: "flex",
@@ -956,6 +999,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
             Edit copy
           </button>
         </div>
+        )}
 
         {!loaded && <div className="admin-empty-set">Loading group buys…</div>}
         {loadError && (
@@ -964,8 +1008,8 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
           </div>
         )}
 
-        {loaded && !loadError && (
-          <div className="admin-ship-list">
+        {tab === "rounds" && loaded && !loadError && (
+          <div className="admin-ship-list" id="gbpanel-rounds" role="tabpanel" aria-labelledby="gbtab-rounds">
             {visible.map((gb) => {
               const eff = effectiveGroupBuyStatus(gb, caps.scheduled);
               return (
