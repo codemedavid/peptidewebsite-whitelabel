@@ -17,7 +17,11 @@ export type HeroMediaRatio = "wide" | "standard" | "tall";
 export type HeroMediaFocus = "center" | "top" | "bottom" | "left" | "right";
 export type HeroMediaLinkType = "page" | "custom" | "none";
 
-export interface HeroMedia {
+// A type alias, not an interface: these config blobs are written straight into
+// the branding.config JSON column, and Prisma's InputJsonValue only accepts
+// types carrying an implicit index signature (interfaces don't). Matches
+// StorefrontBanner / CheckoutRulesConfig.
+export type HeroMedia = {
   /** Which hero the owner chose. "image" still falls back when `url` is blank. */
   mode: HeroMediaMode;
   /** Hosted (ImageKit) banner URL, or a small data: URL in demo mode. "" = none. */
@@ -33,7 +37,7 @@ export interface HeroMedia {
   overlay: boolean;
   /** Dark scrim strength behind the overlay text, 0–70 in steps of 5. */
   scrim: number;
-}
+};
 
 // A hosted URL is short; the demo / no-ImageKit path inlines the bytes as a
 // data: URL instead, which lands in the branding.config JSON blob. Cap it so a

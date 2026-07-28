@@ -4,6 +4,7 @@
 import type { HeroTextField, HeroFieldStyle } from "@/lib/theme/tokens";
 import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { StorefrontBanner } from "@/lib/storefront/banner";
+import type { HeroMedia } from "@/lib/storefront/hero-media";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { ProductClass } from "@/lib/storefront/product-class";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
@@ -551,6 +552,13 @@ export type Brand = {
   heroCta2LinkType?: "page" | "custom";
   heroCta2LinkPage?: string;
   heroCta2LinkUrl?: string;
+
+  // Hero image mode (edited in the store-admin Hero editor). When present with
+  // mode "image" AND a safe url, the whole hero becomes one uploaded banner
+  // instead of the written headline/CTA layout. Unset — or image mode with no
+  // image — keeps the written hero, so existing tenants are unaffected. See
+  // @/lib/storefront/hero-media (covered by npm run test:hero-media).
+  heroMedia?: HeroMedia;
 
   // Hero typography (edited in the admin "Hero" tab). All optional — anything
   // unset inherits from the theme/brand fonts and the storefront.css defaults.

@@ -17,6 +17,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { isBusinessExclusiveLocked } from "@/lib/trial/trial-info";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
+import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import { normalizeBanner } from "@/lib/storefront/banner";
 import { normalizeFaqGroups } from "@/lib/storefront/faq";
 import { normalizeCoaReports } from "@/lib/storefront/coa";
@@ -583,8 +584,12 @@ export async function saveHeroContentAction(input: unknown): Promise<ActionResul
   const slug = await getTenantSlug();
   const hero = normalizeHeroContent(input);
   const links = normalizeHeroLinks(input);
+  // Image-hero config (mode, banner, ratio/focus, overlay + scrim, link target).
+  // Coerced through the same pure core the storefront renders from, so a stored
+  // banner can never carry an unsafe src or a javascript: click target.
+  const heroMedia = normalizeHeroMedia(input);
   const current = await readConfig(tenantId);
-  const config = { ...current, ...hero, ...links };
+  const config = { ...current, ...hero, ...links, heroMedia };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
