@@ -72,6 +72,17 @@ import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
+import {
+  resolveRoundOrders,
+  summarizeRoundOrders,
+  buildProductsToOrder,
+  buildRoundOrderRows,
+  type LinkableOrder,
+  type ProductToOrder,
+  type ReportRoundWindow,
+  type RoundOrderRow,
+  type RoundSummary,
+} from "@/lib/storefront/group-buy-orders";
 import type { Order } from "@/storefront/types";
 
 export type ListGroupBuysResult =
@@ -95,7 +106,20 @@ export type GroupBuyCustomerLine = {
   total: number; // items only — fees/shipping excluded, same as the supplier lines
 };
 export type SupplierReportResult =
-  | { ok: true; report: SupplierReport; customers: GroupBuyCustomerLine[] | null; prep: ReportPrep }
+  | {
+      ok: true;
+      report: SupplierReport;
+      customers: GroupBuyCustomerLine[] | null;
+      prep: ReportPrep;
+      /** Owner-facing headline counts — cancelled excluded from vials/sales. */
+      counts: RoundSummary;
+      /** Vials to buy per product, cancelled orders excluded. */
+      productsToOrder: ProductToOrder[];
+      /** One row per order LINE, cancelled included and flagged. */
+      orderRows: RoundOrderRow[];
+      /** Orders that belong to no round's window — surfaced, never dropped. */
+      unlinked: number;
+    }
   | { error: string };
 
 const NOT_SIGNED_IN = "Not signed in to the store admin.";
@@ -411,28 +435,64 @@ export async function getGroupBuySupplierReportAction(
   if (!gbId) return { error: "Missing group buy id." };
 
   try {
-    let orders: Order[];
+    const rounds = await loadGroupBuys(tenantId, slug);
+    const round = rounds.find((g) => g.id === gbId);
+    if (!round) return { error: "Group buy not found." };
+
+    // Load the CANDIDATES, not "the round's orders". A round's orders can't be
+    // selected with `where: { groupBuyId: gbId }` — that was the bug. groupBuyId
+    // is stamped once at checkout by groupBuyForOrder(), which silently stamps
+    // NULL whenever the round's productIds assignment doesn't cover what the
+    // customer actually bought, and nothing ever backfills it. So we fetch the
+    // orders stamped for THIS round plus every unattributed order, and let
+    // resolveRoundOrders() apply the window fallback. Orders stamped for another
+    // round are excluded in SQL — they already belong somewhere else.
+    let candidates: LinkableOrder[];
     if (isDemoMode()) {
-      orders = getDemoStoreOrders(slug).filter((o) => o.groupBuyId === gbId);
+      candidates = getDemoStoreOrders(slug)
+        .filter((o) => !o.groupBuyId || o.groupBuyId === gbId)
+        .map(toLinkableOrder);
     } else {
       const rows = await withTenant(tenantId, (db) =>
         db.storefrontOrder.findMany({
-          where: { groupBuyId: gbId },
-          select: { orderNumber: true, status: true, paymentStatus: true, items: true, customer: true },
+          where: { OR: [{ groupBuyId: gbId }, { groupBuyId: null }] },
+          select: {
+            orderNumber: true,
+            status: true,
+            paymentStatus: true,
+            paymentMethod: true,
+            paymentProofUrl: true,
+            placedAt: true,
+            items: true,
+            customer: true,
+            shipping: true,
+            groupBuyId: true,
+            groupBuyName: true,
+          },
+          orderBy: { placedAt: "asc" },
         }),
       );
-      orders = rows.map((r) => ({
-        orderNumber: r.orderNumber,
-        status: r.status,
-        paymentStatus: r.paymentStatus,
-        items: r.items,
-        customer: r.customer,
-      })) as unknown as Order[];
+      candidates = rows.map((r) => toLinkableOrder(r));
     }
+
+    const roundWindows: ReportRoundWindow[] = rounds.map((g) => ({
+      id: g.id,
+      name: g.name,
+      status: g.status,
+      startsAt: g.startsAt,
+      endsAt: g.endsAt,
+      createdAt: g.createdAt,
+    }));
+    const resolved = resolveRoundOrders(
+      roundWindows.find((r) => r.id === gbId)!,
+      candidates,
+      roundWindows,
+    );
+    const orders = resolved.orders as unknown as Order[];
 
     const report = buildSupplierReport(
       gbId,
-      orders.map((o) => ({ status: o.status, paymentStatus: o.paymentStatus, items: o.items ?? [] })),
+      resolved.orders.map((o) => ({ status: o.status, paymentStatus: o.paymentStatus, items: o.items ?? [] })),
     );
 
     let customers: GroupBuyCustomerLine[] | null = null;
@@ -459,39 +519,58 @@ export async function getGroupBuySupplierReportAction(
       customers = [...byKey.values()].sort((a, b) => b.total - a.total);
     }
 
-    // Structured 3-sheet workbook prep for the client's lazy exceljs serializer.
-    const round = (await loadGroupBuys(tenantId, slug)).find((g) => g.id === gbId);
-    const prep = prepareReport(
-      {
-        name: round?.name ?? "",
-        status: round?.status ?? "",
-        startsAt: round?.startsAt ?? null,
-        endsAt: round?.endsAt ?? null,
-      },
-      orders.map((o) => {
-        const oo = o as unknown as {
-          orderNumber?: string;
-          status: string;
-          paymentStatus?: string;
-          customer?: { name?: string; email?: string; phone?: string };
-          items?: Array<{ name: string; qty: number; price: number; productId?: string }>;
-        };
-        return {
-          orderNumber: oo.orderNumber,
-          status: oo.status,
-          paymentStatus: oo.paymentStatus,
-          customer: oo.customer,
-          items: oo.items ?? [],
-        };
-      }),
-      // Reuse the report already aggregated above — one pass over the orders, and
-      // the workbook can never diverge from the on-screen numbers.
+    // Structured workbook prep for the client's lazy exceljs serializer. It is
+    // fed the SAME resolved orders and the SAME aggregation the screen renders,
+    // so the download can never disagree with what the owner just looked at.
+    const roundWindow = roundWindows.find((r) => r.id === gbId)!;
+    const prep = prepareReport(roundWindow, resolved.orders, report);
+
+    return {
+      ok: true,
       report,
-    );
-    return { ok: true, report, customers, prep };
+      customers,
+      prep,
+      counts: prep.counts,
+      productsToOrder: prep.productsToOrder,
+      orderRows: prep.orderLines,
+      unlinked: resolved.unlinked,
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't build the report." };
   }
+}
+
+/** Narrow a DB row or demo order to the report's LinkableOrder shape. Untrusted
+ *  JSON columns are cast rather than re-validated — the report only reads them. */
+function toLinkableOrder(r: {
+  orderNumber?: string | null;
+  status: string;
+  paymentStatus?: string | null;
+  paymentMethod?: string | null;
+  paymentProofUrl?: string | null;
+  paymentProof?: string | null;
+  placedAt?: Date | string | null;
+  date?: string;
+  items: unknown;
+  customer: unknown;
+  shipping?: unknown;
+  groupBuyId?: string | null;
+  groupBuyName?: string | null;
+}): LinkableOrder {
+  const placed = r.placedAt ?? r.date ?? "";
+  return {
+    orderNumber: r.orderNumber ?? undefined,
+    date: placed instanceof Date ? placed.toISOString() : String(placed),
+    status: r.status,
+    paymentStatus: r.paymentStatus ?? undefined,
+    paymentMethod: r.paymentMethod ?? undefined,
+    paymentProof: r.paymentProofUrl ?? r.paymentProof ?? null,
+    groupBuyId: r.groupBuyId ?? null,
+    groupBuyName: r.groupBuyName ?? null,
+    customer: (r.customer ?? {}) as LinkableOrder["customer"],
+    shipping: (r.shipping ?? {}) as LinkableOrder["shipping"],
+    items: (Array.isArray(r.items) ? r.items : []) as LinkableOrder["items"],
+  };
 }
 
 // ── Platform operator: per-tenant defaults (Features page) ──────────────────

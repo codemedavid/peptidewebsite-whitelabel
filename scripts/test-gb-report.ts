@@ -105,15 +105,17 @@ check("lines stay sorted by demand qty descending", () => {
 console.log("\nprepareReport — 3-sheet workbook data\n");
 
 const round = {
+  id: "gb-holiday",
   name: "Holiday Round",
   status: "closed",
   startsAt: "2026-06-01T00:00:00.000Z",
   endsAt: "2026-06-30T00:00:00.000Z",
 };
+const D = "2026-06-15T00:00:00.000Z"; // inside the round window
 const reportOrders = [
-  { orderNumber: "A1", status: "pending", paymentStatus: "unpaid", customer: { name: "Ann", email: "ann@x.io" }, items: [line("BPC-157", 2, 100, "p1")] },
-  { orderNumber: "A2", status: "delivered", paymentStatus: "paid", customer: { name: "Bo", email: "bo@x.io" }, items: [line("BPC-157", 1, 100, "p1"), line("TB-500", 4, 50, "p2")] },
-  { orderNumber: "A3", status: "cancelled", paymentStatus: "unpaid", customer: { name: "Cy", email: "cy@x.io" }, items: [line("TB-500", 9, 50, "p2")] },
+  { orderNumber: "A1", date: D, status: "pending", paymentStatus: "unpaid", customer: { name: "Ann", email: "ann@x.io" }, items: [line("BPC-157", 2, 100, "p1")] },
+  { orderNumber: "A2", date: D, status: "delivered", paymentStatus: "paid", customer: { name: "Bo", email: "bo@x.io" }, items: [line("BPC-157", 1, 100, "p1"), line("TB-500", 4, 50, "p2")] },
+  { orderNumber: "A3", date: D, status: "cancelled", paymentStatus: "unpaid", customer: { name: "Cy", email: "cy@x.io" }, items: [line("TB-500", 9, 50, "p2")] },
 ];
 
 check("filename is GB-{slug(name)}-report.xlsx", () => {
@@ -141,12 +143,14 @@ check("Orders sheet lists EVERY line incl cancelled, with Counted Yes/No", () =>
   assert.equal(a1.counted, true);
 });
 
-check("Totals: demand headline + committed alongside + cancelled count", () => {
+check("Totals: owner-facing summary + committed alongside", () => {
   const p = prepareReport(round, reportOrders);
   const get = (label: string) => p.totals.find((t) => t.label === label)?.value;
-  assert.equal(get("Placed Orders"), 2, "demand order count (A1, A2)");
-  assert.equal(get("Cancelled Orders"), 1);
-  assert.equal(get("Total Items"), 7, "demand qty: 2 + (1+4)");
+  assert.equal(get("Total Orders"), 3, "every linked order, cancelled included");
+  assert.equal(get("Total Active Orders"), 2, "A1, A2 — cancelled A3 excluded");
+  assert.equal(get("Total Cancelled Orders"), 1);
+  assert.equal(get("Total Vials Ordered"), 7, "2 + (1+4); A3's 9 vials excluded");
+  assert.equal(get("Total Sales"), 500, "2×100 + 1×100 + 4×50");
   assert.equal(get("Committed Orders"), 1);
   assert.equal(get("Committed Items"), 5, "A2 qty 1+4");
   assert.equal(get("Total Customers"), 2, "unique demand customers: Ann, Bo");
@@ -176,10 +180,13 @@ check("prepareReport uses the injected report instead of re-aggregating (no drif
   assert.equal(p.summary[0].demandQty, 777);
   assert.equal(p.summary[0].committedQty, 5);
   const get = (label: string) => p.totals.find((t) => t.label === label)?.value;
-  assert.equal(get("Total Items"), 777, "report-derived totals reflect the injected report");
-  assert.equal(get("Committed Items"), 5);
-  // The Orders sheet still derives from the raw orders (all 4 lines, cancelled incl).
+  assert.equal(get("Committed Items"), 5, "report-derived totals reflect the injected report");
+  // The owner-facing summary, the Orders sheet and Products to Order all derive
+  // from the RAW orders — they are the same numbers the report page renders, so
+  // an injected supplier report can't make the download disagree with the screen.
+  assert.equal(get("Total Vials Ordered"), 7, "owner summary comes from the orders, not the injected report");
   assert.equal(p.orderLines.length, 4, "order lines still come from the raw orders");
+  assert.equal(p.productsToOrder.reduce((s, r) => s + r.vials, 0), 7, "products to order also come from the raw orders");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

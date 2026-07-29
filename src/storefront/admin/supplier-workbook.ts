@@ -18,18 +18,70 @@ export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> 
   ];
   for (const t of prep.totals) totals.addRow([t.label, t.value]);
 
-  // Product Summary — the sheet the supplier order is built from.
+  // Products to Order — THE sheet the supplier order is placed from: how many
+  // vials of each product to buy. Cancelled orders are excluded completely, so
+  // these numbers can be sent to the supplier as-is.
+  const toOrder = wb.addWorksheet("Products to Order");
+  toOrder.columns = [
+    { header: "Product", width: 42 },
+    { header: "Total Vials to Order", width: 20 },
+    { header: "Orders", width: 10 },
+  ];
+  toOrder.getRow(1).font = { bold: true };
+  for (const p of prep.productsToOrder) toOrder.addRow([p.product, p.vials, p.orders]);
+  toOrder.addRow([]);
+  toOrder.addRow(["TOTAL", prep.counts.totalVials, prep.counts.activeOrders]).font = { bold: true };
+
+  // Product Summary — demand vs the committed (paid/fulfilled) subset.
   const summary = wb.addWorksheet("Product Summary");
   summary.addRow(["Product", "Total Qty Needed (demand)", "Committed Qty", "Orders"]);
   summary.getRow(1).font = { bold: true };
   for (const s of prep.summary) summary.addRow([s.product, s.demandQty, s.committedQty, s.orders]);
 
-  // Orders — one row per line, every order incl cancelled, with a Counted flag.
+  // Orders — one row per line, every order incl cancelled, with a Counted flag
+  // and the full customer detail the owner reconciles payments against.
   const orders = wb.addWorksheet("Orders");
-  orders.addRow(["Order", "Customer", "Product", "Qty", "Price", "Status", "Payment", "Counted"]);
+  orders.columns = [
+    { header: "Order", width: 12 },
+    { header: "Order Date", width: 12 },
+    { header: "Customer", width: 24 },
+    { header: "Contact Number", width: 16 },
+    { header: "Shipping Address", width: 46 },
+    { header: "Batch", width: 18 },
+    { header: "Product", width: 36 },
+    { header: "Vials", width: 8 },
+    { header: "Price", width: 10 },
+    { header: "Payment Method", width: 16 },
+    { header: "Payment Status", width: 15 },
+    { header: "Order Status", width: 13 },
+    { header: "Counted", width: 9 },
+    { header: "Proof of Payment", width: 46 },
+  ];
   orders.getRow(1).font = { bold: true };
   for (const l of prep.orderLines) {
-    orders.addRow([l.orderNumber, l.customer, l.product, l.qty, l.price, l.status, l.paymentStatus, l.counted ? "Yes" : "No"]);
+    const placedAt = new Date(l.orderDate);
+    const row = orders.addRow([
+      l.orderNumber,
+      Number.isNaN(placedAt.getTime()) ? l.orderDate : placedAt,
+      l.customer,
+      l.contact,
+      l.address,
+      l.batch,
+      l.product,
+      l.vials,
+      l.price,
+      l.paymentMethod,
+      l.paymentStatus,
+      l.orderStatus,
+      l.counted ? "Yes" : "No",
+      l.proofUrl ?? "",
+    ]);
+    row.getCell(2).numFmt = "yyyy-mm-dd";
+    // The proof stays a clickable link — the owner opens it, never re-downloads it.
+    if (l.proofUrl) row.getCell(14).value = { text: l.proofUrl, hyperlink: l.proofUrl };
+    // Cancelled lines are present for the audit trail but must never be mistaken
+    // for something to order, so they are struck out.
+    if (!l.counted) row.font = { strike: true, color: { argb: "FF999999" } };
   }
 
   const buffer = await wb.xlsx.writeBuffer();

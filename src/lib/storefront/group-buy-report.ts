@@ -14,23 +14,25 @@ import {
   orderCountsAsDemand,
   type SupplierReport,
 } from "./group-buy";
+import {
+  buildProductsToOrder,
+  buildRoundOrderRows,
+  summarizeRoundOrders,
+  type LinkableOrder,
+  type ProductToOrder,
+  type ReportRoundWindow,
+  type RoundOrderRow,
+  type RoundSummary,
+} from "./group-buy-orders";
 
-export type ReportRound = {
-  name: string;
-  status: string;
-  startsAt?: string | null;
-  endsAt?: string | null;
-};
+/** The round header the workbook labels itself with. */
+export type ReportRound = ReportRoundWindow;
 
 export type ReportCustomer = { name?: string; email?: string; phone?: string };
 export type ReportItem = { name: string; qty: number; price: number; productId?: string };
-export type ReportInputOrder = {
-  orderNumber?: string;
-  status: string;
-  paymentStatus?: string;
-  customer?: ReportCustomer;
-  items: ReportItem[];
-};
+/** Orders reach the workbook in the same shape the report page renders, so the
+ *  export and the screen can never disagree about a customer, status or total. */
+export type ReportInputOrder = LinkableOrder;
 
 export type ReportTotal = { label: string; value: string | number };
 export type ReportSummaryRow = {
@@ -40,21 +42,17 @@ export type ReportSummaryRow = {
   committedQty: number;
   orders: number;
 };
-export type ReportOrderLine = {
-  orderNumber: string;
-  customer: string;
-  product: string;
-  productId: string | null;
-  qty: number;
-  price: number;
-  status: string;
-  paymentStatus: string;
-  counted: boolean;
-};
+/** One row per order LINE on the Orders sheet — the same shape the report page's
+ *  order table renders, so the export can never show different values. */
+export type ReportOrderLine = RoundOrderRow;
 
 export type ReportPrep = {
   filename: string;
   totals: ReportTotal[];
+  /** Headline counts, shared with the on-screen summary tiles. */
+  counts: RoundSummary;
+  /** "Products to Order" — vials to buy per product, cancelled orders excluded. */
+  productsToOrder: ProductToOrder[];
   summary: ReportSummaryRow[];
   orderLines: ReportOrderLine[];
 };
@@ -115,24 +113,16 @@ export function prepareReport(
   }));
 
   // Orders sheet — every order, every line, cancelled included, Counted flag.
-  const orderLines: ReportOrderLine[] = [];
-  for (const o of orders) {
-    const counted = orderCountsAsDemand(o.status);
-    const who = o.customer?.name || o.customer?.email || "—";
-    for (const it of o.items) {
-      orderLines.push({
-        orderNumber: o.orderNumber ?? "—",
-        customer: who,
-        product: it.name,
-        productId: it.productId ?? null,
-        qty: it.qty,
-        price: it.price,
-        status: o.status,
-        paymentStatus: o.paymentStatus ?? "",
-        counted,
-      });
-    }
-  }
+  // Built by the SAME helper the report page renders, so a column can never mean
+  // one thing on screen and another in the download.
+  const orderLines: ReportOrderLine[] = buildRoundOrderRows(round, orders);
+
+  // "Products to Order" — the sheet the supplier order is placed from. Cancelled
+  // orders are excluded completely (ordering against them means over-buying).
+  const productsToOrder = buildProductsToOrder(orders);
+
+  // Headline counts, from the same summarizer the on-screen tiles use.
+  const counts = summarizeRoundOrders(orders);
 
   const uniqueCustomers = new Set(demand.map((o) => customerKey(o.customer)));
 
@@ -142,14 +132,17 @@ export function prepareReport(
     { label: "Opens", value: round.startsAt ?? "—" },
     { label: "Closes", value: round.endsAt ?? "—" },
     { label: "—", value: "—" },
-    // DEMAND is the headline — the supplier order is sized against these.
-    { label: "Placed Orders", value: demand.length },
-    { label: "Cancelled Orders", value: orders.length - demand.length },
+    // The owner-facing summary — identical labels and values to the report page.
+    { label: "Total Orders", value: counts.totalOrders },
+    { label: "Total Active Orders", value: counts.activeOrders },
+    { label: "Total Confirmed Orders", value: counts.confirmedOrders },
+    { label: "Total Pending Orders", value: counts.pendingOrders },
+    { label: "Total Cancelled Orders", value: counts.cancelledOrders },
+    { label: "Total Vials Ordered", value: counts.totalVials },
+    { label: "Total Sales", value: counts.totalSales },
     { label: "Total Customers", value: uniqueCustomers.size },
-    { label: "Total Items", value: report.totalQty },
-    { label: "Total Revenue", value: report.totalRevenue },
     { label: "—", value: "—" },
-    // COMMITTED reported ALONGSIDE, never instead of demand.
+    // COMMITTED (paid/fulfilled) reported ALONGSIDE, never instead of the above.
     { label: "Committed Orders", value: committed.length },
     { label: "Committed Items", value: report.committedTotalQty },
     { label: "Committed Revenue", value: report.committedTotalRevenue },
@@ -157,9 +150,16 @@ export function prepareReport(
     {
       label: "Note",
       value:
-        "Placed/Total = DEMAND (every order except cancelled/refunded, paid or not) — size the supplier order against these. Committed = the paid/fulfilled subset, shown for reference.",
+        "Cancelled orders are listed on the Orders sheet but excluded from Total Vials Ordered, Total Sales and Products to Order. Active = Confirmed (paid) + Pending (unpaid) — size the supplier order against Products to Order.",
     },
   ];
 
-  return { filename: `GB-${slug(round.name)}-report.xlsx`, totals, summary, orderLines };
+  return {
+    filename: `GB-${slug(round.name)}-report.xlsx`,
+    totals,
+    counts,
+    productsToOrder,
+    summary,
+    orderLines,
+  };
 }

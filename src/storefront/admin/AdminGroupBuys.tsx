@@ -335,7 +335,10 @@ function ReportModal({
   const [report, setReport] = useState<SupplierReport | null>(null);
   const [customers, setCustomers] = useState<GroupBuyCustomerLine[] | null>(null);
   const [prep, setPrep] = useState<ReportPrep | null>(null);
+  const [unlinked, setUnlinked] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /** The proof-of-payment image being inspected full-size, or null. */
+  const [proofPreview, setProofPreview] = useState<{ url: string; order: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -346,6 +349,7 @@ function ReportModal({
         setReport(res.report);
         setCustomers(res.customers);
         setPrep(res.prep);
+        setUnlinked(res.unlinked);
       }
     });
     return () => {
@@ -353,34 +357,65 @@ function ReportModal({
     };
   }, [groupBuy.id]);
 
+  // Esc closes the proof lightbox before the report modal, so one keypress never
+  // dismisses both.
+  useEffect(() => {
+    if (!proofPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProofPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [proofPreview]);
+
+  const counts = prep?.counts ?? null;
+  const orderRows = prep?.orderLines ?? [];
+  const productsToOrder = prep?.productsToOrder ?? [];
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  };
+
   const money = (n: number) => `${currency}${n.toLocaleString()}`;
 
   const fileStem = `group-buy-${groupBuy.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-report`;
 
   /** Shared HTML table markup for the Excel (.xls) and PDF (print) exports. */
   const reportHtml = (): string => {
-    if (!report) return "";
+    if (!report || !counts) return "";
     const esc = (v: string | number) =>
       String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const supplierRows = report.lines
+    const supplierRows = productsToOrder
       .map(
         (l) =>
-          `<tr><td>${esc(l.name)}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${esc(
-            money(l.revenue),
-          )}</td></tr>`,
+          `<tr><td>${esc(l.product)}</td><td style="text-align:right">${l.vials}</td><td style="text-align:right">${l.orders}</td></tr>`,
       )
       .join("");
     const supplierTable = `
-      <h3>Supplier order list</h3>
+      <h3>Products to order</h3>
       <table>
-        <thead><tr><th>Product</th><th style="text-align:right">Qty</th><th style="text-align:right">Revenue</th></tr></thead>
+        <thead><tr><th>Product</th><th style="text-align:right">Vials to order</th><th style="text-align:right">Orders</th></tr></thead>
         <tbody>${supplierRows}
           <tr style="font-weight:bold;border-top:2px solid #000">
-            <td>TOTAL</td><td style="text-align:right">${report.totalQty}</td><td style="text-align:right">${esc(
-              money(report.totalRevenue),
-            )}</td>
+            <td>TOTAL</td><td style="text-align:right">${counts.totalVials}</td><td></td>
           </tr>
         </tbody>
+      </table>
+      <h3>Orders</h3>
+      <table>
+        <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Contact</th><th>Address</th><th>Batch</th><th>Product</th><th style="text-align:right">Vials</th><th>Payment</th><th>Pay status</th><th>Order status</th></tr></thead>
+        <tbody>${orderRows
+          .map(
+            (l) =>
+              `<tr${l.counted ? "" : ' style="opacity:.55;text-decoration:line-through"'}><td>${esc(l.orderNumber)}</td><td>${esc(
+                fmtDate(l.orderDate),
+              )}</td><td>${esc(l.customer)}</td><td>${esc(l.contact)}</td><td>${esc(l.address)}</td><td>${esc(
+                l.batch,
+              )}</td><td>${esc(l.product)}</td><td style="text-align:right">${l.vials}</td><td>${esc(
+                l.paymentMethod,
+              )}</td><td>${esc(l.paymentStatus)}</td><td>${esc(l.orderStatus)}</td></tr>`,
+          )
+          .join("")}</tbody>
       </table>`;
     const customerTable =
       customers && customers.length
@@ -399,8 +434,9 @@ function ReportModal({
       </table>`
         : "";
     return `
-      <h1>Supplier Report — ${esc(groupBuy.name)}</h1>
-      <p>${report.orderCount} order(s) · ${report.totalQty} units · ${esc(money(report.totalRevenue))} in items</p>
+      <h1>Group Buy Report — ${esc(groupBuy.name)}</h1>
+      <p>${counts.totalOrders} order(s) · ${counts.activeOrders} active · ${counts.confirmedOrders} confirmed · ${counts.pendingOrders} pending · ${counts.cancelledOrders} cancelled<br/>
+         ${counts.totalVials} vials · ${esc(money(counts.totalSales))} in sales <em>(cancelled orders excluded)</em></p>
       ${supplierTable}
       ${customerTable}`;
   };
@@ -432,12 +468,55 @@ function ReportModal({
   };
 
   const downloadCsv = () => {
-    if (!report) return;
+    if (!report || !counts) return;
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const rows = [
-      ["Product", "Quantity", "Revenue"],
-      ...report.lines.map((l) => [l.name, l.qty, l.revenue]),
-      ["TOTAL", report.totalQty, report.totalRevenue],
+    // Same three blocks the screen shows, in the same order: what to order, the
+    // headline counts, then every order line (cancelled included but flagged).
+    const rows: (string | number)[][] = [
+      ["Product", "Total Vials to Order", "Orders"],
+      ...productsToOrder.map((l) => [l.product, l.vials, l.orders]),
+      ["TOTAL", counts.totalVials, counts.activeOrders],
+      [],
+      ["Total Orders", counts.totalOrders],
+      ["Total Active Orders", counts.activeOrders],
+      ["Total Confirmed Orders", counts.confirmedOrders],
+      ["Total Pending Orders", counts.pendingOrders],
+      ["Total Cancelled Orders", counts.cancelledOrders],
+      ["Total Vials Ordered", counts.totalVials],
+      ["Total Sales", counts.totalSales],
+      [],
+      [
+        "Order",
+        "Order Date",
+        "Customer",
+        "Contact Number",
+        "Shipping Address",
+        "Batch",
+        "Product",
+        "Vials",
+        "Price",
+        "Payment Method",
+        "Payment Status",
+        "Order Status",
+        "Counted",
+        "Proof of Payment",
+      ],
+      ...orderRows.map((l) => [
+        l.orderNumber,
+        fmtDate(l.orderDate),
+        l.customer,
+        l.contact,
+        l.address,
+        l.batch,
+        l.product,
+        l.vials,
+        l.price,
+        l.paymentMethod,
+        l.paymentStatus,
+        l.orderStatus,
+        l.counted ? "Yes" : "No",
+        l.proofUrl ?? "",
+      ]),
     ];
     if (customers && customers.length) {
       rows.push([], ["Customer", "Orders", "Quantity"], ...customers.map((c) => [
@@ -472,35 +551,155 @@ function ReportModal({
         )}
         {!report && !error && <div className="admin-modal__row">Building the report…</div>}
 
-        {report && (
+        {report && counts && (
           <>
-            <div className="admin-modal__row" style={{ fontSize: 13, opacity: 0.8 }}>
-              {report.orderCount} order{report.orderCount === 1 ? "" : "s"} · {report.totalQty}{" "}
-              units · {money(report.totalRevenue)} in items
+            {/* Summary — cancelled orders never feed vials or sales. */}
+            <div
+              className="admin-modal__row"
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(104px,1fr))", gap: 8 }}
+            >
+              {[
+                { label: "Total Orders", value: counts.totalOrders },
+                { label: "Active", value: counts.activeOrders },
+                { label: "Confirmed", value: counts.confirmedOrders },
+                { label: "Pending", value: counts.pendingOrders },
+                { label: "Cancelled", value: counts.cancelledOrders },
+                { label: "Vials Ordered", value: counts.totalVials },
+                { label: "Total Sales", value: money(counts.totalSales) },
+              ].map((tile) => (
+                <div
+                  key={tile.label}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "rgba(0,0,0,.04)",
+                    border: "1px solid rgba(0,0,0,.08)",
+                  }}
+                >
+                  <div style={{ fontSize: 11, opacity: 0.65, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                    {tile.label}
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3 }}>{tile.value}</div>
+                </div>
+              ))}
             </div>
 
-            {report.lines.length === 0 ? (
+            {unlinked > 0 && (
+              <div className="admin-modal__row" style={{ fontSize: 12, opacity: 0.75 }}>
+                {unlinked} other order{unlinked === 1 ? " was" : "s were"} placed outside every group
+                buy&rsquo;s date range, so {unlinked === 1 ? "it isn't" : "they aren't"} counted here.
+                Adjust this round&rsquo;s open/close dates to include {unlinked === 1 ? "it" : "them"}.
+              </div>
+            )}
+
+            {productsToOrder.length === 0 ? (
               <div className="admin-empty-set">No orders were placed under this group buy yet.</div>
             ) : (
               <div className="admin-modal__row">
+                <label className="admin-field__label">Products to order</label>
                 <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ textAlign: "left", opacity: 0.7 }}>
                       <th style={{ padding: "4px 0" }}>Product</th>
-                      <th style={{ textAlign: "right" }}>Qty</th>
-                      <th style={{ textAlign: "right" }}>Revenue</th>
+                      <th style={{ textAlign: "right" }}>Vials to order</th>
+                      <th style={{ textAlign: "right" }}>Orders</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {report.lines.map((l) => (
-                      <tr key={l.productId ?? l.name} style={{ borderTop: "1px solid rgba(0,0,0,.08)" }}>
-                        <td style={{ padding: "6px 0" }}>{l.name}</td>
-                        <td style={{ textAlign: "right", fontWeight: 600 }}>{l.qty}</td>
-                        <td style={{ textAlign: "right" }}>{money(l.revenue)}</td>
+                    {productsToOrder.map((l) => (
+                      <tr key={l.productId ?? l.product} style={{ borderTop: "1px solid rgba(0,0,0,.08)" }}>
+                        <td style={{ padding: "6px 0" }}>{l.product}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700 }}>{l.vials}</td>
+                        <td style={{ textAlign: "right", opacity: 0.7 }}>{l.orders}</td>
                       </tr>
                     ))}
+                    <tr style={{ borderTop: "2px solid rgba(0,0,0,.25)", fontWeight: 700 }}>
+                      <td style={{ padding: "6px 0" }}>TOTAL</td>
+                      <td style={{ textAlign: "right" }}>{counts.totalVials}</td>
+                      <td />
+                    </tr>
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {orderRows.length > 0 && (
+              <div className="admin-modal__row">
+                <label className="admin-field__label">Orders ({counts.totalOrders})</label>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", minWidth: 900 }}>
+                    <thead>
+                      <tr style={{ textAlign: "left", opacity: 0.7 }}>
+                        <th style={{ padding: "4px 6px 4px 0" }}>Order</th>
+                        <th style={{ padding: "4px 6px" }}>Date</th>
+                        <th style={{ padding: "4px 6px" }}>Customer</th>
+                        <th style={{ padding: "4px 6px" }}>Contact</th>
+                        <th style={{ padding: "4px 6px" }}>Shipping address</th>
+                        <th style={{ padding: "4px 6px" }}>Batch</th>
+                        <th style={{ padding: "4px 6px" }}>Product</th>
+                        <th style={{ padding: "4px 6px", textAlign: "right" }}>Vials</th>
+                        <th style={{ padding: "4px 6px" }}>Payment</th>
+                        <th style={{ padding: "4px 6px" }}>Pay status</th>
+                        <th style={{ padding: "4px 6px" }}>Order status</th>
+                        <th style={{ padding: "4px 6px" }}>Proof</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderRows.map((l, i) => (
+                        <tr
+                          key={`${l.orderNumber}-${l.productId ?? l.product}-${i}`}
+                          style={{
+                            borderTop: "1px solid rgba(0,0,0,.08)",
+                            opacity: l.counted ? 1 : 0.5,
+                            textDecoration: l.counted ? "none" : "line-through",
+                          }}
+                        >
+                          <td style={{ padding: "6px 6px 6px 0", whiteSpace: "nowrap" }}>{l.orderNumber}</td>
+                          <td style={{ padding: "6px", whiteSpace: "nowrap" }}>{fmtDate(l.orderDate)}</td>
+                          <td style={{ padding: "6px" }}>{l.customer}</td>
+                          <td style={{ padding: "6px", whiteSpace: "nowrap" }}>{l.contact}</td>
+                          <td style={{ padding: "6px", maxWidth: 220 }}>{l.address}</td>
+                          <td style={{ padding: "6px" }}>{l.batch}</td>
+                          <td style={{ padding: "6px" }}>{l.product}</td>
+                          <td style={{ padding: "6px", textAlign: "right", fontWeight: 600 }}>{l.vials}</td>
+                          <td style={{ padding: "6px" }}>{l.paymentMethod}</td>
+                          <td style={{ padding: "6px" }}>
+                            <PaymentBadge status={l.paymentStatus} />
+                          </td>
+                          <td style={{ padding: "6px" }}>{l.orderStatus}</td>
+                          <td style={{ padding: "6px" }}>
+                            {l.proofUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setProofPreview({ url: l.proofUrl!, order: l.orderNumber })}
+                                title="Click to view the payment proof full size"
+                                style={{
+                                  padding: 0,
+                                  border: "1px solid rgba(0,0,0,.15)",
+                                  borderRadius: 4,
+                                  background: "none",
+                                  cursor: "zoom-in",
+                                  lineHeight: 0,
+                                }}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={l.proofUrl}
+                                  alt={`Payment proof for order ${l.orderNumber}`}
+                                  width={44}
+                                  height={44}
+                                  style={{ width: 44, height: 44, objectFit: "cover", display: "block", borderRadius: 3 }}
+                                />
+                              </button>
+                            ) : (
+                              <span style={{ opacity: 0.5 }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -533,17 +732,17 @@ function ReportModal({
         )}
 
         <div className="admin-modal__actions">
-          {report && report.lines.length > 0 && caps.reports.csv && (
+          {productsToOrder.length > 0 && caps.reports.csv && (
             <button className="admin-btn admin-btn--ghost" onClick={downloadCsv}>
               CSV
             </button>
           )}
-          {report && report.lines.length > 0 && caps.reports.excel && (
+          {productsToOrder.length > 0 && caps.reports.excel && (
             <button className="admin-btn admin-btn--ghost" onClick={downloadExcel}>
               Excel
             </button>
           )}
-          {report && report.lines.length > 0 && caps.reports.pdf && (
+          {productsToOrder.length > 0 && caps.reports.pdf && (
             <button className="admin-btn admin-btn--ghost" onClick={downloadPdf}>
               PDF
             </button>
@@ -553,7 +752,90 @@ function ReportModal({
           </button>
         </div>
       </div>
+
+      {/* Proof-of-payment lightbox — the owner inspects the upload in place;
+          nothing has to be downloaded to be read. Stops propagation so clicking
+          it doesn't also close the report modal underneath. */}
+      {proofPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Payment proof for order ${proofPreview.order}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setProofPreview(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            background: "rgba(0,0,0,.82)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 12,
+            padding: 24,
+            cursor: "zoom-out",
+          }}
+        >
+          <div style={{ color: "#fff", fontSize: 13, display: "flex", gap: 12, alignItems: "center" }}>
+            <span>Payment proof — {proofPreview.order}</span>
+            <a
+              href={proofPreview.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: "#9cf", textDecoration: "underline" }}
+            >
+              Open in new tab
+            </a>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={proofPreview.url}
+            alt={`Payment proof for order ${proofPreview.order}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "min(1100px, 94vw)",
+              maxHeight: "82vh",
+              objectFit: "contain",
+              borderRadius: 6,
+              background: "#fff",
+              cursor: "default",
+            }}
+          />
+          <div style={{ color: "rgba(255,255,255,.6)", fontSize: 12 }}>Click anywhere or press Esc to close</div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Pending / Confirmed / Cancelled, colour-coded so a cancelled order can't be
+ *  mistaken for a paid one at a glance. */
+function PaymentBadge({ status }: { status: "Pending" | "Confirmed" | "Cancelled" }) {
+  const tone =
+    status === "Confirmed"
+      ? { bg: "rgba(22,140,80,.12)", fg: "#0f7a45" }
+      : status === "Cancelled"
+        ? { bg: "rgba(200,40,40,.12)", fg: "#b32626" }
+        : { bg: "rgba(190,140,0,.14)", fg: "#8a6500" };
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 7px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        background: tone.bg,
+        color: tone.fg,
+      }}
+    >
+      {status}
+    </span>
   );
 }
 
