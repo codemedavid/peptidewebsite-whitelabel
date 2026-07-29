@@ -85,6 +85,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Group Buy MANAGEMENT (the "Group Buys" manager view). Server-derived from
   // the groupbuy.module entitlement via brand.groupBuyCaps. Default OFF.
   groupbuys: (b) => b.groupBuyCaps?.enabled === true,
+  // A single round's dedicated dashboard. Gated on the same entitlement as the
+  // manager it opens from, so a #groupbuy-detail deep-link can't bypass the
+  // hidden menu (AdminPage's activeView guard runs isAdminViewVisible).
+  "groupbuy-detail": (b) => b.groupBuyCaps?.enabled === true,
   // Staff Accounts manager (+ its staff-form editor sub-view). Server-derived
   // from the platform Features toggle (FEATURES.STORE_STAFF_ACCOUNTS) into
   // brand.showAdminStaff. ON for Business/Automated, operator-grantable on

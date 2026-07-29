@@ -427,10 +427,26 @@ model GroupBuy {
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
   description String    @default("")
-  status      String    @default("draft") // draft | scheduled | active | closed | archived
+  status      String    @default("draft") // draft | scheduled | active | closed | cancelled | archived
   startsAt    DateTime? // scheduled window — goes live at startsAt (groupbuy.scheduled)
   endsAt      DateTime? // closes automatically once endsAt passes
   deliveryEta String    @default("") // customer-facing ETA, e.g. "3–4 weeks after close"
+  // Owner-typed batch label for the round, e.g. "TR30-B1". Blank/NULL falls back
+  // to the round name everywhere it is displayed.
+  batchNumber String?
+  // Vial thresholds for the round's dashboard. minVials is the "minimum
+  // requirement" the round needs to be viable; maxVials is the ceiling that
+  // progress and completion % are measured against. Both NULL = not configured,
+  // which renders as "not set" rather than a misleading 0.
+  //
+  // NOTE: deliberately NOT the same as slotGoal below. slotGoal drives the
+  // CUSTOMER-FACING storefront progress bar; these are the owner's supplier
+  // planning numbers. Overloading slotGoal would change what shoppers see.
+  minVials    Int?
+  maxVials    Int?
+  // When the round actually closed, stamped on the transition to closed. endsAt
+  // is only the *scheduled* close, so it can't answer "when did this finish?".
+  closedAt    DateTime?
   // Product ids assigned to this group buy (groupbuy.product_assignment).
   // Empty array = the group buy covers the whole catalog.
   productIds  Json      @default("[]")

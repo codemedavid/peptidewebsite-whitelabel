@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Brand, Order, Product } from "../types";
+import type { GroupBuy } from "@/lib/storefront/group-buy";
 import { useStore } from "../store";
 import { AdminShell } from "./AdminShell";
 import { AdminDashboard } from "./AdminDashboard";
@@ -29,6 +30,7 @@ import { AdminAccessCode } from "./AdminAccessCode";
 import { AdminCheckoutRules } from "./AdminCheckoutRules";
 import { AdminFeeSettings } from "./AdminFeeSettings";
 import { AdminGroupBuys } from "./AdminGroupBuys";
+import { AdminGroupBuyDetail } from "./AdminGroupBuyDetail";
 import { AdminGroupBuyRules } from "./AdminGroupBuyRules";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
@@ -68,6 +70,7 @@ type View =
   | "checkout"
   | "fee"
   | "groupbuys"
+  | "groupbuy-detail"
   | "groupbuy"
   | "hero"
   | "banner"
@@ -93,6 +96,9 @@ export function AdminPage({
   const [view, setView] = useState<View>("dashboard");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+  // The round whose dedicated dashboard is open. Same master-detail shape as
+  // viewingOrder — the list hands the row over, the detail view hands back.
+  const [viewingGroupBuy, setViewingGroupBuy] = useState<GroupBuy | null>(null);
   const [editingStaff, setEditingStaff] = useState<StaffListItem | null>(null);
 
   // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
@@ -267,7 +273,30 @@ export function AdminPage({
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;
-  if (activeView === "groupbuys") return <AdminGroupBuys brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "groupbuys") {
+    return (
+      <AdminGroupBuys
+        brand={brand}
+        onBack={() => setView("dashboard")}
+        onOpen={(gb) => {
+          setViewingGroupBuy(gb);
+          setView("groupbuy-detail");
+        }}
+      />
+    );
+  }
+  if (activeView === "groupbuy-detail" && viewingGroupBuy) {
+    return (
+      <AdminGroupBuyDetail
+        brand={brand}
+        groupBuy={viewingGroupBuy}
+        onBack={() => {
+          setViewingGroupBuy(null);
+          setView("groupbuys");
+        }}
+      />
+    );
+  }
   if (activeView === "groupbuy") return <AdminGroupBuyRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;

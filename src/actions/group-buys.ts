@@ -83,15 +83,40 @@ import {
   type RoundOrderRow,
   type RoundSummary,
 } from "@/lib/storefront/group-buy-orders";
+import {
+  buildRoundAnalytics,
+  buildRoundListRow,
+  type AnalyticsRound,
+  type RoundAnalytics,
+  type RoundListRow,
+} from "@/lib/storefront/group-buy-analytics";
 import type { Order } from "@/storefront/types";
 
 export type ListGroupBuysResult =
   | {
       ok: true;
       groupBuys: GroupBuy[];
+      /** Per-round management-list stats, keyed by round id order-matched to
+       *  `groupBuys`. Derived from the same analytics the dashboard renders. */
+      rows: RoundListRow[];
       caps: GroupBuyCapabilities;
       settings: GroupBuySettings;
       content: GroupBuyContent;
+    }
+  | { error: string };
+
+/** Everything one round's dedicated dashboard renders, in a single round trip. */
+export type GroupBuyDashboardResult =
+  | {
+      ok: true;
+      groupBuy: GroupBuy;
+      analytics: RoundAnalytics;
+      orderRows: RoundOrderRow[];
+      /** Workbook prep for THIS round only. */
+      prep: ReportPrep;
+      caps: GroupBuyCapabilities;
+      /** Orders belonging to no round's window — surfaced, never dropped. */
+      unlinked: number;
     }
   | { error: string };
 export type SaveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: string };
@@ -155,9 +180,156 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
     const config = await readTenantConfig(tenantId);
     const settings = normalizeGroupBuySettings(config.groupBuySettings);
     const content = normalizeGroupBuyContent(config.groupBuyContent);
-    return { ok: true, groupBuys, caps, settings, content };
+
+    // One query for every candidate order, then resolve per round in memory —
+    // never one query per round, which would be an N+1 on the list page.
+    const candidates = await loadCandidateOrders(tenantId, slug, groupBuys);
+    const productNames = await loadProductNames(tenantId, slug, groupBuys);
+    const windows = groupBuys.map(toAnalyticsRound);
+    const rows = groupBuys.map((gb, i) =>
+      buildRoundListRow(
+        windows[i],
+        resolveRoundOrders(windows[i], candidates, windows).orders,
+        productNames,
+      ),
+    );
+
+    return { ok: true, groupBuys, rows, caps, settings, content };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load group buys." };
+  }
+}
+
+/** A GroupBuy narrowed to what the analytics need — one place, so the list and
+ *  the dashboard can never disagree about which fields feed the numbers. */
+function toAnalyticsRound(gb: GroupBuy): AnalyticsRound {
+  return {
+    id: gb.id,
+    name: gb.name,
+    status: gb.status,
+    startsAt: gb.startsAt,
+    endsAt: gb.endsAt,
+    createdAt: gb.createdAt,
+    batchNumber: gb.batchNumber,
+    minVials: gb.minVials,
+    maxVials: gb.maxVials,
+    closedAt: gb.closedAt,
+    productIds: gb.productIds,
+  };
+}
+
+/**
+ * The orders any round might own: everything already attributed to a round, plus
+ * everything unattributed that could fall in a round's window.
+ *
+ * Deliberately NOT `where: { groupBuyId: <id> }`. That column is stamped once at
+ * checkout and is NULL whenever the round's product assignment didn't cover what
+ * the customer bought — the k-glow bug. resolveRoundOrders() narrows this
+ * superset down to exactly one owning round per order.
+ *
+ * Bounded by the earliest round start so a tenant with years of on-hand orders
+ * doesn't read its whole history to draw a list of rounds.
+ */
+async function loadCandidateOrders(
+  tenantId: string,
+  slug: string,
+  rounds: GroupBuy[],
+): Promise<LinkableOrder[]> {
+  if (isDemoMode()) {
+    return getDemoStoreOrders(slug).map(toLinkableOrder);
+  }
+  const starts = rounds
+    .map((r) => r.startsAt)
+    .filter((s): s is string => !!s)
+    .sort();
+  const earliest = starts[0] ? new Date(starts[0]) : null;
+  const rows = await withTenant(tenantId, (db) =>
+    db.storefrontOrder.findMany({
+      where: earliest
+        ? { OR: [{ NOT: { groupBuyId: null } }, { placedAt: { gte: earliest } }] }
+        : { NOT: { groupBuyId: null } },
+      select: {
+        orderNumber: true,
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        paymentProofUrl: true,
+        placedAt: true,
+        items: true,
+        customer: true,
+        shipping: true,
+        groupBuyId: true,
+        groupBuyName: true,
+      },
+      orderBy: { placedAt: "asc" },
+    }),
+  );
+  return rows.map(toLinkableOrder);
+}
+
+/** id → name for every product assigned to any round, so the list/dashboard can
+ *  show a product name instead of a cuid. One query, ids only. */
+async function loadProductNames(
+  tenantId: string,
+  slug: string,
+  rounds: GroupBuy[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(rounds.flatMap((r) => r.productIds))];
+  if (ids.length === 0) return new Map();
+  if (isDemoMode()) {
+    const list = getDemoStoreProducts(slug) ?? [];
+    return new Map(list.filter((p) => ids.includes(p.id)).map((p) => [p.id, p.name]));
+  }
+  const rows = await withTenant(tenantId, (db) =>
+    db.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+  );
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+// ── Per-round dashboard ──────────────────────────────────────────────────────
+
+/**
+ * Everything ONE round's dashboard renders. Scoped by construction: the orders
+ * are resolved for this round only (resolveRoundOrders), and every number is
+ * computed from that slice — there is no tenant-wide aggregate anywhere in here,
+ * which is what makes the analytics per-round rather than global.
+ */
+export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyDashboardResult> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug, caps } = gate;
+  const gbId = typeof id === "string" ? id : "";
+  if (!gbId) return { error: "Missing group buy id." };
+
+  try {
+    const rounds = await loadGroupBuys(tenantId, slug);
+    const groupBuy = rounds.find((g) => g.id === gbId);
+    if (!groupBuy) return { error: "Group buy not found." };
+
+    const windows = rounds.map(toAnalyticsRound);
+    const round = windows.find((w) => w.id === gbId)!;
+    const candidates = await loadCandidateOrders(tenantId, slug, rounds);
+    const resolved = resolveRoundOrders(round, candidates, windows);
+    const productNames = await loadProductNames(tenantId, slug, rounds);
+
+    const analytics = buildRoundAnalytics(round, resolved.orders, productNames);
+    const orderRows = buildRoundOrderRows(round, resolved.orders);
+
+    // The export is fed the SAME resolved orders and the same aggregation, so a
+    // download can never disagree with the dashboard it was taken from.
+    const report = buildSupplierReport(
+      gbId,
+      resolved.orders.map((o) => ({
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        items: o.items ?? [],
+      })),
+    );
+    const prep = prepareReport(round, resolved.orders, report);
+
+    return { ok: true, groupBuy, analytics, orderRows, prep, caps, unlinked: resolved.unlinked };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't load the group buy." };
   }
 }
 

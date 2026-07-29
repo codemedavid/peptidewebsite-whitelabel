@@ -82,6 +82,10 @@ export function quickActionToView(quickActionId: string): string {
  */
 export function permissionViewFor(view: string): string {
   if (view === "order-detail") return "orders";
+  // A round's dedicated dashboard is a sub-view of the Group Buys manager, so it
+  // inherits that grant rather than needing one of its own — otherwise a
+  // #groupbuy-detail deep-link would be reachable without the groupbuys module.
+  if (view === "groupbuy-detail") return "groupbuys";
   return view;
 }
 

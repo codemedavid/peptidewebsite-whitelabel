@@ -9,6 +9,10 @@ export const GROUP_BUY_STATUSES = [
   "scheduled",
   "active",
   "closed",
+  // A round the owner called off rather than completed. Distinct from "closed":
+  // closed means it ran and finished, cancelled means it never delivered. Both
+  // are terminal and neither is ever live.
+  "cancelled",
   "archived",
 ] as const;
 
@@ -27,6 +31,16 @@ export type GroupBuy = {
   // Slot goal for the storefront progress bar ("18 of 30 slots filled"). 0 = the
   // goal is OFF and no progress bar renders — the owner sets/clears it per round.
   slotGoal: number;
+  /** Owner-typed batch label ("TR30-B1"). Empty falls back to `name` on display. */
+  batchNumber: string;
+  /** Minimum vials for the round to be viable. null = not configured. */
+  minVials: number | null;
+  /** Vial ceiling that progress and completion % are measured against. null =
+   *  not configured, which renders as "not set" rather than a misleading 0.
+   *  Distinct from slotGoal — that one is the CUSTOMER-facing progress bar. */
+  maxVials: number | null;
+  /** ISO — when the round actually closed. `endsAt` is only the scheduled close. */
+  closedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -153,9 +167,23 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     deliveryEta: str(x.deliveryEta, 200),
     productIds,
     slotGoal: slotGoalInt(x.slotGoal),
+    batchNumber: str(x.batchNumber, 64).trim(),
+    minVials: vialCount(x.minVials),
+    maxVials: vialCount(x.maxVials),
+    closedAt: isoOrNull(x.closedAt),
     createdAt: isoOrNull(x.createdAt) ?? now,
     updatedAt: isoOrNull(x.updatedAt) ?? now,
   };
+}
+
+/** Coerce an untrusted vial threshold to a positive integer, or null when it is
+ *  absent/invalid/zero. null means "not configured" — the dashboard shows
+ *  "not set" instead of a 0 that would read as a real ceiling. */
+function vialCount(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(n, 1000000);
 }
 
 /** Coerce an untrusted slot goal to a clean count: a non-negative integer, capped
@@ -177,7 +205,14 @@ export function effectiveGroupBuyStatus(
   scheduledEnabled: boolean,
   now: Date = new Date(),
 ): GroupBuyStatus {
-  if (gb.status === "draft" || gb.status === "archived" || gb.status === "closed") {
+  // Terminal states short-circuit — a cancelled round must never be derived back
+  // into "active" by its window, or a called-off run would keep taking orders.
+  if (
+    gb.status === "draft" ||
+    gb.status === "archived" ||
+    gb.status === "closed" ||
+    gb.status === "cancelled"
+  ) {
     return gb.status;
   }
   const t = now.getTime();
@@ -319,6 +354,10 @@ export type DbGroupBuyRow = {
   deliveryEta: string;
   productIds: unknown;
   slotGoal?: number | null;
+  batchNumber?: string | null;
+  minVials?: number | null;
+  maxVials?: number | null;
+  closedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -334,6 +373,10 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     deliveryEta: row.deliveryEta,
     productIds: row.productIds,
     slotGoal: row.slotGoal ?? 0,
+    batchNumber: row.batchNumber ?? "",
+    minVials: row.minVials ?? null,
+    maxVials: row.maxVials ?? null,
+    closedAt: row.closedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   });
@@ -349,6 +392,17 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
     deliveryEta: gb.deliveryEta,
     productIds: gb.productIds,
     slotGoal: gb.slotGoal,
+    batchNumber: gb.batchNumber || null,
+    minVials: gb.minVials,
+    maxVials: gb.maxVials,
+    // Stamp the real close the first time the round reaches a terminal state,
+    // and never overwrite it afterwards — reopening then re-closing keeps the
+    // original date rather than silently rewriting history.
+    closedAt: gb.closedAt
+      ? new Date(gb.closedAt)
+      : gb.status === "closed" || gb.status === "cancelled"
+        ? new Date()
+        : null,
   };
 }
 

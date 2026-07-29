@@ -7,6 +7,7 @@
 // same entitlements, so hiding here is UX — not the security boundary.
 
 import { useEffect, useMemo, useState } from "react";
+import type { RoundListRow } from "@/lib/storefront/group-buy-analytics";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import {
@@ -37,6 +38,7 @@ import {
 } from "@/lib/storefront/gb-content";
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
 import { downloadSupplierWorkbook } from "@/storefront/admin/supplier-workbook";
+import { ProofLightbox, PaymentBadge } from "./gb-proof-lightbox";
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -67,6 +69,7 @@ const STATUS_TINT: Record<GroupBuyStatus, string> = {
   scheduled: "cyan",
   active: "green",
   closed: "yellow",
+  cancelled: "red",
   archived: "red",
 };
 
@@ -121,6 +124,10 @@ function GroupBuyModal({
       deliveryEta: settings.defaultDeliveryEta,
       productIds: [] as string[],
       slotGoal: 0,
+      batchNumber: "",
+      minVials: null as number | null,
+      maxVials: null as number | null,
+      closedAt: null as string | null,
       createdAt: "",
       updatedAt: "",
     };
@@ -136,6 +143,9 @@ function GroupBuyModal({
   // Storefront slot-goal for the progress bar. 0 = off (no bar) — the owner can
   // clear the number to hide the progress bar for this round entirely.
   const [slotGoal, setSlotGoal] = useState<number>(seed.slotGoal ?? 0);
+  const [batchNumber, setBatchNumber] = useState<string>(seed.batchNumber ?? "");
+  const [minVials, setMinVials] = useState<number>(seed.minVials ?? 0);
+  const [maxVials, setMaxVials] = useState<number>(seed.maxVials ?? 0);
 
   const statusOptions: GroupBuyStatus[] = caps.scheduled
     ? ["draft", "scheduled", "active", "closed"]
@@ -248,6 +258,56 @@ function GroupBuyModal({
           </div>
         </div>
 
+        {/* Owner-facing planning fields. These drive the round's dashboard only —
+            unlike Slot goal above, nothing here changes what shoppers see. */}
+        <div className="admin-modal__row">
+          <label className="admin-field__label">Batch number</label>
+          <input
+            className="admin-input"
+            maxLength={64}
+            value={batchNumber}
+            placeholder={`Blank uses the name — “${name || "this round"}”`}
+            onChange={(e) => setBatchNumber(e.target.value)}
+          />
+          <div className="admin-field__hint">
+            Your label for this run, e.g. “TR30-B1”. Shown on the dashboard and in every export.
+          </div>
+        </div>
+
+        <div className="admin-modal__row" style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label className="admin-field__label">Minimum vials</label>
+            <input
+              className="admin-input"
+              type="number"
+              min={0}
+              step={1}
+              value={minVials || ""}
+              placeholder="Not set"
+              onChange={(e) => setMinVials(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            />
+            <div className="admin-field__hint">Needed for the run to be viable.</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="admin-field__label">Maximum vials</label>
+            <input
+              className="admin-input"
+              type="number"
+              min={0}
+              step={1}
+              value={maxVials || ""}
+              placeholder="Not set"
+              onChange={(e) => setMaxVials(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            />
+            <div className="admin-field__hint">Progress and completion % measure against this.</div>
+          </div>
+        </div>
+        {minVials > 0 && maxVials > 0 && minVials > maxVials && (
+          <div className="admin-modal__row" style={{ color: "#d33", fontSize: 12 }}>
+            The minimum can&rsquo;t be higher than the maximum.
+          </div>
+        )}
+
         {caps.productAssignment && (
           <div className="admin-modal__row">
             <label className="admin-field__label">Products</label>
@@ -308,6 +368,11 @@ function GroupBuyModal({
                 deliveryEta,
                 productIds,
                 slotGoal,
+                batchNumber,
+                // 0 from the number input means "cleared" — send null so
+                // normalizeGroupBuy stores "not configured" rather than a real 0.
+                minVials: minVials || null,
+                maxVials: maxVials || null,
               })
             }
           >
@@ -753,89 +818,14 @@ function ReportModal({
         </div>
       </div>
 
-      {/* Proof-of-payment lightbox — the owner inspects the upload in place;
-          nothing has to be downloaded to be read. Stops propagation so clicking
-          it doesn't also close the report modal underneath. */}
       {proofPreview && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Payment proof for order ${proofPreview.order}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setProofPreview(null);
-          }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1000,
-            background: "rgba(0,0,0,.82)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 12,
-            padding: 24,
-            cursor: "zoom-out",
-          }}
-        >
-          <div style={{ color: "#fff", fontSize: 13, display: "flex", gap: 12, alignItems: "center" }}>
-            <span>Payment proof — {proofPreview.order}</span>
-            <a
-              href={proofPreview.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={{ color: "#9cf", textDecoration: "underline" }}
-            >
-              Open in new tab
-            </a>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={proofPreview.url}
-            alt={`Payment proof for order ${proofPreview.order}`}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: "min(1100px, 94vw)",
-              maxHeight: "82vh",
-              objectFit: "contain",
-              borderRadius: 6,
-              background: "#fff",
-              cursor: "default",
-            }}
-          />
-          <div style={{ color: "rgba(255,255,255,.6)", fontSize: 12 }}>Click anywhere or press Esc to close</div>
-        </div>
+        <ProofLightbox
+          url={proofPreview.url}
+          label={proofPreview.order}
+          onClose={() => setProofPreview(null)}
+        />
       )}
     </div>
-  );
-}
-
-/** Pending / Confirmed / Cancelled, colour-coded so a cancelled order can't be
- *  mistaken for a paid one at a glance. */
-function PaymentBadge({ status }: { status: "Pending" | "Confirmed" | "Cancelled" }) {
-  const tone =
-    status === "Confirmed"
-      ? { bg: "rgba(22,140,80,.12)", fg: "#0f7a45" }
-      : status === "Cancelled"
-        ? { bg: "rgba(200,40,40,.12)", fg: "#b32626" }
-        : { bg: "rgba(190,140,0,.14)", fg: "#8a6500" };
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 7px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 600,
-        whiteSpace: "nowrap",
-        background: tone.bg,
-        color: tone.fg,
-      }}
-    >
-      {status}
-    </span>
   );
 }
 
@@ -972,9 +962,22 @@ function StorefrontCopyModal({
 
 // ── AdminGroupBuys ────────────────────────────────────────────────────────────
 
-export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+export function AdminGroupBuys({
+  brand,
+  onBack,
+  onOpen,
+}: {
+  brand: Brand;
+  onBack: () => void;
+  /** Open one round's dedicated dashboard. */
+  onOpen: (gb: GroupBuy) => void;
+}) {
   const { toast } = useStore();
   const caps = brand.groupBuyCaps ?? GROUP_BUY_CAPS_OFF;
+  const money = (n: number) => `${brand.currency || "₱"}${n.toLocaleString()}`;
+
+  const [rows, setRows] = useState<RoundListRow[]>([]);
+  const rowsById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
   const [groupBuys, setGroupBuys] = useState<GroupBuy[]>([]);
   const [settings, setSettings] = useState<GroupBuySettings>(GROUP_BUY_SETTINGS_DEFAULTS);
@@ -1040,6 +1043,7 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
       if ("error" in res) setLoadError(res.error);
       else {
         setGroupBuys(res.groupBuys);
+        setRows(res.rows);
         setSettings(res.settings);
         setContent(res.content);
         maybeAutoReport(res.groupBuys);
@@ -1294,20 +1298,46 @@ export function AdminGroupBuys({ brand, onBack }: { brand: Brand; onBack: () => 
           <div className="admin-ship-list" id="gbpanel-rounds" role="tabpanel" aria-labelledby="gbtab-rounds">
             {visible.map((gb) => {
               const eff = effectiveGroupBuyStatus(gb, caps.scheduled);
+              const row = rowsById.get(gb.id);
               return (
                 <div key={gb.id} className="admin-ship-row">
-                  <div className="admin-ship-row__info">
+                  {/* The whole row summary is the link into the round's own
+                      dashboard — a button (not a div with onClick) so it is
+                      keyboard reachable and announced as an action. */}
+                  <button
+                    type="button"
+                    className="admin-ship-row__info"
+                    onClick={() => onOpen(gb)}
+                    aria-label={`Open the dashboard for ${gb.name}`}
+                    style={{
+                      background: "none",
+                      border: 0,
+                      padding: 0,
+                      font: "inherit",
+                      color: "inherit",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      flex: 1,
+                    }}
+                  >
                     <div className="admin-ship-row__name" style={{ fontWeight: 600 }}>
                       {gb.name} <StatusChip status={eff} />
                     </div>
                     <div className="admin-field__hint">
-                      {fmtDate(gb.startsAt)} → {fmtDate(gb.endsAt)}
+                      {row ? `${row.productName} · Batch ${row.batchNumber}` : fmtDate(gb.startsAt)}
                       {gb.deliveryEta ? ` · ETA: ${gb.deliveryEta}` : ""}
-                      {caps.productAssignment
-                        ? ` · ${gb.productIds.length === 0 ? "All products" : `${gb.productIds.length} product${gb.productIds.length === 1 ? "" : "s"}`}`
-                        : ""}
                     </div>
-                  </div>
+                    {row && (
+                      <div className="admin-field__hint">
+                        {row.maxVials === null
+                          ? `${row.currentVials} vials`
+                          : `${row.currentVials}/${row.maxVials} vials`}{" "}
+                        · {row.totalOrders} order{row.totalOrders === 1 ? "" : "s"} ·{" "}
+                        {row.participants} participant{row.participants === 1 ? "" : "s"} ·{" "}
+                        {money(row.grossIncome)} · created {fmtDate(row.createdAt)}
+                      </div>
+                    )}
+                  </button>
                   <div className="admin-ship-row__actions" style={{ display: "inline-flex", gap: 6 }}>
                     {caps.supplierReports && (
                       <button

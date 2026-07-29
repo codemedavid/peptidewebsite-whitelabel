@@ -30,7 +30,22 @@ export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> 
   toOrder.getRow(1).font = { bold: true };
   for (const p of prep.productsToOrder) toOrder.addRow([p.product, p.vials, p.orders]);
   toOrder.addRow([]);
-  toOrder.addRow(["TOTAL", prep.counts.totalVials, prep.counts.activeOrders]).font = { bold: true };
+  toOrder.addRow(["TOTAL VIALS TO ORDER", prep.counts.totalVials, prep.counts.activeOrders]).font = {
+    bold: true,
+  };
+
+  // Summary block, on the same sheet the supplier order is read from, so the
+  // owner sees the money and the order mix without hunting through tabs.
+  toOrder.addRow([]);
+  toOrder.addRow(["SUMMARY"]).font = { bold: true };
+  toOrder.addRow(["Gross Income", prep.counts.totalSales]);
+  toOrder.addRow(["Total Confirmed Orders", prep.counts.confirmedOrders]);
+  toOrder.addRow(["Total Pending Orders", prep.counts.pendingOrders]);
+  toOrder.addRow(["Total Cancelled Orders", prep.counts.cancelledOrders]);
+  toOrder.addRow([
+    "Note",
+    "Vials to order and Gross Income exclude cancelled orders entirely.",
+  ]);
 
   // Product Summary — demand vs the committed (paid/fulfilled) subset.
   const summary = wb.addWorksheet("Product Summary");

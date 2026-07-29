@@ -40,7 +40,12 @@ function check(name: string, fn: () => void | Promise<void>) {
 }
 
 // ──────────────────────────────── fixtures ──────────────────────────────────
-const NOW = new Date("2026-07-17T12:00:00.000Z");
+// Anchored to the REAL clock, not a frozen date. Every fixture window below is
+// a relative offset from this, and the resolver tests that don't pass an
+// explicit `now` fall through to the real clock — a hardcoded date silently
+// expires and turns "the round is live" into "the round closed" once the
+// calendar passes it.
+const NOW = new Date();
 const HOUR = 3_600_000;
 const iso = (offsetMs: number) => new Date(NOW.getTime() + offsetMs).toISOString();
 
@@ -50,6 +55,10 @@ const ROUND_COVERS_P1: GroupBuy = {
   name: "Round 1",
   description: "",
   slotGoal: 0,
+  batchNumber: "",
+  minVials: null,
+  maxVials: null,
+  closedAt: null,
   status: "active",
   startsAt: null,
   endsAt: iso(+24 * HOUR),
