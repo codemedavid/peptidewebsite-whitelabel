@@ -3,7 +3,7 @@ import {
   getTenantOrderFormat,
   getTenantContactChannels,
   getTenantAdminFee,
-  getTenantAdminPassword,
+  getTenantStoreAdminCredential,
   getTenantPlanStatus,
   listTenantDomains,
 } from "@/lib/admin/data";
@@ -22,11 +22,11 @@ export default async function TenantSettingsPage({
 }) {
   const { slug } = await params;
 
-  const [tenant, contact, adminFee, adminPassword, planStatus, domains] = await Promise.all([
+  const [tenant, contact, adminFee, adminCredential, planStatus, domains] = await Promise.all([
     getTenantOrderFormat(slug),
     getTenantContactChannels(slug),
     getTenantAdminFee(slug),
-    getTenantAdminPassword(slug),
+    getTenantStoreAdminCredential(slug),
     getTenantPlanStatus(slug),
     listTenantDomains(slug),
   ]);
@@ -51,7 +51,8 @@ export default async function TenantSettingsPage({
       initialNoticeModalGranted={contact.noticeModalGranted}
       initialAdminFee={adminFee}
       adminFeeEntitled={adminFee.entitled}
-      initialAdminPassword={adminPassword ?? ""}
+      initialAdminEmail={adminCredential?.email ?? ""}
+      initialHasAdminPassword={adminCredential?.hasPassword ?? false}
       domains={<DomainManager slug={slug} initialDomains={domains} />}
     />
   );

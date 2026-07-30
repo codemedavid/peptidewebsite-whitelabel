@@ -20,6 +20,7 @@ import {
   saveRequirePaymentProofAction,
   saveNoticeModalGrantAction,
 } from "@/actions/branding";
+import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import {
   ADMIN_FEE_AMOUNT_MAX,
@@ -95,8 +96,10 @@ type Props = {
   /** Whether the tenant is entitled to the admin-fee feature (admin → Features).
    *  When false the fee section is shown locked — no fee is charged at checkout. */
   adminFeeEntitled: boolean;
-  /** Storefront-admin password override; blank means the default ("admin"). */
-  initialAdminPassword: string;
+  /** The email the store owner signs in to `#admin` with. Blank = never set. */
+  initialAdminEmail: string;
+  /** Whether a password hash exists. The password itself is never sent here. */
+  initialHasAdminPassword: boolean;
   lastSaved?: string;
   /** Plan & status card, rendered first in the sections column (its own save flow). */
   planStatus?: React.ReactNode;
@@ -128,7 +131,8 @@ export function TenantSettingsView({
   initialNoticeModalGranted,
   initialAdminFee,
   adminFeeEntitled,
-  initialAdminPassword,
+  initialAdminEmail,
+  initialHasAdminPassword,
   lastSaved,
   planStatus,
   domains,
@@ -167,9 +171,13 @@ export function TenantSettingsView({
   );
   const currency = initialAdminFee.currency;
 
-  /* ---------- storefront-admin password ---------- */
-  const [adminPassword, setAdminPassword] = useState(initialAdminPassword);
+  /* ---------- storefront-admin credential ----------
+     The password is write-only: we never receive the stored one, so the input
+     starts blank and a blank value on save means "keep the current password". */
+  const [adminEmail, setAdminEmail] = useState(initialAdminEmail);
+  const [adminPassword, setAdminPassword] = useState("");
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [hasAdminPassword, setHasAdminPassword] = useState(initialHasAdminPassword);
 
   /* baseline for dirty tracking; advances on a successful save */
   const baseline = useRef({
@@ -185,7 +193,7 @@ export function TenantSettingsView({
     feeEnabled: initialAdminFee.enabled,
     feeLabel: initialAdminFee.label,
     feeAmount: initialAdminFee.amount > 0 ? String(initialAdminFee.amount) : "",
-    adminPassword: initialAdminPassword,
+    adminEmail: initialAdminEmail,
   });
 
   const [saving, setSaving] = useState<SectionId | "all" | null>(null);
@@ -215,7 +223,13 @@ export function TenantSettingsView({
     feeEnabled !== baseline.current.feeEnabled ||
     feeLabel !== baseline.current.feeLabel ||
     feeAmount !== baseline.current.feeAmount;
-  const adminDirty = adminPassword !== baseline.current.adminPassword;
+  // A typed password is always a change; the email counts only when edited.
+  const adminDirty = adminEmail !== baseline.current.adminEmail || adminPassword.trim() !== "";
+  const adminCheck = validateStoreAdminCredentialInput({
+    email: adminEmail,
+    password: adminPassword,
+    hasExistingPassword: hasAdminPassword,
+  });
   const anyDirty =
     ordersDirty || channelsDirty || proofDirty || feeDirty || copyDirty || adminDirty;
 
@@ -355,10 +369,12 @@ export function TenantSettingsView({
   async function saveAdminPassword(): Promise<boolean> {
     setSaving("admin");
     setErrors((e) => ({ ...e, admin: undefined }));
-    const res = await saveAdminPasswordAction(slug, adminPassword);
+    const res = await saveAdminPasswordAction(slug, adminPassword, adminEmail);
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, adminPassword };
+      baseline.current = { ...baseline.current, adminEmail };
+      if (adminPassword.trim()) setHasAdminPassword(true);
+      setAdminPassword("");
       setSaved((s) => ({ ...s, admin: true }));
       return true;
     }
@@ -373,7 +389,7 @@ export function TenantSettingsView({
     if ((channelsDirty || copyDirty) && incompleteChannels.length === 0) await saveChannelsAndCopy("channels");
     if (proofDirty) await saveProof();
     if (feeDirty && feeValid) await saveFee();
-    if (adminDirty) await saveAdminPassword();
+    if (adminDirty && adminCheck.ok) await saveAdminPassword();
     setSaving(null);
   }
 
@@ -391,7 +407,8 @@ export function TenantSettingsView({
     setFeeEnabled(b.feeEnabled);
     setFeeLabel(b.feeLabel);
     setFeeAmount(b.feeAmount);
-    setAdminPassword(b.adminPassword);
+    setAdminEmail(b.adminEmail);
+    setAdminPassword("");
     setErrors({});
   }
 
@@ -430,7 +447,7 @@ export function TenantSettingsView({
     notice: noticeGranted ? "On" : "Off",
     fee: feeEnabled ? "On" : "Off",
     copy: "3",
-    admin: adminPassword.trim() ? "Custom" : "Default",
+    admin: hasAdminPassword && baseline.current.adminEmail ? "Set" : "Not set",
   };
 
   const mark = name.slice(0, 2).toUpperCase();
@@ -1226,29 +1243,66 @@ export function TenantSettingsView({
                 <span className="set-eyebrow">Access</span>
                 <h2>Admin access</h2>
                 <p className="set-desc">
-                  The password the tenant uses to open their store admin at{" "}
-                  <code>{domain}/#admin</code>. Share it with the store owner — it&apos;s separate from
-                  your platform login.
+                  The email and password the store owner signs in with at{" "}
+                  <code>{domain}/#admin</code>. Both are required — you set them here and pass
+                  them to the owner. Separate from your platform login.
                 </p>
               </div>
-              <span className={"badge " + (adminPassword.trim() ? "badge-success" : "badge-neutral")}>
-                {adminPassword.trim() ? "Custom password" : "Default password"}
+              <span
+                className={
+                  "badge " +
+                  (hasAdminPassword && baseline.current.adminEmail
+                    ? "badge-success"
+                    : "badge-neutral")
+                }
+              >
+                {hasAdminPassword && baseline.current.adminEmail ? "Sign-in set" : "Not set"}
               </span>
             </div>
             <div className="set-card-body">
-              {!adminPassword.trim() && (
+              {!(hasAdminPassword && baseline.current.adminEmail) && (
                 <div className="set-notice" style={{ marginBottom: 14 }}>
                   <Ic.AlertCircle />
                   <div>
-                    No password set — this admin currently accepts the default <code>admin</code>, which
-                    anyone could guess. Set a unique password below.
+                    No sign-in set — nobody can open this store&apos;s admin until you set both an
+                    email and a password below.
                   </div>
                 </div>
               )}
               <div className="set-row">
                 <div>
-                  <div className="set-row-label">Admin password</div>
-                  <div className="set-row-help">At least 4 characters. Leave blank to fall back to the default.</div>
+                  <div className="set-row-label">Sign-in email</div>
+                  <div className="set-row-help">
+                    The owner types this to sign in. Any valid email address.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <input
+                    className="input"
+                    type="email"
+                    value={adminEmail}
+                    placeholder="owner@gmail.com"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    onChange={(e) => {
+                      setAdminEmail(e.target.value);
+                      setSaved((s) => ({ ...s, admin: false }));
+                      setErrors((er) => ({ ...er, admin: undefined }));
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">
+                    {hasAdminPassword ? "New password" : "Password"}
+                  </div>
+                  <div className="set-row-help">
+                    {hasAdminPassword
+                      ? "At least 6 characters. Leave blank to keep the current password."
+                      : "At least 6 characters. Stored hashed — you won't be able to read it back."}
+                  </div>
                 </div>
                 <div className="set-row-control">
                   <div className="set-field-row">
@@ -1256,8 +1310,8 @@ export function TenantSettingsView({
                       className="input mono"
                       type={showAdminPassword ? "text" : "password"}
                       value={adminPassword}
-                      placeholder="default: admin"
-                      autoComplete="off"
+                      placeholder={hasAdminPassword ? "unchanged" : "set a password"}
+                      autoComplete="new-password"
                       onChange={(e) => {
                         setAdminPassword(e.target.value);
                         setSaved((s) => ({ ...s, admin: false }));
@@ -1272,6 +1326,9 @@ export function TenantSettingsView({
                       {showAdminPassword ? "Hide" : "Show"}
                     </button>
                   </div>
+                  {adminDirty && !adminCheck.ok && (
+                    <div className="set-err">{adminCheck.error}</div>
+                  )}
                   {errors.admin && <div className="set-err">{errors.admin}</div>}
                 </div>
               </div>
@@ -1286,7 +1343,8 @@ export function TenantSettingsView({
                   className="btn btn-ghost btn-sm"
                   disabled={!adminDirty || saving !== null}
                   onClick={() => {
-                    setAdminPassword(baseline.current.adminPassword);
+                    setAdminEmail(baseline.current.adminEmail);
+                    setAdminPassword("");
                     setErrors((e) => ({ ...e, admin: undefined }));
                   }}
                 >
@@ -1295,14 +1353,14 @@ export function TenantSettingsView({
                 <button
                   className="btn btn-accent btn-sm"
                   onClick={saveAdminPassword}
-                  disabled={!adminDirty || saving !== null}
+                  disabled={!adminDirty || !adminCheck.ok || saving !== null}
                 >
                   {saving === "admin" ? "Saving…" : saved.admin && !adminDirty ? (
                     <>
                       <Ic.Check /> Saved
                     </>
                   ) : (
-                    "Save password"
+                    "Save sign-in"
                   )}
                 </button>
               </div>

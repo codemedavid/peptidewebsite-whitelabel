@@ -12,6 +12,8 @@ import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-f
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { BRANDING_ASSET_MAX_BYTES, STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
+import { hashPassword } from "@/lib/auth/password-hash";
+import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
 
 export type BrandingAssetKind = "logo" | "favicon";
 export type UploadAssetResult = { url: string | null } | { error: string };
@@ -416,25 +418,38 @@ export async function saveAdminFeeAction(
 }
 
 /**
- * Set the password that gates the tenant's storefront admin (`<slug>.<root>/#admin`).
- * Stored in the shared `branding.config` blob as `adminPassword`; a blank value
- * clears the override and the gate falls back to the built-in default ("admin").
- * Read-modify-write so it never clobbers the rest of the storefront Brand config.
+ * Set the STORE-ADMIN credential for a tenant's storefront admin
+ * (`<slug>.<root>/#admin`): the owner's sign-in email and/or their password.
+ *
+ * Both live on the Tenant row — `storeAdminEmail` and `storeAdminPasswordHash`
+ * — NOT in branding.config, because that blob is spread wholesale into the
+ * client `brand` object and would ship the credential to every visitor.
+ *
+ * The password is stored as a scrypt hash and can never be read back: the
+ * operator can only SET a new one and tell the owner what it is. A blank
+ * password means "leave the current one alone" (so the email can be edited on
+ * its own); it does NOT clear the password or restore any default — there is no
+ * default any more, and a tenant with no credential simply cannot sign in.
  */
 export async function saveAdminPasswordAction(
   slug: string,
   password: string,
+  email: string,
 ): Promise<SaveResult> {
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
-  const adminPassword = (password ?? "").trim();
-  if (adminPassword.length > 0 && adminPassword.length < 4) {
-    return { error: "Use at least 4 characters, or leave blank for the default." };
-  }
-
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, adminPassword } });
+    const checked = validateStoreAdminCredentialInput({
+      email,
+      password,
+      hasExistingPassword: typeof current.adminPasswordHash === "string",
+    });
+    if (!checked.ok) return { error: checked.error };
+
+    const config: Record<string, unknown> = { ...current, adminEmail: checked.email };
+    if (checked.password) config.adminPasswordHash = hashPassword(checked.password);
+    saveDemoBranding(slug, { config });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -445,21 +460,29 @@ export async function saveAdminPasswordAction(
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
+    select: { id: true, storeAdminPasswordHash: true },
   });
   if (!tenant) return { error: "Tenant not found." };
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, adminPassword } as Prisma.InputJsonValue;
-
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
+  // Whether a password already exists decides if a blank one is allowed — so it
+  // has to be read from the row, never trusted from the client.
+  const checked = validateStoreAdminCredentialInput({
+    email,
+    password,
+    hasExistingPassword: Boolean(tenant.storeAdminPasswordHash),
   });
+  if (!checked.ok) return { error: checked.error };
+
+  const data: { storeAdminEmail: string; storeAdminPasswordHash?: string } = {
+    storeAdminEmail: checked.email,
+  };
+  if (checked.password) data.storeAdminPasswordHash = hashPassword(checked.password);
+
+  await prisma.tenant.update({ where: { id: tenant.id }, data });
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
   return { ok: true };
 }
+
 

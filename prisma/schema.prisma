@@ -32,6 +32,20 @@ model Tenant {
   // ("scrypt$<salt-hex>$<hash-hex>"). Null = password not yet set by the platform owner.
   adminPasswordHash String?
 
+  // Storefront STORE-ADMIN login (slug.<root>/#admin) — distinct from
+  // adminPasswordHash above, which gates the platform /dashboard login. The
+  // store owner signs in with this email + password; staff use their own row in
+  // storefront_staff. Both are operator-set in the tenant settings console.
+  // Hash is scrypt-derived ("scrypt$<salt-hex>$<hash-hex>").
+  //
+  // These live on Tenant, NOT in branding.config, because that blob is spread
+  // wholesale into the client `brand` object (see (storefront)/page.tsx) — a
+  // credential stored there ships to every visitor. Same reason accessCodeHash
+  // lives here. Either field null = the store admin CANNOT be signed into; the
+  // login fails closed rather than falling back to a default password.
+  storeAdminEmail        String?
+  storeAdminPasswordHash String?
+
   // Visitor access-code gate (per-tenant "enter a code to view the store").
   // Hash is scrypt-derived, same format as adminPasswordHash. Null = no gate set
   // (the storefront is open). The gate is only enforced when this is non-null AND
@@ -791,7 +805,8 @@ model StorefrontStaff {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @default(now()) @updatedAt
 
-  @@unique([tenantId, username]) // one username per store; also the scoped lookup key
+  @@unique([tenantId, username]) // one username per store (display/legacy identifier)
+  @@unique([tenantId, email]) // email is the LOGIN key — must be unique per store
   @@index([tenantId])
   @@map("storefront_staff")
 }

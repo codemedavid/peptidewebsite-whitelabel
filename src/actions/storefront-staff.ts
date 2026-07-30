@@ -8,12 +8,17 @@ import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { setStorefrontAdminCookie } from "@/lib/auth/storefront-admin";
 import { getStorefrontAdminActor, requireStoreOwner } from "@/lib/auth/staff-guard";
-import { resolveStoreAdminLogin } from "@/lib/auth/store-admin-login";
+import {
+  resolveStoreAdminLogin,
+  normalizeLoginEmail,
+  type OwnerCredential,
+} from "@/lib/auth/store-admin-login";
+import { recordAuthAudit } from "@/lib/auth/audit";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { sanitizePermissions } from "@/storefront/admin/staff-permissions";
-import { parseStaffCreate, parseStaffUpdate, isReservedUsername } from "@/lib/storefront/staff-input";
+import { parseStaffCreate, parseStaffUpdate } from "@/lib/storefront/staff-input";
 
 /**
  * Server actions for the store-admin Staff Accounts feature. Two audiences:
@@ -33,6 +38,18 @@ const FIFTEEN_MIN = 15 * 60 * 1000;
 const DEMO_UNAVAILABLE = "Staff accounts aren't available in demo mode.";
 const OWNER_ONLY = "Only the store owner can manage staff.";
 const FEATURE_OFF = "Staff Accounts isn't enabled for this store.";
+/** The single generic sign-in failure. Deliberately does not distinguish a bad
+ *  email from a bad password, nor a store whose credential was never set. */
+const INVALID_LOGIN = "Incorrect email or password.";
+
+/** Fire-and-forget auth audit row; never breaks the login flow it records. */
+async function audit(
+  tenantId: string,
+  event: "admin_login" | "admin_login_failed",
+  ip: string | null,
+) {
+  await recordAuthAudit((row) => prisma.authAudit.create({ data: row }), { tenantId, event, ip });
+}
 
 /**
  * Is the Staff Accounts feature entitled for this tenant? Owner-only management,
@@ -44,32 +61,48 @@ async function staffFeatureOn(tenantId: string): Promise<boolean> {
   return hasFeature(tenantId, FEATURES.STORE_STAFF_ACCOUNTS);
 }
 
-const DEFAULT_OWNER_USERNAME = "owner";
-const DEFAULT_OWNER_PASSWORD = "admin";
-
-/** The branding.config blob for the current tenant (demo file or DB). */
-async function readConfig(tenantId: string): Promise<Record<string, unknown>> {
+/**
+ * The OWNER's store-admin credential: their sign-in email + scrypt password
+ * hash, set by the super admin in the tenant settings console.
+ *
+ * Read from the Tenant row, NOT branding.config — that blob is spread wholesale
+ * into the client `brand` object, so a credential kept there would ship to every
+ * storefront visitor. Returns null when either half is unset, which makes
+ * resolveStoreAdminLogin fail closed: there is no default password any more.
+ */
+async function readOwnerCredential(tenantId: string): Promise<OwnerCredential | null> {
   if (isDemoMode()) {
-    return (getDemoBranding(tenantId).config ?? {}) as Record<string, unknown>;
+    // Demo mode has no database; the fixture config carries the demo credential.
+    const config = (getDemoBranding(tenantId).config ?? {}) as Record<string, unknown>;
+    const email = typeof config.adminEmail === "string" ? config.adminEmail : "";
+    const passwordHash =
+      typeof config.adminPasswordHash === "string" ? config.adminPasswordHash : "";
+    return email && passwordHash ? { email, passwordHash } : null;
   }
-  const branding = await prisma.branding.findUnique({
-    where: { tenantId },
-    select: { config: true },
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { storeAdminEmail: true, storeAdminPasswordHash: true },
   });
-  return (branding?.config ?? {}) as Record<string, unknown>;
+  if (!tenant?.storeAdminEmail || !tenant.storeAdminPasswordHash) return null;
+  return { email: tenant.storeAdminEmail, passwordHash: tenant.storeAdminPasswordHash };
 }
 
-/** The owner's reserved username + password (config overrides, else the defaults). */
-function resolveOwnerCredential(config: Record<string, unknown>): { username: string; password: string } {
-  const username =
-    typeof config.adminUsername === "string" && config.adminUsername.trim()
-      ? config.adminUsername.trim()
-      : DEFAULT_OWNER_USERNAME;
-  const password =
-    typeof config.adminPassword === "string" && config.adminPassword.trim()
-      ? config.adminPassword.trim()
-      : DEFAULT_OWNER_PASSWORD;
-  return { username, password };
+/**
+ * The tenant's staff login rows. A missing or unmigrated staff table must never
+ * break the OWNER's ability to sign in, so a query failure degrades to "no
+ * staff" rather than throwing the whole login.
+ */
+async function readStaffCredentials(tenantId: string) {
+  if (isDemoMode()) return [];
+  try {
+    return await prisma.storefrontStaff.findMany({
+      where: { tenantId },
+      select: { id: true, email: true, passwordHash: true, status: true },
+    });
+  } catch {
+    return [];
+  }
 }
 
 // ── Unified login ────────────────────────────────────────────────────────────
@@ -81,7 +114,7 @@ function resolveOwnerCredential(config: Record<string, unknown>): { username: st
  * the request host — no slug from the (untrusted) client.
  */
 export async function signInStoreAdminAction(
-  username: string,
+  email: string,
   password: string,
 ): Promise<{ ok: true; kind: "owner" | "staff" } | { error: string }> {
   const tenantId = await getTenantIdOrNull();
@@ -91,38 +124,35 @@ export async function signInStoreAdminAction(
   const limited = rateLimit(`sf-admin:signin:${tenantId}:${ip}`, 10, FIFTEEN_MIN);
   if (!limited.ok) return { error: "Too many attempts. Try again in a few minutes." };
 
-  const config = await readConfig(tenantId);
-  const owner = resolveOwnerCredential(config);
+  const [owner, staff] = await Promise.all([
+    readOwnerCredential(tenantId),
+    readStaffCredentials(tenantId),
+  ]);
 
-  // Owner login must not depend on the staff table existing — only query staff
-  // when the username isn't the owner's reserved name.
-  const isOwnerLogin =
-    (username ?? "").trim().toLowerCase() === owner.username.trim().toLowerCase();
-  const staff =
-    isOwnerLogin || isDemoMode()
-      ? []
-      : await prisma.storefrontStaff.findMany({
-          where: { tenantId },
-          select: { id: true, username: true, passwordHash: true, status: true },
-        });
-
-  const result = resolveStoreAdminLogin(username, password, owner, staff);
-  if (result.kind === "suspended") {
-    return { error: "This staff account is suspended. Contact the store owner." };
-  }
-  if (result.kind === "invalid") {
-    return { error: "Incorrect username or password." };
-  }
+  const result = resolveStoreAdminLogin(email, password, owner, staff);
 
   // Staff sign-in requires the Staff Accounts feature; owner login never does.
-  // Use the generic invalid message so the gate doesn't leak the feature state.
-  if (result.kind === "staff" && !(await staffFeatureOn(tenantId))) {
-    return { error: "Incorrect username or password." };
+  const staffBlocked = result.kind === "staff" && !(await staffFeatureOn(tenantId));
+
+  if (result.kind === "suspended") {
+    await audit(tenantId, "admin_login_failed", ip);
+    return { error: "This staff account is suspended. Contact the store owner." };
+  }
+
+  // `invalid`, `unconfigured` and a de-entitled staff match all collapse to ONE
+  // message. Never tell the browser which store has no credential set, or which
+  // half of the pair was wrong.
+  if (result.kind === "invalid" || result.kind === "unconfigured" || staffBlocked) {
+    await audit(tenantId, "admin_login_failed", ip);
+    return { error: INVALID_LOGIN };
   }
 
   const subject =
-    result.kind === "owner" ? ({ kind: "owner" } as const) : ({ kind: "staff", id: result.id } as const);
+    result.kind === "owner"
+      ? ({ kind: "owner" } as const)
+      : ({ kind: "staff", id: result.id } as const);
   await setStorefrontAdminCookie(tenantId, subject);
+  await audit(tenantId, "admin_login", ip);
   return { ok: true, kind: result.kind };
 }
 
@@ -140,8 +170,8 @@ export async function getStorefrontAdminSessionAction(): Promise<AdminSessionInf
   if (!ctx) return { kind: "none" };
 
   if (ctx.actor.kind === "owner") {
-    const config = await readConfig(ctx.tenantId);
-    return { kind: "owner", displayName: resolveOwnerCredential(config).username };
+    const owner = await readOwnerCredential(ctx.tenantId);
+    return { kind: "owner", displayName: owner?.email ?? "Store owner" };
   }
 
   // Staff actor but the feature was revoked (or never granted) → treat as signed
@@ -217,9 +247,9 @@ export async function createStaffAction(input: unknown): Promise<ActionResult> {
   const parsed = parseStaffCreate(input);
   if (!parsed.ok) return { error: parsed.error };
 
-  const owner = resolveOwnerCredential(await readConfig(tenantId));
-  if (isReservedUsername(parsed.value.username, owner.username)) {
-    return { error: "That username is reserved. Choose a different one." };
+  const owner = await readOwnerCredential(tenantId);
+  if (owner && normalizeLoginEmail(parsed.value.email) === normalizeLoginEmail(owner.email)) {
+    return { error: "That email belongs to the store owner. Use a different one." };
   }
 
   const existing = await prisma.storefrontStaff.findFirst({
@@ -263,9 +293,9 @@ export async function updateStaffAction(id: string, input: unknown): Promise<Act
   const parsed = parseStaffUpdate(input);
   if (!parsed.ok) return { error: parsed.error };
 
-  const owner = resolveOwnerCredential(await readConfig(tenantId));
-  if (isReservedUsername(parsed.value.username, owner.username)) {
-    return { error: "That username is reserved. Choose a different one." };
+  const owner = await readOwnerCredential(tenantId);
+  if (owner && normalizeLoginEmail(parsed.value.email) === normalizeLoginEmail(owner.email)) {
+    return { error: "That email belongs to the store owner. Use a different one." };
   }
 
   // The row must belong to this tenant (defence beyond the global PK).

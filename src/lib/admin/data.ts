@@ -491,23 +491,31 @@ export async function getTenantAdminFee(slug: string): Promise<TenantAdminFee | 
   return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>, entitled);
 }
 
-/** Current storefront-admin password override (blank = falls back to "admin").
- *  Read from the shared branding.config blob, same as the contact channels. */
-export async function getTenantAdminPassword(slug: string): Promise<string | null> {
-  const fromConfig = (config: Record<string, unknown>): string =>
-    typeof config.adminPassword === "string" ? config.adminPassword : "";
+/** The store's `#admin` sign-in credential, for the tenant settings console.
+ *
+ *  Returns the email plus a flag for whether a password exists — NEVER the
+ *  password or its hash. It is stored as a scrypt hash and cannot be read back:
+ *  the operator can only set a new one and tell the owner what it is. */
+export type StoreAdminCredentialStatus = { email: string; hasPassword: boolean };
 
+export async function getTenantStoreAdminCredential(
+  slug: string,
+): Promise<StoreAdminCredentialStatus | null> {
   if (isDemoMode()) {
     if (!listDemoTenants().some((t) => t.slug === slug)) return null;
-    return fromConfig((getDemoBranding(slug).config ?? {}) as Record<string, unknown>);
+    const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    return {
+      email: typeof config.adminEmail === "string" ? config.adminEmail : "",
+      hasPassword: typeof config.adminPasswordHash === "string" && !!config.adminPasswordHash,
+    };
   }
 
   const t = await prisma.tenant.findUnique({
     where: { slug },
-    select: { branding: { select: { config: true } } },
+    select: { storeAdminEmail: true, storeAdminPasswordHash: true },
   });
   if (!t) return null;
-  return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>);
+  return { email: t.storeAdminEmail ?? "", hasPassword: Boolean(t.storeAdminPasswordHash) };
 }
 
 export type TenantDomainRow = {

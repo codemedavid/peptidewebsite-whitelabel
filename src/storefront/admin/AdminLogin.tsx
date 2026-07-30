@@ -4,37 +4,32 @@ import { useState } from "react";
 import type { Brand } from "../types";
 import { ADMIN_AUTH_KEY } from "./authKey";
 import { signInStoreAdminAction } from "@/actions/storefront-staff";
-import { signInStorefrontAdminAction } from "@/actions/storefront-admin";
 
 export { ADMIN_AUTH_KEY };
 
+/**
+ * The `#admin` sign-in. EVERY login — the store owner's and every staff
+ * member's — requires an email AND a password. There is no password-only form
+ * and no default password: the super admin sets the owner's email + password in
+ * the tenant settings console, and the owner creates staff with their own.
+ *
+ * Credentials are verified server-side (both principals against a scrypt hash)
+ * and, on success, the server issues a signed session cookie carrying who you
+ * are. The sessionStorage flag below is only a UI hint for which screen to
+ * show — never the security boundary.
+ */
 export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () => void }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Until the store has per-user logins (Staff Accounts enabled AND ≥1 staff),
-  // there's no username to disambiguate — so we ask for the owner password only,
-  // never a phantom staff username. `staffLoginActive` is derived server-side
-  // (resolveAdminLoginMode); it flips on once the owner creates their first staff
-  // account, bringing the username field back.
-  const usernameRequired = brand.staffLoginActive === true;
-
-  // Credentials are verified server-side (owner against branding.config, staff
-  // against their scrypt hash) and, on success, the server issues a signed session
-  // cookie carrying who you are. The sessionStorage flag below is only a UI hint
-  // for which screen to show, not the security boundary.
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError("");
-    // Password-only mode signs in as the owner (owner password); the unified
-    // form resolves owner-or-staff by username. Both mint the same signed cookie.
-    const result = usernameRequired
-      ? await signInStoreAdminAction(username, pw)
-      : await signInStorefrontAdminAction(pw);
+    const result = await signInStoreAdminAction(email, pw);
     setBusy(false);
     if ("ok" in result) {
       try {
@@ -44,7 +39,7 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
       }
       onSuccess();
     } else {
-      setError(result.error || "Incorrect username or password.");
+      setError(result.error || "Incorrect email or password.");
       setTimeout(() => setError(""), 2600);
     }
   };
@@ -66,27 +61,28 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
         <p className="admin-login__sub">
           {brand.adminLoginSub || `Sign in to manage ${brand.name || "this store"}`}
         </p>
-        {usernameRequired && (
-          <input
-            type="text"
-            className={`admin-login__input ${error ? "is-error" : ""}`}
-            value={username}
-            placeholder="Username"
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect="off"
-            onChange={(e) => {
-              setUsername(e.target.value);
-              setError("");
-            }}
-          />
-        )}
+        <input
+          type="email"
+          className={`admin-login__input ${error ? "is-error" : ""}`}
+          value={email}
+          placeholder="Email address"
+          autoFocus
+          autoComplete="username"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setError("");
+          }}
+        />
         <input
           type="password"
           className={`admin-login__input ${error ? "is-error" : ""}`}
           value={pw}
           placeholder="Password"
-          autoFocus={!usernameRequired}
+          autoComplete="current-password"
           onChange={(e) => {
             setPw(e.target.value);
             setError("");
@@ -97,17 +93,8 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
           {busy ? "Checking…" : "Enter Dashboard"}
         </button>
         <div className="admin-login__hint">
-          {usernameRequired ? (
-            <>
-              Store owners sign in with username{" "}
-              <code style={{ background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: 4 }}>
-                owner
-              </code>{" "}
-              and their admin password. Staff use the username their owner gave them.
-            </>
-          ) : (
-            "Enter your store admin password to manage this store."
-          )}
+          Sign in with the email address and password for this store. Staff use the
+          credentials their store owner gave them.
         </div>
       </form>
     </div>
