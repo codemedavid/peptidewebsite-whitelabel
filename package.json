@@ -44,6 +44,7 @@
     "test:onhand-order": "tsx scripts/test-on-hand-order.ts",
     "test:reseller-gate": "tsx scripts/test-reseller-gate.ts",
     "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
+    "migrate:bacwater-cap": "tsx scripts/migrate-bacwater-cap.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",
     "test:product-add-gates": "tsx scripts/test-product-add-gates.ts",
     "test:variation-price-reveal": "tsx scripts/test-variation-price-reveal.ts",
