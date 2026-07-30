@@ -111,9 +111,11 @@ export const DEFAULT_RATIO_MESSAGE =
   "Every peptide needs {ratio} bacteriostatic water — add {shortfall} more to check out.";
 
 /** Built-in CAP copy. Never tells the customer to add water — the cart already
- *  has too much — and never fires on a peptide-only cart. */
+ *  has too much — and never fires on a peptide-only cart. Phrased to read
+ *  correctly at every quantity (no "1 peptide vials"); owners who want the vial
+ *  count in the copy can use the {peptide} token. */
 export const DEFAULT_CAP_MESSAGE =
-  "Bacteriostatic water can't exceed your peptide vials — {peptide} peptide vials allow {allowed}, you have {bacWater}. Please remove {surplus}.";
+  "Bacteriostatic water can't exceed your peptide vials — your cart allows {allowed}, you have {bacWater}. Please remove {surplus}.";
 
 /** Built-in CAP copy for a cart holding bac water but no peptide at all. */
 export const DEFAULT_CAP_NO_PEPTIDE_MESSAGE =
