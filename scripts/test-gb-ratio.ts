@@ -1,14 +1,19 @@
 /**
  * Tests for the Order Ratio Control engine — the peptide ↔ bacteriostatic-water
- * ratio floor that rides the existing Group Buy Rules engine
+ * ratio rule that rides the existing Group Buy Rules engine
  * (src/lib/storefront/group-buy-rules.ts) plus the shared product classifier
  * (src/lib/storefront/product-class.ts).
  *
- * Grounding: unlike the existing `bacWater.maxPerPeptide` CEILING, this is a
- * FLOOR — "every peptide needs at least N bac water". Three modes: strict
- * (blocks), warn (soft), auto_add (the cart injects the shortfall; a residual
- * gap still blocks like strict). Classification prefers the admin's per-product
- * tag (metadata.productClass) and falls back to the legacy name regex.
+ * The rule runs in one of two DIRECTIONS:
+ *   • floor (default) — "every peptide needs at least N bac water". Three modes:
+ *     strict (blocks), warn (soft), auto_add (the cart injects the shortfall; a
+ *     residual gap still blocks like strict).
+ *   • cap — "bac water must not exceed N per peptide vial". Peptide-only carts
+ *     are always fine (nothing to cap); a cart with bac water and no peptides is
+ *     blocked, since 0 peptides allow 0 water. auto_add never injects here.
+ *
+ * Classification prefers the admin's per-product tag (metadata.productClass)
+ * and falls back to the legacy name regex.
  *
  *   npm run test:gb-ratio
  */
@@ -19,8 +24,10 @@ import { classifyProductClass, type ProductClass } from "../src/lib/storefront/p
 import {
   DEFAULT_GROUP_BUY_RULES,
   normalizeGroupBuyRules,
+  groupBuyViolations,
   ratioCounts,
   requiredBacWater,
+  allowedBacWater,
   ratioViolation,
   autoAddPlan,
   type GroupBuyRules,
@@ -57,6 +64,11 @@ function rulesWith(over: Partial<GroupBuyRules["ratio"]>): GroupBuyRules {
   });
 }
 
+/** The same rules object with the ratio running as a CAP instead of a floor. */
+function capRulesWith(over: Partial<GroupBuyRules["ratio"]>): GroupBuyRules {
+  return rulesWith({ direction: "cap", ...over });
+}
+
 const line = (name: string, qty: number, productClass?: ProductClass): RatioLine => ({
   name,
   qty,
@@ -87,11 +99,23 @@ async function main() {
 
   console.log("\nOrder Ratio Control — engine defaults & normalize\n");
 
-  await check("DEFAULT rules ship the ratio block OFF", () => {
+  await check("DEFAULT rules ship the ratio block OFF, direction floor", () => {
     assert.equal(DEFAULT_GROUP_BUY_RULES.ratio.enabled, false);
     assert.equal(DEFAULT_GROUP_BUY_RULES.ratio.mode, "strict");
     assert.equal(DEFAULT_GROUP_BUY_RULES.ratio.bacWaterPerPeptide, 1);
     assert.equal(DEFAULT_GROUP_BUY_RULES.ratio.defaultBacWaterProductId, null);
+    // Floor is the historical behavior, so a stored config that predates the
+    // direction switch keeps meaning exactly what it meant before.
+    assert.equal(DEFAULT_GROUP_BUY_RULES.ratio.direction, "floor");
+  });
+
+  await check("normalize: absent or junk direction → floor, 'cap' is kept", () => {
+    const absent = normalizeGroupBuyRules({ enabled: true, ratio: { enabled: true } });
+    assert.equal(absent.ratio.direction, "floor", "absent → floor");
+    const junk = normalizeGroupBuyRules({ enabled: true, ratio: { enabled: true, direction: "sideways" } });
+    assert.equal(junk.ratio.direction, "floor", "unknown → floor");
+    const cap = normalizeGroupBuyRules({ enabled: true, ratio: { enabled: true, direction: "cap" } });
+    assert.equal(cap.ratio.direction, "cap");
   });
 
   await check("normalize coerces junk into a well-formed ratio block", () => {
@@ -130,6 +154,15 @@ async function main() {
     assert.equal(requiredBacWater(rulesWith({ bacWaterPerPeptide: 1 }), 3), 3);
     assert.equal(requiredBacWater(rulesWith({ bacWaterPerPeptide: 2 }), 3), 6);
     assert.equal(requiredBacWater(rulesWith({ bacWaterPerPeptide: 1 }), 0), 0);
+  });
+
+  await check("allowedBacWater = peptide × ratio (the cap's ceiling)", () => {
+    assert.equal(allowedBacWater(capRulesWith({ bacWaterPerPeptide: 1 }), 3), 3);
+    assert.equal(allowedBacWater(capRulesWith({ bacWaterPerPeptide: 2 }), 3), 6);
+    // No peptides → no water allowed at all.
+    assert.equal(allowedBacWater(capRulesWith({ bacWaterPerPeptide: 1 }), 0), 0);
+    // Negative/garbage quantities can't widen the ceiling.
+    assert.equal(allowedBacWater(capRulesWith({ bacWaterPerPeptide: 1 }), -5), 0);
   });
 
   console.log("\nOrder Ratio Control — violation (floor)\n");
@@ -190,6 +223,155 @@ async function main() {
     const lines = [line("Mystery Vial", 2, "peptide"), line("Clear Fluid", 0, "bacWater")];
     const v = ratioViolation(rulesWith({ mode: "strict" }), lines);
     assert.ok(v, "2 tagged-peptide vials with 0 bac water → violation");
+  });
+
+  console.log("\nOrder Ratio Control — violation (cap)\n");
+
+  await check("CAP: a peptide-only cart is never nagged", () => {
+    // The whole point of the cap: buying peptides alone is legitimate, so no
+    // message at any quantity.
+    assert.equal(ratioViolation(capRulesWith({}), [line("Semaglutide", 1, "peptide")]), null);
+    assert.equal(ratioViolation(capRulesWith({}), [line("Semaglutide", 10, "peptide")]), null);
+    // Peptides plus unrelated accessories still fine.
+    assert.equal(
+      ratioViolation(capRulesWith({}), [line("Semaglutide", 4, "peptide"), line("Syringes", 9)]),
+      null,
+    );
+  });
+
+  await check("CAP: bac water up to the peptide count is allowed", () => {
+    assert.equal(
+      ratioViolation(capRulesWith({}), [line("Semaglutide", 3, "peptide"), line("Bac Water", 1)]),
+      null,
+      "under the cap",
+    );
+    assert.equal(
+      ratioViolation(capRulesWith({}), [line("Semaglutide", 3, "peptide"), line("Bac Water", 3)]),
+      null,
+      "exactly at the cap",
+    );
+  });
+
+  await check("CAP: more bac water than peptide vials → blocking violation", () => {
+    const v = ratioViolation(capRulesWith({ mode: "strict" }), [
+      line("Semaglutide", 3, "peptide"),
+      line("Bac Water", 4),
+    ]);
+    assert.ok(v, "4 water vs 3 peptide → violation");
+    assert.equal(v!.blocking, true);
+    assert.match(v!.message, /water/i);
+  });
+
+  await check("CAP: 2:1 cap allows two water per peptide, blocks the third", () => {
+    const rules = capRulesWith({ bacWaterPerPeptide: 2 });
+    assert.equal(
+      ratioViolation(rules, [line("Semaglutide", 2, "peptide"), line("Bac Water", 4)]),
+      null,
+      "4 ≤ 2×2 allowed",
+    );
+    assert.ok(
+      ratioViolation(rules, [line("Semaglutide", 2, "peptide"), line("Bac Water", 5)]),
+      "5 > 4 allowed → violation",
+    );
+  });
+
+  await check("CAP: bac water with no peptide is blocked", () => {
+    const v = ratioViolation(capRulesWith({ mode: "strict" }), [line("Bac Water", 2)]);
+    assert.ok(v, "0 peptides allow 0 bac water");
+    assert.equal(v!.blocking, true);
+    assert.match(v!.message, /add a peptide/i);
+  });
+
+  await check("CAP: an empty cart produces no violation", () => {
+    assert.equal(ratioViolation(capRulesWith({}), []), null);
+    assert.equal(ratioViolation(capRulesWith({}), [line("Syringes", 3)]), null);
+  });
+
+  await check("CAP + WARN: surplus violation is non-blocking", () => {
+    const v = ratioViolation(capRulesWith({ mode: "warn" }), [
+      line("Semaglutide", 1, "peptide"),
+      line("Bac Water", 3),
+    ]);
+    assert.ok(v);
+    assert.equal(v!.blocking, false, "warn mode never blocks checkout");
+  });
+
+  await check("CAP + AUTO_ADD: blocks like strict and never injects", () => {
+    const lines = [line("Semaglutide", 1, "peptide"), line("Bac Water", 3)];
+    const v = ratioViolation(capRulesWith({ mode: "auto_add" }), lines);
+    assert.ok(v, "auto_add can't 'add' its way out of a surplus");
+    assert.equal(v!.blocking, true);
+    // The cart's reconcile effect must stay out of cap carts entirely.
+    assert.equal(autoAddPlan(capRulesWith({ mode: "auto_add" }), lines).shortfall, 0);
+    assert.equal(
+      autoAddPlan(capRulesWith({ mode: "auto_add" }), [line("Semaglutide", 3, "peptide")]).shortfall,
+      0,
+      "a peptide-only cap cart must never be topped up with water",
+    );
+  });
+
+  await check("CAP: the message interpolates the cap tokens", () => {
+    const v = ratioViolation(
+      capRulesWith({
+        mode: "strict",
+        message: "Max {ratio} per vial — {peptide} vials allow {allowed}, you have {bacWater}. Remove {surplus}.",
+      }),
+      [line("Semaglutide", 2, "peptide"), line("Bac Water", 5)],
+    );
+    assert.equal(v!.message, "Max 1 per vial — 2 vials allow 2, you have 5. Remove 3.");
+  });
+
+  await check("CAP: the built-in default message names the numbers", () => {
+    const v = ratioViolation(capRulesWith({ mode: "strict" }), [
+      line("Semaglutide", 2, "peptide"),
+      line("Bac Water", 5),
+    ]);
+    assert.ok(v);
+    // Whatever the wording, it must not tell the customer to ADD water.
+    assert.doesNotMatch(v!.message, /\badd\b/i, "cap copy must never say 'add'");
+    assert.match(v!.message, /2/, "mentions the 2 allowed");
+    assert.match(v!.message, /5/, "mentions the 5 in the cart");
+  });
+
+  await check("CAP: classification tag decides what counts as water", () => {
+    // Tagged bacWater despite an innocuous name → counted as water and capped.
+    const v = ratioViolation(capRulesWith({}), [
+      line("Semaglutide", 1, "peptide"),
+      line("Clear Fluid", 3, "bacWater"),
+    ]);
+    assert.ok(v, "3 tagged-bacWater vs 1 peptide → violation");
+  });
+
+  await check("CAP supersedes the legacy maxPerPeptide ceiling (no double message)", () => {
+    // A tenant with BOTH the old ceiling and the new cap configured must see one
+    // message, not two near-identical ones.
+    const rules = normalizeGroupBuyRules({
+      enabled: true,
+      bacWater: { restrictionsDisabled: false, allowUnlimited: false, maxPerPeptide: 1 },
+      ratio: { enabled: true, direction: "cap", mode: "strict", bacWaterPerPeptide: 1 },
+    });
+    const legacy = groupBuyViolations(rules, [
+      { name: "Semaglutide", qty: 1 },
+      { name: "Bac Water", qty: 3 },
+    ]);
+    assert.deepEqual(legacy, [], "the legacy ceiling stays quiet while the cap owns the rule");
+    // …and the cap itself still fires.
+    assert.ok(
+      ratioViolation(rules, [line("Semaglutide", 1, "peptide"), line("Bac Water", 3)]),
+      "the cap is the single source of the message",
+    );
+  });
+
+  await check("the legacy maxPerPeptide ceiling still works on its own", () => {
+    const rules = normalizeGroupBuyRules({
+      enabled: true,
+      bacWater: { restrictionsDisabled: false, allowUnlimited: false, maxPerPeptide: 1 },
+    });
+    const errs = groupBuyViolations(rules, [
+      { name: "Semaglutide", qty: 1 },
+      { name: "Bac Water", qty: 3 },
+    ]);
+    assert.equal(errs.length, 1, "ratio block off → the old ceiling is unchanged");
   });
 
   console.log("\nOrder Ratio Control — auto-add plan\n");
