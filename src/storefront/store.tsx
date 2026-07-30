@@ -555,6 +555,10 @@ export function StoreProvider({
   useEffect(() => {
     const rules = normalizeGroupBuyRules(brand.groupBuyRules);
     const r = rules.ratio;
+    // Floor direction only. Under a CAP, topping the cart up to peptide × ratio
+    // would manufacture the very surplus the cap blocks — the customer would be
+    // handed a cart that can't check out.
+    if (r.direction !== "floor") return;
     if (!rules.enabled || !r.enabled || r.mode !== "auto_add" || !r.defaultBacWaterProductId) return;
     const bacProduct = products.find((p) => p.id === r.defaultBacWaterProductId);
     if (!bacProduct) return;

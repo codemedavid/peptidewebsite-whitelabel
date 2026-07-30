@@ -167,7 +167,7 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
           />
           <Toggle
             label="Bac water validation"
-            hint="Peptide orders must include bacteriostatic water. Only applies while your catalog has a bac-water product, so it can never make checkout impossible."
+            hint="Peptide orders must include bacteriostatic water. Off by default — a peptide-only order is a normal order. Leave it off if you use Order Ratio Control to LIMIT bac water instead, or the two rules contradict each other."
             checked={rules.bacWaterValidation}
             onChange={(v) => set({ bacWaterValidation: v })}
           />

@@ -51,7 +51,9 @@ export type CheckoutRulesConfig = {
   adminFeeValidation: boolean;
   /** Peptide orders must include bacteriostatic water. Only applies when the
    *  catalog actually offers a bac-water product, so it can never make
-   *  checkout impossible. */
+   *  checkout impossible. OPT-IN: this is the coarse peptide→water FLOOR, and it
+   *  contradicts a store running Order Ratio Control as a cap (where buying
+   *  peptides alone is legitimate), so it ships off. */
   bacWaterValidation: boolean;
   // ── Checkout experience ──
   messages: CheckoutRuleMessages;
@@ -63,9 +65,10 @@ export type CheckoutRulesConfig = {
 };
 
 /** Defaults for a tenant that has never opened the Smart Checkout panel.
- *  Single-order-type, min-quantity, admin-fee and bac-water validation ship ON
- *  (each is a no-op until the catalog/config gives it something to check);
- *  mixed-cart prevention ships OFF. */
+ *  Single-order-type, min-quantity and admin-fee validation ship ON (each is a
+ *  no-op until the catalog/config gives it something to check); mixed-cart
+ *  prevention and bac-water validation ship OFF — a peptide-only order is a
+ *  legitimate order, so nagging for water is something an owner opts into. */
 export const CHECKOUT_RULES_DEFAULTS: CheckoutRulesConfig = {
   singleOrderType: true,
   mixedCartPrevention: false,
@@ -73,7 +76,7 @@ export const CHECKOUT_RULES_DEFAULTS: CheckoutRulesConfig = {
   minQuantityEnabled: true,
   minQuantity: 1,
   adminFeeValidation: true,
-  bacWaterValidation: true,
+  bacWaterValidation: false,
   messages: { singleOrderType: "", mixedCart: "", minQuantity: "", bacWater: "" },
   checkoutNotice: "",
   cartWarning: "",
