@@ -4,9 +4,20 @@
 // shaping lives in the pure lib/storefront/group-buy-report.ts (unit-tested);
 // this file only turns that structured prep into an .xlsx Blob and downloads it.
 
+import type { Workbook } from "exceljs";
+
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
-export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> {
+/**
+ * Build the workbook WITHOUT touching the DOM. Split out from the download so a
+ * test can serialize it and read the real cells back — while the two lived in
+ * one browser-only function, nothing could verify what actually lands in the
+ * .xlsx the owner sends the supplier. See scripts/test-gb-e2e.ts.
+ *
+ * The `import type` above is erased at compile time, so exceljs stays lazy and
+ * out of the storefront bundle.
+ */
+export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
 
@@ -99,6 +110,12 @@ export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> 
     if (!l.counted) row.font = { strike: true, color: { argb: "FF999999" } };
   }
 
+  return wb;
+}
+
+/** Serialize the workbook and hand it to the browser as a download. */
+export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> {
+  const wb = await buildSupplierWorkbook(prep);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
