@@ -130,6 +130,37 @@ flip alone retires it store-wide.
 
 Checkpoint: `a72ee3a feat: migrate stores running the ratio rule onto the bac-water cap`
 
+### Task 5 — Live-config verification, then a copy refactor
+
+The Chrome DevTools MCP profile was held by another session, so instead of
+clicking the cart the shipped engine was run against **k-glow's live stored
+config and live 44-product catalog** (temporary read-only script, deleted after
+the run — it wrote nothing).
+
+```
+live k-glow config:
+  ratio: enabled=true direction=cap mode=strict perPeptide=1 message=""
+  engine enabled=true  validation cart=true checkout=true
+  checkoutRules.bacWaterValidation=false
+live catalog: 44 products — peptide sample "MT-2 (Melanotan 2 Acetate)",
+                            bac-water sample "Bacteriostatic Water"
+
+  ✓ 1 peptide, no water      → pass
+  ✓ 10 peptide, no water     → pass
+  ✓ 3 peptide, 1 water       → pass
+  ✓ 3 peptide, 3 water       → pass
+  ✓ 3 peptide, 4 water       → block  "…your cart allows 3, you have 4. Please remove 1."
+  ✓ 1 peptide, 5 water       → block  "…your cart allows 1, you have 5. Please remove 4."
+  ✓ 0 peptide, 2 water       → block  "Add a peptide before adding bacteriostatic water."
+```
+
+That run surfaced one copy defect the unit tests didn't assert: the default read
+"**1 peptide vials** allow 1". `DEFAULT_CAP_MESSAGE` was rephrased to "your cart
+allows {allowed}, you have {bacWater}", which agrees at every quantity;
+`{peptide}` remains available as a token. `test:gb-ratio` stayed 34/34.
+
+Checkpoint: `3e8a18f refactor: make the cap message read correctly at every quantity`
+
 ## Test specification
 
 | # | What is guaranteed | Test | Type | Result |
@@ -159,8 +190,8 @@ the per-feature script suites listed above (124 assertions green).
 
 Untested by automation, deliberately:
 
-- **The store-admin Direction UI and the `store.tsx` effect guard** — no React test harness exists in this repo. The guard's underlying rule (`autoAddPlan` returns 0 under a cap) *is* asserted; the effect wiring is verified by reading and by browser check.
-- **Browser check still to run:** k-glow at `k-glow.lvh.me:3100` — peptide-only checkout clean, then surplus water blocked.
+- **The store-admin Direction UI and the `store.tsx` effect guard** — no React test harness exists in this repo. The guard's underlying rule (`autoAddPlan` returns 0 under a cap) *is* asserted, and k-glow runs `mode: strict` so the auto-add effect is inert there today; the effect wiring itself is verified by reading only.
+- **No browser click-through was performed** (the Chrome MCP profile was locked by another session). Task 5 verified the rule end-to-end against the live config and catalog instead, which does not cover the cart drawer's rendering of the violation.
 - `scripts/kglow-test-gb.ts` (untracked scratch file from a prior session) has a pre-existing `tsc` error, unrelated to this change and left alone.
 
 ## Merge evidence
@@ -169,7 +200,8 @@ If these commits are squashed, the RED→GREEN record is: RED `2d485c4` (20 pass
 14 failed — cap assertions failing because `direction`/`allowedBacWater` did not
 exist, floor suite green) → GREEN `3ddc28d` (34 passed, 0 failed) → surfaces
 `6f35c1e` (124 assertions green across five suites, `tsc` clean) → migration
-`a72ee3a` (k-glow flipped, idempotent re-run confirmed).
+`a72ee3a` (k-glow flipped, idempotent re-run confirmed) → refactor `3e8a18f`
+(cap copy fixed after live verification, 34/34 held).
 
 ## Reverting
 
