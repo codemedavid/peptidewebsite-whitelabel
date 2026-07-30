@@ -245,5 +245,95 @@ check("groupBuyCtaTarget: negative/garbage count is treated as empty", () => {
   assert.equal(groupBuyCtaTarget(Number.NaN), "groupbuy");
 });
 
+// ── An open round never shares the home page with the on-hand shelf ──────────
+// Owner decision (k-glow): while a round is LIVE its products belong on the
+// dedicated #groupbuy page ONLY. The home keeps the on-hand shelf ("ships
+// today") plus the round's chrome as a teaser that links out — it must never
+// render the round's products (and therefore never offers add-to-cart for
+// them), so a shopper can't build a mixed on-hand/group-buy cart from one page.
+
+console.log("\nan open round's products stay off the home (dedicated #groupbuy page)\n");
+
+/** The gb path as the home may expose it, without asserting the old shape. */
+function gbPath(view: ReturnType<typeof buildTwoWaysHomeView>) {
+  return view.gb as typeof view.gb & { productIds?: string[]; lines?: unknown[] };
+}
+
+check("a live round contributes NO product lines to the home view", () => {
+  const products = [
+    product({ id: "a", name: "Alpha", price: 1000 }),
+    product({ id: "b", name: "Bravo", price: 1500 }),
+    product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
+  ];
+  const gb = gbPath(
+    buildTwoWaysHomeView(products, banner({ coversAll: false, productIds: ["c"] }), "₱", NOW),
+  );
+  assert.equal(gb.lines, undefined, "the home must not carry group-buy product lines");
+});
+
+check("the round's products are absent from the home's on-hand shelf too", () => {
+  const products = [
+    product({ id: "a", name: "Alpha", price: 1000 }),
+    product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
+  ];
+  const view = buildTwoWaysHomeView(
+    products,
+    banner({ coversAll: false, productIds: ["c"] }),
+    "₱",
+    NOW,
+  );
+  // "c" is in the round → it appears in NO list on the home.
+  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["a"]);
+});
+
+check("the home still names the round's products so the page cross-check holds", () => {
+  const products = [
+    product({ id: "a", name: "Alpha", price: 1000 }),
+    product({ id: "c", name: "Charlie", price: 1000, productType: "gb" }),
+    product({ id: "d", name: "Delta", price: 900, productType: "gb" }),
+  ];
+  const gb = gbPath(
+    buildTwoWaysHomeView(products, banner({ coversAll: false, productIds: ["c", "d"] }), "₱", NOW),
+  );
+  assert.deepEqual(gb.productIds, ["c", "d"]);
+  assert.equal(gb.count, 2, "the teaser still reports how many items are in the round");
+});
+
+check("a catalog-wide round empties the home's on-hand shelf, listing nothing itself", () => {
+  const products = [
+    product({ id: "a", name: "Alpha", price: 1000 }),
+    product({ id: "b", name: "Bravo", price: 1500, gbPrice: 1200 }),
+  ];
+  const view = buildTwoWaysHomeView(products, banner({ coversAll: true }), "₱", NOW);
+  assert.equal(view.onHand.count, 0);
+  assert.equal(gbPath(view).lines, undefined);
+  assert.equal(view.gb.count, 2);
+});
+
+check("the home keeps the round chrome so the teaser can link to the group-buy page", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "c", name: "Charlie", price: 1000, productType: "gb" })],
+    banner({ name: "June GB", endsAt: "2026-07-25T00:00:00.000Z", slotGoal: 30, filled: 18 }),
+    "₱",
+    NOW,
+  );
+  assert.equal(view.gb.open, true);
+  assert.equal(view.gb.name, "June GB");
+  assert.equal(view.gb.countdown, "Closes in 3 days");
+  assert.equal(view.gb.deliveryEta, "3–4 weeks after close");
+  assert.equal(view.gb.slots.pct, 60);
+});
+
+// WIRING: the component must not render the round's item rows / add-to-cart.
+check("TwoWaysHome renders no group-buy item rows and routes to the group-buy page", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/storefront/components/TwoWaysHome.tsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(src, /sf-twh__gb-items/, "the home must not render a group-buy item list");
+  assert.doesNotMatch(src, /GbItemRow/, "the home must not render group-buy product rows");
+  assert.match(src, /onOpenGroupBuy/, "the live round must link out to the group-buy page");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
