@@ -109,7 +109,8 @@
     "test:admin-dashboard": "tsx scripts/test-admin-dashboard.ts",
     "test:gb-report-orders": "tsx scripts/test-gb-report-orders.ts",
     "test:gb-analytics": "tsx scripts/test-gb-analytics.ts",
-    "test:gb-e2e": "tsx scripts/test-gb-e2e.ts"
+    "test:gb-e2e": "tsx scripts/test-gb-e2e.ts",
+    "test:gb-assignment": "tsx scripts/test-gb-assignment.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
