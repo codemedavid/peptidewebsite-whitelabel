@@ -11,7 +11,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getGroupBuyDashboardAction } from "@/actions/group-buys";
+import { addOrderedProductsToRoundAction, getGroupBuyDashboardAction } from "@/actions/group-buys";
+import type { AssignmentDrift } from "@/lib/storefront/group-buy-assignment";
 import { downloadSupplierWorkbook } from "./supplier-workbook";
 import { ProofThumb, ProofLightbox, PaymentBadge } from "./gb-proof-lightbox";
 import {
@@ -49,6 +50,8 @@ export function AdminGroupBuyDetail({
   const [prep, setPrep] = useState<ReportPrep | null>(null);
   const [caps, setCaps] = useState<GroupBuyCapabilities | null>(null);
   const [unlinked, setUnlinked] = useState(0);
+  const [drift, setDrift] = useState<AssignmentDrift | null>(null);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,9 +73,20 @@ export function AdminGroupBuyDetail({
       setPrep(res.prep);
       setCaps(res.caps);
       setUnlinked(res.unlinked);
+      setDrift(res.drift);
     }
     setLoading(false);
   }, [groupBuy.id]);
+
+  // Re-runs the drift check server-side from the round's real orders, so the
+  // client never gets to say which products should be added.
+  const applyAssignmentFix = useCallback(async () => {
+    setApplying(true);
+    const res = await addOrderedProductsToRoundAction(groupBuy.id);
+    if ("error" in res) setError(res.error);
+    else await load();
+    setApplying(false);
+  }, [groupBuy.id, load]);
 
   useEffect(() => {
     let alive = true;
@@ -85,6 +99,7 @@ export function AdminGroupBuyDetail({
         setPrep(res.prep);
         setCaps(res.caps);
         setUnlinked(res.unlinked);
+        setDrift(res.drift);
       }
       setLoading(false);
     });
@@ -196,6 +211,63 @@ export function AdminGroupBuyDetail({
           {unlinked} order{unlinked === 1 ? " was" : "s were"} placed outside every group buy&rsquo;s date
           range, so {unlinked === 1 ? "it isn't" : "they aren't"} counted here. Adjust this round&rsquo;s
           open/close dates to include {unlinked === 1 ? "it" : "them"}.
+        </div>
+      )}
+
+      {/* ── Assignment drift ──
+          The failure this exists for is SILENT: the round lists valid products
+          while customers buy different ones, so orders lose their group buy and
+          their group-buy pricing with nothing on screen to show it. */}
+      {drift?.hasDrift && (
+        <div
+          role="alert"
+          style={{
+            border: "1px solid #e0a800",
+            background: "#fff8e5",
+            borderRadius: 8,
+            padding: "12px 14px",
+            marginBottom: 14,
+            fontSize: 13,
+          }}
+        >
+          <strong>Check this round&rsquo;s product assignment.</strong>
+          {drift.orderedUnassigned.length > 0 && (
+            <p style={{ margin: "6px 0 0" }}>
+              {drift.orderedUnassigned.length} product
+              {drift.orderedUnassigned.length === 1 ? " is" : "s are"} being ordered but{" "}
+              {drift.orderedUnassigned.length === 1 ? "isn't" : "aren't"} assigned to this group buy,
+              so those orders aren&rsquo;t linked to it and the buyers didn&rsquo;t get group-buy
+              pricing:{" "}
+              <span style={{ fontWeight: 600 }}>
+                {drift.orderedUnassigned.map((p) => `${p.name} (${p.vials})`).join(" · ")}
+              </span>
+            </p>
+          )}
+          {drift.danglingAssignments.length > 0 && (
+            <p style={{ margin: "6px 0 0" }}>
+              {drift.danglingAssignments.length} assigned product
+              {drift.danglingAssignments.length === 1 ? "" : "s"} no longer exist
+              {drift.danglingAssignments.length === 1 ? "s" : ""} in your catalog — most likely
+              deleted or replaced by a duplicate with the same name.
+            </p>
+          )}
+          {drift.assignedUnsold.length > 0 && (
+            <p style={{ margin: "6px 0 0", opacity: 0.75 }}>
+              {drift.assignedUnsold.length} assigned product
+              {drift.assignedUnsold.length === 1 ? " has" : "s have"} no orders:{" "}
+              {drift.assignedUnsold.map((p) => p.name).join(" · ")}
+            </p>
+          )}
+          {caps?.canEdit && caps?.productAssignment && (
+            <button
+              className="admin-btn"
+              style={{ marginTop: 10 }}
+              onClick={applyAssignmentFix}
+              disabled={applying}
+            >
+              {applying ? "Updating…" : "Add the ordered products to this round"}
+            </button>
+          )}
         </div>
       )}
 

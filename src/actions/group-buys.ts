@@ -49,6 +49,11 @@ import {
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import {
+  detectAssignmentDrift,
+  productsToAssign,
+  type AssignmentDrift,
+} from "@/lib/storefront/group-buy-assignment";
+import {
   applyGbPrice,
   gbPriceError,
   removeFromGroupBuy,
@@ -117,6 +122,10 @@ export type GroupBuyDashboardResult =
       caps: GroupBuyCapabilities;
       /** Orders belonging to no round's window — surfaced, never dropped. */
       unlinked: number;
+      /** Does the assignment still match what customers are ordering? An
+       *  unnoticed mismatch is what cost k-glow its attribution AND its
+       *  group-buy pricing — see lib/storefront/group-buy-assignment.ts. */
+      drift: AssignmentDrift;
     }
   | { error: string };
 export type SaveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: string };
@@ -286,6 +295,20 @@ async function loadProductNames(
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
+/**
+ * Every product id that still exists for the tenant — ids only, one query. Used
+ * to spot assignments pointing at deleted products. Returning an EMPTY set is
+ * meaningful: the drift check treats it as "unknown" rather than "everything is
+ * deleted", so a store with no products never mass-flags its assignments.
+ */
+async function loadCatalogProductIds(tenantId: string, slug: string): Promise<Set<string>> {
+  if (isDemoMode()) {
+    return new Set((getDemoStoreProducts(slug) ?? []).map((p) => p.id));
+  }
+  const rows = await withTenant(tenantId, (db) => db.product.findMany({ select: { id: true } }));
+  return new Set(rows.map((r) => r.id));
+}
+
 // ── Per-round dashboard ──────────────────────────────────────────────────────
 
 /**
@@ -327,7 +350,32 @@ export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyD
     );
     const prep = prepareReport(round, resolved.orders, report);
 
-    return { ok: true, groupBuy, analytics, orderRows, prep, caps, unlinked: resolved.unlinked };
+    // Is the assignment still tracking reality? Names for assigned-but-unsold
+    // rows come from the catalog lookup we already did; the drift module only
+    // knows the ids, and a cuid is not something the owner can recognise.
+    const raw = detectAssignmentDrift(
+      groupBuy,
+      resolved.orders,
+      await loadCatalogProductIds(tenantId, slug),
+    );
+    const drift: AssignmentDrift = {
+      ...raw,
+      assignedUnsold: raw.assignedUnsold.map((p) => ({
+        ...p,
+        name: productNames.get(p.productId) ?? p.name,
+      })),
+    };
+
+    return {
+      ok: true,
+      groupBuy,
+      analytics,
+      orderRows,
+      prep,
+      caps,
+      unlinked: resolved.unlinked,
+      drift,
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load the group buy." };
   }
@@ -426,6 +474,71 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
       return { error: "Another group buy is already active. Close it before opening this one." };
     }
     return { error: e instanceof Error ? e.message : "Couldn't save the group buy." };
+  }
+}
+
+/**
+ * Add the products customers are actually ordering to a round's assignment, and
+ * drop assignments whose product no longer exists. The one-click fix behind the
+ * drift warning on the round's dashboard.
+ *
+ * Only touches productIds — dates, status and every other field are left alone,
+ * so this can be run on a live round without disturbing it. The drift is
+ * recomputed server-side from the round's real orders rather than trusting a
+ * list from the client, which is the only way this can't be used to widen a
+ * round to arbitrary products.
+ */
+export async function addOrderedProductsToRoundAction(id: unknown): Promise<SaveGroupBuyResult> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug, caps } = gate;
+  if (!caps.canEdit) return { error: "Editing group buys isn't enabled for this store." };
+  if (!caps.productAssignment) {
+    return { error: "Product assignment isn't enabled for this store." };
+  }
+  const gbId = typeof id === "string" ? id : "";
+  if (!gbId) return { error: "Missing group buy id." };
+
+  try {
+    const rounds = await loadGroupBuys(tenantId, slug);
+    const groupBuy = rounds.find((g) => g.id === gbId);
+    if (!groupBuy) return { error: "Group buy not found." };
+
+    const windows = rounds.map(toAnalyticsRound);
+    const round = windows.find((w) => w.id === gbId)!;
+    const candidates = await loadCandidateOrders(tenantId, slug, rounds);
+    const resolved = resolveRoundOrders(round, candidates, windows);
+    const drift = detectAssignmentDrift(
+      groupBuy,
+      resolved.orders,
+      await loadCatalogProductIds(tenantId, slug),
+    );
+    if (!drift.hasDrift) return { ok: true, groupBuy };
+
+    const productIds = productsToAssign(groupBuy, drift);
+    const next: GroupBuy = { ...groupBuy, productIds };
+
+    if (isDemoMode()) {
+      const list = rounds.map((g) => (g.id === gbId ? next : g));
+      await persistDemo(slug, list);
+      return { ok: true, groupBuy: next };
+    }
+
+    const row = await withTenant(tenantId, async (db) => {
+      // updateMany is tenant-scoped by the extension; a bare-id update isn't.
+      const n = await db.groupBuy.updateMany({
+        where: { id: gbId },
+        data: { productIds: productIds as unknown as Prisma.InputJsonValue },
+      });
+      return n.count ? db.groupBuy.findFirst({ where: { id: gbId } }) : null;
+    });
+    if (!row) return { error: "Group buy not found." };
+    // The assignment drives storefront group-buy pricing and the on-hand gate,
+    // so the tenant's cached pages have to recompute.
+    revalidateTenant(tenantId, slug);
+    return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't update the assignment." };
   }
 }
 
