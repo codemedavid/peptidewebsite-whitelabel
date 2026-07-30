@@ -1,22 +1,23 @@
 "use client";
 
 // The "two ways to order" storefront HOME (design: "K Glow Store.dc.html").
-// One scroll presenting both order paths: a hero, the "Two ways to order" split
-// (On-Hand vs the live Group Buy), the ON-HAND product list (ships now), the live
-// GROUP BUY card (round chrome + per-item regular-vs-gb price + saving), and a
-// "how it works" strip. Opt-in per tenant via brand.homeLayout === "two-ways";
-// white-label — every colour comes from the brand CSS variables, so K Glow's pink
-// theme drives the look while any tenant with the layout on gets the same home.
-// The Header/Footer/cart drawer are owned by the storefront Shell around this.
+// A hero, the "Two ways to order" split (On-Hand vs the live Group Buy), the
+// ON-HAND product list (ships now), a live GROUP BUY teaser, and a "how it works"
+// strip. The teaser carries the round chrome (countdown / slot goal / item count)
+// and links to the dedicated #groupbuy page — an open round's PRODUCTS are never
+// listed here beside the on-hand shelf, so one page never mixes the two order
+// paths. Opt-in per tenant via brand.homeLayout === "two-ways"; white-label —
+// every colour comes from the brand CSS variables, so K Glow's pink theme drives
+// the look while any tenant with the layout on gets the same home. The
+// Header/Footer/cart drawer are owned by the storefront Shell around this.
 
 import { useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
-import { baseProductId, makeVariationEntry, unitPrice } from "../checkout";
+import { baseProductId } from "../checkout";
 import {
   buildTwoWaysHomeView,
   groupBuyCtaTarget,
-  type GbHomeLine,
   type OnHandLine,
 } from "@/lib/storefront/two-ways-home";
 import {
@@ -24,8 +25,6 @@ import {
   optionLabel,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
-import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
-import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
@@ -67,10 +66,6 @@ export function TwoWaysHome({
     "Every batch third-party tested. Order what's on-hand today, or join the group buy and save.";
 
   const qtyOf = (id: string) => cart.filter((c) => baseProductId(c) === id).length;
-
-  // The live round's pricing scope — lets the GB card price a chosen variation
-  // exactly as checkout will charge it (unitPrice on the variation clone).
-  const gbScope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
 
   return (
     <div className="sf-twh" data-testid="two-ways-home">
@@ -129,7 +124,11 @@ export function TwoWaysHome({
           <span className="sf-twh__sec-count">{view.onHand.count} products</span>
         </div>
         {view.onHand.count === 0 ? (
-          <p className="sf-twh__empty">Nothing on hand right now — check the group buy above.</p>
+          <p className="sf-twh__empty">
+            {gbLive
+              ? "Nothing on hand right now — everything is in the open group buy."
+              : "Nothing on hand right now — follow us for the next drop."}
+          </p>
         ) : (
           <ul className="sf-twh__list">
             {view.onHand.lines.map((line) => (
@@ -172,19 +171,10 @@ export function TwoWaysHome({
               </div>
             )}
 
-            <ul className="sf-twh__gb-items">
-              {view.gb.lines.map((line) => (
-                <GbItemRow
-                  key={line.product.id}
-                  line={line}
-                  currency={currency}
-                  scope={gbScope}
-                  qty={qtyOf(line.product.id)}
-                  addToCart={addToCart}
-                  decrementCart={decrementCart}
-                />
-              ))}
-            </ul>
+            <div className="sf-twh__gb-count">
+              {view.gb.count} {view.gb.count === 1 ? "item" : "items"} in this round —
+              browse them on the group buy page
+            </div>
 
             <button
               type="button"
@@ -327,87 +317,6 @@ function OnHandRow({
   );
 }
 
-function GbItemRow({
-  line,
-  currency,
-  scope,
-  qty,
-  addToCart,
-  decrementCart,
-}: {
-  line: GbHomeLine<Product>;
-  currency: string;
-  scope: GroupBuyPriceScope | null;
-  qty: number;
-  addToCart: AddToCart;
-  decrementCart: (productId: string) => void;
-}) {
-  const p = line.product;
-  const options = buildProductOptions(p);
-  const showSelector = shouldShowOptionPicker(p);
-  const [optIdx, setOptIdx] = useState(0);
-  const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
-  // Price the chosen option EXACTLY as checkout will charge it: a variation
-  // clone runs through the same unitPrice (gb min-rule included); the base
-  // option keeps the line's precomputed gb pricing.
-  const variation = showSelector ? selectedOpt?.variation : undefined;
-  const charged = variation ? unitPrice(makeVariationEntry(p, variation), 1, scope) : line.gbPrice;
-  const regular = variation ? variation.price : line.regularPrice;
-  const hasSavings = variation ? charged < regular : line.hasSavings;
-  return (
-    <li className="sf-twh__gb-item">
-      <div className="sf-twh__gb-item-main">
-        <div className="sf-twh__gb-item-name">{p.name}</div>
-        {hasSavings && (
-          <div className="sf-twh__gb-item-reg">On-hand {formatGbMoney(currency, regular)}</div>
-        )}
-        {showSelector && (
-          <select
-            className="sf-twh__opts sf-twh__opts--gb"
-            aria-label={`Options for ${p.name}`}
-            value={optIdx}
-            onChange={(e) => setOptIdx(Number(e.target.value))}
-          >
-            {options.map((o, i) => (
-              <option key={o.name} value={i}>
-                {optionLabel(o, p.currency || currency)}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-      <div className="sf-twh__gb-item-buy">
-        <div className="sf-twh__gb-item-price font-display">{formatGbMoney(currency, charged)}</div>
-        {hasSavings && (
-          <div className="sf-twh__gb-save">save {formatGbMoney(currency, Math.max(0, regular - charged))}</div>
-        )}
-      </div>
-      {showSelector ? (
-        <span className="sf-twh__gb-item-add">
-          <button type="button" className="sf-twh__gb-add" onClick={() => addToCart(p, 1, variation)}>
-            Join
-          </button>
-          {qty > 0 && <span className="sf-twh__incart sf-twh__incart--gb">{qty} in cart</span>}
-        </span>
-      ) : qty === 0 ? (
-        <button type="button" className="sf-twh__gb-add" onClick={() => addToCart(p)}>
-          Join
-        </button>
-      ) : (
-        <div className="sf-twh__stepper sf-twh__stepper--gb" aria-label={`Quantity of ${p.name}`}>
-          <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
-            −
-          </button>
-          <span aria-live="polite">{qty}</span>
-          <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
-            +
-          </button>
-        </div>
-      )}
-    </li>
-  );
-}
-
 // Scoped to .sf-twh. Structure + motion live here (mirrors GroupBuyPage's inline
 // <style>); all colour resolves from the brand CSS variables, with the K Glow
 // pink design as the fallback so an unthemed preview still reads correctly.
@@ -478,12 +387,7 @@ const twhCss = `
   padding: 4px 8px; border-radius: 8px; color: var(--brand-text, #3a1f2c);
   border: 1px solid var(--hairline, #f6d9e7); background: var(--brand-surface, #fff);
 }
-.sf-root .sf-twh__opts--gb {
-  color: var(--brand-main, #c81e6e); border-color: color-mix(in oklab, #fff 40%, transparent);
-}
 .sf-root .sf-twh__incart { display: block; margin-top: 4px; font-size: 10px; font-weight: 700; color: var(--brand-text-muted, #8a4a66); }
-.sf-root .sf-twh__incart--gb { color: color-mix(in oklab, #fff 85%, var(--brand-main, #c81e6e)); text-align: center; }
-.sf-root .sf-twh__gb-item-add { display: flex; flex-direction: column; align-items: center; }
 .sf-root .sf-twh__row-buy { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .sf-root .sf-twh__row-price { font-weight: 700; font-size: 16px; color: var(--brand-text, #3a1f2c); }
 .sf-root .sf-twh__add {
@@ -503,9 +407,6 @@ const twhCss = `
 .sf-root .sf-twh__stepper button:first-child { background: #fff; color: var(--brand-main, #c81e6e); }
 .sf-root .sf-twh__stepper button:last-child { background: var(--brand-main, #c81e6e); color: var(--brand-button-text, #fff); }
 .sf-root .sf-twh__stepper span { font-weight: 700; font-size: 13px; min-width: 16px; text-align: center; color: var(--brand-main, #c81e6e); }
-.sf-root .sf-twh__stepper--gb { background: color-mix(in oklab, #fff 22%, transparent); }
-.sf-root .sf-twh__stepper--gb span { color: #fff; }
-.sf-root .sf-twh__stepper--gb button:first-child { background: #fff; color: var(--brand-main, #c81e6e); }
 .sf-root .sf-twh__gb {
   background: var(--brand-main, #c81e6e); color: var(--brand-button-text, #fff);
   border-radius: 26px; padding: 24px 18px;
@@ -523,25 +424,10 @@ const twhCss = `
 .sf-root .sf-twh__gb-slots-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 .sf-root .sf-twh__gb-bar { height: 8px; background: color-mix(in oklab, #fff 25%, transparent); border-radius: 99px; overflow: hidden; }
 .sf-root .sf-twh__gb-bar-fill { height: 100%; background: #fff; border-radius: 99px; transition: width .4s ease; }
-.sf-root .sf-twh__gb-items { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.sf-root .sf-twh__gb-item {
-  display: flex; align-items: center; gap: 12px; border-radius: 16px; padding: 12px 14px;
+.sf-root .sf-twh__gb-count {
+  margin-top: 18px; border-radius: 16px; padding: 12px 14px; font-size: 13px; font-weight: 700;
   background: color-mix(in oklab, #fff 12%, transparent); border: 1px solid color-mix(in oklab, #fff 25%, transparent);
 }
-.sf-root .sf-twh__gb-item-main { flex: 1; min-width: 0; }
-.sf-root .sf-twh__gb-item-name { font-weight: 700; font-size: 14px; }
-.sf-root .sf-twh__gb-item-reg { font-size: 11px; opacity: .85; margin-top: 2px; text-decoration: line-through; }
-.sf-root .sf-twh__gb-item-buy { text-align: right; }
-.sf-root .sf-twh__gb-item-price { font-size: 16px; font-weight: 700; }
-.sf-root .sf-twh__gb-save {
-  font-size: 10px; font-weight: 700; color: var(--brand-main, #c81e6e);
-  background: color-mix(in oklab, #fff 82%, var(--brand-main, #c81e6e)); border-radius: 99px; padding: 2px 8px; margin-top: 3px;
-}
-.sf-root .sf-twh__gb-add {
-  border: 0; cursor: pointer; font-weight: 700; font-size: 12px; border-radius: 99px; padding: 8px 14px;
-  color: var(--brand-main, #c81e6e); background: #fff; transition: filter .15s ease;
-}
-.sf-root .sf-twh__gb-add:hover { filter: brightness(0.94); }
 .sf-root .sf-twh__gb-cta {
   width: 100%; margin-top: 18px; border: 0; cursor: pointer; border-radius: 99px; padding: 15px;
   font-weight: 700; font-size: 15px; color: var(--brand-main, #c81e6e); background: #fff; transition: filter .15s ease;

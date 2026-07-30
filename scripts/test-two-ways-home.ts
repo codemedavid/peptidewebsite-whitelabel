@@ -70,10 +70,11 @@ function banner(b: Partial<GroupBuyBanner> = {}): GroupBuyBanner {
 const NOW = new Date("2026-07-22T00:00:00.000Z");
 
 // 1. The live round is the source of truth for what's in the group buy: a scoped
-//    round routes its assigned products to the GB card and the rest stay on-hand —
-//    regardless of productType tagging. (Fixes: round active in admin but the
-//    storefront GB card showed CLOSED because the products weren't tagged "gb".)
-check("scoped round routes assigned products to group buy, rest on-hand", () => {
+//    round claims its assigned products (they leave the on-hand shelf for the
+//    dedicated #groupbuy page) and the rest stay on-hand — regardless of
+//    productType tagging. (Fixes: round active in admin but the storefront GB
+//    card showed CLOSED because the products weren't tagged "gb".)
+check("scoped round claims assigned products, rest stay on-hand", () => {
   const products = [
     product({ id: "a", name: "Alpha", price: 1000 }),
     product({ id: "b", name: "Bravo", price: 1500 }),
@@ -82,10 +83,7 @@ check("scoped round routes assigned products to group buy, rest on-hand", () => 
   const view = buildTwoWaysHomeView(products, banner({ coversAll: false, productIds: ["c"] }), "₱", NOW);
   assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["a", "b"]);
   assert.equal(view.gb.count, 1);
-  assert.equal(view.gb.lines[0].product.id, "c");
-  // An untagged round product still lists at its regular price (no phantom saving).
-  assert.equal(view.gb.lines[0].gbLabel, "₱1,000");
-  assert.equal(view.gb.lines[0].hasSavings, false);
+  assert.deepEqual(view.gb.productIds, ["c"]);
 });
 
 // 1b. A catalog-wide round (coversAll) puts every product in the group buy.
@@ -99,23 +97,10 @@ check("catalog-wide round routes all products to the group buy", () => {
   assert.equal(view.gb.count, 2);
 });
 
-// 2. A group-buy line carries the on-hand-vs-GB saving + display labels.
-check("group-buy line surfaces regular vs gb price and the saving", () => {
-  const view = buildTwoWaysHomeView(
-    [product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" })],
-    banner(),
-    "₱",
-    NOW,
-  );
-  const line = view.gb.lines[0];
-  assert.equal(line.regularPrice, 1000);
-  assert.equal(line.gbPrice, 800);
-  assert.equal(line.savings, 200);
-  assert.equal(line.hasSavings, true);
-  assert.equal(line.regularLabel, "₱1,000");
-  assert.equal(line.gbLabel, "₱800");
-  assert.equal(line.saveLabel, "₱200");
-});
+// 2. Per-item group-buy PRICING (regular vs gbPrice + saving labels) is no longer
+//    a home concern — the round's items render only on the dedicated #groupbuy
+//    page. That guarantee is pinned by npm run test:group-buy-page
+//    ("each line exposes gb price, regular price and the saving, all labelled").
 
 // 3. No live round (null banner) → the GB path is closed and empty.
 check("no live round yields a closed, empty group-buy path", () => {
@@ -149,8 +134,10 @@ check("live round wires name, countdown and slot progress", () => {
   assert.equal(view.gb.slots.pct, 60);
 });
 
-// 5. A scoped round narrows the GB list to the round's assigned products.
-check("scoped round narrows the group-buy list to assigned products", () => {
+// 5. A scoped round claims only its assigned products — a gb-tagged product
+//    OUTSIDE the round stays on the on-hand shelf (the round, not the tag, is
+//    the membership rule).
+check("scoped round claims only assigned products, even among gb-tagged ones", () => {
   const products = [
     product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
     product({ id: "d", name: "Delta", price: 900, gbPrice: 700, productType: "gb" }),
@@ -162,7 +149,8 @@ check("scoped round narrows the group-buy list to assigned products", () => {
     NOW,
   );
   assert.equal(view.gb.count, 1);
-  assert.equal(view.gb.lines[0].product.id, "c");
+  assert.deepEqual(view.gb.productIds, ["c"]);
+  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["d"]);
 });
 
 // 6. On-hand line reports stock state for the "N in stock" badge.

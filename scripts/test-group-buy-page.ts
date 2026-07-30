@@ -226,10 +226,7 @@ function main() {
     assert.deepEqual(view.lines.map((l) => l.product.id), ["gb-1", "gb-2", "oh-1"]);
     assert.equal(view.lines[1].priceLabel, "₱840");
     const home = buildTwoWaysHomeView(catalog, banner, "₱", NOW);
-    assert.deepEqual(
-      view.lines.map((l) => l.product.id),
-      home.gb.lines.map((l) => l.product.id),
-    );
+    assert.deepEqual(view.lines.map((l) => l.product.id), home.gb.productIds);
   });
 
   check("surfaces the round chrome: name, countdown, delivery, slot progress", () => {
@@ -277,10 +274,10 @@ function main() {
     const banner: GroupBuyBanner = { ...scopedBanner, productIds: ["p1", "p2"], coversAll: false };
     const page = buildGroupBuyPageView(untagged, banner, "₱", NOW);
     const home = buildTwoWaysHomeView(untagged, banner, "₱", NOW);
-    assert.deepEqual(
-      page.lines.map((l) => l.product.id),
-      home.gb.lines.map((l) => l.product.id),
-    );
+    // The home no longer LISTS the round's items (they live on this page only),
+    // but it must still agree on which products the round covers — otherwise the
+    // teaser advertises a round the page renders empty.
+    assert.deepEqual(page.lines.map((l) => l.product.id), home.gb.productIds);
     assert.ok(page.count > 0); // both non-empty → no "open on home, empty on page" split
   });
 

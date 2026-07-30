@@ -1,20 +1,14 @@
 // "Two ways to order" HOME view-model — the presentation core behind the
-// storefront home layout (design: "K Glow Store.dc.html"). It composes the
-// tested two-ways primitives (splitTwoWays / groupBuyLine / slotProgress) and the
-// group-buy-page helpers (countdown / initial / money) into everything the home
-// renders: the ON-HAND product list (ships now) and the GROUP BUY card (the live
-// round's group-buy products at their gbPrice, with the on-hand-vs-GB saving
-// surfaced — the "two ways" contrast). Distinct from group-buy-page.ts, which is
-// the dedicated #groupbuy route showing ONE price per item. Pure + JSON-safe (no
-// React, no DB), so it drives an SSR compute and is trivially testable
-// (npm run test:two-ways-home).
+// storefront home layout (design: "K Glow Store.dc.html"). It composes the tested
+// two-ways primitives (slotProgress) and the group-buy-page helpers (countdown /
+// initial / money) into what the home renders: the ON-HAND product list (ships
+// now) and, while a round is live, a GROUP BUY TEASER — round chrome plus how
+// many items are in the round, linking to the dedicated #groupbuy page. The
+// round's products themselves are listed only there (group-buy-page.ts), never
+// alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
+// an SSR compute and is trivially testable (npm run test:two-ways-home).
 
-import {
-  groupBuyLine,
-  slotProgress,
-  type SlotProgress,
-  type TwoWaysInput,
-} from "./two-ways";
+import { slotProgress, type SlotProgress, type TwoWaysInput } from "./two-ways";
 import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-page";
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
@@ -44,32 +38,28 @@ export type OnHandLine<T extends TwhProduct = TwhProduct> = {
   stockLabel: string;
 };
 
-/** One group-buy card row: the product with its regular vs gb price + saving. */
-export type GbHomeLine<T extends TwhProduct = TwhProduct> = {
-  product: T;
-  initial: string;
-  regularPrice: number;
-  gbPrice: number;
-  savings: number;
-  hasSavings: boolean;
-  regularLabel: string;
-  gbLabel: string;
-  saveLabel: string;
+/** The live round as the home surfaces it: chrome + how many items are in the
+ *  round, but NOT the products themselves — those live on the dedicated
+ *  #groupbuy page (see buildTwoWaysHomeView). */
+export type GbHomeTeaser = {
+  /** A round is live (banner present). The teaser renders when open && count > 0. */
+  open: boolean;
+  name: string;
+  deliveryEta: string;
+  countdown: string;
+  slots: SlotProgress;
+  /** How many catalog products the round covers — "12 items in this round". */
+  count: number;
+  /** The ids the round covers. Lets callers (and the cross-check test) confirm
+   *  the home and the group-buy page agree on membership without the home
+   *  carrying priced product lines. */
+  productIds: string[];
 };
 
-/** The full home view-model: the two order paths and the live-round chrome. */
+/** The full home view-model: the on-hand shelf and the live-round teaser. */
 export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
   onHand: { count: number; lines: OnHandLine<T>[] };
-  gb: {
-    /** A round is live (banner present). The GB section renders when open && count > 0. */
-    open: boolean;
-    name: string;
-    deliveryEta: string;
-    countdown: string;
-    slots: SlotProgress;
-    count: number;
-    lines: GbHomeLine<T>[];
-  };
+  gb: GbHomeTeaser;
 };
 
 /**
@@ -113,34 +103,24 @@ function onHandLine<T extends TwhProduct>(product: T, currency: string): OnHandL
   };
 }
 
-function gbHomeLine<T extends TwhProduct>(product: T, currency: string): GbHomeLine<T> {
-  const line = groupBuyLine(product);
-  return {
-    product,
-    initial: productInitial(product.name),
-    regularPrice: line.regularPrice,
-    gbPrice: line.gbPrice,
-    savings: line.savings,
-    hasSavings: line.hasSavings,
-    regularLabel: formatGbMoney(currency, line.regularPrice),
-    gbLabel: formatGbMoney(currency, line.gbPrice),
-    saveLabel: formatGbMoney(currency, line.savings),
-  };
-}
-
 /**
  * Build the home view-model. The LIVE ROUND is the source of truth for what's in
- * the group buy: a product is a GROUP BUY line when it's in the live round's scope
+ * the group buy: a product belongs to the round when it's in the round's scope
  * (coversAll, or its id is in the round's assigned productIds) — matching what the
  * store admin shows, regardless of the product's productType tag. Everything else
- * is ON-HAND. A null banner (no live round) puts every product on-hand and closes
- * the GB path. Pricing still honours gbPrice (groupBuyLine) so a round product with
- * a gbPrice shows its saving, while an untagged round product simply lists at its
- * regular price. Availability filtering is the caller's job. Order is preserved
- * within each path — except that `onHandOrder: "per-vial-first"` floats the
- * on-hand shelf's single per-vial listings above its multi-vial kits (see
- * ./on-hand-order); the GROUP BUY path is never re-ordered. The input is never
- * mutated.
+ * is ON-HAND.
+ *
+ * An open round NEVER shares this page with the on-hand shelf: the round's
+ * products are listed only on the dedicated #groupbuy page, so the home returns
+ * their ids and count for the teaser (chrome + "N items", CTA to that page) and no
+ * product lines. That also means the home offers no way to add a round item to a
+ * cart that already holds on-hand stock — the mixed-cart rule (./two-ways-cart)
+ * can't be tripped from one screen. A null banner (no live round) puts every
+ * product on-hand and closes the GB path.
+ *
+ * Availability filtering is the caller's job. On-hand order is preserved, except
+ * that `onHandOrder: "per-vial-first"` floats the shelf's single per-vial listings
+ * above its multi-vial kits (see ./on-hand-order). The input is never mutated.
  */
 export function buildTwoWaysHomeView<T extends TwhProduct>(
   products: T[],
@@ -157,9 +137,7 @@ export function buildTwoWaysHomeView<T extends TwhProduct>(
     products.filter((p) => !inRound(p)),
     onHandOrder,
   ).map((p) => onHandLine(p, currency));
-  const gbLines = banner
-    ? products.filter((p) => inRound(p)).map((p) => gbHomeLine(p, currency))
-    : [];
+  const gbProductIds = banner ? products.filter(inRound).map((p) => p.id) : [];
 
   return {
     onHand: { count: onHandLines.length, lines: onHandLines },
@@ -169,8 +147,8 @@ export function buildTwoWaysHomeView<T extends TwhProduct>(
       deliveryEta: banner?.deliveryEta ?? "",
       countdown: gbCountdownLabel(banner?.endsAt, now),
       slots: slotProgress(banner?.slotGoal ?? 0, banner?.filled ?? 0),
-      count: gbLines.length,
-      lines: gbLines,
+      count: gbProductIds.length,
+      productIds: gbProductIds,
     },
   };
 }
