@@ -1,9 +1,14 @@
 "use client";
 
 // Store-admin view for changing the storefront admin password. Verifies the
-// current password and writes the new one into branding.config.adminPassword via
-// changeStorefrontAdminPasswordAction (read-modify-write). The new password takes
-// effect on the next login — the current session cookie stays valid.
+// current password and writes the new one as a scrypt hash via
+// changeStorefrontAdminPasswordAction — the owner's onto Tenant.storeAdminPasswordHash,
+// a staff member's onto their own StorefrontStaff row. The new password takes
+// effect on the next login; the current session cookie stays valid.
+//
+// The sign-in EMAIL is not editable here. It is set by the provider in the
+// platform tenant settings, so the store owner can change their password but
+// cannot change (or lock themselves out of) the address it belongs to.
 
 import { useState } from "react";
 import { useStore } from "../store";
@@ -78,7 +83,8 @@ export function AdminAccountSettings({ onBack }: { onBack: () => void }) {
           <h2 className="admin-form__section">🔒 Change Your Password</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
             This is your password for signing in to the ADMIN DASHBOARD.
-            The new password takes effect the next time you log in.
+            The new password takes effect the next time you log in. To change the
+            email address you sign in with, contact your provider.
           </div>
 
           <div className="admin-field" style={{ marginBottom: 14 }}>

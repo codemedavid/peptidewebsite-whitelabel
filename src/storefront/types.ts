@@ -331,7 +331,9 @@ export type Brand = {
   // @/lib/storefront/product-image; absent = the built-in SVG placeholder.
   defaultProductImage?: string;
 
-  adminPassword: string;
+  // NOTE: there is deliberately no `adminPassword` here. The store-admin
+  // credential lives on the Tenant row (storeAdminEmail + storeAdminPasswordHash)
+  // because this whole object is serialized to every storefront visitor.
   adminLoginTitle: string;
   adminLoginSub: string;
 
@@ -464,12 +466,6 @@ export type Brand = {
   // The modal itself additionally needs the owner's own `enabled` flag on. See
   // page.tsx projection + visibility.ts (ADMIN_VIEW_TOGGLE.notice).
   showAdminNotice?: boolean;
-  // Whether the `#admin` login shows the unified username + password form. True
-  // only when Staff Accounts are enabled AND ≥1 staff account exists; otherwise
-  // the login is password-only (owner password), so a fresh store is never asked
-  // for a staff username that doesn't exist yet. Derived server-side via
-  // resolveAdminLoginMode (see admin-login-mode.ts, test:admin-login-mode).
-  staffLoginActive?: boolean;
   // Store-admin Reseller Portal manager. Derived server-side from the platform
   // entitlement (FEATURES.STORE_RESELLER_PORTAL, admin → Features). In every
   // plan ceiling so it defaults ON; the #merchant page additionally needs an

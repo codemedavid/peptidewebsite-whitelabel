@@ -1,7 +1,6 @@
 import { getTenantId, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
-import { resolveAdminLoginMode } from "@/lib/storefront/admin-login-mode";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders } from "@/lib/demo/fixtures";
 import { orderCountsAsDemand, DEMAND_EXCLUDED_STATUS_LIST } from "@/lib/storefront/group-buy";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
@@ -84,6 +83,15 @@ export default async function HomePage() {
   // The reseller access code is validated server-side (verifyResellerCodeAction);
   // never ship it to the browser, even though the rest of `config` is public.
   delete (brand as Record<string, unknown>).resellerAccessCode;
+
+  // Same for the store-admin credential. It now lives on the Tenant row, but
+  // stores created before that migration may still carry a legacy plaintext
+  // `adminPassword` (and its hash) inside branding.config — and the spread above
+  // copies every config key onto `brand`, which is serialized to every visitor.
+  // Stripping here keeps the leak closed until the backfill clears those rows.
+  for (const key of ["adminPassword", "adminEmail", "adminPasswordHash"]) {
+    delete (brand as Record<string, unknown>)[key];
+  }
 
   // Per-tenant default product image — the fallback photo shown for products
   // without an image of their own. Normalized here (hosted http(s) URLs only)
@@ -207,28 +215,10 @@ export default async function HomePage() {
     await getSubscriptionBilling(tenantId),
   );
 
-  // The `#admin` login only asks for a USERNAME once the store actually has
-  // per-user logins to disambiguate — i.e. Staff Accounts are enabled AND at
-  // least one staff account exists. Until then the login is password-only (the
-  // owner password), so a brand-new store is never asked for a phantom staff
-  // username that doesn't exist yet. Count via withTenant() to match this file's
-  // tenant-scoped access (the product load below) and stay correct if app_user
-  // RLS is ever adopted ([[live-db-state]] runs as postgres/BYPASSRLS today). Only
-  // read when the feature is on, and wrap it so an absent staff table or a stale
-  // generated client (delegate undefined) resolves to "no staff" — the public
-  // storefront render must never fail on this. Decision lives in the pure core
-  // (test:admin-login-mode).
-  let staffCount = 0;
-  if (staffEntitled && !isDemoMode()) {
-    try {
-      staffCount = await withTenant(tenantId, (db) =>
-        db.storefrontStaff.count({ where: { tenantId } }),
-      );
-    } catch {
-      staffCount = 0;
-    }
-  }
-  brand.staffLoginActive = resolveAdminLoginMode(staffEntitled, staffCount) === "unified";
+  // NOTE: the storefront no longer counts staff here. The `#admin` login is a
+  // single email + password form for everyone — owner and staff alike — so the
+  // client needs no hint about which form to render, and the old
+  // resolveAdminLoginMode / brand.staffLoginActive pair is gone.
 
   // Checkout admin fee: operator-revocable per tenant (admin → Features, default
   // ON) AND Business-exclusive under the trial system. brand.adminFeeEntitled is

@@ -13,6 +13,9 @@ import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode, updateDemoOnboarding } from "@/lib/demo/fixtures";
 import { revalidateTenant, revalidateTenantVisibility } from "@/lib/tenant/revalidate";
 import { hashAdminPassword } from "@/lib/auth/tenant-admin";
+import { hashPassword } from "@/lib/auth/password-hash";
+import { normalizeLoginEmail } from "@/lib/auth/login-email";
+import { isValidEmail } from "@/lib/analytics/events";
 import { ONBOARDING_STATUSES, type OnboardingStatus } from "@/lib/admin/onboarding-data";
 
 export type AdminOnboardingResult = { ok: true } | { error: string };
@@ -135,15 +138,23 @@ export async function setTrialAction(
   return { ok: true };
 }
 
-/** Set the client's store credentials: dashboard password (hashed) + storefront
- *  #admin password (plaintext in branding.config), so they can sign into both. */
+/** Set the client's store credentials — both stored as hashes, never plaintext:
+ *
+ *   • Tenant.adminPasswordHash        → the platform /dashboard login
+ *   • Tenant.storeAdminPasswordHash   → the storefront `<slug>/#admin` login
+ *
+ *  The `#admin` login also needs an EMAIL. If the tenant has none yet we seed it
+ *  from the onboarding submission the client filled in, so setting a password
+ *  here produces a credential that actually works instead of a half-configured
+ *  store nobody can sign into. The operator can correct it later in tenant
+ *  settings, which is where the email is owned. */
 export async function setStorePasswordAction(
   slug: string,
   password: string,
 ): Promise<AdminOnboardingResult> {
   await requirePlatformUser();
   if (isDemoMode()) {
-    return { error: 'Demo mode uses a fixed password ("admin"). Connect a database to set one.' };
+    return { error: "Demo mode has no database. Connect one to set store credentials." };
   }
   const pwd = (password ?? "").trim();
   if (pwd.length < 6) return { error: "Use at least 6 characters." };
@@ -151,23 +162,30 @@ export async function setStorePasswordAction(
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
+    select: { id: true, storeAdminEmail: true },
   });
   if (!tenant) return { error: "Store not found." };
 
-  const config = { ...((tenant.branding?.config ?? {}) as Record<string, unknown>), adminPassword: pwd };
+  const data: {
+    adminPasswordHash: string;
+    storeAdminPasswordHash: string;
+    storeAdminEmail?: string;
+  } = {
+    adminPasswordHash: hashAdminPassword(pwd),
+    storeAdminPasswordHash: hashPassword(pwd),
+  };
 
-  await prisma.$transaction([
-    prisma.tenant.update({
-      where: { id: tenant.id },
-      data: { adminPasswordHash: hashAdminPassword(pwd) },
-    }),
-    prisma.branding.upsert({
+  if (!tenant.storeAdminEmail) {
+    const submission = await prisma.onboardingSubmission.findFirst({
       where: { tenantId: tenant.id },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId: tenant.id, config: config as Prisma.InputJsonValue },
-    }),
-  ]);
+      orderBy: { createdAt: "desc" },
+      select: { email: true },
+    });
+    const email = normalizeLoginEmail(submission?.email);
+    if (isValidEmail(email)) data.storeAdminEmail = email;
+  }
+
+  await prisma.tenant.update({ where: { id: tenant.id }, data });
 
   revalidateTenant(tenant.id, slug);
   bust();

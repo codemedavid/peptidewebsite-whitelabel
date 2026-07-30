@@ -61,7 +61,6 @@ const THEME_ID = "ocean-breeze";
 /** Playful wellness-lab = generous rounding. */
 const RADIUS = "1rem";
 /** Storefront #admin password. Change it in admin → Tenant → Settings. */
-const ADMIN_PASSWORD = "pepsy2026";
 
 /**
  * No logo is seeded. The owner uploads it from the white-label store admin,
@@ -132,7 +131,6 @@ const CONFIG: Brand = {
   bodyFont: FONTS.body,
   buttonFont: FONTS.heading,
 
-  adminPassword: ADMIN_PASSWORD,
   adminLoginTitle: "Store Admin",
   adminLoginSub: "Enter your store password to continue.",
 
@@ -254,7 +252,7 @@ async function main() {
   console.log(`✓ ${NAME} (${SLUG}) — ${PLAN_KEY}/${STATUS}, theme ${THEME_ID}`);
   console.log(`  live at   https://${SLUG}.${root}`);
   console.log(`  local at  http://${SLUG}.lvh.me:3100`);
-  console.log(`  #admin password: ${ADMIN_PASSWORD}`);
+  console.log("  #admin sign-in: set the email + password in admin → tenant settings");
   console.log(
     uploadedLogo
       ? `  logo: branding.logoUrl = ${uploadedLogo} (config.logoUrl cleared so it shows)`

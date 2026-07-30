@@ -37,8 +37,6 @@ export type ActionResult = { ok: true } | { error: string };
  *  without the per-module permission that gates it (staff enforcement). */
 const NO_ACCESS = "You don't have permission to do that.";
 
-const DEFAULT_PASSWORD = "admin";
-
 /** The branding.config blob for the current tenant (demo file or DB). */
 async function readConfig(
   tenantId: string,
@@ -53,31 +51,10 @@ async function readConfig(
   return (branding?.config ?? {}) as Record<string, unknown>;
 }
 
-/** The admin password the owner configured, or the built-in default. */
-function resolvePassword(config: Record<string, unknown>): string {
-  const raw = typeof config.adminPassword === "string" ? config.adminPassword.trim() : "";
-  return raw || DEFAULT_PASSWORD;
-}
-
-/**
- * Verify the storefront admin password (server-side) and, on success, issue the
- * signed `sf_admin_session` cookie scoped to the current tenant. The tenant is
- * resolved from the request host — no slug is passed from the (untrusted) client.
- */
-export async function signInStorefrontAdminAction(password: string): Promise<ActionResult> {
-  const tenantId = await getTenantIdOrNull();
-  if (!tenantId) return { error: "Could not resolve this store." };
-
-  const config = await readConfig(tenantId);
-  const expected = resolvePassword(config);
-
-  if ((password ?? "").trim() !== expected) {
-    return { error: "Incorrect password." };
-  }
-
-  await setStorefrontAdminCookie(tenantId);
-  return { ok: true };
-}
+// NOTE: the password-only `signInStorefrontAdminAction` was removed. Every
+// `#admin` sign-in now goes through signInStoreAdminAction (actions/storefront-staff.ts),
+// which requires an email AND a password and verifies both against a scrypt
+// hash. There is no default password and no password-only path any more.
 
 export async function signOutStorefrontAdminAction(): Promise<ActionResult> {
   await clearStorefrontAdminCookie();
@@ -97,9 +74,11 @@ export async function hasStorefrontAdminSessionAction(): Promise<boolean> {
 /**
  * Change the storefront admin password. Requires a valid session, re-verifies the
  * current password (so a hijacked open session can't silently rotate the
- * credential), then persists the new one into `branding.config.adminPassword`
- * (read-modify-write, mirroring the save* actions). Passwords are stored as the
- * plaintext the owner typed — same scheme signInStorefrontAdminAction checks.
+ * credential), then persists the new one as a scrypt hash.
+ *
+ * Staff rotate their own StorefrontStaff.passwordHash; the owner rotates
+ * Tenant.storeAdminPasswordHash. The owner's sign-in EMAIL is not editable here
+ * — the super admin owns it in tenant settings.
  */
 export async function changeStorefrontAdminPasswordAction(
   currentPassword: string,
@@ -133,25 +112,43 @@ export async function changeStorefrontAdminPasswordAction(
     return { ok: true };
   }
 
+  // The OWNER's credential lives on the Tenant row (storeAdminPasswordHash),
+  // never in branding.config — that blob is spread into the public client
+  // `brand`, so a password kept there shipped to every visitor.
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  if ((currentPassword ?? "").trim() !== resolvePassword(current)) {
+
+  if (isDemoMode()) {
+    const current = await readConfig(tenantId);
+    const stored = typeof current.adminPasswordHash === "string" ? current.adminPasswordHash : "";
+    if (!stored || !verifyPassword((currentPassword ?? "").trim(), stored)) {
+      return { error: "Current password is incorrect." };
+    }
+    saveDemoBranding(tenantId, { config: { ...current, adminPasswordHash: hashPassword(next) } });
+    revalidateTenant(tenantId, slug);
+    return { ok: true };
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { storeAdminPasswordHash: true },
+  });
+  // No stored credential means the owner cannot prove who they are; the super
+  // admin sets it in tenant settings. Fail closed rather than letting anyone
+  // claim the account by "changing" a password that was never set.
+  if (!tenant?.storeAdminPasswordHash) {
+    return { error: "No sign-in is set for this store yet. Contact your provider." };
+  }
+  if (!verifyPassword((currentPassword ?? "").trim(), tenant.storeAdminPasswordHash)) {
     return { error: "Current password is incorrect." };
   }
-  if (next === resolvePassword(current)) {
+  if (verifyPassword(next, tenant.storeAdminPasswordHash)) {
     return { error: "New password must be different from the current one." };
   }
 
-  const config = { ...current, adminPassword: next };
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { storeAdminPasswordHash: hashPassword(next) },
+  });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };

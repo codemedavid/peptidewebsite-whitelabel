@@ -34,7 +34,6 @@ export const BRAND: Brand = {
   headingFont: "Playfair Display",
   bodyFont: "Inter",
 
-  adminPassword: "admin",
   adminLoginTitle: "Admin Access",
   adminLoginSub: "",
 
