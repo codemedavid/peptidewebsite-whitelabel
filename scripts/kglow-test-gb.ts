@@ -15,7 +15,7 @@
  * 5-Amino-1MQ were already tagged `productType: "gb"` with no price, so a blind
  * "delete both keys" revert would have silently untagged two live products.
  */
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import {
   normalizeGroupBuy,
   groupBuyToDbWrite,
@@ -86,7 +86,10 @@ async function writeMetadata(
     select: { metadata: true },
   });
   const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  await db.product.update({ where: { id }, data: { metadata: patch(meta) } });
+  await db.product.update({
+    where: { id },
+    data: { metadata: patch(meta) as Prisma.InputJsonValue },
+  });
 }
 
 async function open(): Promise<void> {
