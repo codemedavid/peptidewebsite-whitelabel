@@ -154,15 +154,38 @@ from a parallel session that was already failing before this work and is not min
   Playwright run against a seeded tenant.
 - The demo-mode path (`isDemoMode()`) is exercised by neither suite.
 
-## Deployment order — NOT yet shippable
+## Deployment — done, with 7 tenants still needing an operator
 
-Enforcement is live in code, but no tenant has a credential and the columns do not exist
-in the database. **Shipping now locks every store owner out.** Required order:
+Both steps have been run against the live database (Supabase `postgres`, 2026-07-30).
 
-1. `npm run db:push` — adds `Tenant.storeAdminEmail`, `Tenant.storeAdminPasswordHash`,
-   and `@@unique([tenantId, email])` on `StorefrontStaff`. Pre-checked above: no
-   duplicate staff emails, so the index can be created.
-2. `npm run backfill:admin-credentials` — dry run, and read the list of blocked tenants.
-3. `npm run backfill:admin-credentials -- --apply`.
-4. For every tenant still reported as blocked, set the email and password in
-   admin → tenant settings, and pass them to that store's owner.
+1. `npx prisma db push --accept-data-loss` — added `Tenant.storeAdminEmail`,
+   `Tenant.storeAdminPasswordHash` and `@@unique([tenantId, email])` on
+   `storefront_staff`. The flag was required only for the unique-constraint warning,
+   which the dry run had already shown was satisfiable. Nothing was dropped.
+2. `npm run backfill:admin-credentials -- --apply` — 13 tenants processed.
+
+Verified directly against the database afterwards:
+
+```
+tenants=13  scrypt-hashed=13  with-email=6  plaintext-left=0
+```
+
+Every owner's **existing** password was carried over as a scrypt hash, so no owner needs
+a new password — they simply type their email alongside it now. The leaked plaintext is
+gone from every `branding.config`.
+
+### Still required — 7 tenants cannot sign in until an email is set
+
+`dragon-peptides`, `hpglow`, `peppies-intl`, `pepsys-compound`, `peptibesties`,
+`soi-health`, `urban-biopeptides`.
+
+None has an onboarding submission or an order-notification recipient. A scan of their
+`branding.config` found an address for only two of them —
+`peppies-intl` → `Peppiesinternationalph@gmail.com`, and `pepsys-compound` with two
+competing candidates — so none was adopted automatically: these are contact addresses,
+not proof of who owns the account. The operator sets each in
+admin → tenant → settings → **Admin access**, then passes it to that store's owner.
+
+Until then those 7 stores are **not** in a worse security position (their passwords are
+hashed and no longer leaked), but their owners cannot get in — this is the one
+user-visible regression of the rollout and it is resolved per tenant by setting an email.
