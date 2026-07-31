@@ -1,11 +1,11 @@
 import type { Brand } from "../types";
-import { isLinkHidden } from "../visibility";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
 import {
   normalizeFooterStyle,
   buildFooterQuickLinks,
   type FooterQuickIcon,
 } from "@/lib/storefront/footer-style";
+import { buildFooterColumns, buildFooterSocials } from "@/lib/storefront/footer-links";
 
 function QuickIcon({ name }: { name: FooterQuickIcon }) {
   const props = {
@@ -96,30 +96,13 @@ function SocialIcon({ name }: { name: string }) {
 }
 
 export function Footer({ brand }: { brand: Brand }) {
-  // When the legal row is toggled off, also hide the "Legal" links column
-  // (Privacy / Terms / Disclaimer) so one switch governs everything legal.
-  const legalHidden = brand.footerShowLegal === false;
-  // Strip links to toggled-off pages, drop the Legal column when legal is off,
-  // then drop any column left with no links.
-  const cols = (brand.footerColumns || [])
-    .filter((col) => !(legalHidden && (col.title || "").trim().toLowerCase() === "legal"))
-    .map((col) => ({
-      ...col,
-      links: (col.links || []).filter((l) => !isLinkHidden(brand, l.href)),
-    }))
-    .filter((col) => col.links.length > 0);
-  // Surface the gated reseller page automatically when enabled (and not already
-  // linked) as its own footer column, mirroring the nav link.
-  if (
-    brand.showPageMerchant === true &&
-    !cols.some((col) => col.links.some((l) => l.href === "#merchant"))
-  ) {
-    cols.push({ title: "Wholesale", links: [{ label: "Reseller pricing", href: "#merchant" }] });
-  }
-  const socials = (brand.footerSocials || []).filter((s) => s.show !== false);
-  const hasBrandSide =
-    brand.footerShowBrand !== false ||
-    (brand.footerShowSocials !== false && socials.length > 0);
+  // Both collections come from lib/storefront/footer-links, which is the single
+  // place that decides what a footer link has to be to render: columns lose the
+  // placeholder Legal block and links to toggled-off pages, socials need a real
+  // http(s) profile URL. See that module for the full rule set.
+  const cols = buildFooterColumns(brand);
+  const socials = buildFooterSocials(brand);
+  const hasBrandSide = brand.footerShowBrand !== false || socials.length > 0;
   const copyright = (brand.footerCopyright || "© {year} {brand}. All rights reserved.")
     .replaceAll("{year}", String(new Date().getFullYear()))
     .replaceAll("{brand}", brand.name || "");
@@ -175,7 +158,7 @@ export function Footer({ brand }: { brand: Brand }) {
     <footer className="site-footer">
       <div
         className="container site-footer__inner"
-        data-cols={brand.footerShowColumns !== false && cols.length > 0 ? "1" : "0"}
+        data-cols={cols.length > 0 ? "1" : "0"}
         data-brand={hasBrandSide ? "1" : "0"}
       >
         {hasBrandSide && (
@@ -198,10 +181,17 @@ export function Footer({ brand }: { brand: Brand }) {
               brand.footerBlurb && (
                 <p className="site-footer__blurb">{brand.footerBlurb}</p>
               )}
-            {brand.footerShowSocials !== false && socials.length > 0 && (
+            {socials.length > 0 && (
               <div className="site-footer__socials">
                 {socials.map((s) => (
-                  <a key={s.label} href={s.href} aria-label={s.label} className="site-footer__social">
+                  <a
+                    key={s.label}
+                    href={s.href}
+                    aria-label={s.label}
+                    className="site-footer__social"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <SocialIcon name={s.icon} />
                   </a>
                 ))}
@@ -210,7 +200,7 @@ export function Footer({ brand }: { brand: Brand }) {
           </div>
         )}
 
-        {brand.footerShowColumns !== false && cols.length > 0 && (
+        {cols.length > 0 && (
           <div className="site-footer__cols">
             {cols.map((col, ci) => (
               <div key={ci} className="site-footer__col">

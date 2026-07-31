@@ -85,10 +85,13 @@ export const BRAND: Brand = {
     "Verified products, transparent protocols, and discreet nationwide delivery.",
   footerDisclaimer: "Research use only. For qualified personnel.",
   footerCopyright: "© {year} {brand}. All rights reserved.",
+  // Socials ship linkless: the footer only draws an icon once the store has a
+  // real profile URL (buildFooterSocials), so a brand-new store shows none
+  // rather than three icons pointing at "#". The operator fills these in per
+  // platform from the branding editor's Footer → Socials rows.
   footerSocials: [
-    { label: "Instagram", href: "#", icon: "instagram", show: true },
-    { label: "Facebook", href: "#", icon: "facebook", show: true },
-    { label: "Twitter", href: "#", icon: "twitter", show: true },
+    { label: "Facebook", href: "", icon: "facebook", show: true },
+    { label: "Instagram", href: "", icon: "instagram", show: true },
   ],
   footerColumns: [
     {
@@ -119,14 +122,10 @@ export const BRAND: Brand = {
         { label: "Blog", href: "#" },
       ],
     },
-    {
-      title: "Legal",
-      links: [
-        { label: "Privacy", href: "#" },
-        { label: "Terms", href: "#" },
-        { label: "Disclaimer", href: "#" },
-      ],
-    },
+    // No "Legal" column by default — Privacy / Terms / Disclaimer shipped with
+    // every href at "#", so it was three dead links on every store. A tenant
+    // that actually has policy pages adds the column with real URLs from the
+    // branding editor (buildFooterColumns then keeps it).
   ],
 
   trackTitle: "Track Your Order",
