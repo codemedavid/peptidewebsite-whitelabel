@@ -128,7 +128,7 @@ export function GroupBuyPage({
                 <div className="gbpage__card-media">
                   {image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={image} alt={p.name} />
+                    <img src={image} alt={line.displayName} />
                   ) : (
                     <span className="gbpage__monogram font-display" aria-hidden>
                       {line.initial}
@@ -140,7 +140,7 @@ export function GroupBuyPage({
                 </div>
                 <div className="gbpage__card-body">
                   <div>
-                    <div className="gbpage__card-name">{p.name}</div>
+                    <div className="gbpage__card-name">{line.displayName}</div>
                     <div className="gbpage__card-note">COA ✓ · third-party tested</div>
                   </div>
                   <div className="gbpage__card-prices">
@@ -162,10 +162,10 @@ export function GroupBuyPage({
                       Join GB
                     </button>
                   ) : (
-                    <div className="gbpage__stepper" aria-label={`Quantity of ${p.name}`}>
+                    <div className="gbpage__stepper" aria-label={`Quantity of ${line.displayName}`}>
                       <button
                         type="button"
-                        aria-label={`Remove one ${p.name}`}
+                        aria-label={`Remove one ${line.displayName}`}
                         onClick={() => decrementCart(p.id)}
                       >
                         −
@@ -173,7 +173,7 @@ export function GroupBuyPage({
                       <span aria-live="polite">{qty}</span>
                       <button
                         type="button"
-                        aria-label={`Add one ${p.name}`}
+                        aria-label={`Add one ${line.displayName}`}
                         onClick={() => addToCart(p)}
                       >
                         +

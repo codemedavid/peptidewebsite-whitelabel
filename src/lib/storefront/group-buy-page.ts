@@ -14,8 +14,12 @@ import {
   type TwoWaysInput,
 } from "./two-ways";
 import type { GroupBuyBanner } from "./group-buy-banner";
+import type { Variation } from "./variations";
 
 const DAY_MS = 86_400_000;
+
+/** A dose written into a name — "5mg", "0.1 mg", "10ml", "500mcg", "10iu". */
+const DOSE_RE = /\d+(?:\.\d+)?\s*(?:mcg|mg|iu|ml|g)\b/i;
 
 /** The round's countdown pill — "Closes in 5 days" from endsAt. Empty string for
  *  an open-ended round (no endsAt) or an unparseable date; "Closed" once the
@@ -47,12 +51,51 @@ export function formatGbMoney(currency: string, amount: number): string {
   return `${currency}${Math.max(0, amount || 0).toLocaleString()}`;
 }
 
+/**
+ * The name the group-buy card shows: the product name with its dose appended.
+ *
+ * WHY (k-glow, 2026-07-31): sellers put the dose in the VARIATIONS, not the
+ * product name — the row is "Semaglutide" and "5mg × 10 vials" is a variation.
+ * The catalog card and the two-ways home both render an option picker, so the
+ * dose is visible there; this page has no picker and rendered the bare name, so
+ * with a round open every card read "Semaglutide" and the mg was simply gone.
+ *
+ * Rules, in order:
+ *  - Name already carries a dose ("Lemon Bottle 10ml", "BPC 10mg + TB 10mg")
+ *    → left alone. Appending would read "Lemon Bottle 10ml 10ml / 50ml".
+ *  - Exactly one variation → its FULL name, so the pack size survives
+ *    ("Semaglutide 5mg × 10 vials").
+ *  - Several variations → just the dose token from each ("5mg / 10mg / 15mg").
+ *    k-glow's Tirzepatide has nine, whose full names run past 140 characters.
+ *  - A variation with no dose token ("Vials only") → fall back to full names, so
+ *    a non-dose option list is still named rather than silently dropped.
+ */
+export function gbDisplayName(
+  name: string,
+  variations: readonly Variation[] | null | undefined,
+): string {
+  const base = (name || "").trim();
+  if (DOSE_RE.test(base)) return base;
+
+  const names = (Array.isArray(variations) ? variations : [])
+    .map((v) => (v?.name || "").trim())
+    .filter((n) => n !== "");
+  if (names.length === 0) return base;
+  if (names.length === 1) return `${base} ${names[0]}`.trim();
+
+  const doses = names.map((n) => n.match(DOSE_RE)?.[0]);
+  const suffix = doses.every(Boolean) ? doses.join(" / ") : names.join(" / ");
+  return `${base} ${suffix}`.trim();
+}
+
 /** The minimal product shape the page reads. Generic so the caller keeps its own
- *  concrete Product type through the view (id/name/image for the card). */
+ *  concrete Product type through the view (id/name/image for the card, and the
+ *  variations the dose is read from — see gbDisplayName). */
 export type GbPageProduct = TwoWaysInput & {
   id: string;
   name: string;
   image?: string | null;
+  variations?: Variation[];
 };
 
 /** One product card on the group-buy page. `price`/`priceLabel` are the primary
@@ -62,6 +105,8 @@ export type GbPageProduct = TwoWaysInput & {
  *  strikethrough so a GB product with no valid gbPrice never shows a phantom cut. */
 export type GroupBuyPageLine<T extends GbPageProduct = GbPageProduct> = {
   product: T;
+  /** The card's heading — the product name carrying its dose (gbDisplayName). */
+  displayName: string;
   initial: string;
   /** The group-buy per-unit price (gbPrice, clamped to a valid value). */
   price: number;
@@ -116,6 +161,7 @@ function pageLine<T extends GbPageProduct>(product: T, currency: string): GroupB
   const line = groupBuyLine(product);
   return {
     product,
+    displayName: gbDisplayName(product.name, product.variations),
     initial: productInitial(product.name),
     price: line.gbPrice,
     priceLabel: formatGbMoney(currency, line.gbPrice),

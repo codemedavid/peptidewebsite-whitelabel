@@ -21,12 +21,17 @@ async function main() {
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, status: true, productIds: true, createdAt: true },
   });
+  // productIds is a Json column — normalise to a string[] before reading it.
+  const idsOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+
   console.log(`\n=== rounds (${rounds.length}) ===`);
   for (const r of rounds) {
-    console.log(`${r.status.padEnd(10)} ${r.name} [${r.id}] products=${r.productIds.length}`);
+    console.log(`${r.status.padEnd(10)} ${r.name} [${r.id}] products=${idsOf(r.productIds).length}`);
   }
 
   const open = rounds.find((r) => r.status === "active" || r.status === "open") ?? rounds[0];
+  const openIds = new Set(idsOf(open?.productIds));
 
   const products = await prisma.product.findMany({
     where: { tenantId: tenant.id },
@@ -36,7 +41,7 @@ async function main() {
 
   console.log(`\n=== products (${products.length}) ===  [GB = in open round, !!! = no dose token]`);
   for (const p of products) {
-    const assigned = open?.productIds.includes(p.id) ? "GB" : "  ";
+    const assigned = openIds.has(p.id) ? "GB" : "  ";
     const hasDose = /\d\s*(mg|mcg|iu)\b/i.test(p.name) ? "   " : "!!!";
     const vars = (p.metadata as { variations?: { name?: string }[] } | null)?.variations;
     const varNames = vars?.length ? ` vars=[${vars.map((v) => v.name).join(" | ")}]` : "";
