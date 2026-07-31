@@ -100,6 +100,7 @@
     "test:logo-curve": "tsx scripts/test-logo-curve.ts",
     "test:brand-border": "tsx scripts/test-brand-border.ts",
     "test:footer-style": "tsx scripts/test-footer-style.ts",
+    "test:footer-links": "tsx scripts/test-footer-links.ts",
     "test:price-font": "tsx scripts/test-price-font.ts",
     "test:hero-wordmark": "tsx scripts/test-hero-wordmark.ts",
     "test:header-logo": "tsx scripts/test-header-logo.ts",
