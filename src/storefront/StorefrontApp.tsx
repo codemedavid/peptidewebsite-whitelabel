@@ -21,11 +21,13 @@ import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
-import { ADMIN_AUTH_KEY } from "./admin/authKey";
 import { isPageVisible } from "./visibility";
 import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
 import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
-import { hasStorefrontAdminSessionAction } from "@/actions/storefront-admin";
+import {
+  hasStorefrontAdminSessionAction,
+  signOutStorefrontAdminAction,
+} from "@/actions/storefront-admin";
 
 // Spinner shown while any lazy page chunk is downloading for the first time.
 function PageSpinner() {
@@ -69,7 +71,11 @@ function Shell() {
   // catalog; opting in narrows it to the live round's products (presentation only).
   const [gbScope, setGbScope] = useState(false);
   const [page, setPage] = useState("home");
-  const [adminAuthed, setAdminAuthed] = useState(false);
+  // "checking" while the server session is being verified, so entering #admin
+  // from inside the SPA doesn't flash the login form at an already-signed-in
+  // owner. There is no cached client-side hint to short-circuit this — see
+  // verifyAdmin below.
+  const [adminAuth, setAdminAuth] = useState<"checking" | "in" | "out">("out");
   const [cartOpen, setCartOpen] = useState(false);
   // Drives the top progress bar — fires immediately on any hash navigation so
   // users get instant visual feedback even before the JS chunk loads.
@@ -83,30 +89,17 @@ function Shell() {
   useEffect(() => {
     setPage(pageFromHash());
 
-    // The admin gate is a REAL server session, not just the sessionStorage flag.
-    // We optimistically trust the flag for instant UI, then confirm against the
-    // server: if there's no valid sf_admin_session cookie, force re-login (and
-    // clear the stale flag) so the user can't sit in the admin issuing saves
-    // that would be silently rejected.
+    // The admin gate is a REAL server session — always ask the server, never a
+    // cached client-side hint. Store-admin sessions are killed on every document
+    // load (middleware → lib/auth/admin-session-reset.ts), so the sessionStorage
+    // flag this used to trust optimistically would be wrong on exactly the case
+    // it existed for: it survives a refresh, the session doesn't. Trusting it
+    // could only flash the admin UI for a session the server had already ended.
     const verifyAdmin = () => {
-      let optimistic = false;
-      try {
-        optimistic = sessionStorage.getItem(ADMIN_AUTH_KEY) === "1";
-      } catch {
-        /* ignore */
-      }
-      setAdminAuthed(optimistic);
+      setAdminAuth("checking");
       void hasStorefrontAdminSessionAction()
-        .then((ok) => {
-          setAdminAuthed(ok);
-          try {
-            if (ok) sessionStorage.setItem(ADMIN_AUTH_KEY, "1");
-            else sessionStorage.removeItem(ADMIN_AUTH_KEY);
-          } catch {
-            /* ignore */
-          }
-        })
-        .catch(() => {});
+        .then((ok) => setAdminAuth(ok ? "in" : "out"))
+        .catch(() => setAdminAuth("out"));
     };
     if (pageFromHash() === "admin") verifyAdmin();
 
@@ -135,12 +128,11 @@ function Shell() {
     setPage("home");
   };
   const logoutAdmin = () => {
-    try {
-      sessionStorage.removeItem(ADMIN_AUTH_KEY);
-    } catch {
-      /* ignore */
-    }
-    setAdminAuthed(false);
+    // Drop the UI immediately, then kill the server cookie. Without the action
+    // call an explicit "Log out" only cleared client state and left a valid
+    // sf_admin_session behind for anyone returning to #admin.
+    setAdminAuth("out");
+    void signOutStorefrontAdminAction().catch(() => {});
     goHome();
   };
   const scrollToCatalog = () => {
@@ -212,10 +204,12 @@ function Shell() {
     return (
       <>
         {navKey > 0 && <div key={navKey} className="sf-nav-progress" />}
-        {adminAuthed ? (
+        {adminAuth === "checking" ? (
+          <PageSpinner />
+        ) : adminAuth === "in" ? (
           <AdminPage brand={brand} onLogout={logoutAdmin} onExitToSite={goHome} />
         ) : (
-          <AdminLogin brand={brand} onSuccess={() => setAdminAuthed(true)} />
+          <AdminLogin brand={brand} onSuccess={() => setAdminAuth("in")} />
         )}
       </>
     );

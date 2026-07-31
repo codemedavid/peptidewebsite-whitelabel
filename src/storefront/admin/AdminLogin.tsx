@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import type { Brand } from "../types";
-import { ADMIN_AUTH_KEY } from "./authKey";
 import { signInStoreAdminAction } from "@/actions/storefront-staff";
-
-export { ADMIN_AUTH_KEY };
 
 /**
  * The `#admin` sign-in. EVERY login — the store owner's and every staff
@@ -15,8 +12,9 @@ export { ADMIN_AUTH_KEY };
  *
  * Credentials are verified server-side (both principals against a scrypt hash)
  * and, on success, the server issues a signed session cookie carrying who you
- * are. The sessionStorage flag below is only a UI hint for which screen to
- * show — never the security boundary.
+ * are — the sole source of truth for which screen to show. That cookie is
+ * deliberately killed on every page refresh (lib/auth/admin-session-reset.ts),
+ * so nothing is cached client-side that could outlive it.
  */
 export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () => void }) {
   const [email, setEmail] = useState("");
@@ -32,11 +30,6 @@ export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () =
     const result = await signInStoreAdminAction(email, pw);
     setBusy(false);
     if ("ok" in result) {
-      try {
-        sessionStorage.setItem(ADMIN_AUTH_KEY, "1");
-      } catch {
-        /* ignore */
-      }
       onSuccess();
     } else {
       setError(result.error || "Incorrect email or password.");
