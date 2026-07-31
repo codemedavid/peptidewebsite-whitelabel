@@ -31,6 +31,7 @@ import {
   gbCountdownLabel,
   productInitial,
   formatGbMoney,
+  gbDisplayName,
   buildGroupBuyPageView,
   groupBuyCartSummary,
 } from "../src/lib/storefront/group-buy-page";
@@ -122,6 +123,112 @@ function main() {
   });
   check("negative amounts are clamped to 0", () => {
     assert.equal(formatGbMoney("₱", -50), "₱0");
+  });
+
+  // The k-glow catalog keeps the dose in metadata.variations, NOT in the product
+  // name ("Semaglutide" + a "5mg × 10 vials" variation). The group-buy page is the
+  // only surface that lists a round's products, and it rendered the bare name — so
+  // during an open round every card read "Semaglutide" with the mg nowhere on it.
+  console.log("\ngbDisplayName — the card name carries the dose\n");
+
+  check("no variations → name unchanged", () => {
+    assert.equal(gbDisplayName("KPV", undefined), "KPV");
+    assert.equal(gbDisplayName("Selank", []), "Selank");
+  });
+
+  check("one variation → its full name is appended (pack size kept)", () => {
+    assert.equal(
+      gbDisplayName("Semaglutide", [{ name: "5mg × 10 vials", price: 4200 }]),
+      "Semaglutide 5mg × 10 vials",
+    );
+  });
+
+  check("several variations → just the dose tokens, joined", () => {
+    assert.equal(
+      gbDisplayName("Cagrilintide", [
+        { name: "5mg", price: 3000 },
+        { name: "10mg", price: 5000 },
+      ]),
+      "Cagrilintide 5mg / 10mg",
+    );
+    // The 9-dose k-glow Tirzepatide: full variation names would run past 140
+    // characters, so the shared "× 10 vials" suffix is dropped.
+    assert.equal(
+      gbDisplayName("Tirzepatide", [
+        { name: "5mg × 10 vials", price: 1 },
+        { name: "10mg × 10 vials", price: 2 },
+        { name: "15mg × 10 vials", price: 3 },
+      ]),
+      "Tirzepatide 5mg / 10mg / 15mg",
+    );
+  });
+
+  check("non-mg units (ml) are treated as doses too", () => {
+    assert.equal(
+      gbDisplayName("Bacteriostatic Water", [
+        { name: "3ml", price: 1 },
+        { name: "5ml", price: 2 },
+        { name: "10ml", price: 3 },
+      ]),
+      "Bacteriostatic Water 3ml / 5ml / 10ml",
+    );
+  });
+
+  check("a name that ALREADY carries a dose is left alone (no duplication)", () => {
+    // Real k-glow rows — appending would read "Lemon Bottle 10ml 10ml / 50ml".
+    assert.equal(
+      gbDisplayName("Lemon Bottle 10ml", [
+        { name: "10ml", price: 1 },
+        { name: "50ml", price: 2 },
+      ]),
+      "Lemon Bottle 10ml",
+    );
+    assert.equal(
+      gbDisplayName("BPC 10mg + TB 10mg", [{ name: "20mg × 10 vials", price: 1 }]),
+      "BPC 10mg + TB 10mg",
+    );
+  });
+
+  check("variations with no dose token fall back to their full names", () => {
+    assert.equal(
+      gbDisplayName("Starter kit", [
+        { name: "Vials only", price: 1 },
+        { name: "Complete set", price: 2 },
+      ]),
+      "Starter kit Vials only / Complete set",
+    );
+  });
+
+  check("blank / whitespace variation names are ignored", () => {
+    assert.equal(gbDisplayName("Epithalon", [{ name: "   ", price: 1 }]), "Epithalon");
+  });
+
+  check("the page view-model exposes displayName on every line", () => {
+    const catalog = [
+      product({
+        id: "gb-1",
+        name: "Semaglutide",
+        price: 4900,
+        gbPrice: 4200,
+        productType: "gb",
+        variations: [{ name: "5mg × 10 vials", price: 4200 }],
+      }),
+      product({ id: "gb-2", name: "KPV", price: 900, gbPrice: 800, productType: "gb" }),
+    ];
+    const banner: GroupBuyBanner = {
+      id: "gb-round",
+      name: "check out now",
+      description: "",
+      deliveryEta: "",
+      endsAt: null,
+      slotGoal: 0,
+      filled: 0,
+      coversAll: true,
+      productIds: [],
+    };
+    const view = buildGroupBuyPageView(catalog, banner, "₱", NOW);
+    assert.equal(view.lines[0].displayName, "Semaglutide 5mg × 10 vials");
+    assert.equal(view.lines[1].displayName, "KPV");
   });
 
   console.log("\nunitPrice — charges gbPrice while a round is live\n");
