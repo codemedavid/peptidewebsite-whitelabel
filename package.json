@@ -112,6 +112,7 @@
     "test:gb-e2e": "tsx scripts/test-gb-e2e.ts",
     "test:gb-assignment": "tsx scripts/test-gb-assignment.ts",
     "test:store-admin-login": "tsx scripts/test-store-admin-login.ts",
+    "test:admin-session-reset": "tsx scripts/test-admin-session-reset.ts",
     "backfill:admin-credentials": "tsx scripts/backfill-admin-credentials.ts"
   },
   "prisma": {
