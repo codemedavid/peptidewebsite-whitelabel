@@ -1,6 +1,7 @@
 /** READ-ONLY: list k-glow products and the open group-buy round's assignment,
  *  so product names missing a dose ("mg") can be spotted. */
 import { PrismaClient } from "@prisma/client";
+import { gbDisplayName } from "../src/lib/storefront/group-buy-page";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
@@ -39,13 +40,15 @@ async function main() {
     select: { id: true, name: true, priceCents: true, stock: true, status: true, metadata: true },
   });
 
-  console.log(`\n=== products (${products.length}) ===  [GB = in open round, !!! = no dose token]`);
+  console.log(`\n=== products (${products.length}) ===  [GB = in open round]`);
+  console.log(`row name  →  what the group-buy card now shows (gbDisplayName)\n`);
   for (const p of products) {
     const assigned = openIds.has(p.id) ? "GB" : "  ";
-    const hasDose = /\d\s*(mg|mcg|iu)\b/i.test(p.name) ? "   " : "!!!";
-    const vars = (p.metadata as { variations?: { name?: string }[] } | null)?.variations;
-    const varNames = vars?.length ? ` vars=[${vars.map((v) => v.name).join(" | ")}]` : "";
-    console.log(`${assigned} ${hasDose} ${p.name}  <${p.id}> stock=${p.stock}${varNames}`);
+    const vars =
+      (p.metadata as { variations?: { name: string; price: number }[] } | null)?.variations ?? [];
+    const shown = gbDisplayName(p.name, vars);
+    const changed = shown === p.name ? "     " : " →   ";
+    console.log(`${assigned}${changed}${p.name}${shown === p.name ? "" : `  →  ${shown}`}`);
   }
 
   await prisma.$disconnect();
