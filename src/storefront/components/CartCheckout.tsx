@@ -192,6 +192,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     const v = ratioViolation(
       rules,
       lines.map((l) => ({
+        // The RAW catalog name on purpose — the ratio engine classifies a line
+        // by name when the owner set no explicit productClass, and that is the
+        // name the owner's rules were written against. (Its regexes match on
+        // substrings, so a dose suffix would classify the same; keeping the raw
+        // name just means the cart and the seller's rules read one string.)
         name: l.product.name,
         qty: l.qty,
         category: l.product.category,
