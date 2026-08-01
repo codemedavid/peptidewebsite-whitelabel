@@ -14,12 +14,9 @@ import {
   type TwoWaysInput,
 } from "./two-ways";
 import type { GroupBuyBanner } from "./group-buy-banner";
-import type { Variation } from "./variations";
+import { DOSE_PATTERN, hasDoseToken, type Variation } from "./variations";
 
 const DAY_MS = 86_400_000;
-
-/** A dose written into a name — "5mg", "0.1 mg", "10ml", "500mcg", "10iu". */
-const DOSE_RE = /\d+(?:\.\d+)?\s*(?:mcg|mg|iu|ml|g)\b/i;
 
 /** The round's countdown pill — "Closes in 5 days" from endsAt. Empty string for
  *  an open-ended round (no endsAt) or an unparseable date; "Closed" once the
@@ -75,7 +72,7 @@ export function gbDisplayName(
   variations: readonly Variation[] | null | undefined,
 ): string {
   const base = (name || "").trim();
-  if (DOSE_RE.test(base)) return base;
+  if (hasDoseToken(base)) return base;
 
   const names = (Array.isArray(variations) ? variations : [])
     .map((v) => (v?.name || "").trim())
@@ -83,7 +80,7 @@ export function gbDisplayName(
   if (names.length === 0) return base;
   if (names.length === 1) return `${base} ${names[0]}`.trim();
 
-  const doses = names.map((n) => n.match(DOSE_RE)?.[0]);
+  const doses = names.map((n) => n.match(DOSE_PATTERN)?.[0]);
   const suffix = doses.every(Boolean) ? doses.join(" / ") : names.join(" / ");
   return `${base} ${suffix}`.trim();
 }

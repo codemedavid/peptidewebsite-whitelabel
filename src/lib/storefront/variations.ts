@@ -7,6 +7,23 @@
 // the rules across the two is how a variation ends up sellable at a price the
 // editor never meant to allow.
 
+/**
+ * A dose written into a name — "5mg", "0.1 mg", "10ml", "500mcg", "10iu".
+ *
+ * Lives here, beside the variation rules, because two surfaces must agree on
+ * what counts as a dose: the group-buy card (which appends one to a bare name)
+ * and the checkout line (which must not append a second). Deliberately carries
+ * no `g` flag, so `test`/`match` stay stateless and sharing one instance across
+ * callers can't leak a `lastIndex` between them.
+ */
+export const DOSE_PATTERN = /\d+(?:\.\d+)?\s*(?:mcg|mg|iu|ml|g)\b/i;
+
+/** Does this name already carry its own dose ("Lemon Bottle 10ml")? Such a name
+ *  is left alone everywhere — appending would read "Lemon Bottle 10ml 10ml". */
+export function hasDoseToken(name: string): boolean {
+  return DOSE_PATTERN.test(name || "");
+}
+
 /** A saved variation: name plus its own price, in the storefront's major units.
  *  `stock` is OPTIONAL and opt-in: when a seller sets a number the variation is
  *  tracked independently; when absent the variation falls back to the base

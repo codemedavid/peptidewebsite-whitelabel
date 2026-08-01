@@ -8,6 +8,7 @@
 import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product } from "./types";
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 import { isGroupBuyProduct, groupBuyLine, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { buildProductOptions, hasDoseToken } from "@/lib/storefront/variations";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
@@ -76,6 +77,44 @@ export function makeVariationEntry(
     discountPrice: 0,
     reseller: undefined,
   };
+}
+
+/**
+ * The name a cart entry is shown and ORDERED under — the product name carrying
+ * its dose whenever the dose is actually known.
+ *
+ * WHY (k-glow, 2026-08-01): sellers put the dose in the VARIATIONS, not the
+ * product name — the catalog row is "Semaglutide" and "5mg × 10 vials" is a
+ * variation. The catalog card and the two-ways home render an option picker, so
+ * a pick clones the row via makeVariationEntry and the name already carries the
+ * dose. The GROUP-BUY page has no picker: it adds the raw row, so the checkout
+ * list and the order the seller receives both read a bare "Semaglutide".
+ *
+ * Rules, in order:
+ *  - A chosen variation → left alone; makeVariationEntry already named it, and
+ *    appending again gives "… — 5mg × 10 vials 5mg × 10 vials".
+ *  - A name already carrying a dose ("Lemon Bottle 10ml") → left alone.
+ *  - Exactly ONE buyable option → append it, so a bare add reads identically to
+ *    the same product added through a picker (one line, not two).
+ *  - Anything else → left BARE, deliberately. With several options and none
+ *    chosen the dose is genuinely unknown, and this string is persisted onto the
+ *    order: "Tirzepatide 5mg / 10mg / 15mg" would tell the seller the customer
+ *    ordered every dose at once. A distinct "Standard" base price alongside one
+ *    variation is the same trap — the customer may have bought Standard.
+ *
+ * Note this is a LABEL, not a price: what the customer pays still comes from
+ * unitPrice, and the server re-derives it via authoritativeItemPrice.
+ */
+export function cartDisplayName(product: Product): string {
+  const name = (product.name || "").trim();
+  if (product.variantName) return name;
+  if (hasDoseToken(name)) return name;
+
+  const options = buildProductOptions(product);
+  if (options.length !== 1 || !options[0].variation) return name;
+
+  const only = options[0].name.trim();
+  return only ? `${name} — ${only}` : name;
 }
 
 /** Group the flat cart (one entry per unit) into deduplicated lines. */
@@ -285,7 +324,7 @@ export function buildOrderMessage(
       const tag = isResellerQty(l.product, l.qty)
         ? ` (reseller — ${resellerTierLabel(l.product)?.toLowerCase()} @ ${money(up, cur)}/ea)`
         : "";
-      return `• ${l.product.name} ×${l.qty} — ${money(line, cur)}${tag}`;
+      return `• ${cartDisplayName(l.product)} ×${l.qty} — ${money(line, cur)}${tag}`;
     })
     .join("\n");
   const subtotal = cartTotal(lines);

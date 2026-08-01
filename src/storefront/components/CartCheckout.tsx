@@ -23,6 +23,7 @@ import {
   activePaymentMethods,
   baseProductId,
   buildOrderMessage,
+  cartDisplayName,
   cartLines,
   cartTotal,
   liveCartLines,
@@ -392,7 +393,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         // The underlying catalog row id (a variation line carries a composite id),
         // so the server matches stock + checkout rules to the real product.
         productId: baseProductId(l.product),
-        name: l.product.name,
+        // Carries the dose (see cartDisplayName) so the order the seller reads
+        // names the same thing the checkout showed. Matching is by productId /
+        // variation, so a richer label never breaks the server's price + stock
+        // lookup (authoritativeItemPrice).
+        name: cartDisplayName(l.product),
         qty: l.qty,
         price: unitPrice(l.product, l.qty, groupBuyScope),
         ...(l.product.variantName ? { variation: l.product.variantName } : {}),
@@ -569,10 +574,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   !reseller && resellerUnitPrice(l.product) != null
                     ? resellerMinQty(l.product) - l.qty
                     : 0;
+                // The dose lives in the variations, so a product added without
+                // picking one (the group-buy page has no picker) is named here.
+                const shownName = cartDisplayName(l.product);
                 return (
                 <li key={l.product.id} className="sf-cart__line">
                   <div className="sf-cart__line-info">
-                    <span className="sf-cart__line-name">{l.product.name}</span>
+                    <span className="sf-cart__line-name">{shownName}</span>
                     <span className="sf-cart__line-price">
                       {reseller && (
                         <span className="sf-cart__line-retail">
@@ -601,11 +609,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     )}
                   </div>
                   <div className="sf-cart__qty">
-                    <button aria-label={`Remove one ${l.product.name}`} onClick={() => decrementCart(l.product.id)}>−</button>
+                    <button aria-label={`Remove one ${shownName}`} onClick={() => decrementCart(l.product.id)}>−</button>
                     <span>{l.qty}</span>
-                    <button aria-label={`Add one ${l.product.name}`} onClick={() => addToCart(l.product)}>+</button>
+                    <button aria-label={`Add one ${shownName}`} onClick={() => addToCart(l.product)}>+</button>
                   </div>
-                  <button className="sf-cart__remove" aria-label={`Remove ${l.product.name}`} onClick={() => removeLine(l.product.id)}>
+                  <button className="sf-cart__remove" aria-label={`Remove ${shownName}`} onClick={() => removeLine(l.product.id)}>
                     Remove
                   </button>
                 </li>
