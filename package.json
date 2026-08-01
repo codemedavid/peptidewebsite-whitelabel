@@ -29,6 +29,7 @@
     "test:plan-status": "tsx scripts/test-plan-options.ts",
     "test:staff": "tsx scripts/test-staff-permissions.ts",
     "test:cart": "tsx scripts/test-cart-pricing.ts",
+    "test:checkout-names": "tsx scripts/test-checkout-item-names.ts",
     "test:gb-rounds": "tsx scripts/test-gb-rounds.ts",
     "test:gb-report": "tsx scripts/test-gb-report.ts",
     "test:auth-audit": "tsx scripts/test-auth-audit.ts",
