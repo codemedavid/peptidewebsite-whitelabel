@@ -134,9 +134,6 @@ export function GroupBuyPage({
                       {line.initial}
                     </span>
                   )}
-                  {line.hasSavings && (
-                    <span className="gbpage__save">save {line.saveLabel}</span>
-                  )}
                 </div>
                 <div className="gbpage__card-body">
                   <div>
@@ -265,13 +262,6 @@ const gbPageCss = `
 }
 .sf-root .gbpage__card-media img { width: 100%; height: 100%; object-fit: cover; }
 .sf-root .gbpage__monogram { font-size: 30px; color: var(--brand-main); }
-.sf-root .gbpage__save {
-  position: absolute; top: 10px; left: 10px;
-  font-size: 10px; font-weight: 700; letter-spacing: .02em;
-  color: var(--brand-button-text); background: var(--brand-main);
-  border-radius: 99px; padding: 3px 9px; white-space: nowrap;
-  box-shadow: 0 2px 6px color-mix(in oklab, var(--brand-main) 30%, transparent);
-}
 .sf-root .gbpage__card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .sf-root .gbpage__card-name { font-weight: 700; font-size: 14px; color: var(--brand-text); line-height: 1.3; }
 .sf-root .gbpage__card-note { font-size: 11px; color: var(--brand-text-muted); margin-top: 2px; }
