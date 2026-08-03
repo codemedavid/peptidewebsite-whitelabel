@@ -28,14 +28,12 @@ function Option({
   title,
   tagline,
   grants,
-  themeId,
   onSelect,
 }: {
   selected: boolean;
   title: string;
   tagline: string;
   grants?: string[];
-  themeId?: string;
   onSelect: () => void;
 }) {
   return (
@@ -54,11 +52,6 @@ function Option({
         {selected && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />}
       </span>
       <span className="mt-1 block text-xs text-muted-foreground">{tagline}</span>
-      {themeId && (
-        <span className="mt-1 block text-xs text-muted-foreground">
-          Theme: <code>{themeId}</code>
-        </span>
-      )}
       {grants && grants.length > 0 && (
         <span className="mt-2 flex flex-wrap gap-1">
           {grants.map((g) => (
@@ -76,7 +69,6 @@ function Option({
 }
 
 export function TenantPresetPicker({ value, onChange }: Props) {
-  const selected = TENANT_PRESET_LIST.find((p) => p.id === value) ?? null;
 
   return (
     <div className="space-y-2">
@@ -94,7 +86,6 @@ export function TenantPresetPicker({ value, onChange }: Props) {
             title={p.name}
             tagline={p.tagline}
             grants={grantLabels(p)}
-            themeId={p.themeId}
             onSelect={() => onChange(p.id)}
           />
         ))}
@@ -103,12 +94,6 @@ export function TenantPresetPicker({ value, onChange }: Props) {
         A preset provisions the storefront layout, module settings and entitlements. Products are
         never copied — the new tenant starts with its own empty catalog.
       </p>
-      {selected && (
-        <p className="text-xs text-warning">
-          Heads up: this preset sets the theme to <code>{selected.themeId}</code>, overriding the
-          theme picked above.
-        </p>
-      )}
       <input type="hidden" name="presetId" value={value} />
     </div>
   );

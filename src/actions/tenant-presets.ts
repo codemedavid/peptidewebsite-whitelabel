@@ -75,7 +75,7 @@ async function resolve(input: Input) {
     where: { slug },
     select: {
       id: true,
-      branding: { select: { themeId: true, config: true } },
+      branding: { select: { config: true } },
       // Plan features are read separately from the resolved entitlement set so a
       // revoke can warn when it is about to deny something the PLAN grants.
       plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
@@ -89,7 +89,6 @@ async function resolve(input: Input) {
     slug,
     preset,
     current: {
-      themeId: tenant.branding?.themeId,
       config: tenant.branding?.config,
       enabledFeatures: [...(await getEntitlements(tenant.id))],
     },
@@ -160,7 +159,7 @@ export async function previewTenantPresetAction(
 }
 
 /**
- * Persist the preset: Branding.themeId + Branding.config, plus one enabled
+ * Persist the preset: Branding.config, plus one enabled
  * override per grantable feature. Safe to run twice — the applier is idempotent
  * and the override writes are upserts.
  */
@@ -176,17 +175,13 @@ export async function applyTenantPresetAction(
   const { tenantId, slug, application, featureRows, missingFeatures } = p;
 
   await prisma.$transaction([
+    // themeId is deliberately absent from both branches: a preset never changes
+    // how a store looks, so an existing tenant keeps its theme and a new Branding
+    // row takes the schema default.
     prisma.branding.upsert({
       where: { tenantId },
-      update: {
-        themeId: application.themeId,
-        config: application.config as Prisma.InputJsonValue,
-      },
-      create: {
-        tenantId,
-        themeId: application.themeId,
-        config: application.config as Prisma.InputJsonValue,
-      },
+      update: { config: application.config as Prisma.InputJsonValue },
+      create: { tenantId, config: application.config as Prisma.InputJsonValue },
     }),
     ...featureRows.map((f) =>
       prisma.tenantFeatureOverride.upsert({

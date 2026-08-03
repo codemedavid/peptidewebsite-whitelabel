@@ -62,7 +62,6 @@ function check(name: string, fn: () => void): void {
 /** A realistic already-live tenant: its own brand identity + its own content. */
 function livingTenant() {
   return {
-    themeId: "clinical-white",
     config: {
       name: "Pep Stack Davao",
       logoUrl: "https://ik.imagekit.io/x/pepstack-logo.png",
@@ -286,7 +285,7 @@ check("overwrites the keys the preset does own", () => {
 check("never touches the tenant's theme", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
   assert.ok(!("themeId" in out), "application returned a themeId to persist");
-  assert.ok(!out.changes.some((c) => c.kind === "theme"), "proposed a theme change");
+  assert.ok(!out.changes.some((c) => (c as { kind: string }).kind === "theme"), "proposed a theme change");
 });
 
 check("does not mutate the caller's config object", () => {
@@ -301,7 +300,7 @@ check("does not mutate the caller's config object", () => {
 console.log("\n6. Apply at tenant creation (J1)");
 
 check("an empty config yields a complete group-buy setup on the classic home", () => {
-  const out = applyTenantPreset({ themeId: "default", config: {}, enabledFeatures: [] }, kglow);
+  const out = applyTenantPreset({ config: {}, enabledFeatures: [] }, kglow);
   assert.ok(!("themeId" in out), "a new tenant's operator-picked theme was overridden");
   assert.equal(out.config.homeLayout, "classic");
   assert.equal(out.featuresToGrant.length, kglow.features.length);
@@ -314,7 +313,6 @@ check("tolerates absent / malformed current state", () => {
     { config: undefined },
     { config: "nonsense" },
     { config: [] },
-    { themeId: null },
   ];
   for (const current of cases) {
     const out = applyTenantPreset(current, kglow);
@@ -350,7 +348,7 @@ console.log("\n8. Change preview (J3)");
 
 check("reports no theme change even when the tenant's theme differs", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
-  assert.equal(out.changes.find((c) => c.kind === "theme"), undefined);
+  assert.equal(out.changes.find((c) => (c as { kind: string }).kind === "theme"), undefined);
 });
 
 check("reports each changed config key with its before/after", () => {
@@ -368,7 +366,7 @@ check("reports each feature that will be granted", () => {
 });
 
 check("reports no change for a config key that already matches", () => {
-  const current = { themeId: "kglow", config: { homeLayout: "classic" }, enabledFeatures: [] };
+  const current = { config: { homeLayout: "classic" }, enabledFeatures: [] };
   const out = applyTenantPreset(current, kglow);
   assert.ok(
     !out.changes.some((c) => c.kind === "config" && c.key === "homeLayout"),
@@ -382,7 +380,7 @@ console.log("\n9. Idempotency");
 check("re-applying to its own output reports zero changes", () => {
   const first = applyTenantPreset(livingTenant(), kglow);
   const second = applyTenantPreset(
-    { themeId: "clinical-white", config: first.config, enabledFeatures: first.featuresToGrant },
+    { config: first.config, enabledFeatures: first.featuresToGrant },
     kglow,
   );
   assert.deepEqual(second.changes, [], `still changing: ${JSON.stringify(second.changes)}`);
@@ -534,7 +532,6 @@ function stampedTenant() {
   // The owner customised the seeded rules after the preset was applied.
   config.groupBuyRules = { enabled: true, ratio: { enabled: true, bacWaterPerPeptide: 2 } };
   return {
-    themeId: "clinical-white",
     config,
     enabledFeatures: [...kglow.features] as string[],
   };
@@ -564,7 +561,7 @@ check("no preset's off block touches a seeded default or a forbidden key", () =>
 check("removing never reports a theme change — the tenant keeps its look", () => {
   const out = removeTenantPreset(stampedTenant(), kglow);
   assert.ok(
-    !out.changes.some((c) => c.kind === "theme"),
+    !out.changes.some((c) => (c as { kind: string }).kind === "theme"),
     "removal proposed a theme change",
   );
   assert.ok(!("themeId" in out), "removal returned a themeId to persist");
@@ -658,7 +655,7 @@ check("removing reports each config key it clears", () => {
 check("removing is idempotent — a second removal changes nothing", () => {
   const first = removeTenantPreset(stampedTenant(), kglow);
   const second = removeTenantPreset(
-    { themeId: "kglow", config: first.config, enabledFeatures: [] },
+    { config: first.config, enabledFeatures: [] },
     kglow,
   );
   assert.deepEqual(second.changes, [], "second removal still proposed changes");
@@ -668,7 +665,7 @@ check("removing is idempotent — a second removal changes nothing", () => {
 
 check("removing a preset the tenant never had is a no-op", () => {
   const out = removeTenantPreset(
-    { themeId: "clinical-white", config: { name: "Untouched" }, enabledFeatures: [] },
+    { config: { name: "Untouched" }, enabledFeatures: [] },
     kglow,
   );
   assert.deepEqual(out.changes, []);
@@ -686,11 +683,11 @@ check("apply → remove → apply restores the stamped shape", () => {
   const start = livingTenant();
   const applied = applyTenantPreset(start, kglow);
   const removed = removeTenantPreset(
-    { themeId: applied.themeId, config: applied.config, enabledFeatures: [...kglow.features] },
+    { config: applied.config, enabledFeatures: [...kglow.features] },
     kglow,
   );
   const reapplied = applyTenantPreset(
-    { themeId: "kglow", config: removed.config, enabledFeatures: [] },
+    { config: removed.config, enabledFeatures: [] },
     kglow,
   );
   for (const key of Object.keys(kglow.config)) {

@@ -126,7 +126,6 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
   const configChanges = changes.filter((c) => c.kind === "config");
   const grants = changes.filter((c) => c.kind === "feature");
   const revokes = changes.filter((c) => c.kind === "revoke");
-  const themeChange = changes.find((c) => c.kind === "theme");
   const removing = mode?.kind === "remove";
 
   return (
@@ -136,7 +135,7 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
           <h3 className="card-title">Store preset</h3>
           <div className="card-sub">
             Stamp a whole store shape onto this tenant — layout, modules and entitlements.
-            Additive: name, logo, colors, catalog and lab reports are never touched, and existing
+            Additive: name, logo, colors, theme, catalog and lab reports are never touched, and existing
             group-buy rules, copy and round defaults are kept as the owner set them. Removing
             switches the shape back off and revokes its entitlements; the theme, catalog and those
             same owner-edited rules and copy stay.
@@ -242,13 +241,6 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
               {changes.length} change{changes.length === 1 ? "" : "s"} to{" "}
               {removing ? "revert" : "apply"}
             </div>
-
-            {themeChange?.kind === "theme" && (
-              <div style={muted}>
-                Theme: <span className="mono">{themeChange.from || "—"}</span> →{" "}
-                <span className="mono">{themeChange.to}</span>
-              </div>
-            )}
 
             {configChanges.map((c) =>
               c.kind === "config" ? (

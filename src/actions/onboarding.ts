@@ -44,8 +44,8 @@ const createTenantSchema = z.object({
   // Optional store-shape preset (lib/tenant/presets.ts). When set, the new
   // tenant is provisioned with that preset's branding.config + entitlements
   // already in place — e.g. "K Glow — Two ways to order" yields a group-buy +
-  // on-hand storefront with no follow-up configure script. The preset's themeId
-  // wins over `themeId` above so the picked shape stays coherent.
+  // on-hand storefront with no follow-up configure script. The operator's own
+  // `themeId` above always wins — a preset never chooses how a store looks.
   //
   // Validated against the registry rather than accepted as a free string: a
   // stale form or renamed id would otherwise provision a plain storefront while
@@ -77,7 +77,7 @@ export async function createTenant(input: z.infer<typeof createTenantSchema>) {
   // the preset's own config + its full grant list.
   const preset = getTenantPreset(data.presetId);
   const seeded = preset
-    ? applyTenantPreset({ themeId: data.themeId, config: {}, enabledFeatures: [] }, preset)
+    ? applyTenantPreset({ config: {}, enabledFeatures: [] }, preset)
     : null;
 
   // Grants need seeded Feature rows (the override FK). Missing ones are skipped
@@ -100,7 +100,7 @@ export async function createTenant(input: z.infer<typeof createTenantSchema>) {
         orderNumberFormat,
         branding: {
           create: {
-            themeId: seeded?.themeId ?? data.themeId,
+            themeId: data.themeId,
             ...(seeded ? { config: seeded.config as Prisma.InputJsonValue } : {}),
           },
         },

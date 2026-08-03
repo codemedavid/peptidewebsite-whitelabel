@@ -3,12 +3,16 @@
 // The white-label problem this solves: K Glow's "two ways to order" storefront
 // (an on-hand catalog that ships now + a live group buy at a lower price) was
 // assembled by hand — four one-off seed scripts, nine feature grants clicked in
-// admin → Features, a theme picked from the dropdown, and a set of store-admin
-// edits for the group-buy rules and copy. None of it was reusable, so every
-// additional tenant that wanted the same shape meant another copy-pasted
-// scripts/configure-<slug>.ts. This module makes the setup a value: a preset is
-// { themeId, config, features }, and one pure applier merges it onto whatever
-// the tenant already has.
+// admin → Features, and a set of store-admin edits for the group-buy rules and
+// copy. None of it was reusable, so every additional tenant that wanted the same
+// shape meant another copy-pasted scripts/configure-<slug>.ts. This module makes
+// the setup a value: a preset is { config, features }, and one pure applier
+// merges it onto whatever the tenant already has.
+//
+// A preset describes how a store WORKS, never how it LOOKS. It carries no theme
+// and no palette: Branding.themeId belongs to the tenant, and overwriting it
+// would contradict this feature's own promise that colors are never touched —
+// and it is the one change removeTenantPreset could not undo.
 //
 // Shape deliberately mirrors the house preset pattern (lib/theme/presets.ts's
 // ThemeSeed registry, storefront/cardDesign.ts's CardPreset): a compact hand-
@@ -17,7 +21,7 @@
 // Two hard rules, both enforced by npm run test:tenant-presets:
 //   1. ADDITIVE ONLY. Applying a preset never revokes an entitlement and never
 //      overwrites a config key the preset does not explicitly own. A live tenant
-//      keeps its name, logo, colors, catalog, COA reports and secrets.
+//      keeps its name, logo, colors, theme, catalog, COA reports and secrets.
 //   2. NOTHING FORBIDDEN. A preset may not write tenant identity, owner secrets,
 //      or server-projected keys (see PRESET_FORBIDDEN_KEYS) — the first two are
 //      per-tenant by definition, the third is recomputed per request and would
@@ -161,8 +165,6 @@ export type TenantPreset = {
   name: string;
   /** One-line description of the store shape this produces. */
   tagline: string;
-  /** Theme preset applied to Branding.themeId (see lib/theme/presets.ts). */
-  themeId: string;
   /**
    * Structural keys the preset OWNS and always overwrites — the layout and
    * module switches that define the store shape. Keep these to scalars the
@@ -220,7 +222,6 @@ const KGLOW_TWO_WAYS: TenantPreset = {
   name: "K Glow — Group buy + on-hand",
   tagline:
     "Group-buy rounds, ratio rules and Lab Reports on the classic home. The two-ways split home is included but off by default.",
-  themeId: "kglow",
   config: {
     // The dual "two ways to order" home ships OFF: a stamped store opens on the
     // classic hero → catalog home, and the split layout is a deliberate second
@@ -309,9 +310,11 @@ export function getTenantPreset(id: string | null | undefined): TenantPreset | n
 
 // ── Applying ─────────────────────────────────────────────────────────────────
 
-/** One thing applying or removing the preset will change — the confirm list. */
+/** One thing applying or removing the preset will change — the confirm list.
+ *
+ *  There is deliberately no "theme" member: a preset never writes Branding.themeId
+ *  (see TenantPreset), so neither direction can propose one. */
 export type PresetChange =
-  | { kind: "theme"; from: string; to: string }
   | { kind: "config"; key: string; from: unknown; to: unknown }
   /** A grant, emitted only by applying. */
   | { kind: "feature"; key: FeatureKey }
@@ -323,7 +326,6 @@ export type PresetChange =
 /** The tenant's current state. Every field is optional/untrusted: callers read
  *  it straight out of a Branding row whose `config` is an untyped Json column. */
 export type TenantPresetTarget = {
-  themeId?: string | null;
   config?: unknown;
   /** Feature keys the tenant already resolves to (plan ∪ overrides). */
   enabledFeatures?: readonly string[];
@@ -331,7 +333,6 @@ export type TenantPresetTarget = {
 
 /** What the caller should persist, plus the diff that produced it. */
 export type PresetApplication = {
-  themeId: string;
   config: Record<string, unknown>;
   /** Preset features the tenant does not already have. Additive only. */
   featuresToGrant: FeatureKey[];
@@ -377,14 +378,9 @@ export function applyTenantPreset(
   preset: TenantPreset,
 ): PresetApplication {
   const currentConfig = asConfig(current.config);
-  const currentTheme = current.themeId ?? "";
   const enabled = new Set(current.enabledFeatures ?? []);
 
   const changes: PresetChange[] = [];
-
-  if (currentTheme !== preset.themeId) {
-    changes.push({ kind: "theme", from: currentTheme, to: preset.themeId });
-  }
 
   const config: Record<string, unknown> = { ...currentConfig };
 
@@ -407,16 +403,12 @@ export function applyTenantPreset(
   const featuresToGrant = preset.features.filter((f) => !enabled.has(f));
   for (const key of featuresToGrant) changes.push({ kind: "feature", key });
 
-  return { themeId: preset.themeId, config, featuresToGrant, changes };
+  return { config, featuresToGrant, changes };
 }
 
 // ── Removing ─────────────────────────────────────────────────────────────────
 
-/** What the caller should persist to switch the shape off, plus the diff.
- *
- *  Deliberately carries NO themeId: removal leaves the tenant's look alone. A
- *  theme is a visual choice the owner may have kept on purpose, and there is no
- *  record of what preceded it — reverting it would be a guess. */
+/** What the caller should persist to switch the shape off, plus the diff. */
 export type PresetRemoval = {
   config: Record<string, unknown>;
   /** Preset features the tenant currently has. Revoked, never merely un-granted. */
