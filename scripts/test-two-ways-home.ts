@@ -430,6 +430,46 @@ check("the ways argument is never mutated", () => {
   assert.equal(ways.onHand, "closed");
 });
 
+// WIRING: a hidden group-buy way must remove the GB surfaces WITHOUT dropping
+// brand.groupBuyBanner. The banner is what tells the home which products belong
+// to the round; deleting it would return those pre-orders to the ships-now shelf
+// at their on-hand price. So the components gate on the way state instead.
+check("the storefront page never deletes the banner to hide the group-buy way", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/app/(tenant)/(storefront)/page.tsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    src,
+    /delete\s*\(?[^\n]*groupBuyBanner/,
+    "deleting the banner would spill the round's pre-orders onto the on-hand shelf",
+  );
+  assert.match(src, /resolveWays\(/, "the page must resolve the effective per-way states");
+});
+
+check("the header hides the Group Buy nav item when the way is hidden", () => {
+  const src = readFileSync(join(__dirname, "..", "src/storefront/components/Header.tsx"), "utf8");
+  assert.match(
+    src,
+    /twoWaysMode[^\n]*groupBuy/,
+    "the Group Buy nav item must be gated on the group-buy way state",
+  );
+});
+
+check("TwoWaysHome reads the resolved ways rather than assuming two", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/storefront/components/TwoWaysHome.tsx"),
+    "utf8",
+  );
+  assert.match(src, /view\.heading/, "the heading must come from the view-model");
+  assert.doesNotMatch(
+    src,
+    />\s*Two ways to order\s*</,
+    "the heading must not be hardcoded — a one-way store never claims two",
+  );
+  assert.match(src, /onHand\.state/, "the on-hand section must respect its way state");
+});
+
 // WIRING: the component must not render the round's item rows / add-to-cart.
 check("TwoWaysHome renders no group-buy item rows and routes to the group-buy page", () => {
   const src = readFileSync(
