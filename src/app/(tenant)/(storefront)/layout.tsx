@@ -62,6 +62,14 @@ export default async function StorefrontLayout({
   const gateDecision = await evaluateVisitorGate(tenantId);
   if (gateDecision.status === "blocked") {
     const colors = (branding?.colors ?? {}) as { primary?: string };
+    // The wall also carries the `#admin` sign-in (see AccessCodeGate): the hash
+    // is invisible to this server render, so without it the store owner would
+    // have to know the VISITOR code before they could reach their own login.
+    // Pass the admin login's copy along so that surface stays white-labeled.
+    const adminCopy = (branding?.config ?? {}) as {
+      adminLoginTitle?: string;
+      adminLoginSub?: string;
+    };
     return (
       <div style={cssVars} className="min-h-screen">
         <AccessCodeGate
@@ -69,6 +77,8 @@ export default async function StorefrontLayout({
           logoUrl={branding?.logoUrl}
           brandColor={colors.primary || "#0f172a"}
           heading={gateDecision.heading}
+          adminLoginTitle={adminCopy.adminLoginTitle}
+          adminLoginSub={adminCopy.adminLoginSub}
         />
       </div>
     );

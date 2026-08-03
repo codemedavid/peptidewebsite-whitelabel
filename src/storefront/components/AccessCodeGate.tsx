@@ -6,10 +6,24 @@
 // unauthenticated browser. White-labeled: logo, brand color and heading all come
 // from the tenant. The code is verified server-side (verifyAccessCodeAction); it
 // is never shipped to the client, and neither is its hash.
+//
+// One exception, and it is why this component has two surfaces: the store-admin
+// sign-in lives at `#admin`, INSIDE the SPA this wall is replacing. A hash never
+// reaches the server, so the layout cannot tell a shopper from an owner on their
+// way to the dashboard — which used to force the owner to type the VISITOR code
+// before they could type their own email and password. The wall therefore
+// resolves the surface here, on the client, where the hash is readable
+// (lib/auth/gate-surface.ts), and shows the admin login on `#admin`.
+//
+// That concedes nothing: the store stays walled on both surfaces, the login is
+// protected by its own server-side scrypt check and rate limit, and it shows the
+// same store name and logo this wall already shows.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { verifyAccessCodeAction } from "@/actions/storefront-gate";
+import { resolveGateSurface, type GateSurface } from "@/lib/auth/gate-surface";
+import { AdminLogin } from "@/storefront/admin/AdminLogin";
 
 // "checking" = verifying the code; "unlocking" = code accepted, the server is
 // re-rendering the store (router.refresh) and this gate is about to unmount. We
@@ -41,18 +55,46 @@ export function AccessCodeGate({
   logoUrl,
   brandColor,
   heading,
+  adminLoginTitle,
+  adminLoginSub,
 }: {
   storeName: string;
   logoUrl?: string | null;
   brandColor: string;
   heading: string;
+  adminLoginTitle?: string;
+  adminLoginSub?: string;
 }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState<Status>("idle");
 
+  // Which surface to show. Starts at "wall" because the server has no hash to
+  // read and both sides must agree on the first paint; the effect below settles
+  // it on mount. Kept in sync with `hashchange` too — the storefront never
+  // reloads on a hash change, so a visitor who lands on the wall and then types
+  // `#admin` would otherwise keep staring at the code form.
+  const [surface, setSurface] = useState<GateSurface>("wall");
+  useEffect(() => {
+    const sync = () => setSurface(resolveGateSurface(window.location.hash));
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+
   const busy = status !== "idle";
+
+  // Signed in. The server issued `sf_admin_session`, so re-rendering the layout
+  // re-runs evaluateVisitorGate — which exempts a verified admin — and the store
+  // replaces this wall with the SPA, still on `#admin`. This must be a
+  // router.refresh() and NOT a hard reload: a document load is exactly what
+  // middleware kills the admin session on (lib/auth/admin-session-reset.ts), so
+  // reloading here would sign the owner straight back out.
+  const onAdminSignedIn = () => {
+    setStatus("unlocking");
+    router.refresh();
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +129,30 @@ export function AccessCodeGate({
       setStatus("idle");
     }
   };
+
+  // ── The `#admin` surface: the store owner's / staff sign-in ────────────────
+  // Wrapped in `.sf-root` because every `.admin-login` rule in storefront.css is
+  // scoped to it — outside that scope the form renders unstyled.
+  if (surface === "admin-login") {
+    return (
+      <div className="sf-root">
+        <style>{"@keyframes sf-gate-spin{to{transform:rotate(360deg)}}"}</style>
+        {status === "unlocking" ? (
+          <div className="admin-login">
+            <div className="admin-login__card" style={{ textAlign: "center" }} aria-live="polite">
+              <Spinner color={brandColor} />
+              <span style={{ fontSize: 16, fontWeight: 600 }}>Opening your dashboard…</span>
+            </div>
+          </div>
+        ) : (
+          <AdminLogin
+            brand={{ name: storeName, logoUrl, adminLoginTitle, adminLoginSub }}
+            onSuccess={onAdminSignedIn}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

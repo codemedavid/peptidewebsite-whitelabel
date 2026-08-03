@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { Brand } from "../types";
 import { signInStoreAdminAction } from "@/actions/storefront-staff";
 
 /**
@@ -16,7 +15,28 @@ import { signInStoreAdminAction } from "@/actions/storefront-staff";
  * deliberately killed on every page refresh (lib/auth/admin-session-reset.ts),
  * so nothing is cached client-side that could outlive it.
  */
-export function AdminLogin({ brand, onSuccess }: { brand: Brand; onSuccess: () => void }) {
+/**
+ * Only the branding this form paints itself with. Narrower than `Brand` on
+ * purpose: the visitor access wall renders this login too (see
+ * components/AccessCodeGate.tsx), and there the only branding available is the
+ * tenant's branding row — the assembled client `Brand` doesn't exist until the
+ * storefront SPA boots, which is precisely what the wall is withholding. The
+ * full `Brand` satisfies this shape, so the SPA's call site is unchanged.
+ */
+export type AdminLoginBrand = {
+  name: string;
+  logoUrl?: string | null;
+  adminLoginTitle?: string;
+  adminLoginSub?: string;
+};
+
+export function AdminLogin({
+  brand,
+  onSuccess,
+}: {
+  brand: AdminLoginBrand;
+  onSuccess: () => void;
+}) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
