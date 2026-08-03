@@ -17,6 +17,9 @@
 //      that tenant's own identity (name, logo, colors, catalog, COA reports).
 //   J3 Operator previews exactly which config keys / features will change.
 //   J4 Developer adds a new preset as data, not another configure-*.ts script.
+//   J5 Operator turns the stamped shape back OFF — the preset is a switch, not a
+//      one-way stamp — without destroying the owner's rules, copy, catalog or
+//      theme, and without silently flipping an absent-means-ON key the wrong way.
 //
 // Pure: no DB, no React, no network. The applier is a total function over
 // (current branding state, preset) so every guarantee below is checked offline.
@@ -30,8 +33,10 @@ import {
   TENANT_PRESET_LIST,
   KGLOW_TWO_WAYS_ID,
   PRESET_FORBIDDEN_KEYS,
+  PRESET_UNSET,
   getTenantPreset,
   applyTenantPreset,
+  removeTenantPreset,
   type TenantPreset,
 } from "../src/lib/tenant/presets";
 import { ALL_FEATURES, OPERATOR_GRANTABLE, FEATURES } from "../src/lib/features/catalog";
@@ -507,6 +512,194 @@ check("config and defaults never declare the same key", () => {
     for (const k of Object.keys(p.defaults ?? {})) {
       assert.ok(!(k in p.config), `${p.id}: ${k} is in both config and defaults`);
     }
+  }
+});
+
+// ── 12. Removing a preset — the shape is a switch (J5) ───────────────────────
+console.log("\n12. Remove the preset (J5)");
+
+// A tenant that has HAD the preset stamped on it: the structural keys are set,
+// the four entitlements resolve, and the owner has since edited the seeded
+// group-buy rules. Removing must undo the shape without touching that edit.
+function stampedTenant() {
+  const applied = applyTenantPreset(livingTenant(), kglow);
+  const config = { ...applied.config };
+  // The owner customised the seeded rules after the preset was applied.
+  config.groupBuyRules = { enabled: true, ratio: { enabled: true, bacWaterPerPeptide: 2 } };
+  return {
+    themeId: applied.themeId,
+    config,
+    enabledFeatures: [...kglow.features] as string[],
+  };
+}
+
+check("every preset declares an off value for exactly the keys its config owns", () => {
+  for (const p of TENANT_PRESET_LIST) {
+    const configKeys = Object.keys(p.config).sort();
+    const offKeys = Object.keys(p.off).sort();
+    assert.deepEqual(
+      offKeys,
+      configKeys,
+      `${p.id}: off must cover exactly its config keys (config=${configKeys}, off=${offKeys})`,
+    );
+  }
+});
+
+check("no preset's off block touches a seeded default or a forbidden key", () => {
+  for (const p of TENANT_PRESET_LIST) {
+    for (const k of Object.keys(p.off)) {
+      assert.ok(!PRESET_FORBIDDEN_KEYS.has(k), `${p.id}: off writes forbidden key ${k}`);
+      assert.ok(!(k in (p.defaults ?? {})), `${p.id}: off touches owner-editable ${k}`);
+    }
+  }
+});
+
+check("removing never reports a theme change — the tenant keeps its look", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.ok(
+    !out.changes.some((c) => c.kind === "theme"),
+    "removal proposed a theme change",
+  );
+  assert.ok(!("themeId" in out), "removal returned a themeId to persist");
+});
+
+check("removing keeps the owner's edited group-buy rules, copy and round defaults", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.deepEqual(
+    out.config.groupBuyRules,
+    { enabled: true, ratio: { enabled: true, bacWaterPerPeptide: 2 } },
+    "removal destroyed the owner's edited rules",
+  );
+  assert.ok(out.config.groupBuyContent, "removal dropped groupBuyContent");
+  assert.ok(out.config.groupBuySettings, "removal dropped groupBuySettings");
+});
+
+check("removing keeps identity, secrets and the owner's own content", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.equal(out.config.name, "Pep Stack Davao");
+  assert.equal(out.config.logoUrl, "https://ik.imagekit.io/x/pepstack-logo.png");
+  assert.equal(out.config.main, "#123456");
+  assert.equal(out.config.adminPassword, "super-secret-owner-pw");
+  assert.deepEqual(out.config.categories, ["Peptides", "Bac Water"]);
+  assert.equal((out.config.coaReports as unknown[]).length, 1);
+});
+
+// The two hazard keys. Both are read as `!== false`, so writing an explicit
+// `false` is NOT the off-state — it is a new, stickier owner decision.
+check("removing UNSETS groupBuyAllowOnHand rather than writing false", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.ok(
+    !("groupBuyAllowOnHand" in out.config),
+    "removal left groupBuyAllowOnHand set — `false` here PAUSES on-hand sales (on-hand-gate.ts reads `!== false`)",
+  );
+});
+
+check("removing UNSETS showPageCOA rather than writing false", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.ok(
+    !("showPageCOA" in out.config),
+    "removal left showPageCOA set — `false` would keep Lab Reports hidden even after a future re-grant",
+  );
+});
+
+check("removing keeps homeLayout explicitly classic — absent-while-entitled reads as two-ways", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.equal(
+    out.config.homeLayout,
+    "classic",
+    "removal must not delete homeLayout: resolveHomeLayout treats an absent key as ON",
+  );
+  assert.equal(resolveHomeLayout(true, out.config.homeLayout as string), "classic");
+});
+
+check("removing switches the store-admin surfaces off", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.ok(!("showAdminGroupBuy" in out.config), "showAdminGroupBuy survived removal");
+  assert.ok(!("showAnalyticsGroupBuys" in out.config), "showAnalyticsGroupBuys survived removal");
+});
+
+check("removing revokes exactly the preset's features that are currently enabled", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  assert.deepEqual([...out.featuresToRevoke].sort(), [...kglow.features].sort());
+});
+
+check("removing revokes nothing the tenant does not already have", () => {
+  const partial = {
+    ...stampedTenant(),
+    enabledFeatures: [FEATURES.GB_MODULE] as string[],
+  };
+  const out = removeTenantPreset(partial, kglow);
+  assert.deepEqual(out.featuresToRevoke, [FEATURES.GB_MODULE]);
+});
+
+check("removing reports one revoke change per feature, distinct from a grant", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  const revokes = out.changes.filter((c) => c.kind === "revoke");
+  assert.equal(revokes.length, kglow.features.length);
+  assert.ok(
+    !out.changes.some((c) => c.kind === "feature"),
+    "removal emitted a grant-shaped change",
+  );
+});
+
+check("removing reports each config key it clears", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  const cleared = out.changes.filter((c) => c.kind === "config" && c.to === undefined);
+  assert.ok(cleared.length >= 4, `expected the 4 unset keys, got ${cleared.length}`);
+});
+
+check("removing is idempotent — a second removal changes nothing", () => {
+  const first = removeTenantPreset(stampedTenant(), kglow);
+  const second = removeTenantPreset(
+    { themeId: "kglow", config: first.config, enabledFeatures: [] },
+    kglow,
+  );
+  assert.deepEqual(second.changes, [], "second removal still proposed changes");
+  assert.deepEqual(second.config, first.config);
+  assert.deepEqual(second.featuresToRevoke, []);
+});
+
+check("removing a preset the tenant never had is a no-op", () => {
+  const out = removeTenantPreset(
+    { themeId: "clinical-white", config: { name: "Untouched" }, enabledFeatures: [] },
+    kglow,
+  );
+  assert.deepEqual(out.changes, []);
+  assert.deepEqual(out.config, { name: "Untouched" });
+});
+
+check("removing never mutates the caller's state", () => {
+  const current = stampedTenant();
+  const snapshot = JSON.parse(JSON.stringify(current));
+  removeTenantPreset(current, kglow);
+  assert.deepEqual(JSON.parse(JSON.stringify(current)), snapshot, "input was mutated");
+});
+
+check("apply → remove → apply restores the stamped shape", () => {
+  const start = livingTenant();
+  const applied = applyTenantPreset(start, kglow);
+  const removed = removeTenantPreset(
+    { themeId: applied.themeId, config: applied.config, enabledFeatures: [...kglow.features] },
+    kglow,
+  );
+  const reapplied = applyTenantPreset(
+    { themeId: "kglow", config: removed.config, enabledFeatures: [] },
+    kglow,
+  );
+  for (const key of Object.keys(kglow.config)) {
+    assert.deepEqual(
+      reapplied.config[key],
+      applied.config[key],
+      `${key} did not survive the apply→remove→apply round trip`,
+    );
+  }
+  assert.deepEqual([...reapplied.featuresToGrant].sort(), [...kglow.features].sort());
+});
+
+check("PRESET_UNSET is never persisted into a tenant's config", () => {
+  const out = removeTenantPreset(stampedTenant(), kglow);
+  for (const [k, v] of Object.entries(out.config)) {
+    assert.notEqual(v, PRESET_UNSET, `${k} kept the UNSET sentinel`);
   }
 });
 
