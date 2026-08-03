@@ -52,6 +52,7 @@
     "test:variation-price-reveal": "tsx scripts/test-variation-price-reveal.ts",
     "test:variant-inventory": "tsx scripts/test-variant-inventory.ts",
     "test:variation-gb-pricing": "tsx scripts/test-variation-gb-pricing.ts",
+    "test:dragon-pricelist": "tsx scripts/test-dragon-pricelist.ts",
     "test:stock-gate": "tsx scripts/test-stock-gate.ts",
     "test:product-detail": "tsx scripts/test-product-detail.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
