@@ -76,6 +76,7 @@ import {
 import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
+import { normalizeTwoWaysMode, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
 import {
   resolveRoundOrders,
@@ -575,6 +576,47 @@ export async function saveGroupBuyAllowOnHandAction(
     }
     revalidateTenant(tenantId, slug);
     return { ok: true, allowOnHand: value };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the setting." };
+  }
+}
+
+// ── Ways to order (store admin) ──────────────────────────────────────────────
+
+/**
+ * Persist per-way management of the two order paths into
+ * branding.config.twoWaysMode (read-modify-write, so the rest of the storefront
+ * config is untouched). Store-admin gated + module entitlement, and the input is
+ * re-normalized server-side — a tampered client can't write a state the
+ * storefront doesn't understand, and can't hide BOTH ways and leave a store with
+ * nothing to buy (normalizeTwoWaysMode refuses that combination).
+ *
+ * Revalidates the tenant so the storefront, the cart gate, and the checkout gate
+ * all pick the new states up together.
+ */
+export async function saveTwoWaysModeAction(
+  mode: unknown,
+): Promise<{ ok: true; mode: TwoWaysMode } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const value = normalizeTwoWaysMode(mode);
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: { ...current, twoWaysMode: value } });
+    } else {
+      const current = await readTenantConfig(tenantId);
+      const config = { ...current, twoWaysMode: value } as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId },
+        update: { config },
+        create: { tenantId, config },
+      });
+    }
+    revalidateTenant(tenantId, slug);
+    return { ok: true, mode: value };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't save the setting." };
   }

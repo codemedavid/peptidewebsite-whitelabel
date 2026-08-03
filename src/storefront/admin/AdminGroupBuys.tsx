@@ -27,9 +27,31 @@ import {
   setGroupBuyArchivedAction,
   getGroupBuySupplierReportAction,
   saveGroupBuyAllowOnHandAction,
+  saveTwoWaysModeAction,
   saveGroupBuyContentAction,
   type GroupBuyCustomerLine,
 } from "@/actions/group-buys";
+import {
+  normalizeTwoWaysMode,
+  type TwoWaysMode,
+  type WayKey,
+  type WayState,
+} from "@/lib/storefront/two-ways-mode";
+
+// The two order paths, each paired with the OTHER one so the control can refuse
+// the click that would leave the store with nothing to sell.
+const WAY_ROWS: { key: WayKey; other: WayKey; label: string }[] = [
+  { key: "onHand", other: "groupBuy", label: "On-Hand (ships now)" },
+  { key: "groupBuy", other: "onHand", label: "Group Buy (ships after close)" },
+];
+
+// "Removed" rather than "Hidden" in the UI: the owner is deciding what they
+// sell, not managing a visibility flag.
+const WAY_CHOICES: { value: WayState; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "closed", label: "Closed" },
+  { value: "hidden", label: "Removed" },
+];
 import {
   GB_CONTENT_LIMITS,
   normalizeGroupBuyContent,
@@ -992,6 +1014,15 @@ export function AdminGroupBuys({
   const [allowOnHand, setAllowOnHand] = useState(brand.groupBuyAllowOnHand !== false);
   const [savingOnHand, setSavingOnHand] = useState(false);
 
+  // Per-way management: which of the two order paths this store actually sells.
+  // brand.twoWaysMode carries the EFFECTIVE states (already folded with the live
+  // round), so re-normalize the raw pair here — the owner is editing their own
+  // setting, not the round's side effect on it.
+  const [ways, setWays] = useState<TwoWaysMode>(() =>
+    normalizeTwoWaysMode(brand.twoWaysMode),
+  );
+  const [savingWays, setSavingWays] = useState(false);
+
   // Owner-editable storefront copy ("How group buys work" + live-round terms) —
   // loaded with the list, saved via saveGroupBuyContentAction into
   // branding.config.groupBuyContent.
@@ -1103,6 +1134,22 @@ export function AdminGroupBuys({
         ? "On-hand products stay buyable during group buys."
         : "On-hand products are paused while a group buy is live.",
     );
+  };
+
+  const saveWays = async (next: TwoWaysMode) => {
+    const prev = ways;
+    setWays(next); // optimistic
+    setSavingWays(true);
+    const res = await saveTwoWaysModeAction(next);
+    setSavingWays(false);
+    if ("error" in res) {
+      setWays(prev); // revert
+      return toast(res.error);
+    }
+    // The server re-normalizes, so a combination it refuses (hiding both ways)
+    // comes back corrected rather than silently diverging from what's stored.
+    setWays(res.mode);
+    toast("Ways to order saved.");
   };
 
   const saveContent = async (next: GroupBuyContent) => {
@@ -1218,7 +1265,68 @@ export function AdminGroupBuys({
           </div>
         )}
 
-        {tab === "rounds" && caps.productAssignment && (
+        {tab === "rounds" && (
+          <div
+            style={{
+              margin: "4px 0 14px",
+              padding: "12px 14px",
+              border: "1px solid var(--brand-border, rgba(0,0,0,.12))",
+              borderRadius: 10,
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>Ways to order</div>
+            <div className="admin-field__hint" style={{ marginTop: 2 }}>
+              Which order paths your storefront offers. <strong>Open</strong> sells normally.{" "}
+              <strong>Closed</strong> still shows the section, marked closed, but nothing can be
+              added to cart. <strong>Removed</strong> takes it off the storefront entirely — the
+              store reads as a one-way store. You can’t remove both.
+            </div>
+            {WAY_ROWS.map((row) => (
+              <div
+                key={row.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginTop: 10,
+                }}
+              >
+                <span>{row.label}</span>
+                <div role="group" aria-label={`${row.label} availability`} style={{ display: "flex", gap: 6 }}>
+                  {WAY_CHOICES.map((choice) => {
+                    // Never offer the click that would remove the last way — the
+                    // server refuses it anyway, so the button would just bounce.
+                    const wouldEmptyStore =
+                      choice.value === "hidden" && ways[row.other] === "hidden";
+                    const active = ways[row.key] === choice.value;
+                    return (
+                      <button
+                        key={choice.value}
+                        type="button"
+                        className={`admin-btn${active ? "" : " admin-btn--ghost"}`}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                        aria-pressed={active}
+                        disabled={savingWays || wouldEmptyStore}
+                        title={
+                          wouldEmptyStore
+                            ? "Your store needs at least one way to order."
+                            : undefined
+                        }
+                        onClick={() => saveWays({ ...ways, [row.key]: choice.value })}
+                      >
+                        {choice.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "rounds" && caps.productAssignment && ways.onHand === "open" && (
           <label
             className="admin-check"
             style={{
