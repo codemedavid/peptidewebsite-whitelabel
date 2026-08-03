@@ -120,6 +120,38 @@ export const PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set(FORBIDDEN_KEYS
  */
 export type PresetConfig = Omit<Partial<Brand>, ForbiddenKey>;
 
+/**
+ * Sentinel for an `off` entry meaning "delete this key from the tenant's config"
+ * rather than "write this value". A symbol, so it can never collide with a real
+ * config value and can never survive a JSON write — the gate asserts it never
+ * reaches a persisted config.
+ */
+export const PRESET_UNSET: unique symbol = Symbol("preset:unset");
+
+/**
+ * What REMOVING a preset writes, per structural key: either a literal value, or
+ * PRESET_UNSET to delete the key so it falls back to the app default.
+ *
+ * DECLARED, never derived. "Off" is not uniformly `false` in this config, and
+ * guessing wrong is silently destructive in both directions:
+ *   • groupBuyAllowOnHand is read as `!== false` (storefront/on-hand-gate.ts) —
+ *     absent means on-hand stays buyable, so writing `false` would PAUSE a
+ *     store's normal sales: the opposite of switching the preset off.
+ *   • showPageCOA is read as `!== false` (storefront/visibility.ts) — writing
+ *     `false` is an explicit owner-off that would keep Lab Reports hidden even
+ *     after the entitlement is granted again.
+ *   • homeLayout is the mirror case: resolveHomeLayout reads an ABSENT key while
+ *     entitled as two-ways, so removal must keep an explicit "classic" rather
+ *     than delete it — the same trap documented on KGLOW_TWO_WAYS.config.
+ *
+ * Must cover exactly the keys in the preset's `config`, and may never name a key
+ * from `defaults` — removal switches the shape off, it never touches the owner's
+ * rules or copy. Both invariants are enforced by npm run test:tenant-presets.
+ */
+export type PresetOff = {
+  [K in keyof PresetConfig]?: PresetConfig[K] | typeof PRESET_UNSET;
+};
+
 // ── Preset shape ─────────────────────────────────────────────────────────────
 
 export type TenantPreset = {
@@ -137,6 +169,13 @@ export type TenantPreset = {
    * operator can eyeball in the confirm diff.
    */
   config: PresetConfig;
+  /**
+   * The inverse of `config` — what removing the preset writes for each key it
+   * owns, so the shape is a switch rather than a one-way stamp. See PresetOff:
+   * exhaustive over `config`, disjoint from `defaults`, and hand-declared
+   * because an absent key is not uniformly "off" in this config.
+   */
+  off: PresetOff;
   /**
    * Owner-editable blocks the preset only SEEDS: written when the tenant has no
    * value, left strictly alone when it does. Group-buy rules, explainer copy and
@@ -202,6 +241,26 @@ const KGLOW_TWO_WAYS: TenantPreset = {
     // its own reports — coaReports is forbidden, so nothing is copied over.
     showPageCOA: true,
   },
+  // Switching K Glow's shape back off. Note only ONE key is written: the other
+  // four are cleared, because their absent state already IS the off state and
+  // writing `false` would say something stronger (and, for the first two, worse)
+  // than "this store no longer runs the preset". See PresetOff.
+  off: {
+    // Kept, never cleared: an absent homeLayout while GB_TWO_WAYS_HOME is
+    // entitled resolves to two-ways. The revoke below should make that moot, but
+    // an explicit "classic" means the front page cannot flip even if the tenant
+    // picks the grant up again from its plan.
+    homeLayout: "classic",
+    // Absent = on-hand buyable, which is the normal store. `false` would pause
+    // on-hand sales — an active setting, not an off-switch.
+    groupBuyAllowOnHand: PRESET_UNSET,
+    // Absent = hidden; page.tsx projects both from the entitlement anyway.
+    showAdminGroupBuy: PRESET_UNSET,
+    showAnalyticsGroupBuys: PRESET_UNSET,
+    // Absent = owner-on, gated by the STORE_COA grant we revoke. Clearing rather
+    // than writing `false` keeps a future re-grant able to show Lab Reports.
+    showPageCOA: PRESET_UNSET,
+  },
   // Seeded only when absent — a store already running group buys keeps its own
   // rules, copy and round defaults.
   defaults: {
@@ -250,11 +309,16 @@ export function getTenantPreset(id: string | null | undefined): TenantPreset | n
 
 // ── Applying ─────────────────────────────────────────────────────────────────
 
-/** One thing applying the preset will change — the operator's confirm list. */
+/** One thing applying or removing the preset will change — the confirm list. */
 export type PresetChange =
   | { kind: "theme"; from: string; to: string }
   | { kind: "config"; key: string; from: unknown; to: unknown }
-  | { kind: "feature"; key: FeatureKey };
+  /** A grant, emitted only by applying. */
+  | { kind: "feature"; key: FeatureKey }
+  /** A revoke, emitted only by removing. A separate member rather than a flag on
+   *  "feature" so the existing apply UI, which filters on kind, cannot render a
+   *  revoke as if it were a grant. */
+  | { kind: "revoke"; key: FeatureKey };
 
 /** The tenant's current state. Every field is optional/untrusted: callers read
  *  it straight out of a Branding row whose `config` is an untyped Json column. */
@@ -344,4 +408,83 @@ export function applyTenantPreset(
   for (const key of featuresToGrant) changes.push({ kind: "feature", key });
 
   return { themeId: preset.themeId, config, featuresToGrant, changes };
+}
+
+// ── Removing ─────────────────────────────────────────────────────────────────
+
+/** What the caller should persist to switch the shape off, plus the diff.
+ *
+ *  Deliberately carries NO themeId: removal leaves the tenant's look alone. A
+ *  theme is a visual choice the owner may have kept on purpose, and there is no
+ *  record of what preceded it — reverting it would be a guess. */
+export type PresetRemoval = {
+  config: Record<string, unknown>;
+  /** Preset features the tenant currently has. Revoked, never merely un-granted. */
+  featuresToRevoke: FeatureKey[];
+  changes: PresetChange[];
+};
+
+/**
+ * Undo a preset: the inverse of applyTenantPreset, and the other half of "the
+ * store shape is a switch".
+ *
+ * Scope is deliberately narrow — it touches ONLY the structural keys the preset
+ * owns (via `preset.off`) and the preset's entitlements. Left alone:
+ *   • the theme, and every identity/secret key (forbidden to presets anyway);
+ *   • the `defaults` blocks — group-buy rules, explainer copy, round defaults.
+ *     Applying seeds those fill-if-absent precisely because owners edit them, so
+ *     removal deleting them would destroy real work that apply promised to keep.
+ *     A store that stops running group buys keeps its rules for when it resumes.
+ *   • products, orders and COA reports, which were never part of the preset.
+ *
+ * ONE ASYMMETRY WORTH KNOWING: apply is additive (it grants only what is
+ * missing), but remove revokes every one of the preset's features the tenant
+ * currently has — including any it held BEFORE the preset was ever applied,
+ * because nothing records which grants the preset itself introduced. That is why
+ * the operator surface previews the revoke list before writing.
+ *
+ * Idempotent and non-mutating, like the applier: removing twice yields an empty
+ * `changes` and an identical config, so a double-click is harmless.
+ */
+export function removeTenantPreset(
+  current: TenantPresetTarget,
+  preset: TenantPreset,
+): PresetRemoval {
+  const currentConfig = asConfig(current.config);
+  const enabled = new Set(current.enabledFeatures ?? []);
+
+  const changes: PresetChange[] = [];
+  const config: Record<string, unknown> = { ...currentConfig };
+
+  for (const [key, to] of Object.entries(preset.off) as [string, unknown][]) {
+    // Removal only ever touches keys that are CURRENTLY SET. An absent key means
+    // the preset is not in effect there, so there is nothing to undo — and
+    // writing one anyway would be a change, not a removal. Concretely: without
+    // this guard, removing the preset from a tenant that never had it would
+    // stamp homeLayout "classic" and take down a two-ways home that tenant got
+    // from its plan. It is also what makes a second removal a true no-op.
+    if (!(key in currentConfig)) continue;
+
+    const from = currentConfig[key];
+
+    // Clear the key so it falls back to the app default.
+    if (to === PRESET_UNSET) {
+      delete config[key];
+      changes.push({ kind: "config", key, from, to: undefined });
+      continue;
+    }
+
+    // Reset the key to the preset's declared off value. After a plain apply this
+    // is already equal (apply wrote "classic", off says "classic") so it is a
+    // no-op; it bites when the owner has since switched the shape on, e.g.
+    // homeLayout "two-ways" — removing the preset takes the split home with it.
+    if (sameValue(from, to)) continue;
+    config[key] = cloneValue(to);
+    changes.push({ kind: "config", key, from, to: config[key] });
+  }
+
+  const featuresToRevoke = preset.features.filter((f) => enabled.has(f));
+  for (const key of featuresToRevoke) changes.push({ kind: "revoke", key });
+
+  return { config, featuresToRevoke, changes };
 }
