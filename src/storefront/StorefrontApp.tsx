@@ -251,7 +251,11 @@ function Shell() {
       {activePage === "calculator" && <ReconstitutionPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
-      {activePage === "groupbuy" && (
+      {/* A store that HID the group-buy way doesn't serve the page, even by
+          direct #groupbuy link — the way state, not the banner, is the gate
+          (the banner has to stay so the round's pre-orders keep off the
+          ships-now shelf). */}
+      {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && (
         <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
       )}
 

@@ -46,7 +46,9 @@ import {
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { brandBorderVars } from "@/lib/storefront/brand-border";
 import { priceFontVar } from "@/lib/storefront/price-font";
-import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
+import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
+import { TWO_WAYS_MODE_DEFAULT } from "@/lib/storefront/two-ways-mode";
 import {
   gbScopeFromBanner,
   isGroupBuyPreorder,
@@ -468,6 +470,21 @@ export function StoreProvider({
         toast(`${product.name} isn't part of the current group buy.`);
         return;
       }
+      // Per-way gate: a store that sells only one way (group buy only) refuses
+      // the other path outright — not just while a round is live. The home
+      // already hides the section, but the catalog route and a stale tab can
+      // still reach a product, and letting it into the cart only to bounce it
+      // at the end of checkout is the worse failure. Same decision function the
+      // server runs at placement, so the two can't disagree.
+      const wayBlock = decideWayBlock({
+        ways: brand.twoWaysMode ?? TWO_WAYS_MODE_DEFAULT,
+        gate: brand.groupBuyGate ?? GROUP_BUY_GATE_OPEN,
+        items: [{ productId: baseProductId(product), name: product.name }],
+      });
+      if (wayBlock) {
+        toast(wayBlock);
+        return;
+      }
       // Two-ways split: on-hand items ship now, group-buy items ship after the
       // round closes — one cart never mixes the two paths. Rejected here (the
       // friendliest spot); placeStorefrontOrderAction re-checks server-side.
@@ -531,7 +548,7 @@ export function StoreProvider({
       if (room <= 0) return;
       setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
     },
-    [cart, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner],
+    [cart, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner, brand.twoWaysMode],
   );
 
   const decrementCart = useCallback((productId: string) => {
