@@ -1,4 +1,5 @@
 import type { Brand } from "./types";
+import { normalizeTwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import { businessExclusiveLocked } from "@/lib/trial/trial-state";
 
@@ -46,6 +47,13 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // brand.groupBuyBanner (buildGroupBuyBanner) when there is one. No round → the
   // nav link is hidden and a direct #groupbuy visit falls back to home.
   groupbuy: (b) => !!b.groupBuyBanner,
+  // The on-hand shelf IS the catalog, so hiding that way must also drop its nav
+  // link — otherwise a group-buy-only store still advertises "Products" and
+  // lands the shopper on an empty page. Only an explicit "hidden" does this:
+  // normalizeTwoWaysMode returns both ways OPEN for absent/junk config, so a
+  // tenant that never touched the setting is untouched, and "closed" (paused,
+  // still shown) deliberately keeps the link.
+  catalog: (b) => normalizeTwoWaysMode(b.twoWaysMode).onHand !== "hidden",
 };
 
 // Each store-admin sub-view that exists to manage a storefront page. When the
