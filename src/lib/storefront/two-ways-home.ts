@@ -13,6 +13,14 @@ import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-pag
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
 import { availableUnits, productOutOfStock } from "./inventory";
+import {
+  TWO_WAYS_MODE_DEFAULT,
+  normalizeTwoWaysMode,
+  visibleWayCount,
+  waysHeading,
+  type TwoWaysMode,
+  type WayState,
+} from "./two-ways-mode";
 
 /** The minimal product shape the home reads. Generic so the caller keeps its own
  *  concrete Product type through the view (id/name/image/stock for the rows). */
@@ -40,14 +48,23 @@ export type OnHandLine<T extends TwhProduct = TwhProduct> = {
   /** "12 in stock" — the units sellable across every pool (see
    *  inventory.availableUnits). Empty when no pool carries a stock number. */
   stockLabel: string;
+  /** Can this line actually be added to a cart? Stock AND the on-hand way being
+   *  open — an owner who paused on-hand sales still shows the shelf (so the
+   *  pause is explained), but nothing on it sells. */
+  buyable: boolean;
 };
 
 /** The live round as the home surfaces it: chrome + how many items are in the
  *  round, but NOT the products themselves — those live on the dedicated
  *  #groupbuy page (see buildTwoWaysHomeView). */
 export type GbHomeTeaser = {
-  /** A round is live (banner present). The teaser renders when open && count > 0. */
+  /** A round is live (banner present) AND the group-buy way is open. The teaser
+   *  renders when open && count > 0. An owner who closed or hid the way stops
+   *  the join path here, whatever the round says. */
   open: boolean;
+  /** The group-buy way as the owner set it — what the way CARD renders
+   *  (open / marked closed / gone). */
+  state: WayState;
   name: string;
   deliveryEta: string;
   countdown: string;
@@ -62,8 +79,17 @@ export type GbHomeTeaser = {
 
 /** The full home view-model: the on-hand shelf and the live-round teaser. */
 export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
-  onHand: { count: number; lines: OnHandLine<T>[] };
+  onHand: {
+    count: number;
+    lines: OnHandLine<T>[];
+    /** The on-hand way as the owner set it. "hidden" empties the shelf. */
+    state: WayState;
+  };
   gb: GbHomeTeaser;
+  /** How many order paths the page actually shows (a CLOSED way still counts). */
+  visibleWays: number;
+  /** The heading above the ways split — a one-way store never claims two. */
+  heading: string;
 };
 
 /**
@@ -93,7 +119,11 @@ export function groupBuyCtaTarget(cartCount: number): "groupbuy" | "checkout" {
   return Number.isFinite(cartCount) && cartCount > 0 ? "checkout" : "groupbuy";
 }
 
-function onHandLine<T extends TwhProduct>(product: T, currency: string): OnHandLine<T> {
+function onHandLine<T extends TwhProduct>(
+  product: T,
+  currency: string,
+  wayOpen: boolean,
+): OnHandLine<T> {
   const price = Math.max(0, product.price || 0);
   // Availability comes from the shared inventory rules, not the base column
   // alone: a product whose doses track their own stock has as many pools as it
@@ -105,13 +135,15 @@ function onHandLine<T extends TwhProduct>(product: T, currency: string): OnHandL
   // not a sold-out signal — such a product stays buyable and unlabelled, the
   // same treatment the catalog gives it.
   const known = isNum(product.stock) || (product.variations ?? []).some((v) => isNum(v.stock));
+  const inStock = known ? !productOutOfStock(product) : true;
   return {
     product,
     initial: productInitial(product.name),
     price,
     priceLabel: formatGbMoney(currency, price),
-    inStock: known ? !productOutOfStock(product) : true,
+    inStock,
     stockLabel: known ? `${availableUnits(product)} in stock` : "",
+    buyable: inStock && wayOpen,
   };
 }
 
@@ -133,6 +165,14 @@ function onHandLine<T extends TwhProduct>(product: T, currency: string): OnHandL
  * Availability filtering is the caller's job. On-hand order is preserved, except
  * that `onHandOrder: "per-vial-first"` floats the shelf's single per-vial listings
  * above its multi-vial kits (see ./on-hand-order). The input is never mutated.
+ *
+ * `ways` (./two-ways-mode) lets a store sell only ONE way. A hidden way drops
+ * out of the page entirely — the on-hand shelf comes back empty, or the group-buy
+ * teaser never opens — and a closed way is still shown but sells nothing. Omitting
+ * the argument leaves both ways open, i.e. exactly the home every existing tenant
+ * already has. Note that hiding the group-buy way does NOT return the round's
+ * products to the on-hand shelf: they are pre-orders priced at gbPrice, so the
+ * round's scope keeps excluding them either way.
  */
 export function buildTwoWaysHomeView<T extends TwhProduct>(
   products: T[],
@@ -140,21 +180,29 @@ export function buildTwoWaysHomeView<T extends TwhProduct>(
   currency: string,
   now: Date = new Date(),
   onHandOrder: OnHandOrder = "catalog",
+  ways: TwoWaysMode = TWO_WAYS_MODE_DEFAULT,
 ): TwoWaysHomeView<T> {
+  const mode = normalizeTwoWaysMode(ways);
   const covered = banner && !banner.coversAll ? new Set(banner.productIds) : null;
   const inRound = (p: T): boolean =>
     !!banner && (banner.coversAll || (covered?.has(p.id) ?? false));
 
-  const onHandLines = orderOnHandProducts(
-    products.filter((p) => !inRound(p)),
-    onHandOrder,
-  ).map((p) => onHandLine(p, currency));
+  const onHandLines =
+    mode.onHand === "hidden"
+      ? []
+      : orderOnHandProducts(
+          products.filter((p) => !inRound(p)),
+          onHandOrder,
+        ).map((p) => onHandLine(p, currency, mode.onHand === "open"));
   const gbProductIds = banner ? products.filter(inRound).map((p) => p.id) : [];
 
   return {
-    onHand: { count: onHandLines.length, lines: onHandLines },
+    onHand: { count: onHandLines.length, lines: onHandLines, state: mode.onHand },
+    visibleWays: visibleWayCount(mode),
+    heading: waysHeading(mode),
     gb: {
-      open: !!banner,
+      open: !!banner && mode.groupBuy === "open",
+      state: mode.groupBuy,
       name: banner?.name ?? "",
       deliveryEta: banner?.deliveryEta ?? "",
       countdown: gbCountdownLabel(banner?.endsAt, now),
