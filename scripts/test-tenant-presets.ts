@@ -102,12 +102,20 @@ check("getTenantPreset returns the preset by id and null for unknown ids", () =>
   assert.equal(getTenantPreset(""), null);
 });
 
-check("every preset carries id / name / tagline / themeId", () => {
+check("every preset carries id / name / tagline", () => {
   for (const p of TENANT_PRESET_LIST) {
     assert.ok(p.id.trim(), "blank id");
     assert.ok(p.name.trim(), `${p.id}: blank name`);
     assert.ok(p.tagline.trim(), `${p.id}: blank tagline`);
-    assert.ok(p.themeId.trim(), `${p.id}: blank themeId`);
+  }
+});
+
+check("no preset carries a theme — a preset changes how a store works, not how it looks", () => {
+  for (const p of TENANT_PRESET_LIST) {
+    assert.ok(
+      !("themeId" in p),
+      `${p.id} declares a themeId; the theme belongs to the tenant, not the store shape`,
+    );
   }
 });
 
@@ -120,8 +128,8 @@ console.log("\n2. K Glow two-ways preset");
 
 const kglow: TenantPreset = TENANT_PRESETS[KGLOW_TWO_WAYS_ID];
 
-check("uses the kglow theme", () => {
-  assert.equal(kglow.themeId, "kglow");
+check("does not carry a theme", () => {
+  assert.equal((kglow as { themeId?: string }).themeId, undefined);
 });
 
 check("ships the two-ways home OFF — the storefront home stays classic", () => {
@@ -275,9 +283,10 @@ check("overwrites the keys the preset does own", () => {
   assert.equal(out.config.showPageCOA, true, "showPageCOA not switched on");
 });
 
-check("applies the preset theme", () => {
+check("never touches the tenant's theme", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
-  assert.equal(out.themeId, "kglow");
+  assert.ok(!("themeId" in out), "application returned a themeId to persist");
+  assert.ok(!out.changes.some((c) => c.kind === "theme"), "proposed a theme change");
 });
 
 check("does not mutate the caller's config object", () => {
@@ -293,7 +302,7 @@ console.log("\n6. Apply at tenant creation (J1)");
 
 check("an empty config yields a complete group-buy setup on the classic home", () => {
   const out = applyTenantPreset({ themeId: "default", config: {}, enabledFeatures: [] }, kglow);
-  assert.equal(out.themeId, "kglow");
+  assert.ok(!("themeId" in out), "a new tenant's operator-picked theme was overridden");
   assert.equal(out.config.homeLayout, "classic");
   assert.equal(out.featuresToGrant.length, kglow.features.length);
 });
@@ -310,7 +319,7 @@ check("tolerates absent / malformed current state", () => {
   for (const current of cases) {
     const out = applyTenantPreset(current, kglow);
     assert.equal(out.config.homeLayout, "classic");
-    assert.equal(out.themeId, "kglow");
+    assert.ok(!("themeId" in out));
   }
 });
 
@@ -339,10 +348,9 @@ check("is additive only — never revokes what the tenant already has", () => {
 // ── 8. Change preview (J3) ───────────────────────────────────────────────────
 console.log("\n8. Change preview (J3)");
 
-check("reports the theme change", () => {
+check("reports no theme change even when the tenant's theme differs", () => {
   const out = applyTenantPreset(livingTenant(), kglow);
-  const theme = out.changes.find((c) => c.kind === "theme");
-  assert.deepEqual(theme, { kind: "theme", from: "clinical-white", to: "kglow" });
+  assert.equal(out.changes.find((c) => c.kind === "theme"), undefined);
 });
 
 check("reports each changed config key with its before/after", () => {
@@ -366,7 +374,6 @@ check("reports no change for a config key that already matches", () => {
     !out.changes.some((c) => c.kind === "config" && c.key === "homeLayout"),
     "reported a no-op config change",
   );
-  assert.ok(!out.changes.some((c) => c.kind === "theme"), "reported a no-op theme change");
 });
 
 // ── 9. Idempotency ───────────────────────────────────────────────────────────
@@ -375,7 +382,7 @@ console.log("\n9. Idempotency");
 check("re-applying to its own output reports zero changes", () => {
   const first = applyTenantPreset(livingTenant(), kglow);
   const second = applyTenantPreset(
-    { themeId: first.themeId, config: first.config, enabledFeatures: first.featuresToGrant },
+    { themeId: "clinical-white", config: first.config, enabledFeatures: first.featuresToGrant },
     kglow,
   );
   assert.deepEqual(second.changes, [], `still changing: ${JSON.stringify(second.changes)}`);
@@ -527,7 +534,7 @@ function stampedTenant() {
   // The owner customised the seeded rules after the preset was applied.
   config.groupBuyRules = { enabled: true, ratio: { enabled: true, bacWaterPerPeptide: 2 } };
   return {
-    themeId: applied.themeId,
+    themeId: "clinical-white",
     config,
     enabledFeatures: [...kglow.features] as string[],
   };
