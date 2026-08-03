@@ -142,9 +142,6 @@ export function GroupBuyPage({
                   </div>
                   <div className="gbpage__card-prices">
                     <span className="gbpage__card-price font-display">{line.priceLabel}</span>
-                    {line.hasSavings && (
-                      <span className="gbpage__card-regular">{line.regularLabel}</span>
-                    )}
                   </div>
                   {blocked ? (
                     <button type="button" className="gbpage__join" disabled>
@@ -267,7 +264,6 @@ const gbPageCss = `
 .sf-root .gbpage__card-note { font-size: 11px; color: var(--brand-text-muted); margin-top: 2px; }
 .sf-root .gbpage__card-prices { display: flex; align-items: baseline; gap: 6px; margin-top: auto; }
 .sf-root .gbpage__card-price { font-weight: 700; font-size: 19px; color: var(--brand-main); }
-.sf-root .gbpage__card-regular { font-size: 12px; color: var(--brand-text-muted); text-decoration: line-through; }
 .sf-root .gbpage__join {
   border: 0; cursor: pointer; background: var(--brand-main); color: var(--brand-button-text);
   font-weight: 700; font-size: 13px; text-align: center; border-radius: 99px; padding: 11px;
