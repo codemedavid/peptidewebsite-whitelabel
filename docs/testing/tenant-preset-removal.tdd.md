@@ -139,6 +139,69 @@ Deliberately **not** covered, and why:
    existing operator-only surface, styled with the same `.sa` primitives already on the page.
 3. **No live-tenant run.** Nothing was applied to or removed from a real tenant in this session.
 
+## Follow-up cycle — presets no longer write the theme
+
+**Commits:** `90bf893` (RED) → `f22c324` (GREEN)
+
+Found while applying the preset to `dragon-peptides`: the dry run proposed
+`theme dynasty-red → kglow`. The shipped behaviour contradicted the feature's own promise twice
+over — the card says *"name, logo, colors … are never touched"*, and `PRESET_FORBIDDEN_KEYS`
+already blocks every other identity key (`main`, `accent`, `headingFont`) while `themeId`, the one
+key that sets all of them, was overwritten. It was also the single change `removeTenantPreset`
+could not undo, so applying was a one-way door on a tenant's look.
+
+Operator ruling: *"the feature should not change the website branding just apply the preset"*.
+
+> **J6** As an operator, I want applying a store preset to leave the tenant's theme alone, so that
+> stamping a store *shape* onto a live storefront never changes how it *looks*.
+
+`themeId` removed from `TenantPreset`, `PresetApplication`, `TenantPresetTarget` and the
+`PresetChange` union. Neither branding upsert writes it now: an existing tenant keeps its theme, a
+new `Branding` row takes the schema default `"default"`. Onboarding keeps the operator's picked
+`themeId` (it was previously being overridden by the preset), and the new-tenant picker loses its
+*"overrides the theme picked above"* warning.
+
+| Stage | Command | Result |
+|---|---|---|
+| RED | `npm run test:tenant-presets` | **58 passed, 7 failed** — all theme assertions |
+| GREEN | `npm run test:tenant-presets` | **65 passed, 0 failed** |
+| GREEN | `npx tsc --noEmit` | exit 0 |
+
+New guarantees: no preset declares a `themeId`; applying returns no `themeId` and emits no theme
+change, on a live tenant, a brand-new tenant, and malformed input alike.
+
+## Live operator run — dragon-peptides (2026-08-03)
+
+Also adds `scripts/apply-tenant-preset.ts` — dry-run-by-default CLI (`--apply` to write, `--remove`
+to switch off), matching the `seed-dragon-products.ts` convention.
+
+Applied `kglow-two-ways` to `dragon-peptides` (Starter, trial). `groupbuy.module` and
+`groupbuy.rules` were already enabled, so only 2 grants were new. 10 config/grant changes written,
+then a corrective write restored COA to off per the 2026-07-19 decision that dragon-peptides keeps
+COA/protocols disabled (`gb-access-gate-port`).
+
+Verified final state:
+
+```
+theme        : dynasty-red      ← untouched
+homeLayout   : "classic"
+groupBuyAllowOnHand   : true
+showAdminGroupBuy     : true
+showAnalyticsGroupBuys: true
+showPageCOA  : false            ← COA kept off
+groupBuySettings/Content/Rules : seeded
+
+groupbuy.module         ON
+groupbuy.rules          ON
+groupbuy.two_ways_home  ON
+storefront.coa          off
+```
+
+**Caveat:** the CLI writes directly to Postgres and cannot call `revalidateTenant`, so the
+storefront and admin may serve stale entitlements for up to the 5-minute `unstable_cache`
+`revalidate` window (`lib/features/entitlements.ts`). The admin *Store preset* card does revalidate;
+prefer it when immediacy matters.
+
 ## Merge evidence
 
 If these commits are squashed, preserve:
