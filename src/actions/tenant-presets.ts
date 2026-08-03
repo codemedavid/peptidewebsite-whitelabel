@@ -1,16 +1,22 @@
 "use server";
 
-// Apply a TENANT PRESET (lib/tenant/presets.ts) to a tenant — the operator-facing
+// Apply or REMOVE a TENANT PRESET (lib/tenant/presets.ts) — the operator-facing
 // half of "duplicate the K Glow store". The pure applier decides WHAT changes;
 // this file is the thin persistence + authorization shell around it.
 //
-// Two entry points, both platform-operator only:
-//   • previewTenantPresetAction — read-only diff for the confirm dialog.
-//   • applyTenantPresetAction   — writes Branding (themeId + config) and upserts
-//                                 the preset's feature overrides in one txn.
+// Four entry points, all platform-operator only:
+//   • previewTenantPresetAction       — read-only diff for the confirm dialog.
+//   • applyTenantPresetAction         — writes Branding (themeId + config) and
+//                                       upserts the preset's overrides in one txn.
+//   • previewRemoveTenantPresetAction — read-only diff for switching the shape off.
+//   • removeTenantPresetAction        — writes the reverted config and upserts
+//                                       `enabled: false` overrides in one txn.
 //
-// Additive by construction: the applier never emits a revoke, and this file only
-// ever upserts `enabled: true` rows. Nothing a tenant already had is removed.
+// Applying is additive by construction: the applier never emits a revoke, and
+// the apply path only upserts `enabled: true`. Removing is the deliberate
+// exception and the ONLY destructive path here — which is why it is previewed
+// separately, revokes only the preset's own features, and never touches the
+// theme or the owner-editable blocks (see removeTenantPreset's contract).
 
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -20,7 +26,12 @@ import { getPlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { getEntitlements } from "@/lib/features/entitlements";
-import { applyTenantPreset, getTenantPreset, type PresetChange } from "@/lib/tenant/presets";
+import {
+  applyTenantPreset,
+  removeTenantPreset,
+  getTenantPreset,
+  type PresetChange,
+} from "@/lib/tenant/presets";
 
 const schema = z.object({
   slug: z.string().regex(/^[a-z0-9-]{2,}$/, "Invalid tenant slug."),
@@ -40,13 +51,14 @@ export type PresetPreview = {
   missingFeatures: string[];
 };
 
-/**
- * Resolve the tenant + preset and compute the diff, or an error string.
- * Shared by preview and apply so both agree on exactly what will happen.
- */
-async function plan(input: Input) {
-  const fail = (error: string) => ({ ok: false as const, error });
+const fail = (error: string) => ({ ok: false as const, error });
 
+/**
+ * Validate the input and load everything both planners need: the tenant, its
+ * branding, the preset, and the tenant's current entitlements. Shared so apply
+ * and remove can never disagree about what state they are acting on.
+ */
+async function resolve(input: Input) {
   // Demo mode is file-backed: there is no Branding row or Feature table to write,
   // so bail with a message instead of a confusing "Tenant not found". Matches the
   // guard every sibling action on this page uses (actions/admin.ts, tenant-admin).
@@ -61,37 +73,68 @@ async function plan(input: Input) {
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, branding: { select: { themeId: true, config: true } } },
+    select: {
+      id: true,
+      branding: { select: { themeId: true, config: true } },
+      // Plan features are read separately from the resolved entitlement set so a
+      // revoke can warn when it is about to deny something the PLAN grants.
+      plan: { select: { features: { select: { feature: { select: { key: true } } } } } },
+    },
   });
   if (!tenant) return fail(`Tenant not found: ${slug}`);
-
-  const entitlements = await getEntitlements(tenant.id);
-
-  const application = applyTenantPreset(
-    {
-      themeId: tenant.branding?.themeId,
-      config: tenant.branding?.config,
-      enabledFeatures: [...entitlements],
-    },
-    preset,
-  );
-
-  // A grant needs a seeded Feature row (tenant_feature_overrides.featureId is an
-  // FK). Split rather than crash so a partially-synced catalog degrades loudly.
-  const rows = await prisma.feature.findMany({
-    where: { key: { in: [...application.featuresToGrant] } },
-    select: { id: true, key: true },
-  });
-  const foundKeys = new Set(rows.map((r) => r.key));
 
   return {
     ok: true as const,
     tenantId: tenant.id,
     slug,
     preset,
-    application,
+    current: {
+      themeId: tenant.branding?.themeId,
+      config: tenant.branding?.config,
+      enabledFeatures: [...(await getEntitlements(tenant.id))],
+    },
+    planFeatures: new Set(tenant.plan.features.map((pf) => pf.feature.key)),
+  };
+}
+
+/** Look up the Feature rows for a set of keys. Writing an override needs one
+ *  (tenant_feature_overrides.featureId is an FK), so callers split found from
+ *  missing and degrade loudly rather than crashing on a half-synced catalog. */
+async function featureRowsFor(keys: readonly string[]) {
+  const rows = await prisma.feature.findMany({
+    where: { key: { in: [...keys] } },
+    select: { id: true, key: true },
+  });
+  const found = new Set(rows.map((r) => r.key));
+  return { rows, missing: keys.filter((k) => !found.has(k)) };
+}
+
+/** Resolve + compute what applying would change. */
+async function planApply(input: Input) {
+  const r = await resolve(input);
+  if (!r.ok) return r;
+
+  const application = applyTenantPreset(r.current, r.preset);
+  const { rows, missing } = await featureRowsFor(application.featuresToGrant);
+
+  return { ...r, application, featureRows: rows, missingFeatures: missing };
+}
+
+/** Resolve + compute what removing would change. */
+async function planRemove(input: Input) {
+  const r = await resolve(input);
+  if (!r.ok) return r;
+
+  const removal = removeTenantPreset(r.current, r.preset);
+  const { rows } = await featureRowsFor(removal.featuresToRevoke);
+
+  return {
+    ...r,
+    removal,
     featureRows: rows,
-    missingFeatures: application.featuresToGrant.filter((k) => !foundKeys.has(k)),
+    // Features the PLAN grants: revoking these writes a deny override that
+    // outlives the preset, so the operator is told before, not after.
+    planGranted: removal.featuresToRevoke.filter((k) => r.planFeatures.has(k)),
   };
 }
 
@@ -102,7 +145,7 @@ export async function previewTenantPresetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const p = await plan(input);
+  const p = await planApply(input);
   if (!p.ok) return { error: p.error };
 
   return {
@@ -127,7 +170,7 @@ export async function applyTenantPresetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const p = await plan(input);
+  const p = await planApply(input);
   if (!p.ok) return { error: p.error };
 
   const { tenantId, slug, application, featureRows, missingFeatures } = p;
@@ -154,11 +197,98 @@ export async function applyTenantPresetAction(
     ),
   ]);
 
+  revalidateAfterPresetWrite(tenantId, slug);
+
+  return { ok: true, changed: application.changes.length, missingFeatures };
+}
+
+/** Both write paths touch branding + entitlements, so both bust the same set. */
+function revalidateAfterPresetWrite(tenantId: string, slug: string) {
   revalidatePath("/admin");
   revalidatePath(`/admin/tenants/${slug}`);
   revalidatePath(`/admin/tenants/${slug}/features`);
   revalidatePath(`/admin/tenants/${slug}/branding`);
   revalidateTenant(tenantId, slug); // storefront re-reads branding + entitlements
+}
 
-  return { ok: true, changed: application.changes.length, missingFeatures };
+// ── Removing ─────────────────────────────────────────────────────────────────
+
+export type PresetRemovalPreview = {
+  presetName: string;
+  changes: PresetChange[];
+  /** Entitlements that will be denied. */
+  revoking: string[];
+  /** The subset of `revoking` the tenant's PLAN grants. Revoking one writes a
+   *  deny override that survives the preset, so the store loses a feature it
+   *  pays for until an operator re-enables it by hand. Shown as a warning. */
+  planGranted: string[];
+};
+
+/** Read-only: what switching this preset off would change. Nothing is written. */
+export async function previewRemoveTenantPresetAction(
+  input: Input,
+): Promise<{ ok: true; preview: PresetRemovalPreview } | { error: string }> {
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const p = await planRemove(input);
+  if (!p.ok) return { error: p.error };
+
+  return {
+    ok: true,
+    preview: {
+      presetName: p.preset.name,
+      changes: p.removal.changes,
+      revoking: [...p.removal.featuresToRevoke],
+      planGranted: [...p.planGranted],
+    },
+  };
+}
+
+/**
+ * Persist the removal: the reverted Branding.config, plus one DISABLED override
+ * per revoked feature. The theme is deliberately not written — removal leaves
+ * the tenant's look alone (see removeTenantPreset).
+ *
+ * Overrides are upserted to `enabled: false` rather than deleted, because a
+ * delete would fall back to the plan and silently re-grant the feature. An
+ * explicit deny wins over the plan in getEntitlements, which is the whole point.
+ *
+ * Safe to run twice — the remover is idempotent and the override writes are
+ * upserts.
+ */
+export async function removeTenantPresetAction(
+  input: Input,
+): Promise<{ ok: true; changed: number; revoked: number } | { error: string }> {
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const p = await planRemove(input);
+  if (!p.ok) return { error: p.error };
+
+  const { tenantId, slug, removal, featureRows } = p;
+
+  await prisma.$transaction([
+    // Update-only: with no preset applied there is nothing to revert, and
+    // creating a Branding row here would write a config the tenant never had.
+    ...(removal.changes.some((c) => c.kind === "config")
+      ? [
+          prisma.branding.update({
+            where: { tenantId },
+            data: { config: removal.config as Prisma.InputJsonValue },
+          }),
+        ]
+      : []),
+    ...featureRows.map((f) =>
+      prisma.tenantFeatureOverride.upsert({
+        where: { tenantId_featureId: { tenantId, featureId: f.id } },
+        update: { enabled: false, expiresAt: null },
+        create: { tenantId, featureId: f.id, enabled: false },
+      }),
+    ),
+  ]);
+
+  revalidateAfterPresetWrite(tenantId, slug);
+
+  return { ok: true, changed: removal.changes.length, revoked: featureRows.length };
 }
