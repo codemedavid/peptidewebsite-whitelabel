@@ -203,6 +203,28 @@ check(
   "StorefrontApp must send #groupbuy home when the way is hidden",
 );
 
+check(
+  "a store-admin action persists the setting",
+  (() => {
+    const src = read("src/actions/group-buys.ts");
+    return (
+      /saveTwoWaysModeAction/.test(src) &&
+      /normalizeTwoWaysMode/.test(src) &&
+      /twoWaysMode/.test(src)
+    );
+  })(),
+  "actions/group-buys.ts must expose a gated saveTwoWaysModeAction",
+);
+
+check(
+  "the owner can manage both ways from the Group Buys admin",
+  (() => {
+    const src = read("src/storefront/admin/AdminGroupBuys.tsx");
+    return /saveTwoWaysModeAction/.test(src) && /Ways to order/.test(src);
+  })(),
+  "AdminGroupBuys must expose a 'Ways to order' control",
+);
+
 console.log(
   failures === 0
     ? "\nPASS — per-way two-ways management verified"
