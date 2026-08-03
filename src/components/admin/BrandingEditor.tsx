@@ -42,8 +42,12 @@ import {
   uploadBrandingAssetAction,
   uploadStorefrontImageAsAdminAction,
   removeBrandingAssetAction,
-  type BrandingAssetKind,
 } from "@/actions/branding";
+import {
+  applyDefaultProductImage,
+  brandingAssetRules,
+  type BrandingAssetKind,
+} from "@/lib/upload/branding-assets";
 import { settleUpload } from "@/lib/upload/settle";
 
 // Tenant storefronts live at `<slug>.<ROOT>`. ROOT carries its own dev port
@@ -81,6 +85,11 @@ export function BrandingEditor({
   const [tab, setTab] = useState<"brand" | "hero" | "storefront">("brand");
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [faviconUrl, setFaviconUrl] = useState(initialFaviconUrl);
+  // Unlike the logo/favicon (own columns), this one lives inside branding.config
+  // — see onDefaultProductImageChange for why it is mirrored into `cfg` too.
+  const [defaultProductImage, setDefaultProductImage] = useState<string | null>(
+    initialConfig.defaultProductImage ?? null,
+  );
   const [themeId, setThemeId] = useState(initialThemeId || "clinical-white");
   const [hexes, setHexes] = useState<Record<RoleKey, string>>(() =>
     Object.fromEntries(
@@ -126,6 +135,17 @@ export function BrandingEditor({
     if (typeof edits.headingFont === "string") setHeadingFont(edits.headingFont);
     if (typeof edits.bodyFont === "string") setBodyFont(edits.bodyFont);
     setSaved(false);
+  };
+
+  /**
+   * The upload already persisted the URL into branding.config server-side, so
+   * this doesn't mark the form dirty. It DOES have to mirror the value into
+   * `cfg`: Save branding writes that object back wholesale, so a `cfg` still
+   * holding the config as it was loaded would silently undo the upload.
+   */
+  const onDefaultProductImageChange = (url: string | null) => {
+    setDefaultProductImage(url);
+    setCfg((c) => applyDefaultProductImage(c as Record<string, unknown>, url) as Partial<Brand>);
   };
 
   // Map the storefront's hex palette onto the shadcn tokens the live preview
@@ -467,6 +487,14 @@ export function BrandingEditor({
                   help="Browser-tab icon. Overrides the generated tile. ICO/PNG/SVG, max 2 MB."
                   value={faviconUrl}
                   onChange={setFaviconUrl}
+                />
+                <AssetUpload
+                  slug={slug}
+                  kind="defaultProductImage"
+                  label="Default product image"
+                  help="Shown on products that have no photo of their own — instead of the grey placeholder. Products with their own image keep it. JPG/PNG/WebP, max 10 MB."
+                  value={defaultProductImage}
+                  onChange={onDefaultProductImageChange}
                 />
               </div>
             </>
@@ -1258,6 +1286,11 @@ function AssetUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Offer the picker exactly what the server will take for THIS kind — a
+  // product photo can't be an .ico, a favicon can. The extension is spelled out
+  // alongside the MIME because some browsers won't match image/x-icon by type.
+  const allowedTypes = brandingAssetRules(kind).allowedTypes;
+  const accept = [...allowedTypes, ...(allowedTypes.has("image/x-icon") ? [".ico"] : [])].join(",");
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1316,7 +1349,7 @@ function AssetUpload({
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/x-icon,.ico"
+          accept={accept}
           onChange={onFile}
           disabled={busy}
           className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-[var(--radius)] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground disabled:opacity-50"

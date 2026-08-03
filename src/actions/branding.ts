@@ -11,30 +11,31 @@ import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
-import { BRANDING_ASSET_MAX_BYTES, STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
+import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
+import {
+  applyDefaultProductImage,
+  isBrandingAssetKind,
+  validateBrandingAssetFile,
+  type BrandingAssetKind,
+} from "@/lib/upload/branding-assets";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
 
-export type BrandingAssetKind = "logo" | "favicon";
+export type { BrandingAssetKind };
 export type UploadAssetResult = { url: string | null } | { error: string };
 
-const MAX_BYTES = BRANDING_ASSET_MAX_BYTES; // 2 MB — logos/favicons are small
-const ALLOWED_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/svg+xml",
-  "image/gif",
-  "image/x-icon",
-  "image/vnd.microsoft.icon",
-]);
-
 /**
- * Upload a tenant's logo or favicon. The upload is forced into the tenant's
- * own ImageKit folder server-side (see `uploadTenantMedia`), the URL is stored
- * on `Branding.logoUrl` / `Branding.faviconUrl`, and a `MediaAsset` row records
- * it. In demo mode (no DB / no ImageKit creds) the image is persisted as a data
- * URL so the storefront still round-trips locally.
+ * Upload one of a tenant's branding assets. The upload is forced into the
+ * tenant's own ImageKit folder server-side (see `uploadTenantMedia`) and a
+ * `MediaAsset` row records it. Where the URL is stored depends on the kind:
+ * the logo and favicon own their `Branding` columns, while the default product
+ * image — the fallback photo for products with no image of their own — is a
+ * key inside the shared `branding.config` blob, merged read-modify-write.
+ *
+ * In demo mode (no DB / no ImageKit creds) the image is persisted as a data
+ * URL so the storefront still round-trips locally. A data URL is deliberately
+ * refused by `normalizeDefaultProductImage`, so a demo default product image
+ * shows in this editor but not on the storefront — demo has nowhere to host it.
  */
 export async function uploadBrandingAssetAction(
   slug: string,
@@ -42,21 +43,26 @@ export async function uploadBrandingAssetAction(
   formData: FormData,
 ): Promise<UploadAssetResult> {
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
-  if (kind !== "logo" && kind !== "favicon") return { error: "Invalid asset kind." };
+  if (!isBrandingAssetKind(kind)) return { error: "Invalid asset kind." };
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };
-  if (file.size > MAX_BYTES) return { error: "File too large (max 2 MB)." };
-  if (!ALLOWED_TYPES.has(file.type)) {
-    return { error: `Unsupported type: ${file.type || "unknown"}.` };
-  }
+  if (!(file instanceof File)) return { error: "No file provided." };
+  // Per-kind: a product photo gets the 10 MB budget and photographic types
+  // only; a logo/favicon stays at 2 MB but may be a vector or an .ico.
+  const invalid = validateBrandingAssetFile(kind, { type: file.type, size: file.size });
+  if (invalid) return { error: invalid };
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
   // ── Demo mode: no DB / no ImageKit — store a data URL so it renders locally.
   if (isDemoMode()) {
     const dataUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
-    saveDemoBranding(slug, kind === "logo" ? { logoUrl: dataUrl } : { faviconUrl: dataUrl });
+    if (kind === "defaultProductImage") {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: applyDefaultProductImage(current, dataUrl) });
+    } else {
+      saveDemoBranding(slug, kind === "logo" ? { logoUrl: dataUrl } : { faviconUrl: dataUrl });
+    }
     revalidatePath("/admin");
     revalidateTenant(slug, slug); // storefronts re-read branding (demo: id = slug)
     return { url: dataUrl };
@@ -66,7 +72,10 @@ export async function uploadBrandingAssetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
   if (!tenant) return { error: "Tenant not found." };
 
   try {
@@ -88,11 +97,23 @@ export async function uploadBrandingAssetAction(
       },
     });
     // ... and point the branding row at it. Branding is keyed by the unique
-    // tenantId, so this single-row update is already tenant-scoped.
-    await prisma.branding.update({
-      where: { tenantId: tenant.id },
-      data: kind === "logo" ? { logoUrl: uploaded.url } : { faviconUrl: uploaded.url },
-    });
+    // tenantId, so these single-row writes are already tenant-scoped. The
+    // default product image is a key in the config blob rather than a column,
+    // so it merges instead of overwriting (upsert: a tenant may have no row).
+    if (kind === "defaultProductImage") {
+      const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+      const config = applyDefaultProductImage(current, uploaded.url) as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId: tenant.id },
+        update: { config },
+        create: { tenantId: tenant.id, config },
+      });
+    } else {
+      await prisma.branding.update({
+        where: { tenantId: tenant.id },
+        data: kind === "logo" ? { logoUrl: uploaded.url } : { faviconUrl: uploaded.url },
+      });
+    }
 
     revalidatePath("/admin");
     revalidateTenant(tenant.id, slug);
@@ -171,16 +192,26 @@ export async function uploadStorefrontImageAsAdminAction(
   }
 }
 
-/** Clear a logo/favicon override (storefront falls back to the monogram). */
+/**
+ * Clear a branding asset override: the storefront falls back to the monogram
+ * (logo), the generated tile (favicon), or the card's SVG placeholder (default
+ * product image). The hosted file is left in ImageKit — same as before, the
+ * media library keeps the audit row.
+ */
 export async function removeBrandingAssetAction(
   slug: string,
   kind: BrandingAssetKind,
 ): Promise<UploadAssetResult> {
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
-  if (kind !== "logo" && kind !== "favicon") return { error: "Invalid asset kind." };
+  if (!isBrandingAssetKind(kind)) return { error: "Invalid asset kind." };
 
   if (isDemoMode()) {
-    saveDemoBranding(slug, kind === "logo" ? { logoUrl: null } : { faviconUrl: null });
+    if (kind === "defaultProductImage") {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: applyDefaultProductImage(current, null) });
+    } else {
+      saveDemoBranding(slug, kind === "logo" ? { logoUrl: null } : { faviconUrl: null });
+    }
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { url: null };
@@ -189,13 +220,26 @@ export async function removeBrandingAssetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    select: { id: true, branding: { select: { config: true } } },
+  });
   if (!tenant) return { error: "Tenant not found." };
 
-  await prisma.branding.update({
-    where: { tenantId: tenant.id },
-    data: kind === "logo" ? { logoUrl: null } : { faviconUrl: null },
-  });
+  if (kind === "defaultProductImage") {
+    const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+    const config = applyDefaultProductImage(current, null) as Prisma.InputJsonValue;
+    await prisma.branding.upsert({
+      where: { tenantId: tenant.id },
+      update: { config },
+      create: { tenantId: tenant.id, config },
+    });
+  } else {
+    await prisma.branding.update({
+      where: { tenantId: tenant.id },
+      data: kind === "logo" ? { logoUrl: null } : { faviconUrl: null },
+    });
+  }
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
   return { url: null };
