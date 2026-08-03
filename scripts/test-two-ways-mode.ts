@@ -13,6 +13,9 @@
 //
 //   npm run test:two-ways-mode
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   TWO_WAYS_MODE_DEFAULT,
   WAY_BLOCK_MESSAGES,
@@ -178,6 +181,27 @@ check("group-buy hidden drops out → 1", visibleWayCount(ON_HAND_ONLY) === 1);
 check('two visible ways keep the "Two ways to order" heading', waysHeading(BOTH_OPEN) === "Two ways to order");
 check('one visible way reads "How to order"', waysHeading(GB_ONLY) === "How to order");
 check('a one-way store never says "two"', !/two/i.test(waysHeading(ON_HAND_ONLY)));
+
+// ── Wiring — the storefront must enforce, not just hide ─────────────────────
+// Hiding a section is cosmetic. The cart has to refuse the add too, or a stale
+// tab (or a product reached from the catalog route) still fills a cart the
+// server will only reject at the very end of checkout.
+const read = (rel: string) => readFileSync(join(__dirname, "..", rel), "utf8");
+
+check(
+  "the cart refuses adds from a way that isn't selling",
+  (() => {
+    const src = read("src/storefront/store.tsx");
+    return /decideWayBlock/.test(src) && /twoWaysMode/.test(src);
+  })(),
+  "store.tsx addToCart must consult the per-way gate",
+);
+
+check(
+  "the group-buy route is not reachable when the way is hidden",
+  /twoWaysMode[^\n]*groupBuy/.test(read("src/storefront/StorefrontApp.tsx")),
+  "StorefrontApp must send #groupbuy home when the way is hidden",
+);
 
 console.log(
   failures === 0
