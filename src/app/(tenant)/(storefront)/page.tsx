@@ -23,6 +23,11 @@ import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
+import {
+  TWO_WAYS_MODE_DEFAULT,
+  normalizeTwoWaysMode,
+  resolveWays,
+} from "@/lib/storefront/two-ways-mode";
 import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
@@ -263,6 +268,16 @@ export default async function HomePage() {
   brand.groupBuyContent = normalizeGroupBuyContent(config.groupBuyContent);
 
   brand.groupBuyAllowOnHand = config.groupBuyAllowOnHand !== false;
+  // Per-way management: a store may sell only one way (Dragon Peptides is
+  // group-buy only). Resolved to EFFECTIVE states below, once we know whether a
+  // round is live, so the client never re-derives the rule. Without the Group
+  // Buy module there is no second way to sell through, so the setting is left
+  // unenforced rather than walling the store — same call the server gate makes
+  // (lib/storefront/on-hand-gate).
+  const twoWaysMode = brand.groupBuyCaps.enabled
+    ? normalizeTwoWaysMode(config.twoWaysMode)
+    : TWO_WAYS_MODE_DEFAULT;
+  brand.twoWaysMode = twoWaysMode;
   if (brand.groupBuyCaps.enabled) {
     const slug = (await getTenantSlug()) ?? tenantId;
     const groupBuys = await loadGroupBuys(tenantId, slug);
@@ -303,6 +318,19 @@ export default async function HomePage() {
       }
       brand.groupBuyBanner = { ...brand.groupBuyBanner!, filled };
     }
+
+    // EFFECTIVE per-way states: the owner's setting folded with the live-round
+    // rule, resolved once here so the home, the cart, and the server checkout
+    // all read the same answer.
+    brand.twoWaysMode = resolveWays(twoWaysMode, {
+      allowOnHand: brand.groupBuyAllowOnHand,
+      roundLive: !!brand.groupBuyBanner,
+    });
+    // NOTE: a hidden group-buy way must NOT drop brand.groupBuyBanner. The
+    // banner is what tells the home which products belong to the round, and
+    // those are pre-orders priced at gbPrice — removing it would return them to
+    // the ships-now shelf at their on-hand price with the wrong ship date. The
+    // banner stays; the components read twoWaysMode to decide what to render.
   }
 
   // Products are the source of truth in the DB. Load the tenant's catalog

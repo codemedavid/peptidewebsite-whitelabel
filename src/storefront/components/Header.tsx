@@ -27,7 +27,13 @@ export function Header({
   // Surface the Group Buy page automatically while a round is live (the server
   // sets brand.groupBuyBanner) so customers can reach the live round from the
   // nav. Slotted first — it's the timely, high-intent destination.
-  if (brand.groupBuyBanner && !nav.some((i) => i.href === "#groupbuy")) {
+  //
+  // A store that HID the group-buy way gets no link, even with a round running:
+  // the banner deliberately stays on the brand (it's what keeps the round's
+  // pre-orders off the ships-now shelf), so the way state is what decides
+  // whether the page is offered.
+  const gbWayHidden = brand.twoWaysMode?.groupBuy === "hidden";
+  if (brand.groupBuyBanner && !gbWayHidden && !nav.some((i) => i.href === "#groupbuy")) {
     nav.unshift({ label: "Group Buy", href: "#groupbuy" });
   }
   // Surface the reconstitution calculator (default-on) for every tenant — even

@@ -45,12 +45,15 @@ export function TwoWaysHome({
   // brand.onHandOrder decides whether the on-hand shelf leads with the store's
   // single per-vial listings (K Glow) or keeps plain catalog order (everyone
   // else). Either way the same products render — only their order changes.
+  // brand.twoWaysMode carries the EFFECTIVE per-way states (resolved server-side
+  // in page.tsx). A store that sells only one way drops the other section here.
   const view = buildTwoWaysHomeView(
     products.filter((p) => p.available !== false),
     brand.groupBuyBanner ?? null,
     currency,
     new Date(),
     brand.onHandOrder,
+    brand.twoWaysMode,
   );
 
   // Owner-editable GB copy (branding.config.groupBuyContent, normalized
@@ -58,7 +61,11 @@ export function TwoWaysHome({
   // a stale client). {eta} in any line renders the live round's delivery ETA.
   const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
 
+  // view.gb.open already folds in the group-buy way state, so a closed or hidden
+  // way never lights the round up.
   const gbLive = view.gb.open && view.gb.count > 0;
+  const onHandState = view.onHand.state;
+  const gbState = view.gb.state;
   const heroLine1 = brand.heroLine1 || brand.name;
   const heroLine2 = brand.heroLine2 || "beautifully verified.";
   const heroSub =
@@ -78,18 +85,30 @@ export function TwoWaysHome({
         <p className="sf-twh__hero-sub">{heroSub}</p>
       </header>
 
-      {/* Two ways to order */}
+      {/* Ways to order — one card per way the store actually offers. The
+          heading comes from the view-model so a one-way store never claims two. */}
       <section className="sf-twh__section" aria-labelledby="twh-ways-label">
         <div id="twh-ways-label" className="sf-twh__eyebrow">
-          Two ways to order
+          {view.heading}
         </div>
-        <div className="sf-twh__ways">
-          <a href="#twh-onhand" className="sf-twh__way sf-twh__way--onhand">
-            <span className="sf-twh__way-tag sf-twh__way-tag--ships">● Ships now</span>
-            <span className="sf-twh__way-name font-display">On-Hand</span>
-            <span className="sf-twh__way-copy">In stock, packed &amp; shipped within 24h.</span>
-          </a>
-          {gbLive ? (
+        <div className="sf-twh__ways" data-ways={view.visibleWays}>
+          {onHandState === "open" && (
+            <a href="#twh-onhand" className="sf-twh__way sf-twh__way--onhand">
+              <span className="sf-twh__way-tag sf-twh__way-tag--ships">● Ships now</span>
+              <span className="sf-twh__way-name font-display">On-Hand</span>
+              <span className="sf-twh__way-copy">In stock, packed &amp; shipped within 24h.</span>
+            </a>
+          )}
+          {onHandState === "closed" && (
+            <div className="sf-twh__way sf-twh__way--closed">
+              <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Paused</span>
+              <span className="sf-twh__way-name font-display">On-Hand</span>
+              <span className="sf-twh__way-copy">
+                Ships-now orders are paused right now — follow us for the next restock.
+              </span>
+            </div>
+          )}
+          {gbState === "hidden" ? null : gbLive ? (
             <a
               href="#groupbuy"
               className="sf-twh__way sf-twh__way--gb"
@@ -114,15 +133,25 @@ export function TwoWaysHome({
         </div>
       </section>
 
-      {/* On-hand */}
+      {/* On-hand — gone entirely for a store that sells group buy only. A CLOSED
+          shelf still lists its products (so the pause is visible and explained),
+          but every row's buy control is off. */}
+      {onHandState !== "hidden" && (
       <section id="twh-onhand" className="sf-twh__section" aria-labelledby="twh-onhand-label">
         <div className="sf-twh__sec-head">
           <div>
             <div className="sf-twh__eyebrow">On-Hand</div>
-            <h2 id="twh-onhand-label" className="sf-twh__sec-title font-display">Ships today</h2>
+            <h2 id="twh-onhand-label" className="sf-twh__sec-title font-display">
+              {onHandState === "closed" ? "Paused" : "Ships today"}
+            </h2>
           </div>
           <span className="sf-twh__sec-count">{view.onHand.count} products</span>
         </div>
+        {onHandState === "closed" && view.onHand.count > 0 && (
+          <p className="sf-twh__empty">
+            Ships-now orders are paused right now — these are listed for reference only.
+          </p>
+        )}
         {view.onHand.count === 0 ? (
           <p className="sf-twh__empty">
             {gbLive
@@ -145,6 +174,7 @@ export function TwoWaysHome({
           </ul>
         )}
       </section>
+      )}
 
       {/* Live group buy */}
       {gbLive && (
@@ -267,7 +297,7 @@ function OnHandRow({
           )}
           <span className="sf-twh__coa">COA ✓</span>
         </div>
-        {showSelector && canBuy && line.inStock && (
+        {showSelector && canBuy && line.buyable && (
           <select
             className="sf-twh__opts"
             aria-label={`Options for ${p.name}`}
@@ -284,7 +314,7 @@ function OnHandRow({
       </div>
       <div className="sf-twh__row-buy">
         <div className="sf-twh__row-price">{p.priceOnRequest ? "Ask" : displayPrice}</div>
-        {canBuy && line.inStock && (
+        {canBuy && line.buyable && (
           showSelector ? (
             <>
               <button

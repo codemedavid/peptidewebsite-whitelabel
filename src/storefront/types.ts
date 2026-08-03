@@ -6,6 +6,7 @@ import type { CheckoutRulesConfig } from "@/lib/storefront/checkout-rules";
 import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { HeroMedia } from "@/lib/storefront/hero-media";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
+import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import type { ProductClass } from "@/lib/storefront/product-class";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
@@ -498,6 +499,11 @@ export type Brand = {
   // products to the cart? Store-admin choice, persisted in
   // branding.config.groupBuyAllowOnHand. Absent = true (on-hand stays buyable).
   groupBuyAllowOnHand?: boolean;
+  // Per-way management of the two order paths — the EFFECTIVE states, already
+  // folded with groupBuyAllowOnHand and the live round server-side (see
+  // lib/storefront/two-ways-mode.resolveWays). A store that sells only one way
+  // (group-buy-only) hides the other here. Absent = both open.
+  twoWaysMode?: TwoWaysMode;
   // The resolved storefront gate for the live run(s): which products are covered
   // and whether on-hand products are blocked. Computed server-side in page.tsx
   // so a stale client can't bypass it; absent = no live run / module off.
