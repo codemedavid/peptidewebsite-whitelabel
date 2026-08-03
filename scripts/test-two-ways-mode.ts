@@ -16,6 +16,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { isLinkHidden } from "../src/storefront/visibility";
+import type { Brand } from "../src/storefront/types";
+
 import {
   TWO_WAYS_MODE_DEFAULT,
   WAY_BLOCK_MESSAGES,
@@ -223,6 +226,34 @@ check(
     return /saveTwoWaysModeAction/.test(src) && /Ways to order/.test(src);
   })(),
   "AdminGroupBuys must expose a 'Ways to order' control",
+);
+
+// ── Hiding a way removes its nav link ────────────────────────────────────────
+// "Hidden" must mean gone from the SITE, not just from the two-ways home. The
+// on-hand shelf is reached from the header as "Products" (#catalog), so a store
+// that hides on-hand and sells group-buy-only must not keep a nav link to an
+// empty shelf.
+const brandWays = (mode: unknown) => ({ twoWaysMode: mode }) as unknown as Brand;
+
+check(
+  "hiding on-hand hides the Products (#catalog) nav link",
+  isLinkHidden(brandWays({ onHand: "hidden", groupBuy: "open" }), "#catalog") === true,
+);
+check(
+  "an OPEN on-hand way keeps the Products link",
+  isLinkHidden(brandWays({ onHand: "open", groupBuy: "open" }), "#catalog") === false,
+);
+check(
+  "a CLOSED on-hand way keeps the Products link (paused, still shown)",
+  isLinkHidden(brandWays({ onHand: "closed", groupBuy: "open" }), "#catalog") === false,
+);
+check(
+  "a store that never configured the ways keeps the Products link",
+  isLinkHidden({} as unknown as Brand, "#catalog") === false,
+);
+check(
+  "hiding on-hand does not hide unrelated links",
+  isLinkHidden(brandWays({ onHand: "hidden", groupBuy: "open" }), "#track") === false,
 );
 
 console.log(
