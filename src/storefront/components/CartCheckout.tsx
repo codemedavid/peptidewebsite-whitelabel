@@ -16,6 +16,7 @@ import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
+import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import {
@@ -206,9 +207,21 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     );
     return v ? { rule: "ratio", message: v.message, blocking: v.blocking } : null;
   }, [lines, brand.groupBuyRules]);
+  // Out-of-stock gate — the cart half. Add-to-cart already refuses a sold-out
+  // item and the server re-checks at placement; this covers the gap between:
+  // something that sells out WHILE it sits in the cart (the owner edits stock,
+  // another customer takes the last unit, a tab left open overnight). Without
+  // it the customer only learns after entering an address and uploading proof
+  // of payment. `lines` is priced from the LIVE catalog, so it carries current
+  // stock. Always blocking — unlike the owner's checkout rules this is not
+  // subject to ruleBasedCheckout.
+  const stockV = useMemo(
+    () => cartStockViolations(lines, groupBuyScope),
+    [lines, groupBuyScope],
+  );
   const violations = useMemo(
-    () => (ratioV ? [...checkoutViolations, ratioV] : checkoutViolations),
-    [checkoutViolations, ratioV],
+    () => [...checkoutViolations, ...(ratioV ? [ratioV] : []), ...stockV],
+    [checkoutViolations, ratioV, stockV],
   );
   const blocked = violations.some((v) => v.blocking);
 
@@ -616,7 +629,16 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   <div className="sf-cart__qty">
                     <button aria-label={`Remove one ${shownName}`} onClick={() => decrementCart(l.product.id)}>−</button>
                     <span>{l.qty}</span>
-                    <button aria-label={`Add one ${shownName}`} onClick={() => addToCart(l.product)}>+</button>
+                    <button
+                      aria-label={`Add one ${shownName}`}
+                      // Stop at what the store can actually supply. addToCart
+                      // refuses beyond the cap anyway, but a live "+" that only
+                      // ever toasts an error reads as broken.
+                      disabled={cartLineRoom(l, groupBuyScope) <= 0}
+                      onClick={() => addToCart(l.product)}
+                    >
+                      +
+                    </button>
                   </div>
                   <button className="sf-cart__remove" aria-label={`Remove ${shownName}`} onClick={() => removeLine(l.product.id)}>
                     Remove
@@ -970,7 +992,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   <div className="sf-cart__rules">
                     {violations.map((v) => (
                       <p
-                        key={v.rule}
+                        // A cart can hold several sold-out lines, so `rule`
+                        // alone is not unique — qualify it with the product.
+                        key={"productId" in v ? `${v.rule}:${v.productId}` : v.rule}
                         className={v.blocking ? "sf-cart__error" : "sf-cart__warn"}
                         role={v.blocking ? "alert" : "status"}
                       >

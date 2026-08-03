@@ -12,6 +12,7 @@ import { slotProgress, type SlotProgress, type TwoWaysInput } from "./two-ways";
 import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-page";
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
+import { availableUnits, productOutOfStock } from "./inventory";
 
 /** The minimal product shape the home reads. Generic so the caller keeps its own
  *  concrete Product type through the view (id/name/image/stock for the rows). */
@@ -20,9 +21,10 @@ export type TwhProduct = TwoWaysInput & {
   name: string;
   image?: string | null;
   stock?: number;
-  /** Size/dosage options — read only to tell a per-vial listing from a
-   *  multi-vial kit when the shelf is ordered per-vial-first. */
-  variations?: { name: string; price: number }[];
+  /** Size/dosage options — read to tell a per-vial listing from a multi-vial
+   *  kit when the shelf is ordered per-vial-first, and for `stock` when a dose
+   *  tracks its own pool (see ./inventory). */
+  variations?: { name: string; price: number; stock?: number }[];
 };
 
 /** One on-hand ("ships now") product row. */
@@ -31,10 +33,12 @@ export type OnHandLine<T extends TwhProduct = TwhProduct> = {
   initial: string;
   price: number;
   priceLabel: string;
-  /** True when stock is unknown (undefined) or positive — mirrors the catalog's
-   *  "in stock" treatment (absent stock is not a sold-out signal). */
+  /** True when stock is unknown, or when at least one option can still be
+   *  bought — mirrors the catalog's "in stock" treatment (absent stock is not a
+   *  sold-out signal, and one stocked dose keeps the product buyable). */
   inStock: boolean;
-  /** "12 in stock" — empty string when the product carries no stock number. */
+  /** "12 in stock" — the units sellable across every pool (see
+   *  inventory.availableUnits). Empty when no pool carries a stock number. */
   stockLabel: string;
 };
 
@@ -91,15 +95,23 @@ export function groupBuyCtaTarget(cartCount: number): "groupbuy" | "checkout" {
 
 function onHandLine<T extends TwhProduct>(product: T, currency: string): OnHandLine<T> {
   const price = Math.max(0, product.price || 0);
-  const hasStock = typeof product.stock === "number" && Number.isFinite(product.stock);
-  const stock = hasStock ? Math.max(0, Math.floor(product.stock as number)) : undefined;
+  // Availability comes from the shared inventory rules, not the base column
+  // alone: a product whose doses track their own stock has as many pools as it
+  // has options, and reading `product.stock` HID products whose doses were
+  // stocked (empty base column) while ADVERTISING ones whose doses were all
+  // sold out (stale positive base column).
+  const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  // Stock is genuinely UNKNOWN only when no pool carries a number. Unknown is
+  // not a sold-out signal — such a product stays buyable and unlabelled, the
+  // same treatment the catalog gives it.
+  const known = isNum(product.stock) || (product.variations ?? []).some((v) => isNum(v.stock));
   return {
     product,
     initial: productInitial(product.name),
     price,
     priceLabel: formatGbMoney(currency, price),
-    inStock: stock === undefined ? true : stock > 0,
-    stockLabel: stock === undefined ? "" : `${stock} in stock`,
+    inStock: known ? !productOutOfStock(product) : true,
+    stockLabel: known ? `${availableUnits(product)} in stock` : "",
   };
 }
 

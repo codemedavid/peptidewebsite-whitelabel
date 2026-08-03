@@ -509,8 +509,14 @@ export function StoreProvider({
       // only that option's own cart lines against its own pool; an untracked
       // variation or a plain product keeps the historical shared count against
       // the base column (effectiveStock resolves which applies).
-      const tracked = variationStock(product, variation?.name) !== undefined;
-      const stock = effectiveStock(product, variation?.name);
+      // A re-add from the cart passes the variation CLONE with no `variation`
+      // argument (the clone already names its option), so read the option off
+      // the entry itself — keying on `variation?.name` alone made a clone fall
+      // back to the shared base column, and a sold-out dose stayed incrementable
+      // while the product's base stock was positive.
+      const optionName = variation?.name ?? product.variantName;
+      const tracked = variationStock(product, optionName) !== undefined;
+      const stock = effectiveStock(product, optionName);
       const inCart = tracked
         ? cart.filter((p) => p.id === entry.id).length
         : cart.filter((p) => baseProductId(p) === baseProductId(product)).length;

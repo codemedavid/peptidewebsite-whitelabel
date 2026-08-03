@@ -31,6 +31,7 @@ import { join } from "node:path";
 import type { Product } from "../src/storefront/types";
 import {
   availableUnits,
+  cartLineRoom,
   cartStockViolations,
   productOutOfStock,
 } from "../src/lib/storefront/inventory";
@@ -233,6 +234,32 @@ check("a variation of an assigned round product is exempt too", () => {
   assert.deepEqual(cartStockViolations([line(entry, 3)], ASSIGNED), []);
 });
 
+// ══════════════════════════════ cartLineRoom ════════════════════════════════
+// Drives the cart's "+" button: how many more units can still be added.
+console.log("cartLineRoom");
+
+check("room is what is left after the cart's own quantity", () => {
+  assert.equal(cartLineRoom(line(P({ stock: 5 }), 2)), 3);
+});
+
+check("a line at its cap has no room", () => {
+  assert.equal(cartLineRoom(line(P({ stock: 2 }), 2)), 0);
+});
+
+check("an over-filled line clamps to zero, never negative", () => {
+  assert.equal(cartLineRoom(line(P({ stock: 1 }), 4)), 0);
+});
+
+check("room for a tracked variation comes from its own pool", () => {
+  const p = P({ stock: 50, variations: [{ name: "5mg", price: 1200, stock: 2 }] });
+  const entry = makeVariationEntry(p, { name: "5mg", price: 1200 });
+  assert.equal(cartLineRoom(line(entry, 2)), 0, "the base column must not unlock a sold-out dose");
+});
+
+check("a group-buy pre-order has unlimited room", () => {
+  assert.equal(cartLineRoom(line(P({ id: "gb-1", stock: 0 }), 99), ASSIGNED), Infinity);
+});
+
 // ══════════════════════════════ availableUnits ══════════════════════════════
 // One honest "how many can I sell right now" across the pools a product has:
 // the shared base column plus every independently-tracked variation.
@@ -368,12 +395,21 @@ check("the cart drawer merges stock violations into its blocking list", () => {
   );
 });
 
-check("the cart's re-add button passes the chosen variation", () => {
+check("the cart's re-add button stops at the line's remaining stock", () => {
   const s = src("src/storefront/components/CartCheckout.tsx");
-  assert.doesNotMatch(
+  assert.match(
     s,
-    /onClick=\{\(\)\s*=>\s*addToCart\(l\.product\)\}/,
-    "the '+' button re-adds a variation clone with no variation argument, so the cap reads the BASE column and a sold-out dose can be incremented",
+    /disabled=\{cartLineRoom\(/,
+    "the cart's '+' stays live past the cap, so it only ever toasts an error",
+  );
+});
+
+check("the add cap reads a re-added clone's OWN option, not the base column", () => {
+  const s = src("src/storefront/store.tsx");
+  assert.match(
+    s,
+    /variation\?\.name\s*\?\?\s*product\.variantName/,
+    "addToCart keys the cap on the variation ARGUMENT alone, so a clone re-added from the cart falls back to the shared base column and a sold-out dose stays incrementable",
   );
 });
 
