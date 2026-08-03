@@ -29,6 +29,13 @@ import {
   normalizeDefaultProductImage,
   resolveProductImage,
 } from "../src/lib/storefront/product-image";
+import {
+  applyDefaultProductImage,
+  brandingAssetRules,
+  isBrandingAssetKind,
+  validateBrandingAssetFile,
+} from "../src/lib/upload/branding-assets";
+import { BRANDING_ASSET_MAX_BYTES, STOREFRONT_IMAGE_MAX_BYTES } from "../src/lib/upload/limits";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
 let passed = 0;
@@ -124,6 +131,147 @@ check("SEO product detail page falls back to the brand default", () => {
       "normalizeDefaultProductImage",
     ),
   );
+});
+
+// ──────────────────── operator upload: kinds, rules, validation ─────────────
+// The super admin sets this image from the tenant Branding editor, alongside
+// the logo and favicon. A product photo is not a 2 MB logo, so the upload rules
+// are per-kind rather than shared.
+console.log("branding asset kinds");
+check("the three uploadable branding assets are recognised", () => {
+  assert.equal(isBrandingAssetKind("logo"), true);
+  assert.equal(isBrandingAssetKind("favicon"), true);
+  assert.equal(isBrandingAssetKind("defaultProductImage"), true);
+});
+check("anything else is rejected (guards the server action)", () => {
+  assert.equal(isBrandingAssetKind("hero"), false);
+  assert.equal(isBrandingAssetKind(""), false);
+  assert.equal(isBrandingAssetKind(null), false);
+  assert.equal(isBrandingAssetKind(undefined), false);
+  assert.equal(isBrandingAssetKind({ kind: "logo" }), false);
+});
+
+console.log("brandingAssetRules");
+check("logo and favicon keep the small 2 MB budget", () => {
+  assert.equal(brandingAssetRules("logo").maxBytes, BRANDING_ASSET_MAX_BYTES);
+  assert.equal(brandingAssetRules("favicon").maxBytes, BRANDING_ASSET_MAX_BYTES);
+});
+check("the default product image gets the 10 MB photo budget", () => {
+  assert.equal(brandingAssetRules("defaultProductImage").maxBytes, STOREFRONT_IMAGE_MAX_BYTES);
+});
+check("the default product image accepts photo types", () => {
+  const { allowedTypes } = brandingAssetRules("defaultProductImage");
+  assert.ok(allowedTypes.has("image/jpeg"));
+  assert.ok(allowedTypes.has("image/png"));
+  assert.ok(allowedTypes.has("image/webp"));
+});
+check("the default product image rejects icon/vector types a product card can't use well", () => {
+  const { allowedTypes } = brandingAssetRules("defaultProductImage");
+  assert.equal(allowedTypes.has("image/x-icon"), false);
+  assert.equal(allowedTypes.has("image/svg+xml"), false);
+});
+check("favicons still accept .ico", () => {
+  assert.ok(brandingAssetRules("favicon").allowedTypes.has("image/x-icon"));
+});
+
+console.log("validateBrandingAssetFile");
+check("a valid photo passes for the default product image", () => {
+  assert.equal(
+    validateBrandingAssetFile("defaultProductImage", { type: "image/jpeg", size: 3 * 1024 * 1024 }),
+    null,
+  );
+});
+check("the same 3 MB photo is too large for a logo", () => {
+  const err = validateBrandingAssetFile("logo", { type: "image/jpeg", size: 3 * 1024 * 1024 });
+  assert.ok(err && /too large/i.test(err), `expected a size error, got ${String(err)}`);
+});
+check("an oversized default product image is rejected with its own 10 MB limit", () => {
+  const err = validateBrandingAssetFile("defaultProductImage", {
+    type: "image/png",
+    size: STOREFRONT_IMAGE_MAX_BYTES + 1,
+  });
+  assert.ok(err && /too large/i.test(err), `expected a size error, got ${String(err)}`);
+  assert.ok(/10 MB/.test(err!), `error should name the 10 MB limit, got ${err}`);
+});
+check("an unsupported type is rejected by name", () => {
+  const err = validateBrandingAssetFile("defaultProductImage", {
+    type: "application/pdf",
+    size: 1024,
+  });
+  assert.ok(err && /unsupported/i.test(err), `expected a type error, got ${String(err)}`);
+});
+check("an empty file is rejected", () => {
+  const err = validateBrandingAssetFile("defaultProductImage", { type: "image/png", size: 0 });
+  assert.ok(err, "a zero-byte upload must not be accepted");
+});
+
+// ──────────────── operator upload: branding.config read-modify-write ────────
+// The upload persists straight into branding.config (like the logo persists
+// straight onto its column), so both the action and the editor merge through
+// this one function — see the clobber guard asserted further down.
+console.log("applyDefaultProductImage");
+const CONFIG = { name: "K Glow", accent: "#111", defaultProductImage: "https://cdn.example/old.png" };
+check("sets the image without touching the rest of the config", () => {
+  const next = applyDefaultProductImage(CONFIG, "https://cdn.example/new.png");
+  assert.equal(next.defaultProductImage, "https://cdn.example/new.png");
+  assert.equal(next.name, "K Glow");
+  assert.equal(next.accent, "#111");
+});
+check("never mutates the config it was given", () => {
+  const before = { ...CONFIG };
+  applyDefaultProductImage(CONFIG, "https://cdn.example/new.png");
+  assert.deepEqual(CONFIG, before);
+});
+check("removing drops the key entirely (storefront falls back to the placeholder)", () => {
+  const next = applyDefaultProductImage(CONFIG, null);
+  assert.equal("defaultProductImage" in next, false);
+  assert.equal(next.name, "K Glow");
+});
+check("trims the stored URL", () => {
+  const next = applyDefaultProductImage({}, "  https://cdn.example/new.png  ");
+  assert.equal(next.defaultProductImage, "https://cdn.example/new.png");
+});
+check("a blank URL removes the key rather than storing an empty string", () => {
+  const next = applyDefaultProductImage(CONFIG, "   ");
+  assert.equal("defaultProductImage" in next, false);
+});
+check("what it stores survives the storefront normalizer (no dead value in the DB)", () => {
+  const next = applyDefaultProductImage({}, "https://ik.imagekit.io/x/tenant/k-glow/default.jpeg");
+  assert.equal(
+    normalizeDefaultProductImage(next.defaultProductImage),
+    "https://ik.imagekit.io/x/tenant/k-glow/default.jpeg",
+  );
+});
+
+// ────────────── structural: the operator surfaces are actually wired ────────
+console.log("operator surfaces");
+check("the branding action validates uploads per kind", () => {
+  assert.ok(
+    read("src/actions/branding.ts").includes("validateBrandingAssetFile"),
+    "actions/branding.ts must validate through the shared per-kind rules",
+  );
+});
+check("the branding action persists the image into branding.config", () => {
+  assert.ok(
+    read("src/actions/branding.ts").includes("applyDefaultProductImage"),
+    "actions/branding.ts must merge through applyDefaultProductImage",
+  );
+});
+check("the Branding editor offers the upload control to the super admin", () => {
+  assert.ok(
+    read("src/components/admin/BrandingEditor.tsx").includes('kind="defaultProductImage"'),
+    "BrandingEditor must render an AssetUpload for the default product image",
+  );
+});
+check("the editor mirrors the uploaded URL into cfg (Save branding can't clobber it)", () => {
+  // The upload writes branding.config server-side; `cfg` is written back
+  // wholesale by Save branding, so a stale `cfg` would silently undo the upload.
+  const src = read("src/components/admin/BrandingEditor.tsx");
+  assert.ok(
+    src.includes("applyDefaultProductImage"),
+    "BrandingEditor must merge the uploaded URL into cfg via applyDefaultProductImage",
+  );
+  assert.ok(/setCfg\([\s\S]{0,200}applyDefaultProductImage/.test(src), "the merge must go through setCfg");
 });
 
 // ──────────────────────────── summary ────────────────────────────────────────
