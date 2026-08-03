@@ -144,5 +144,26 @@ check("the two-ways home carries no K Glow pink literal", () => {
   assert.deepEqual(found, [], `K Glow palette hardcoded in TwoWaysHome: ${found.join(", ")}`);
 });
 
+
+console.log("\n4. Tokens no tenant overrides must derive, not hardcode");
+
+check("shared surface/border tokens derive from the tenant's palette", () => {
+  // applyBrandStyle (store.tsx) only setProperty's a handful of tokens —
+  // --brand-main/-accent/-background/-surface/-text/-button*. Anything else
+  // declared in :root with a LITERAL keeps that literal on every tenant, exactly
+  // like an undefined var. --brand-surface-2 (#FFEEF3) and --brand-border
+  // (#F5D9E3) were K Glow pinks, so a cream-and-red store drew pink pills and
+  // pink hairlines. They must be expressed in terms of tokens that ARE per-tenant.
+  for (const token of ["--brand-surface-2", "--brand-border"]) {
+    const m = new RegExp(token + "\\s*:\\s*([^;]+);").exec(cssText);
+    assert.ok(m, `${token} is not declared in :root`);
+    assert.ok(
+      /var\(\s*--brand-/.test(m![1]),
+      `${token} hardcodes "${m![1].trim()}" — no tenant overrides it, so that literal ` +
+        `is the value on EVERY store. Derive it with color-mix from --brand-main/--brand-surface.`,
+    );
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

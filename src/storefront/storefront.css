@@ -16,14 +16,21 @@
   --brand-button-text: #ffffff;
   --brand-background: #FFF7FA;      /* page bg (soft pink wash) */
   --brand-surface: #ffffff;         /* cards */
-  --brand-surface-2: #FFEEF3;       /* secondary surface, pills bg */
+  /* Secondary surface (pills, soft panels). DERIVED, not literal: only a few
+     tokens are setProperty'd per tenant (store.tsx applyBrandStyle), so a
+     hardcoded value here is the value on EVERY store — this used to be a K
+     Glow pink, which is why cream-and-red tenants drew pink pills. */
+  --brand-surface-2: color-mix(in oklab, var(--brand-main) 8%, var(--brand-surface));
   --brand-text: #3B1F2A;            /* body text */
   --brand-text-muted: #8A6B76;      /* secondary text */
   /* Status token. Referenced by the group-buy surfaces ("Ships now", stock
      pills); it was previously undefined, so every use silently fell back to a
      literal. Semantic, not brand-derived: green must stay green on any tenant. */
   --brand-success: #1a8a5c;         /* in-stock / open states */
-  --brand-border: #F5D9E3;          /* hairlines */
+  /* Hairlines. Also derived — brand-border.ts only setProperty's this when the
+     owner has configured an explicit border colour, so the default must follow
+     the tenant's own palette rather than pin every store to one hue. */
+  --brand-border: color-mix(in oklab, var(--brand-main) 18%, var(--brand-surface));
   /* Standard border thickness. Owner-overridable per tenant (Brand.borderWidth
      → applyBrandStyle); the 1px default preserves the pre-feature look. Heavier
      accents (1.5px frame, 2px radio dot) intentionally keep their own widths. */
