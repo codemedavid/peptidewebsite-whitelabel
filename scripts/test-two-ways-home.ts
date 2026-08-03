@@ -312,6 +312,124 @@ check("the home keeps the round chrome so the teaser can link to the group-buy p
   assert.equal(view.gb.slots.pct, 60);
 });
 
+// ── Per-way management (./two-ways-mode) ────────────────────────────────────
+// A store may sell only one way (Dragon Peptides: group buy only). The home
+// view-model has to honour that WITHOUT changing anything for the tenants that
+// never touch the setting.
+
+const SHELF = [
+  product({ id: "a", name: "Alpha", price: 1000 }),
+  product({ id: "b", name: "Bravo", price: 2000 }),
+];
+
+check("omitting the ways argument keeps today's home exactly as it was", () => {
+  const view = buildTwoWaysHomeView(SHELF, null, "₱", NOW);
+  assert.equal(view.onHand.count, 2);
+  assert.equal(view.onHand.state, "open");
+  assert.equal(view.onHand.lines[0].buyable, true);
+  assert.equal(view.gb.state, "open");
+  assert.equal(view.visibleWays, 2);
+  assert.equal(view.heading, "Two ways to order");
+});
+
+check("a HIDDEN on-hand way empties the shelf entirely", () => {
+  const view = buildTwoWaysHomeView(SHELF, null, "₱", NOW, "catalog", {
+    onHand: "hidden",
+    groupBuy: "open",
+  });
+  assert.equal(view.onHand.state, "hidden");
+  assert.equal(view.onHand.count, 0);
+  assert.deepEqual(view.onHand.lines, []);
+  assert.equal(view.visibleWays, 1);
+  assert.equal(view.heading, "How to order");
+});
+
+check("a CLOSED on-hand way still lists the shelf, but nothing is buyable", () => {
+  const view = buildTwoWaysHomeView(SHELF, null, "₱", NOW, "catalog", {
+    onHand: "closed",
+    groupBuy: "open",
+  });
+  assert.equal(view.onHand.state, "closed");
+  assert.equal(view.onHand.count, 2, "a paused shelf is still shown");
+  assert.equal(view.onHand.lines.every((l) => l.buyable === false), true);
+  assert.equal(view.onHand.lines[0].inStock, true, "stock is unchanged — only the way is shut");
+  assert.equal(view.visibleWays, 2, "a closed way is still visible");
+});
+
+check("an out-of-stock line is never buyable even while the way is open", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "z", name: "Zulu", price: 500, stock: 0 })],
+    null,
+    "₱",
+    NOW,
+  );
+  assert.equal(view.onHand.lines[0].inStock, false);
+  assert.equal(view.onHand.lines[0].buyable, false);
+});
+
+check("a HIDDEN group-buy way closes the GB path even with a live round", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "a", name: "Alpha", price: 1000 }), product({ id: "c", name: "Charlie", price: 900 })],
+    banner({ coversAll: false, productIds: ["c"] }),
+    "₱",
+    NOW,
+    "catalog",
+    { onHand: "open", groupBuy: "hidden" },
+  );
+  assert.equal(view.gb.state, "hidden");
+  assert.equal(view.gb.open, false, "the teaser must not render");
+  assert.equal(view.visibleWays, 1);
+  assert.equal(view.heading, "How to order");
+});
+
+// The round's products are PRE-ORDERS priced at gbPrice — hiding the group-buy
+// way must never dump them onto the ships-now shelf at their on-hand price.
+check("hiding the group-buy way does NOT spill the round's products onto the shelf", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "a", name: "Alpha", price: 1000 }), product({ id: "c", name: "Charlie", price: 900 })],
+    banner({ coversAll: false, productIds: ["c"] }),
+    "₱",
+    NOW,
+    "catalog",
+    { onHand: "open", groupBuy: "hidden" },
+  );
+  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["a"]);
+});
+
+check("a CLOSED group-buy way keeps the round chrome but stops the join path", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "c", name: "Charlie", price: 900 })],
+    banner({ coversAll: false, productIds: ["c"], name: "June GB" }),
+    "₱",
+    NOW,
+    "catalog",
+    { onHand: "open", groupBuy: "closed" },
+  );
+  assert.equal(view.gb.state, "closed");
+  assert.equal(view.gb.open, false, "a closed way must not offer the join CTA");
+  assert.equal(view.visibleWays, 2, "but the card is still shown, marked closed");
+});
+
+check("junk in the ways argument falls back to both ways open", () => {
+  const view = buildTwoWaysHomeView(
+    SHELF,
+    null,
+    "₱",
+    NOW,
+    "catalog",
+    { onHand: "gone", groupBuy: null } as never,
+  );
+  assert.equal(view.onHand.state, "open");
+  assert.equal(view.onHand.count, 2);
+  assert.equal(view.gb.state, "open");
+});
+
+check("the ways argument is never mutated", () => {
+  const ways = { onHand: "closed", groupBuy: "open" } as const;
+  buildTwoWaysHomeView(SHELF, null, "₱", NOW, "catalog", ways);
+  assert.equal(ways.onHand, "closed");
+});
+
 // WIRING: the component must not render the round's item rows / add-to-cart.
 check("TwoWaysHome renders no group-buy item rows and routes to the group-buy page", () => {
   const src = readFileSync(
