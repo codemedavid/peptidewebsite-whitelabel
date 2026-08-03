@@ -30,8 +30,8 @@ export function GroupBuyBanner({
       className="gb-banner"
       aria-label={`Group buy live: ${banner.name}`}
       style={{
-        borderBottom: "1px solid var(--hairline, rgba(0,0,0,.12))",
-        background: "var(--brand-tint, color-mix(in oklab, var(--brand-main, #111) 6%, transparent))",
+        borderBottom: "1px solid var(--brand-border)",
+        background: "var(--brand-surface-2, color-mix(in oklab, var(--brand-main) 6%, transparent))",
       }}
     >
       <div
@@ -57,8 +57,8 @@ export function GroupBuyBanner({
               fontWeight: 700,
               letterSpacing: ".08em",
               textTransform: "uppercase",
-              color: "var(--brand-button-text, #fff)",
-              background: "var(--brand-main, #111)",
+              color: "var(--brand-button-text)",
+              background: "var(--brand-main)",
               borderRadius: 999,
               padding: "4px 10px",
               whiteSpace: "nowrap",
@@ -87,7 +87,7 @@ export function GroupBuyBanner({
               <div
                 style={{
                   fontSize: 13,
-                  color: "var(--brand-text-muted, #667)",
+                  color: "var(--brand-text-muted)",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -119,13 +119,13 @@ export function GroupBuyBanner({
               borderRadius: 999,
               whiteSpace: "nowrap",
               transition: "background .15s ease, color .15s ease, border-color .15s ease",
-              border: `1px solid ${scopeOn ? "var(--brand-main, #111)" : "var(--hairline, rgba(0,0,0,.16))"}`,
+              border: `1px solid ${scopeOn ? "var(--brand-main)" : "var(--brand-border)"}`,
               background: scopeOn
-                ? "var(--brand-main, #111)"
+                ? "var(--brand-main)"
                 : hover
-                  ? "color-mix(in oklab, var(--brand-main, #111) 8%, transparent)"
+                  ? "color-mix(in oklab, var(--brand-main) 8%, transparent)"
                   : "transparent",
-              color: scopeOn ? "var(--brand-button-text, #fff)" : "var(--brand-text, inherit)",
+              color: scopeOn ? "var(--brand-button-text)" : "var(--brand-text, inherit)",
             }}
           >
             {scopeOn ? (

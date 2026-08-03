@@ -19,6 +19,10 @@
   --brand-surface-2: #FFEEF3;       /* secondary surface, pills bg */
   --brand-text: #3B1F2A;            /* body text */
   --brand-text-muted: #8A6B76;      /* secondary text */
+  /* Status token. Referenced by the group-buy surfaces ("Ships now", stock
+     pills); it was previously undefined, so every use silently fell back to a
+     literal. Semantic, not brand-derived: green must stay green on any tenant. */
+  --brand-success: #1a8a5c;         /* in-stock / open states */
   --brand-border: #F5D9E3;          /* hairlines */
   /* Standard border thickness. Owner-overridable per tenant (Brand.borderWidth
      → applyBrandStyle); the 1px default preserves the pre-feature look. Heavier

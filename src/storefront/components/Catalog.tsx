@@ -204,10 +204,10 @@ export function ProductCard({
                   style={{
                     cursor: "pointer",
                     border: active
-                      ? "1px solid var(--brand-main, #111)"
-                      : "1px solid var(--hairline, rgba(0,0,0,.14))",
-                    background: active ? "var(--brand-main, #111)" : "transparent",
-                    color: active ? "var(--brand-button-text, #fff)" : "inherit",
+                      ? "1px solid var(--brand-main)"
+                      : "1px solid var(--brand-border)",
+                    background: active ? "var(--brand-main)" : "transparent",
+                    color: active ? "var(--brand-button-text)" : "inherit",
                     fontWeight: active ? 600 : 500,
                     opacity: soldOut ? 0.5 : 1,
                     textDecoration: soldOut ? "line-through" : "none",
@@ -431,10 +431,10 @@ function ProductDetailModal({
                       style={{
                         cursor: "pointer",
                         border: active
-                          ? "1px solid var(--brand-main, #111)"
-                          : "1px solid var(--hairline, rgba(0,0,0,.14))",
-                        background: active ? "var(--brand-main, #111)" : "transparent",
-                        color: active ? "var(--brand-button-text, #fff)" : "inherit",
+                          ? "1px solid var(--brand-main)"
+                          : "1px solid var(--brand-border)",
+                        background: active ? "var(--brand-main)" : "transparent",
+                        color: active ? "var(--brand-button-text)" : "inherit",
                         fontWeight: active ? 600 : 500,
                         opacity: soldOut ? 0.5 : 1,
                         textDecoration: soldOut ? "line-through" : "none",
