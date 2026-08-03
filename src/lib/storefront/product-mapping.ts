@@ -45,8 +45,11 @@ export type ProductMetadata = {
   /** Per-product variations (dosage/size options + their price). Only present
    *  when at least one named variation exists — see `cleanVariations`. `stock`
    *  is present only when the option is tracked independently; absent = falls
-   *  back to the base `stock` column (see lib/storefront/inventory.ts). */
-  variations?: { name: string; price: number; stock?: number }[];
+   *  back to the base `stock` column (see lib/storefront/inventory.ts).
+   *  `gbPrice` is likewise present only when the option has its own group-buy
+   *  price; absent = no group price for that option (it sells at its own
+   *  `price`, NOT at the product-level `gbPrice`). */
+  variations?: { name: string; price: number; stock?: number; gbPrice?: number }[];
   /** Order Ratio Control classification (peptide / bacWater / other) set by the
    *  storefront admin. Absent → the ratio engine's name heuristic decides. */
   productClass?: ProductClass;
@@ -177,7 +180,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     storage: meta.storage ?? "",
     sequence: meta.sequence ?? "",
     sizes: meta.sizes ?? "",
-    variations: cleanVariations(meta.variations) ?? [],
+    variations: cleanVariations(meta.variations, meta.productType === "gb") ?? [],
     productClass: toProductClass(meta.productClass),
     reseller: cleanReseller(meta.reseller),
     productType: meta.productType === "gb" ? "gb" : "onhand",
@@ -213,10 +216,15 @@ function cleanReseller(
  * Normalize a variations list: trim names, coerce prices to non-negative
  * numbers, and drop rows without a name. Returns `undefined` when nothing
  * survives so `compactMetadata` never persists an empty `[]`.
+ *
+ * `keepGbPrice` is the product's group-buy tag: only a "gb" product may carry
+ * per-option group prices, so an on-hand product never stores (or reads back) a
+ * price no storefront surface would honour.
  */
 function cleanVariations(
-  v: { name?: string; price?: number; stock?: number }[] | undefined,
-): { name: string; price: number; stock?: number }[] | undefined {
+  v: { name?: string; price?: number; stock?: number; gbPrice?: number }[] | undefined,
+  keepGbPrice = false,
+): { name: string; price: number; stock?: number; gbPrice?: number }[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out = v
     .map((x) => {
@@ -226,9 +234,18 @@ function cleanVariations(
       // back to the base column" — injecting a 0 here would silently mark
       // every legacy variation sold out, so the key must stay off.
       const hasStock = typeof x?.stock === "number" && Number.isFinite(x.stock);
-      return hasStock
-        ? { name, price, stock: Math.max(0, Math.round(x!.stock as number)) }
-        : { name, price };
+      // Same opt-in rule for the group price: only a POSITIVE number persists.
+      // Absent means "no group price for this option", which makeVariationEntry
+      // reads as "sell at the option's own price" — never as "reuse the
+      // product's gbPrice", which would undercharge every larger size.
+      const gb = Number(x?.gbPrice);
+      const hasGb = keepGbPrice && Number.isFinite(gb) && gb > 0;
+      return {
+        name,
+        price,
+        ...(hasStock ? { stock: Math.max(0, Math.round(x!.stock as number)) } : {}),
+        ...(hasGb ? { gbPrice: gb } : {}),
+      };
     })
     .filter((x) => x.name);
   return out.length ? out : undefined;
@@ -282,7 +299,7 @@ export function productToDbWrite(
       storage: p.storage || undefined,
       sequence: p.sequence || undefined,
       sizes: p.sizes || undefined,
-      variations: cleanVariations(p.variations),
+      variations: cleanVariations(p.variations, p.productType === "gb"),
       productClass: toProductClass(p.productClass),
       currencySymbol: displaySymbol || undefined,
       reseller: cleanReseller(p.reseller),

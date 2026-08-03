@@ -135,6 +135,11 @@ function main() {
 
   console.log("\n#1 — authoritativeItemPrice prices a gb variation like the cart\n");
 
+  // A 10mg option that costs MORE than the base and carries no group price of
+  // its own. The product-level gbPrice (560) belongs to the base option, so it
+  // must NOT reach this one — that inheritance is the k-glow Retatrutide bug
+  // (a ₱9,924 size billed at the ₱3,866 base group price). See
+  // scripts/test-variation-gb-pricing.ts.
   const gbWithVariation = product({
     id: "gb-1",
     name: "Reta",
@@ -145,14 +150,32 @@ function main() {
   });
   const item = { productId: "gb-1", name: "Reta — 10mg", qty: 1, variation: "10mg" };
 
-  check("server matches the cart: a gb variation in a live round → gbPrice", () => {
+  check("server matches the cart: an option with no group price of its own", () => {
     const viaCart = unitPrice(
       makeVariationEntry(gbWithVariation, { name: "10mg", price: 900 }),
       1,
       COVERS_ALL,
     );
     assert.equal(authoritativeItemPrice(item, [gbWithVariation], COVERS_ALL), viaCart);
-    assert.equal(authoritativeItemPrice(item, [gbWithVariation], COVERS_ALL), 560);
+    // 900 (its own price), NOT 560 — the base option's group price is not inherited.
+    assert.equal(authoritativeItemPrice(item, [gbWithVariation], COVERS_ALL), 900);
+  });
+  check("server matches the cart: an option WITH its own group price", () => {
+    const priced = product({
+      id: "gb-1",
+      name: "Reta",
+      price: 700,
+      gbPrice: 560,
+      productType: "gb",
+      variations: [{ name: "10mg", price: 900, gbPrice: 720 }],
+    });
+    const viaCart = unitPrice(
+      makeVariationEntry(priced, { name: "10mg", price: 900, gbPrice: 720 }),
+      1,
+      COVERS_ALL,
+    );
+    assert.equal(authoritativeItemPrice(item, [priced], COVERS_ALL), viaCart);
+    assert.equal(authoritativeItemPrice(item, [priced], COVERS_ALL), 720);
   });
   check("no live round → the variation's own price stands", () => {
     assert.equal(authoritativeItemPrice(item, [gbWithVariation], null), 900);

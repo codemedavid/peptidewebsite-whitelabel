@@ -44,7 +44,17 @@ export function normalizeProductInput(input: unknown): Product {
       const raw = x.stock;
       const tracked =
         typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "");
-      return tracked ? { ...base, stock: Math.max(0, Math.round(num(raw))) } : base;
+      // Same opt-in rule for the option's own group-buy price, but keyed on a
+      // POSITIVE value rather than mere presence: a blank or 0 means "no group
+      // price for this option", and the option then sells at its own price
+      // instead of inheriting the product's gbPrice (which would undercharge
+      // every larger size — see makeVariationEntry).
+      const gb = Math.max(0, num(x.gbPrice));
+      return {
+        ...base,
+        ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
+        ...(gb > 0 ? { gbPrice: gb } : {}),
+      };
     })
     .filter((v) => v.name);
   return {

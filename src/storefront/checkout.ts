@@ -61,11 +61,21 @@ export function baseProductId(p: Product): string {
  * name (so every order/message surface shows it), and the variation's own price.
  * A variation carries its own price, so base-product promos/wholesale don't apply
  * to it — those stay on the single-option base product.
+ *
+ * `gbPrice` follows the same rule, and for the same reason. The product-level
+ * gbPrice belongs to the BASE option, so carrying it over (which spreading
+ * `...product` used to do silently) charged the base option's group price for
+ * every size: k-glow's Retatrutide 30mg listed at ₱9,924 and was billed ₱3,866,
+ * the 5mg price. A variation therefore gets its OWN gbPrice, and an option
+ * without one gets NONE — it sells at its own price rather than inheriting a
+ * discount that was never meant for it. Erring toward the seller's list price is
+ * the safe direction; `unitPrice`'s Math.min still stops the reverse error.
  */
 export function makeVariationEntry(
   product: Product,
-  variation: { name: string; price: number },
+  variation: { name: string; price: number; gbPrice?: number },
 ): Product {
+  const gbPrice = Math.max(0, Number(variation.gbPrice) || 0);
   return {
     ...product,
     id: `${product.id}::${variation.name}`,
@@ -76,6 +86,7 @@ export function makeVariationEntry(
     discountEnabled: false,
     discountPrice: 0,
     reseller: undefined,
+    gbPrice: gbPrice > 0 ? gbPrice : undefined,
   };
 }
 

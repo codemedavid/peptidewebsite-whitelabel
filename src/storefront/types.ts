@@ -49,8 +49,17 @@ export type Product = {
    *
    *  `stock` is optional per variation: a number tracks that option's own
    *  inventory; absent falls back to the base product `stock`. See
-   *  effectiveStock in lib/storefront/inventory.ts. */
-  variations?: { name: string; price: number; stock?: number }[];
+   *  effectiveStock in lib/storefront/inventory.ts.
+   *
+   *  `gbPrice` is optional per variation and works the same opt-in way: it is
+   *  what THIS option costs inside a live group-buy round. It exists because the
+   *  product-level `gbPrice` is a single number, so a multi-size listing had no
+   *  way to price each size in a round — every option was charged the base
+   *  option's group price. Absent means "no group price for this option", and
+   *  the option sells at its own `price`; it deliberately does NOT fall back to
+   *  the product's `gbPrice`, which would undercharge every larger size. See
+   *  makeVariationEntry in storefront/checkout.ts. */
+  variations?: { name: string; price: number; stock?: number; gbPrice?: number }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
    *  underlying catalog product id — used so the shared product stock is counted
