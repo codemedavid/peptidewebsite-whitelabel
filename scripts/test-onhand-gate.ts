@@ -14,15 +14,18 @@ import assert from "node:assert";
 
 import {
   decideOnHandBlock,
+  decideWayBlock,
   evaluateOnHandGate,
   ON_HAND_GATE_UNVERIFIED_MESSAGE,
   type OnHandGateDeps,
 } from "../src/lib/storefront/on-hand-gate";
 import {
   GROUP_BUY_CAPS_OFF,
+  buildGroupBuyGate,
   type GroupBuy,
   type GroupBuyCapabilities,
 } from "../src/lib/storefront/group-buy";
+import { WAY_BLOCK_MESSAGES } from "../src/lib/storefront/two-ways-mode";
 
 let passed = 0;
 let failed = 0;
@@ -193,6 +196,170 @@ async function main() {
   await check("a gate error NEVER walls checkout when on-hand sales are allowed", async () => {
     const msg = await evaluateOnHandGate({ groupBuyAllowOnHand: true }, "t1", "slug", ITEMS_WITH_ONHAND, throwingDeps);
     assert.equal(msg, null, "on-hand allowed must short-circuit before the throwing deps");
+  });
+
+  // ── per-way mode (./two-ways-mode) ────────────────────────────────────────
+  // Unlike groupBuyAllowOnHand, the owner's per-way setting is NOT scoped to a
+  // live round: a group-buy-only store (Dragon Peptides) refuses on-hand items
+  // whether or not a round happens to be running.
+  console.log("decideWayBlock (pure, per-way mode)");
+
+  const GATE_ROUND_P1 = buildGroupBuyGate([ROUND_COVERS_P1], CAPS_ON, true, NOW);
+  const GATE_NO_ROUND = buildGroupBuyGate([], CAPS_ON, true, NOW);
+
+  await check("both ways open blocks nothing", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "open" },
+      gate: GATE_ROUND_P1,
+      items: ITEMS_WITH_ONHAND,
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("a HIDDEN on-hand way blocks an on-hand item with NO round running", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "hidden", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p2", name: "On-hand product" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+  });
+
+  await check("a CLOSED on-hand way blocks just the same (closed and hidden both refuse)", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "closed", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p2", name: "On-hand product" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+  });
+
+  await check("a hidden on-hand way still lets the ROUND's products through", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "hidden", groupBuy: "open" },
+      gate: GATE_ROUND_P1,
+      items: [{ productId: "p1", name: "In-buy product" }],
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("a HIDDEN group-buy way blocks the round's products", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "hidden" },
+      gate: GATE_ROUND_P1,
+      items: [{ productId: "p1", name: "In-buy product" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+  });
+
+  await check("a closed group-buy way leaves on-hand items alone", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "closed" },
+      gate: GATE_ROUND_P1,
+      items: [{ productId: "p2", name: "On-hand product" }],
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("under a catalog-wide round every item is group-buy, so on-hand rules are moot", () => {
+    const coversAll: GroupBuy = { ...ROUND_COVERS_P1, productIds: [] };
+    const gate = buildGroupBuyGate([coversAll], CAPS_ON, true, NOW);
+    const msg = decideWayBlock({
+      ways: { onHand: "hidden", groupBuy: "open" },
+      gate,
+      items: ITEMS_WITH_ONHAND,
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("an item with no productId is never blocked", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "hidden", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: null, name: "Custom line" }],
+    });
+    assert.equal(msg, null);
+  });
+
+  console.log("evaluateOnHandGate (per-way mode)");
+
+  await check("both ways open + on-hand allowed still short-circuits WITHOUT touching deps", async () => {
+    let touched = false;
+    const spyDeps: OnHandGateDeps = {
+      resolveCaps: async () => {
+        touched = true;
+        return CAPS_ON;
+      },
+      loadGroupBuys: async () => {
+        touched = true;
+        return [];
+      },
+    };
+    const msg = await evaluateOnHandGate({}, "t1", "slug", ITEMS_WITH_ONHAND, spyDeps);
+    assert.equal(msg, null);
+    assert.equal(touched, false, "an untouched config must not cost a DB read");
+  });
+
+  await check("a group-buy-only store refuses an on-hand item at checkout", async () => {
+    const config = { twoWaysMode: { onHand: "hidden", groupBuy: "open" } };
+    const msg = await evaluateOnHandGate(
+      config,
+      "t1",
+      "slug",
+      ITEMS_WITH_ONHAND,
+      okDeps(CAPS_ON, [ROUND_COVERS_P1]),
+    );
+    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+  });
+
+  await check("a group-buy-only store refuses on-hand items with no round running at all", async () => {
+    const config = { twoWaysMode: { onHand: "hidden", groupBuy: "open" } };
+    const msg = await evaluateOnHandGate(
+      config,
+      "t1",
+      "slug",
+      [{ productId: "p2", name: "On-hand product" }],
+      okDeps(CAPS_ON, []),
+    );
+    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+  });
+
+  await check("FAILS CLOSED when the gate can't be evaluated and a way is shut", async () => {
+    const config = { twoWaysMode: { onHand: "hidden", groupBuy: "open" } };
+    const msg = await evaluateOnHandGate(config, "t1", "slug", ITEMS_WITH_ONHAND, throwingDeps);
+    assert.equal(msg, ON_HAND_GATE_UNVERIFIED_MESSAGE);
+  });
+
+  // Losing the Group Buy module must not wall a store shut: without it there is
+  // no group buy to sell through, so the per-way setting is meaningless and the
+  // store falls back to an ordinary one rather than refusing every order.
+  await check("the per-way mode is ignored when the Group Buy module is off", async () => {
+    const config = { twoWaysMode: { onHand: "hidden", groupBuy: "open" } };
+    const msg = await evaluateOnHandGate(
+      config,
+      "t1",
+      "slug",
+      ITEMS_WITH_ONHAND,
+      okDeps(GROUP_BUY_CAPS_OFF, [ROUND_COVERS_P1]),
+    );
+    assert.equal(msg, null);
+  });
+
+  await check("junk in config.twoWaysMode leaves checkout open", async () => {
+    const msg = await evaluateOnHandGate(
+      { twoWaysMode: "group-buy-only" },
+      "t1",
+      "slug",
+      ITEMS_WITH_ONHAND,
+      throwingDeps,
+    );
+    assert.equal(msg, null, "unreadable config must not wall an ordinary store");
+  });
+
+  // The pre-existing live-round rule keeps its own, more specific message.
+  await check("the legacy live-round block still names the offending product", async () => {
+    const msg = await evaluateOnHandGate(OFF, "t1", "slug", ITEMS_WITH_ONHAND, okDeps(CAPS_ON, [ROUND_COVERS_P1]));
+    assert.match(msg ?? "", /On-hand product/);
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
