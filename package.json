@@ -115,7 +115,8 @@
     "test:gb-assignment": "tsx scripts/test-gb-assignment.ts",
     "test:store-admin-login": "tsx scripts/test-store-admin-login.ts",
     "test:admin-session-reset": "tsx scripts/test-admin-session-reset.ts",
-    "backfill:admin-credentials": "tsx scripts/backfill-admin-credentials.ts"
+    "backfill:admin-credentials": "tsx scripts/backfill-admin-credentials.ts",
+    "test:gate-admin-login": "tsx scripts/test-gate-admin-login.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
