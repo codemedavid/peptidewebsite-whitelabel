@@ -71,6 +71,13 @@ export function baseProductId(p: Product): string {
  * discount that was never meant for it. Erring toward the seller's list price is
  * the safe direction; `unitPrice`'s Math.min still stops the reverse error.
  */
+/** The cart id a chosen variation lands under — the base id plus the option, so
+ *  each dose is its own cart line. Exported so a card can count/decrement the
+ *  entry for the option it has selected without re-deriving the format. */
+export function variationEntryId(productId: string, variationName: string): string {
+  return `${productId}::${variationName}`;
+}
+
 export function makeVariationEntry(
   product: Product,
   variation: { name: string; price: number; gbPrice?: number },
@@ -78,7 +85,7 @@ export function makeVariationEntry(
   const gbPrice = Math.max(0, Number(variation.gbPrice) || 0);
   return {
     ...product,
-    id: `${product.id}::${variation.name}`,
+    id: variationEntryId(product.id, variation.name),
     name: `${product.name} — ${variation.name}`,
     price: Math.max(0, Number(variation.price) || 0),
     variantOf: product.id,

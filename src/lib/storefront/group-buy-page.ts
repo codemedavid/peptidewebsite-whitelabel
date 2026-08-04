@@ -14,7 +14,12 @@ import {
   type TwoWaysInput,
 } from "./two-ways";
 import type { GroupBuyBanner } from "./group-buy-banner";
-import { DOSE_PATTERN, hasDoseToken, type Variation } from "./variations";
+import {
+  buildProductOptions,
+  DOSE_PATTERN,
+  hasDoseToken,
+  type Variation,
+} from "./variations";
 
 const DAY_MS = 86_400_000;
 
@@ -95,6 +100,84 @@ export type GbPageProduct = TwoWaysInput & {
   variations?: Variation[];
 };
 
+/**
+ * One dose a group-buy card can be joined at: the seller's option name, the
+ * price the round actually charges for it, and the variation the cart needs to
+ * clone (absent on the product's own base price, which reads "Standard").
+ */
+export type GbPageOption = {
+  name: string;
+  /** The group-buy price for THIS option — what unitPrice charges for it. */
+  price: number;
+  /** The option's own regular (on-hand) price. */
+  regularPrice: number;
+  /** "₱3,866" — display-ready. */
+  priceLabel: string;
+  /** Absent on the base "Standard" option; present on every real variation. */
+  variation?: Variation;
+};
+
+/**
+ * The doses a group-buy card offers, priced at the round's prices.
+ *
+ * The catalog card and the two-ways home have always had an option picker; this
+ * page did not, so "Join GB" added the bare catalog row — the cart line lost the
+ * dose AND paid the base option's group price. The options are the same ones
+ * those surfaces build (buildProductOptions), re-priced through groupBuyLine so
+ * each dose shows the price the cart and the server both charge for it: a
+ * variation with its own gbPrice gets it, and one WITHOUT sells at its own
+ * price rather than inheriting a discount meant for a smaller size (see
+ * makeVariationEntry).
+ */
+export function gbPageOptions(product: GbPageProduct, currency: string): GbPageOption[] {
+  return buildProductOptions(product).map((option) => {
+    const priced = groupBuyLine({
+      ...product,
+      price: option.price,
+      gbPrice: option.variation ? option.variation.gbPrice : product.gbPrice,
+    });
+    return {
+      name: option.name,
+      price: priced.gbPrice,
+      regularPrice: priced.regularPrice,
+      priceLabel: formatGbMoney(currency, priced.gbPrice),
+      variation: option.variation,
+    };
+  });
+}
+
+/**
+ * Which option a card has selected on load: the first one carrying a dose.
+ *
+ * Not simply index 0. A seller who prices the base product distinctly gets a
+ * "Standard" option at the head of the list (buildProductOptions), which names
+ * no dose at all — defaulting to it would put "Semax" in the cart with the mg
+ * gone, which is the whole bug. With no dosed option anywhere (or no options),
+ * the first one stands.
+ */
+export function defaultGbOptionIndex(options: readonly GbPageOption[]): number {
+  const dosed = options.findIndex((o) => hasDoseToken(o.name));
+  return dosed >= 0 ? dosed : 0;
+}
+
+/**
+ * The addToCart call a card makes for the option at `selectedIndex` — the
+ * product plus the variation to clone (none when the product has no options, or
+ * when the base "Standard" price is the selection). An index outside the option
+ * list falls back to the card's default rather than crashing or, worse, silently
+ * adding the wrong dose.
+ */
+export function gbCardAddition<T extends GbPageProduct>(
+  line: GroupBuyPageLine<T>,
+  selectedIndex: number,
+): { product: T; variation?: Variation } {
+  const options = line.options;
+  if (options.length === 0) return { product: line.product };
+  const inRange = selectedIndex >= 0 && selectedIndex < options.length;
+  const option = options[inRange ? selectedIndex : line.defaultOptionIndex] ?? options[0];
+  return { product: line.product, variation: option.variation };
+}
+
 /** One product card on the group-buy page. `price`/`priceLabel` are the primary
  *  (group-buy) price — the same price the cart + server charge. The design also
  *  surfaces the regular price struck through and a "save ₱X" badge, so the line
@@ -104,6 +187,11 @@ export type GroupBuyPageLine<T extends GbPageProduct = GbPageProduct> = {
   product: T;
   /** The card's heading — the product name carrying its dose (gbDisplayName). */
   displayName: string;
+  /** The doses this card can be joined at, priced at the round's prices. Empty
+   *  when the seller defined no variations (the card keeps its single price). */
+  options: GbPageOption[];
+  /** The option the card has selected on load (see defaultGbOptionIndex). */
+  defaultOptionIndex: number;
   initial: string;
   /** The group-buy per-unit price (gbPrice, clamped to a valid value). */
   price: number;
@@ -156,9 +244,12 @@ export type GroupBuyPageView<T extends GbPageProduct = GbPageProduct> = {
  *  with the regular price + saving carried for the design's strikethrough + badge. */
 function pageLine<T extends GbPageProduct>(product: T, currency: string): GroupBuyPageLine<T> {
   const line = groupBuyLine(product);
+  const options = gbPageOptions(product, currency);
   return {
     product,
     displayName: gbDisplayName(product.name, product.variations),
+    options,
+    defaultOptionIndex: defaultGbOptionIndex(options),
     initial: productInitial(product.name),
     price: line.gbPrice,
     priceLabel: formatGbMoney(currency, line.gbPrice),

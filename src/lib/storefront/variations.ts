@@ -29,7 +29,11 @@ export function hasDoseToken(name: string): boolean {
  *  tracked independently; when absent the variation falls back to the base
  *  product's `stock` (the historical shared-stock behavior). See
  *  `variationStock` / `effectiveStock` in ./inventory. */
-export type Variation = { name: string; price: number; stock?: number };
+/** `gbPrice` is likewise optional and per-variation: a multi-size listing prices
+ *  each dose's group buy separately, and an option WITHOUT one sells at its own
+ *  price rather than inheriting the base option's discount (see
+ *  makeVariationEntry / gbPageOptions). Mirrors `Product.variations`. */
+export type Variation = { name: string; price: number; stock?: number; gbPrice?: number };
 
 /** An option offered on the product card. `variation` is absent on the product's
  *  own base price ("Standard") and present on every real variation — the cart

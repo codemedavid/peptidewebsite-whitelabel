@@ -9,11 +9,18 @@
 // while any tenant with a live round gets the same page. Rendered only when a
 // round is live (StorefrontApp gates the route on brand.groupBuyBanner).
 
-import type { Brand } from "../types";
+import { useState } from "react";
+
+import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
-import { baseProductId, unitPrice } from "../checkout";
-import { buildGroupBuyPageView, groupBuyCartSummary } from "@/lib/storefront/group-buy-page";
+import { baseProductId, unitPrice, variationEntryId } from "../checkout";
+import {
+  buildGroupBuyPageView,
+  gbCardAddition,
+  groupBuyCartSummary,
+  type GroupBuyPageLine,
+} from "@/lib/storefront/group-buy-page";
 import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
@@ -111,73 +118,16 @@ export function GroupBuyPage({
 
         {/* Product grid */}
         <div className="gbpage__grid">
-          {view.lines.map((line) => {
-            const p = line.product;
-            const qty = cart.filter((c) => baseProductId(c) === p.id).length;
-            // Products the owner paused (Group Buys → Pricing) stay listed here
-            // — the round still advertises them — but can't be joined. This page
-            // previously had no guard at all, so a paused product was fully
-            // buyable from it. Stock is deliberately NOT consulted: group-buy
-            // lines are pre-orders (isGroupBuyPreorder), so a stock-0 round
-            // product must keep its live "Join GB".
-            const blocked = p.purchasable === false || p.priceOnRequest === true;
-            // Product photo, or the brand's default product image, or the monogram.
-            const image = resolveProductImage(p.image, brand.defaultProductImage);
-            return (
-              <article key={p.id} className="gbpage__card">
-                <div className="gbpage__card-media">
-                  {image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={image} alt={line.displayName} />
-                  ) : (
-                    <span className="gbpage__monogram font-display" aria-hidden>
-                      {line.initial}
-                    </span>
-                  )}
-                </div>
-                <div className="gbpage__card-body">
-                  <div>
-                    <div className="gbpage__card-name">{line.displayName}</div>
-                    <div className="gbpage__card-note">COA ✓ · third-party tested</div>
-                  </div>
-                  <div className="gbpage__card-prices">
-                    <span className="gbpage__card-price font-display">{line.priceLabel}</span>
-                  </div>
-                  {blocked ? (
-                    <button type="button" className="gbpage__join" disabled>
-                      {p.priceOnRequest ? CTA_COPY.messageToOrder : CTA_COPY.notAvailable}
-                    </button>
-                  ) : qty === 0 ? (
-                    <button
-                      type="button"
-                      className="gbpage__join"
-                      onClick={() => addToCart(p)}
-                    >
-                      Join GB
-                    </button>
-                  ) : (
-                    <div className="gbpage__stepper" aria-label={`Quantity of ${line.displayName}`}>
-                      <button
-                        type="button"
-                        aria-label={`Remove one ${line.displayName}`}
-                        onClick={() => decrementCart(p.id)}
-                      >
-                        −
-                      </button>
-                      <span aria-live="polite">{qty}</span>
-                      <button
-                        type="button"
-                        aria-label={`Add one ${line.displayName}`}
-                        onClick={() => addToCart(p)}
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+          {view.lines.map((line) => (
+            <GbProductCard
+              key={line.product.id}
+              line={line}
+              image={resolveProductImage(line.product.image, brand.defaultProductImage)}
+              cart={cart}
+              addToCart={addToCart}
+              decrementCart={decrementCart}
+            />
+          ))}
         </div>
 
         {/* How it works */}
@@ -214,6 +164,114 @@ export function GroupBuyPage({
 
       <style>{gbPageCss}</style>
     </section>
+  );
+}
+
+/**
+ * One product card: the dose picker, the price for the CHOSEN dose, and the
+ * Join GB / stepper for that dose's own cart line.
+ *
+ * WHY the picker (k-glow, 2026-08-04): the card named its doses but "Join GB"
+ * added the raw catalog row, so a multi-dose product reached the cart — and the
+ * order the seller reads — as a bare "Tirzepatide" at the base option's group
+ * price. The catalog card and the two-ways home have always offered this pick;
+ * the group-buy page was the one surface without it. The selection drives what
+ * is added (gbCardAddition), what is charged (the option's own gbPrice), and
+ * which cart line the stepper counts.
+ */
+function GbProductCard({
+  line,
+  image,
+  cart,
+  addToCart,
+  decrementCart,
+}: {
+  line: GroupBuyPageLine<Product>;
+  image: string | null;
+  cart: Product[];
+  addToCart: (product: Product, qty?: number, variation?: { name: string; price: number }) => void;
+  decrementCart: (productId: string) => void;
+}) {
+  const p = line.product;
+  const options = line.options;
+  const [optIdx, setOptIdx] = useState(line.defaultOptionIndex);
+  const chosen = gbCardAddition(line, optIdx);
+  const selected = options.length
+    ? (options[optIdx] ?? options[line.defaultOptionIndex] ?? options[0])
+    : null;
+  // Products the owner paused (Group Buys → Pricing) stay listed here — the
+  // round still advertises them — but can't be joined. Stock is deliberately NOT
+  // consulted: group-buy lines are pre-orders (isGroupBuyPreorder), so a stock-0
+  // round product must keep its live "Join GB".
+  const blocked = p.purchasable === false || p.priceOnRequest === true;
+  // The cart line THIS selection lands on, so the stepper counts and removes the
+  // chosen dose rather than every dose of the product at once.
+  const entryId = chosen.variation ? variationEntryId(p.id, chosen.variation.name) : p.id;
+  const qty = cart.filter((c) => c.id === entryId).length;
+  const shownName = chosen.variation ? `${p.name} — ${chosen.variation.name}` : line.displayName;
+  const join = () => addToCart(p, 1, chosen.variation);
+
+  return (
+    <article className="gbpage__card">
+      <div className="gbpage__card-media">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt={line.displayName} />
+        ) : (
+          <span className="gbpage__monogram font-display" aria-hidden>
+            {line.initial}
+          </span>
+        )}
+      </div>
+      <div className="gbpage__card-body">
+        <div>
+          <div className="gbpage__card-name">{line.displayName}</div>
+          <div className="gbpage__card-note">COA ✓ · third-party tested</div>
+        </div>
+        {options.length > 0 && !blocked && (
+          <select
+            className="gbpage__opts"
+            aria-label={`Dose for ${p.name}`}
+            value={optIdx}
+            onChange={(e) => setOptIdx(Number(e.target.value))}
+          >
+            {options.map((o, i) => (
+              <option key={o.name} value={i}>
+                {o.name} · {o.priceLabel}
+              </option>
+            ))}
+          </select>
+        )}
+        <div className="gbpage__card-prices">
+          <span className="gbpage__card-price font-display">
+            {selected ? selected.priceLabel : line.priceLabel}
+          </span>
+        </div>
+        {blocked ? (
+          <button type="button" className="gbpage__join" disabled>
+            {p.priceOnRequest ? CTA_COPY.messageToOrder : CTA_COPY.notAvailable}
+          </button>
+        ) : qty === 0 ? (
+          <button type="button" className="gbpage__join" onClick={join}>
+            Join GB
+          </button>
+        ) : (
+          <div className="gbpage__stepper" aria-label={`Quantity of ${shownName}`}>
+            <button
+              type="button"
+              aria-label={`Remove one ${shownName}`}
+              onClick={() => decrementCart(entryId)}
+            >
+              −
+            </button>
+            <span aria-live="polite">{qty}</span>
+            <button type="button" aria-label={`Add one ${shownName}`} onClick={join}>
+              +
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -262,6 +320,12 @@ const gbPageCss = `
 .sf-root .gbpage__card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .sf-root .gbpage__card-name { font-weight: 700; font-size: 14px; color: var(--brand-text); line-height: 1.3; }
 .sf-root .gbpage__card-note { font-size: 11px; color: var(--brand-text-muted); margin-top: 2px; }
+.sf-root .gbpage__opts {
+  width: 100%; font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--brand-text); background: var(--brand-surface);
+  border: 1px solid var(--brand-border); border-radius: 10px; padding: 7px 8px; cursor: pointer;
+}
+.sf-root .gbpage__opts:focus-visible { outline: 2px solid var(--brand-main); outline-offset: 1px; }
 .sf-root .gbpage__card-prices { display: flex; align-items: baseline; gap: 6px; margin-top: auto; }
 .sf-root .gbpage__card-price { font-weight: 700; font-size: 19px; color: var(--brand-main); }
 .sf-root .gbpage__join {
