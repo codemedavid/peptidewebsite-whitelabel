@@ -41,6 +41,7 @@
     "test:two-ways-mode": "tsx scripts/test-two-ways-mode.ts",
     "test:gb-content": "tsx scripts/test-gb-content.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
+    "test:gb-cart-doses": "tsx scripts/test-gb-cart-doses.ts",
     "test:group-buy-pricing": "tsx scripts/test-group-buy-pricing.ts",
     "test:onhand-gate": "tsx scripts/test-onhand-gate.ts",
     "test:onhand-order": "tsx scripts/test-on-hand-order.ts",
