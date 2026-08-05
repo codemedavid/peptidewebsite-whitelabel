@@ -12,3 +12,6 @@ next-env.d.ts
 .demo-data/
 .rehost-backup/
 .env*
+# Postgres dumps of migrated stores — customer PII and auth hashes. Kept local
+# only; the legacy order import reads one from the repo root.
+*.backup

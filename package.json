@@ -23,6 +23,7 @@
     "db:gb-index": "prisma db execute --file prisma/group-buy-active-index.sql --schema prisma/schema.prisma",
     "db:rls:check": "tsx prisma/rls-check.ts",
     "test:isolation": "tsx scripts/test-isolation.ts",
+    "test:legacy-import": "tsx scripts/test-legacy-order-import.ts",
     "test:themes": "tsx scripts/check-theme-contrast.ts",
     "test:gate": "tsx scripts/test-access-gate.ts",
     "test:posthog": "tsx scripts/test-posthog.ts",
