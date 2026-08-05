@@ -192,7 +192,8 @@ const catalog: P[] = [
 // Picking a GROUP sorts — it floats that group's members to the top. It must NOT
 // filter: the rest of the catalog still follows, so a shopper never loses items.
 const weightFirst = sortByCategory(catalog, "weight", menu);
-eq("group members float to the top", ids(weightFirst).slice(0, 2), ["p4", "p2"]);
+// Beta then Delta — members are name-ordered within the group.
+eq("group members float to the top", ids(weightFirst).slice(0, 2), ["p2", "p4"]);
 eq("the whole catalog is still present (sort, not filter)", weightFirst.length, catalog.length);
 eq(
   "non-members keep a stable name order behind the group",
@@ -272,8 +273,8 @@ const grouped = orderCatalogByCategories(catalog, [
   { id: "healing", label: "Healing", kind: "group", enabled: true },
 ]);
 eq("products are blocked by category, in admin order", ids(grouped), [
-  "p4", // weight
-  "p2", // weight
+  "p2", // weight  (Beta)
+  "p4", // weight  (Delta) — name-ordered within the block
   "p1", // aging
   "p5", // healing
   "p3", // unassigned → last
