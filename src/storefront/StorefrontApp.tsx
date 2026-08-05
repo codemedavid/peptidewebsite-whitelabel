@@ -43,6 +43,7 @@ function PageSpinner() {
 // password-gated admin tree are code-split: they download on demand the first
 // time their hash route is hit, keeping the public first-load JS small.
 const TrackOrderPage = dynamic(() => import("./pages/TrackOrderPage").then((m) => m.TrackOrderPage), { ssr: false, loading: PageSpinner });
+const OrderConfirmedPage = dynamic(() => import("./pages/OrderConfirmedPage").then((m) => m.OrderConfirmedPage), { ssr: false, loading: PageSpinner });
 const FAQPage = dynamic(() => import("./pages/FAQPage").then((m) => m.FAQPage), { ssr: false, loading: PageSpinner });
 const COAPage = dynamic(() => import("./pages/COAPage").then((m) => m.COAPage), { ssr: false, loading: PageSpinner });
 const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => m.ProtocolsPage), { ssr: false, loading: PageSpinner });
@@ -56,7 +57,7 @@ const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) =>
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -245,6 +246,7 @@ function Shell() {
       <NoticeModal brand={brand} />
 
       {activePage === "track" && <TrackOrderPage brand={brand} onBack={goHome} />}
+      {activePage === "order-confirmed" && <OrderConfirmedPage brand={brand} onBack={goHome} />}
       {activePage === "faq" && <FAQPage brand={brand} onBack={goHome} />}
       {activePage === "coa" && <COAPage brand={brand} onBack={goHome} />}
       {activePage === "protocols" && <ProtocolsPage brand={brand} onBack={goHome} />}

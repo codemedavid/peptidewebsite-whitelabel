@@ -13,6 +13,12 @@
 // Pure (no DB, no React) so the page and the tests resolve identically —
 // npm run test:order-confirmation.
 
+/** Where the checkout leaves the pre-built chat message for the confirmation
+ *  page. sessionStorage, so it survives a reload of that page but never outlives
+ *  the tab. Lives here (not on the page) so the drawer can write it without
+ *  importing a page component. */
+export const CONFIRM_HANDOFF_KEY = "sf_confirm";
+
 /** The persisted order, narrowed to what the review screen reads. Structural, so
  *  the storefront `Order` type satisfies it without a cast. */
 export interface ConfirmationOrder {

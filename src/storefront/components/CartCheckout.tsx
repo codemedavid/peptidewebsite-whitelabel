@@ -18,6 +18,7 @@ import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
+import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import {
   activeChannels,
@@ -29,7 +30,6 @@ import {
   cartTotal,
   liveCartLines,
   channelPrefills,
-  channelUrl,
   CHANNEL_LABELS,
   EMPTY_CUSTOMER,
   isResellerQty,
@@ -40,7 +40,7 @@ import {
   type CheckoutCustomer,
 } from "../checkout";
 
-type Step = "cart" | "details" | "payment" | "sent";
+type Step = "cart" | "details" | "payment";
 
 const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; type?: string }[] = [
   { key: "name", label: "Full name", required: true },
@@ -56,11 +56,6 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
-  // After an email ("gmail") order is placed we land on the "sent" step, which
-  // shows an explicit "Email your order" button. The mailto: link must fire from
-  // that button's own tap — a fresh user gesture — because browsers block a mail
-  // handler invoked programmatically after the awaited order save.
-  const [handoff, setHandoff] = useState<{ url: string; message: string; orderNum: string } | null>(null);
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   const [touched, setTouched] = useState(false);
   // Courier + shipping location the customer picks at checkout. The customer
@@ -243,7 +238,6 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // reviews and pays against the current catalog, not the add-time snapshot.
       refreshProducts();
       setStep("cart");
-      setHandoff(null);
       setTouched(false);
       setCourierId("");
       setLocationId("");
@@ -499,14 +493,6 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       order.discount ?? null,
     );
 
-    // Copy the summary as a fallback (Telegram/Messenger can't prefill a DM;
-    // WhatsApp carries the text in the link). Best-effort and awaited so the
-    // write completes BEFORE we navigate the tab away — otherwise the unload
-    // would abort it.
-    const url = channelUrl(channel, message);
-    if (!channelPrefills(channel.type)) {
-      try { await navigator.clipboard?.writeText(message); } catch { /* clipboard denied — link still opens */ }
-    }
     clearCart();
     // Success: release the lock and retire this order's idempotency key so the
     // next checkout starts a fresh logical order.
@@ -514,31 +500,31 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     placingRef.current = false;
     setPlacing(false);
 
-    // Email handoff (mailto:) can't be auto-fired here — the user-gesture
-    // activation is spent by the time the awaited save returns, so browsers
-    // block the mail handler. Keep the drawer open on a "sent" step whose button
-    // fires the mailto from a fresh tap. The message is also stashed so that
-    // screen can offer a copy-to-clipboard fallback.
-    if (channel.type === "gmail") {
-      toast(`Order ${orderNum} placed — tap to email it`);
-      setHandoff({ url, message, orderNum });
-      setStep("sent");
-      return;
-    }
-
-    toast(
-      channelPrefills(channel.type)
-        ? `Order ${orderNum} placed — opening ${CHANNEL_LABELS[channel.type]}…`
-        : `Order ${orderNum} — copied, paste it in ${CHANNEL_LABELS[channel.type]}`,
-    );
+    toast(`Order ${orderNum} placed — review it before you send`);
     onClose();
 
-    // Top-level navigation to the chat channel. Unlike window.open() this is
-    // NEVER popup-blocked and works identically on desktop and mobile — the
-    // customer is handed straight to WhatsApp / Telegram / Messenger, and the
-    // browser Back button returns them to the store. This is the last thing we
-    // do so all the state above is committed first.
-    if (typeof window !== "undefined") window.location.href = url;
+    // The customer no longer goes straight to the chat app. They land on the
+    // Order Confirmed page, check the order over, and fire their chosen channel
+    // from there. The pre-built message rides along in sessionStorage so that
+    // page doesn't have to re-derive it from a cart we just cleared — and so it
+    // survives a reload of the confirmation screen.
+    //
+    // This also retires the gmail special case: mailto: was unfireable here
+    // because the user gesture is spent by the time the awaited save returns.
+    // On the confirmation page every channel is a fresh tap, so they all work
+    // the same way.
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem(
+          CONFIRM_HANDOFF_KEY,
+          JSON.stringify({ orderId: order.id, message }),
+        );
+      } catch {
+        // Storage full or blocked (private mode). The page still renders the
+        // order from myOrders; only the prefilled message is lost.
+      }
+      window.location.hash = "order-confirmed";
+    }
   }
 
   if (!open) return null;
@@ -563,15 +549,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         </header>
 
         <div className="sf-cart__body">
-          {step === "sent" ? (
-            <div className="sf-cart__sent">
-              <p className="sf-cart__sent-title">Order {handoff?.orderNum} placed 🎉</p>
-              <p className="sf-cart__sent-text">
-                Tap <strong>Email your order</strong> below to open your mail app with the
-                order details already filled in — just press send to confirm with us.
-              </p>
-            </div>
-          ) : lines.length === 0 ? (
+          {lines.length === 0 ? (
             <p className="sf-cart__empty">Your cart is empty.</p>
           ) : step === "cart" ? (
             <>
@@ -901,9 +879,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
           )}
         </div>
 
-        {(lines.length > 0 || step === "sent") && (
+        {lines.length > 0 && (
           <footer className="sf-cart__foot">
-            {step !== "sent" && (
             <div className="sf-cart__totals">
               {(adminFee || shippingFee > 0 || discountAmount > 0) && (
                 <>
@@ -954,39 +931,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </strong>
               </div>
             </div>
-            )}
 
-            {step === "sent" ? (
-              <>
-                <button
-                  className="btn btn-primary sf-cart__cta"
-                  onClick={() => {
-                    // Fired from this tap (a fresh user gesture) so the browser
-                    // doesn't block the mail handler.
-                    if (handoff && typeof window !== "undefined") window.location.href = handoff.url;
-                  }}
-                >
-                  Email your order
-                </button>
-                <button
-                  className="sf-cart__back"
-                  onClick={async () => {
-                    if (!handoff) return;
-                    try {
-                      await navigator.clipboard?.writeText(handoff.message);
-                      toast("Order details copied — paste them into an email");
-                    } catch {
-                      toast("Couldn't copy — please email us your order number");
-                    }
-                  }}
-                >
-                  Copy order details instead
-                </button>
-                <button className="sf-cart__back" onClick={onClose}>
-                  Done
-                </button>
-              </>
-            ) : step === "cart" ? (
+            {step === "cart" ? (
               <>
                 {violations.length > 0 && (
                   <div className="sf-cart__rules">

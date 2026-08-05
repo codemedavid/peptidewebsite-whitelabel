@@ -8893,3 +8893,157 @@
   .sf-root .adm-table__row,
   .sf-root .adm-alert { transition: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Order Confirmed — the review screen between placing an order and handing the
+   customer off to WhatsApp / Viber / Messenger. Deliberately calmer than the
+   catalog: the job here is legibility of a receipt, not merchandising. Every
+   colour comes from the tenant's theme tokens, so it inherits each store's look.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.sf-root .sf-confirm { max-width: 940px; margin-inline: auto; }
+
+.sf-root .sf-confirm__head { text-align: center; margin-bottom: 2rem; }
+
+/* The tick reads as "we have this" — the reassurance the old straight-to-chat
+   redirect never gave. */
+.sf-root .sf-confirm__check {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 0.75rem;
+  border-radius: 999px;
+  color: var(--brand-surface);
+  background: var(--brand-main);
+}
+
+.sf-root .sf-confirm__title { margin: 0 0 0.5rem; }
+
+.sf-root .sf-confirm__lede {
+  max-width: 52ch;
+  margin-inline: auto;
+  opacity: 0.78;
+  line-height: 1.6;
+}
+
+/* Reference — the one thing a customer is asked to keep, so it gets the most
+   contrast on the page. */
+.sf-root .sf-confirm__ref {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--brand-main) 5%, var(--brand-surface));
+}
+
+.sf-root .sf-confirm__ref-label {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.sf-root .sf-confirm__ref-value { font-size: clamp(1.35rem, 1rem + 1.6vw, 2rem); }
+
+.sf-root .sf-confirm__copy {
+  padding: 0.5rem 1rem;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+.sf-root .sf-confirm__copy:hover { background: color-mix(in oklab, var(--brand-main) 10%, transparent); }
+.sf-root .sf-confirm__copy:active { transform: translateY(1px); }
+
+.sf-root .sf-confirm__note { margin: 0.6rem 0 1.75rem; font-size: 0.9rem; opacity: 0.66; }
+
+.sf-root .sf-confirm__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.sf-root .sf-confirm__card {
+  padding: 1.25rem;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 14px;
+  margin-bottom: 1rem;
+}
+
+.sf-root .sf-confirm__card-title {
+  margin: 0 0 0.9rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.sf-root .sf-confirm__dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem 1rem;
+  margin: 0;
+}
+.sf-root .sf-confirm__dl dt { opacity: 0.6; }
+.sf-root .sf-confirm__dl dd { margin: 0; overflow-wrap: anywhere; }
+
+/* A wide receipt table must scroll inside itself — the page body never scrolls
+   sideways on a phone. */
+.sf-root .sf-confirm__table-wrap { overflow-x: auto; }
+
+.sf-root .sf-confirm__table { width: 100%; border-collapse: collapse; min-width: 560px; }
+.sf-root .sf-confirm__table th,
+.sf-root .sf-confirm__table td {
+  padding: 0.7rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--brand-border);
+}
+.sf-root .sf-confirm__table th {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.sf-root .sf-confirm__table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.sf-root .sf-confirm__totals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem 1rem;
+  margin: 1.1rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--brand-border);
+}
+.sf-root .sf-confirm__totals dt { opacity: 0.7; }
+.sf-root .sf-confirm__totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.sf-root .sf-confirm__totals .is-total { font-size: 1.15rem; font-weight: 700; opacity: 1; }
+
+.sf-root .sf-confirm__send {
+  padding: 1.5rem 1.25rem;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 14px;
+  text-align: center;
+  background: color-mix(in oklab, var(--brand-main) 4%, var(--brand-surface));
+}
+
+.sf-root .sf-confirm__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.sf-root .sf-confirm__channel { min-width: 160px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-confirm__copy { transition: none; }
+}
