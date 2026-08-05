@@ -65,13 +65,24 @@ export function stockCurrentlyDeducted(history: OrderStatusEvent[]): boolean {
   return deducted;
 }
 
-/** Which stock movement (if any) this status change triggers. */
+/**
+ * Which stock movement (if any) this status change triggers.
+ *
+ * `imported` freezes it. An order carried over from a store's PREVIOUS system
+ * (see lib/orders/legacy-import) describes stock that was consumed months ago
+ * somewhere else — the live catalog's counts already exclude it. Its lines are
+ * still linked to real products, deliberately, so demand reporting and Best
+ * Sellers can see that history; this flag is what stops that linkage from also
+ * letting a re-status invent or destroy live units.
+ */
 export function inventoryMove(
   currentStatus: string,
   history: OrderStatusEvent[],
   newStatus: OrderStatus | undefined,
+  imported = false,
 ): InventoryMove {
   if (!newStatus || newStatus === currentStatus) return null;
+  if (imported) return null;
   const deducted = stockCurrentlyDeducted(history);
   if (newStatus === "confirmed" && !deducted) return "deduct";
   if (newStatus === "cancelled" && deducted) return "restock";
@@ -97,13 +108,19 @@ export type StatusChangePlan = {
  * here) so the decision stays pure and deterministic under test.
  */
 export function planStatusChange(
-  current: Pick<Order, "status"> & { statusHistory?: OrderStatusEvent[] },
+  current: Pick<Order, "status"> & { statusHistory?: OrderStatusEvent[]; imported?: boolean },
   newStatus: OrderStatus,
   nowIso: string,
 ): StatusChangePlan {
   const history = current.statusHistory ?? [];
   const changed = newStatus !== current.status;
-  const move = inventoryMove(current.status, history, changed ? newStatus : undefined);
+  // An imported order's status and journey still move — only its stock is frozen.
+  const move = inventoryMove(
+    current.status,
+    history,
+    changed ? newStatus : undefined,
+    current.imported === true,
+  );
   return {
     changed,
     status: changed ? newStatus : current.status,

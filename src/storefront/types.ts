@@ -169,6 +169,11 @@ export type Order = {
   groupBuyId?: string | null;
   groupBuyName?: string | null;
   paymentProof: string | null;
+  /** Carried over from the store's previous system instead of placed through
+   *  this checkout (lib/orders/legacy-import). Counts as history and revenue
+   *  like any other order, but its stock moved on the old system — so a status
+   *  change never deducts or restocks it (see order-status/inventoryMove). */
+  imported?: boolean;
 };
 
 export type ShippingLocation = {

@@ -683,6 +683,7 @@ type DbOrderRow = {
   placedAt: Date;
   groupBuyId?: string | null;
   groupBuyName?: string | null;
+  imported?: boolean;
 };
 
 function dbOrderToStorefront(row: DbOrderRow): Order {
@@ -706,7 +707,10 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     groupBuyName: row.groupBuyName,
     paymentProof: row.paymentProofUrl,
   });
-  return base;
+  // Set from the ROW, never through normalizeOrderInput — that function also
+  // parses untrusted checkout payloads, and a buyer who could declare their own
+  // order "imported" would place orders that never deduct stock.
+  return row.imported ? { ...base, imported: true } : base;
 }
 
 /** Shape the normalized Order into the columns/JSON the DB row expects.
@@ -1228,7 +1232,11 @@ export async function updateStorefrontOrderAction(
     // journey event only on a real change, and learn the inventory move.
     const plan = newStatus
       ? planStatusChange(
-          { status: list[i].status, statusHistory: normalizeStatusHistory(list[i].statusHistory) },
+          {
+            status: list[i].status,
+            statusHistory: normalizeStatusHistory(list[i].statusHistory),
+            imported: list[i].imported,
+          },
           newStatus,
           new Date().toISOString(),
         )
@@ -1273,6 +1281,7 @@ export async function updateStorefrontOrderAction(
             {
               status: current.status as Order["status"],
               statusHistory: normalizeStatusHistory(current.statusHistory),
+              imported: current.imported,
             },
             newStatus,
             new Date().toISOString(),
@@ -1392,7 +1401,11 @@ export async function bulkUpdateStorefrontOrderStatusAction(
     const nextOrders = getDemoStoreOrders(slug).map((o) => {
       if (!target.has(o.id)) return o;
       const plan = planStatusChange(
-        { status: o.status, statusHistory: normalizeStatusHistory(o.statusHistory) },
+        {
+          status: o.status,
+          statusHistory: normalizeStatusHistory(o.statusHistory),
+          imported: o.imported,
+        },
         status,
         now,
       );
@@ -1422,6 +1435,7 @@ export async function bulkUpdateStorefrontOrderStatusAction(
           {
             status: current.status as Order["status"],
             statusHistory: normalizeStatusHistory(current.statusHistory),
+            imported: current.imported,
           },
           status,
           now,

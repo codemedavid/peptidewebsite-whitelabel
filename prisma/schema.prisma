@@ -424,6 +424,14 @@ model StorefrontOrder {
   groupBuyId   String?
   groupBuyName String?
 
+  // Carried over from the store's PREVIOUS system rather than placed through
+  // this checkout (see lib/orders/legacy-import). Such an order is real history
+  // and counts as revenue and demand like any other — but its stock was consumed
+  // months ago elsewhere, and the live catalog counts already exclude it. So
+  // inventoryMove() refuses to deduct or restock on ANY status change to it,
+  // which is what makes it safe to link its lines to real productIds.
+  imported Boolean @default(false)
+
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
