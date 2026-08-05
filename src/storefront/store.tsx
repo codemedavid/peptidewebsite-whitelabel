@@ -64,7 +64,11 @@ import {
 } from "@/lib/storefront/group-buy-rules";
 import { getStorefrontProductsAction } from "@/actions/products";
 import type { CardDesign, CardTemplate } from "./cardDesign";
-import { seedSortCategories, type SortCategory } from "@/lib/storefront/sort-categories";
+import {
+  normalizeSortCategories,
+  seedSortCategories,
+  type SortCategory,
+} from "@/lib/storefront/sort-categories";
 import type {
   Brand,
   Category,
@@ -237,7 +241,9 @@ export function StoreProvider({
   // legacy catalogSortStyle, so the dropdown they have today is the dropdown
   // they keep until they deliberately edit it.
   const [sortCategories, setSortCategoriesState] = useState<SortCategory[]>(
-    brandSeed.sortCategories ?? seedSortCategories(brandSeed.catalogSortStyle),
+    normalizeSortCategories(
+      brandSeed.sortCategories ?? seedSortCategories(brandSeed.catalogSortStyle),
+    ),
   );
   const [orders, setOrdersState] = useState<Order[]>(SEED_ORDERS);
   // Customer's own placed orders — NOT seeded (a visitor must only see orders

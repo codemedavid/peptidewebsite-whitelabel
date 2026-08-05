@@ -608,6 +608,9 @@ export type Brand = {
   catalogTitle: string;
   catalogShowSearch: boolean;
   catalogShowSort: boolean;
+  /** Wording for the sort dropdown's resting option — the owner's own catalog
+   *  arrangement, before any sort is picked. Absent → "Sort: Featured". */
+  catalogSortLabel?: string;
   catalogShowCount: boolean;
   /** Which sort dropdown the catalog renders — "classic" (default) is today's
    *  Name / Price low-high / Price high-low menu; "simple" is the 3-option

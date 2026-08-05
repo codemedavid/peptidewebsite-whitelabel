@@ -26,12 +26,19 @@ export type DbProductRow = {
   status: string; // active | draft | archived
   active: boolean;
   metadata: unknown; // Json — ProductMetadata
+  /** Row creation time, for the "New Arrivals" sort. A Date from Prisma, but an
+   *  ISO string once a cache layer has serialized the row. Optional so every
+   *  existing caller that builds a row by hand still type-checks. */
+  createdAt?: Date | string | null;
 };
 
 /** Storefront-only fields parked in `Product.metadata`. */
 export type ProductMetadata = {
   purity?: string;
   category?: string;
+  /** The admin-managed sort group this product belongs to (a `group` entry in
+   *  branding.config.sortCategories). Not the filter-chip `category`. */
+  sortCategory?: string;
   featured?: boolean;
   discountPrice?: number;
   discountEnabled?: boolean;
@@ -167,7 +174,19 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     currency: meta.currencySymbol || displaySymbol || row.currency,
     purity: meta.purity ?? "",
     category: meta.category ?? "",
+    // The admin-managed SORT group (distinct from `category`, the filter chip).
+    // Absent = unassigned, which is a normal state, not an error.
+    sortCategory: meta.sortCategory || undefined,
     featured: !!meta.featured,
+    // Surfaced as an ISO string so the "New Arrivals" sort has real data to rank
+    // by. Guarded because a cached row hands this back as a string already — see
+    // the unstable_cache Date→string trap that crashed getSubscriptionMeta.
+    createdAt:
+      row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : typeof row.createdAt === "string"
+          ? row.createdAt
+          : undefined,
     image: images[0] ?? null,
     stock: row.stock ?? 0,
     available: row.status !== "draft" && row.status !== "archived",
@@ -289,6 +308,7 @@ export function productToDbWrite(
     metadata: compactMetadata({
       purity: p.purity || undefined,
       category: p.category || undefined,
+      sortCategory: p.sortCategory || undefined,
       featured: !!p.featured,
       discountEnabled,
       discountPrice: discountEnabled ? Number(p.discountPrice) || 0 : undefined,

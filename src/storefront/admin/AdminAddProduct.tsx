@@ -13,6 +13,7 @@ import {
 } from "./variation-presets";
 import { unpricedVariationNames } from "@/lib/storefront/variations";
 import { resolveSelectableCategories } from "@/lib/storefront/categories";
+import { assignableSortCategories } from "@/lib/storefront/sort-categories";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -217,7 +218,7 @@ export function AdminAddProduct({
   onCancel: () => void;
   onSaved: (p: Product) => void;
 }) {
-  const { products, setProducts, categories, toast } = useStore();
+  const { products, setProducts, categories, sortCategories, toast } = useStore();
 
   const isEdit = !!initial?.id;
   const [name, setName]             = useState<string>(initial?.name || "");
@@ -225,6 +226,9 @@ export function AdminAddProduct({
   const [category, setCategory]     = useState<string>(
     initial?.category || resolveSelectableCategories(categories)[0].id,
   );
+  // Optional, unlike Category: a product with no sort group is a normal state
+  // (it lists after the grouped ones), so this never blocks Save.
+  const [sortCategory, setSortCategory] = useState<string>(initial?.sortCategory || "");
   const [price, setPrice]           = useState<number | string>(initial?.price ?? 0);
   const [purity, setPurity]         = useState<number | string>(
     initial?.purity?.replace("%", "") || "99",
@@ -283,6 +287,13 @@ export function AdminAddProduct({
   // the dropdown doesn't silently reassign the product to a different category.
   const categoryOrphaned = !!category && !selectableCats.some((c) => c.id === category);
 
+  // Sort groups the owner defined (built-ins are behaviors, not buckets). Same
+  // orphan rule as above: a group deleted after this product was filed stays
+  // selectable so opening the form can't silently refile it.
+  const assignableSortCats = assignableSortCategories(sortCategories);
+  const sortCategoryOrphaned =
+    !!sortCategory && !assignableSortCats.some((c) => c.id === sortCategory);
+
   // Upload the chosen file to the tenant's ImageKit folder (server action) and
   // store the returned hosted URL. No more base64 in the DB — and if ImageKit
   // isn't configured the action returns a clear message we surface inline.
@@ -317,6 +328,7 @@ export function AdminAddProduct({
       name: name.trim(),
       description: description.trim(),
       category,
+      ...(sortCategory ? { sortCategory } : {}),
       price: Number(price) || 0,
       currency,
       purity: purity ? `${purity}%` : "",
@@ -459,6 +471,26 @@ export function AdminAddProduct({
               </select>
             </div>
             <div className="admin-field">
+              <label className="admin-field__label">Sort Category</label>
+              <select className="admin-select" value={sortCategory}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortCategory(e.target.value)}>
+                <option value="">— None —</option>
+                {/* A product whose sort group was deleted keeps pointing at it
+                    until the owner chooses again, so the dropdown never silently
+                    reassigns it (same rule as Category above). */}
+                {sortCategoryOrphaned && (
+                  <option value={sortCategory}>(removed) {sortCategory}</option>
+                )}
+                {assignableSortCats.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+              <p className="admin-field__hint">
+                Groups this product in your shop&rsquo;s Sort menu. Optional — unassigned
+                products still show, just after the grouped ones.
+              </p>
+            </div>
+            <div className="admin-field">
               <label className="admin-field__label">Order ratio class</label>
               <select className="admin-select" value={productClass}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
@@ -579,7 +611,9 @@ export function AdminAddProduct({
               <label className="admin-check">
                 <input type="checkbox" checked={featured}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFeatured(e.target.checked)} />
-                <span>⭐ Featured</span>
+                <span title="Pins this product to the very top of your catalog">
+                  ⭐ Featured — pin to top
+                </span>
               </label>
               <label className="admin-check">
                 <input type="checkbox" checked={available}

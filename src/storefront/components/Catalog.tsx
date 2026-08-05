@@ -14,10 +14,13 @@ import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventor
 import { buildProductCta } from "@/lib/storefront/product-cta";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
 import {
-  catalogSortOptions,
-  normalizeCatalogSortStyle,
-  sortCatalogProducts,
-} from "@/lib/storefront/catalog-sort";
+  normalizeSortCategories,
+  orderCatalogByCategories,
+  pinFeatured,
+  seedSortCategories,
+  sortByCategory,
+  sortCategoryOptions,
+} from "@/lib/storefront/sort-categories";
 import { normalizeOnHandOrder, orderOnHandProducts } from "@/lib/storefront/on-hand-order";
 
 /**
@@ -513,16 +516,22 @@ export function Catalog({
   brand: Brand;
 }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("name");
+  // "" = no explicit pick yet → the catalog shows the owner's configured order
+  // (products blocked by sort category, featured pinned above everything).
+  const [sort, setSort] = useState("");
   // The product whose full-detail quick-view modal is open (null = closed).
   const [selected, setSelected] = useState<Product | null>(null);
 
-  // Per-tenant sort menu: "classic" (default) or the "simple" 3-option menu
-  // (Sort by Name / Price / Best Sellers). Best sellers rank by the server-
-  // computed units-sold map — the sorter itself stays pure and covered by
-  // npm run test:catalog-sort.
-  const sortStyle = normalizeCatalogSortStyle(brand.catalogSortStyle);
-  const sortOptions = catalogSortOptions(sortStyle);
+  // The sort menu is the owner's own list now (Admin → Product Sort Categories),
+  // not a hardcoded three. A tenant who has never opened that screen is seeded
+  // from their legacy catalogSortStyle, so their dropdown is unchanged. Best
+  // sellers still rank by the server-computed units-sold map; the sorters stay
+  // pure and are covered by npm run test:sort-categories.
+  const sortCategories = useMemo(
+    () => normalizeSortCategories(brand.sortCategories ?? seedSortCategories(brand.catalogSortStyle)),
+    [brand.sortCategories, brand.catalogSortStyle],
+  );
+  const sortOptions = sortCategoryOptions(sortCategories);
 
   const filtered = useMemo(() => {
     let list = products;
@@ -537,13 +546,26 @@ export function Catalog({
           (p.description || "").toLowerCase().includes(q),
       );
     }
-    // On a "per-vial-first" store the packaging tier outranks the chosen sort:
+    // No explicit pick → the owner's configured order: one block per sort
+    // category, in admin order, unassigned products last. An explicit pick runs
+    // that entry (a group floats its members; a built-in sorts everything).
+    const sorted = sort
+      ? sortByCategory(list, sort, sortCategories, { bestSellerCounts: brand.bestSellerCounts })
+      : orderCatalogByCategories(list, sortCategories);
+
+    // Featured products pin to the very top — but only on the default view and
+    // on group picks. Pinning under an explicit "Price: Low to High" would put a
+    // pricier featured item above a cheaper one and just read as a broken sort.
+    const picked = sortCategories.find((c) => c.id === sort);
+    const pinnable = !sort || picked?.kind === "group";
+    const ranked = pinnable ? pinFeatured(sorted) : sorted;
+
+    // On a "per-vial-first" store the packaging tier outranks everything above:
     // single per-vial listings lead, multi-vial kits sit underneath, and the
-    // shopper's Name / Price / Best-Sellers choice orders within each tier
-    // (orderOnHandProducts is stable). Every other store is a pass-through.
-    const sorted = sortCatalogProducts(list, sort, brand.bestSellerCounts);
-    return orderOnHandProducts(sorted, normalizeOnHandOrder(brand.onHandOrder));
-  }, [products, category, query, sort, brand.bestSellerCounts, brand.onHandOrder]);
+    // order computed above holds within each tier (orderOnHandProducts is
+    // stable). Every other store is a pass-through.
+    return orderOnHandProducts(ranked, normalizeOnHandOrder(brand.onHandOrder));
+  }, [products, category, query, sort, sortCategories, brand.bestSellerCounts, brand.onHandOrder]);
 
   return (
     <section className="catalog section" id="catalog">
@@ -580,6 +602,10 @@ export function Catalog({
                   <line x1="10" y1="18" x2="20" y2="18" />
                 </svg>
                 <select value={sort} onChange={(e) => setSort(e.target.value)}>
+                  {/* The resting state: the owner's own arrangement. Named
+                      explicitly so the control never renders blank and the
+                      shopper has a way back after picking a sort. */}
+                  <option value="">{brand.catalogSortLabel || "Sort: Featured"}</option>
                   {sortOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
