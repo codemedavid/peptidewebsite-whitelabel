@@ -35,6 +35,7 @@ import {
   saveCardDesignAction,
   saveCardTemplatesAction,
   saveCategoriesAction,
+  saveSortCategoriesAction,
   saveCoaReportsAction,
   saveCouriersAction,
   saveFaqAction,
@@ -63,6 +64,7 @@ import {
 } from "@/lib/storefront/group-buy-rules";
 import { getStorefrontProductsAction } from "@/actions/products";
 import type { CardDesign, CardTemplate } from "./cardDesign";
+import { seedSortCategories, type SortCategory } from "@/lib/storefront/sort-categories";
 import type {
   Brand,
   Category,
@@ -101,6 +103,9 @@ export type Store = {
   refreshProducts: () => void;
   categories: Category[];
   setCategories: (next: Updater<Category[]>) => void;
+  /** The catalog's owner-editable sort menu (branding.config.sortCategories). */
+  sortCategories: SortCategory[];
+  setSortCategories: (next: Updater<SortCategory[]>) => void;
   orders: Order[];
   setOrders: (next: Updater<Order[]>) => void;
   /** Orders the CUSTOMER placed in THIS browser — drives the public Track page's
@@ -227,6 +232,12 @@ export function StoreProvider({
   // on every device/customer. Seed defaults apply only until the owner saves once.
   const [categories, setCategoriesState] = useState<Category[]>(
     brandSeed.categories ?? SEED_CATEGORIES,
+  );
+  // The sort menu, same DB-backed path. Never saved → seeded from the tenant's
+  // legacy catalogSortStyle, so the dropdown they have today is the dropdown
+  // they keep until they deliberately edit it.
+  const [sortCategories, setSortCategoriesState] = useState<SortCategory[]>(
+    brandSeed.sortCategories ?? seedSortCategories(brandSeed.catalogSortStyle),
   );
   const [orders, setOrdersState] = useState<Order[]>(SEED_ORDERS);
   // Customer's own placed orders — NOT seeded (a visitor must only see orders
@@ -857,11 +868,35 @@ export function StoreProvider({
     [toast, categories],
   );
 
+  // The catalog's sort menu, same persistence contract as categories above. Read
+  // through seedSortCategories so a tenant who has never opened the new screen
+  // still gets exactly the menu their legacy catalogSortStyle produced.
+  const setSortCategories = useCallback(
+    (next: Updater<SortCategory[]>) => {
+      const value =
+        typeof next === "function"
+          ? (next as (p: SortCategory[]) => SortCategory[])(sortCategories)
+          : next;
+      setSortCategoriesState(value);
+      saveSortCategoriesAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save sort categories: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save sort categories — please sign in again and retry.");
+        });
+    },
+    [toast, sortCategories],
+  );
+
   const value: Store = {
     brand, setTweak,
     setCardDesign, setCardTemplates,
     products, setProducts, refreshProducts,
     categories, setCategories,
+    sortCategories, setSortCategories,
     orders, setOrders,
     myOrders, setMyOrders,
     shippingLocations, setShippingLocations,

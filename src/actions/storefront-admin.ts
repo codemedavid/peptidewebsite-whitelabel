@@ -23,6 +23,7 @@ import { normalizeFaqGroups } from "@/lib/storefront/faq";
 import { normalizeCoaReports } from "@/lib/storefront/coa";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -241,6 +242,42 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
   const normalized = normalizeCategories(categories);
   const current = await readConfig(tenantId);
   const config = { ...current, categories: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the owner's catalog sort menu into `branding.config.sortCategories`
+ * (read-modify-write, same shape as saveCategoriesAction so it never clobbers
+ * the rest of the Brand config).
+ *
+ * The client list is re-normalized HERE, not trusted: normalizeSortCategories is
+ * the same pure function the storefront reads through, so a tampered or stale
+ * editor cannot store an unknown `kind`, a duplicate id, or an empty menu that
+ * would leave the public catalog with a broken sort dropdown.
+ */
+export async function saveSortCategoriesAction(categories: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("sort-categories");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeSortCategories(
+    Array.isArray(categories) ? categories.slice(0, 200) : categories,
+  );
+  const current = await readConfig(tenantId);
+  const config = { ...current, sortCategories: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

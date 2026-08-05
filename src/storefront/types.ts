@@ -8,6 +8,7 @@ import type { HeroMedia } from "@/lib/storefront/hero-media";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import type { ProductClass } from "@/lib/storefront/product-class";
+import type { SortCategory } from "@/lib/storefront/sort-categories";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { BrandTrial } from "@/lib/trial/trial-state";
@@ -30,7 +31,16 @@ export type Product = {
   currency: string;
   purity?: string;
   category: string;
+  /** The admin-managed SORT category this product belongs to (a `group` entry in
+   *  branding.config.sortCategories). Distinct from `category`, which is the
+   *  storefront's filter chip. Absent = unassigned: the product still shows,
+   *  just after every assigned block. Stored in `metadata.sortCategory`. */
+  sortCategory?: string;
+  /** Pins the product to the very top of the catalog (and badges it). */
   featured: boolean;
+  /** ISO timestamp of the catalog row, so the "New Arrivals" sort has real data
+   *  to rank by. Absent on demo/seed products → those sort last. */
+  createdAt?: string;
   image: string | null;
   stock?: number;
   available?: boolean;
@@ -790,6 +800,14 @@ export type Brand = {
   // editing browser. Absent until the owner saves once → storefront falls back
   // to the seed categories.
   categories?: Category[];
+
+  // The owner-editable sort menu behind the catalog's "Sort: …" dropdown, in
+  // dropdown order. Each entry is a built-in behavior (name / price / best
+  // sellers / newest) or a group the owner named and assigns products to. Absent
+  // until the owner saves once → seeded from the legacy catalogSortStyle, so a
+  // live store's menu is unchanged on deploy day. See lib/storefront/
+  // sort-categories.ts.
+  sortCategories?: SortCategory[];
 
   // Product card design chosen in the store admin's Card Studio. Persisted in
   // branding.config (same mechanism as paymentMethods). Absent → the catalog

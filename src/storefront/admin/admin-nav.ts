@@ -71,6 +71,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
 
   // ── Weekly ───────────────────────────────────────────────────────────────
   { view: "categories", label: "Categories", hint: "Organize items", icon: "folder", tint: "orange", group: "weekly" },
+  { view: "sort-categories", label: "Product Sort Categories", hint: "Edit the catalog's sort menu", icon: "trend", tint: "purple", group: "weekly" },
   { view: "promo", label: "Promo Codes", hint: "Manage discounts", icon: "tag", tint: "red", group: "weekly" },
   { view: "lab", label: "Lab Results", hint: "Manage COAs", icon: "shield", tint: "pink", group: "weekly" },
   { view: "couriers", label: "Couriers", hint: "Manage couriers", icon: "truck", tint: "mint", group: "weekly" },

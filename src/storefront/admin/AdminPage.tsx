@@ -10,6 +10,7 @@ import { dashboardCapabilities } from "@/lib/storefront/admin-dashboard";
 import { AdminAddProduct } from "./AdminAddProduct";
 import { AdminProductsList } from "./AdminProductsList";
 import { AdminCategoriesManager } from "./AdminCategoriesManager";
+import { AdminSortCategories } from "./AdminSortCategories";
 import { AdminOrders } from "./AdminOrders";
 import { AdminOrderDetail } from "./AdminOrderDetail";
 import { AdminShippingLocations } from "./AdminShippingLocations";
@@ -52,6 +53,7 @@ type View =
   | "add-product"
   | "products"
   | "categories"
+  | "sort-categories"
   | "orders"
   | "order-detail"
   | "shipping"
@@ -231,6 +233,9 @@ export function AdminPage({
   }
   if (activeView === "categories") {
     return <AdminCategoriesManager brand={brand} onBack={() => setView("dashboard")} />;
+  }
+  if (activeView === "sort-categories") {
+    return <AdminSortCategories brand={brand} onBack={() => setView("dashboard")} />;
   }
   if (activeView === "orders") {
     return (
