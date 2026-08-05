@@ -77,6 +77,7 @@
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
     "test:catalog-sort": "tsx scripts/test-catalog-sort.ts",
     "test:sort-categories": "tsx scripts/test-sort-categories.ts",
+    "test:order-confirmation": "tsx scripts/test-order-confirmation.ts",
     "test:kglow-pricelist": "tsx scripts/test-kglow-pricelist.ts",
     "test:kglow-onhand": "tsx scripts/test-kglow-onhand.ts",
     "test:admin-order-alert": "tsx scripts/test-admin-order-alert.ts",
