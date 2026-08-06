@@ -17,6 +17,7 @@
 
 import {
   buildOrderConfirmation,
+  formatOrderMessage,
   type ConfirmationOrder,
 } from "../src/lib/storefront/order-confirmation";
 
@@ -207,6 +208,147 @@ console.log("immutability");
 const itemsBefore = JSON.stringify(order.items);
 buildOrderConfirmation(order, catalog, { currency: "₱" });
 eq("building the view does not mutate the stored order", JSON.stringify(order.items), itemsBefore);
+
+// ── The copyable order message ───────────────────────────────────────────────
+// The confirmation page hands the customer off to a chat app, but only WhatsApp
+// and Gmail can carry a prefilled body. On Telegram / Messenger / Instagram —
+// and on any device where the deep link opens the app with an empty compose box
+// — the customer needs to paste the order in themselves. formatOrderMessage
+// rebuilds that text from the REVIEWED VIEW, so the pasted message and the
+// screen above it can never disagree.
+console.log("copyable order message");
+
+const msg = formatOrderMessage(view, { brandName: "Peptide Lab" });
+const msgLines = msg.split("\n");
+
+eq(
+  "the message names the order and the store",
+  msgLines[0],
+  "Order #1042 — Peptide Lab",
+);
+eq(
+  "no store name → the order still names itself",
+  formatOrderMessage(view).split("\n")[0],
+  "Order #1042",
+);
+
+ok(
+  "every item lists quantity and line total",
+  msg.includes("• Semaglutide — 5mg ×2 — ₱6,000") &&
+    msg.includes("• Bacteriostatic Water ×1 — ₱250"),
+  JSON.stringify(msg),
+);
+
+// The stored line name usually already carries the chosen option (the cart
+// stamps a display name at placement). Appending the variation blindly would
+// print "Semaglutide — 5mg (5mg)".
+ok(
+  "a variation the stored name already carries is not repeated",
+  !msg.includes("(5mg)"),
+  JSON.stringify(msg),
+);
+
+const withOption = buildOrderConfirmation(
+  {
+    ...order,
+    items: [{ productId: "p1", name: "Retatrutide", qty: 1, price: 4000, variation: "10mg" }],
+  },
+  catalog,
+  { currency: "₱" },
+);
+ok(
+  "a variation the stored name lacks is appended so the store knows the size",
+  formatOrderMessage(withOption).includes("• Retatrutide (10mg) ×1 — ₱4,000"),
+  JSON.stringify(formatOrderMessage(withOption)),
+);
+
+// Money breakdown: same rule as the chat message built at checkout — show the
+// arithmetic only when something moved the total off the subtotal.
+ok(
+  "the breakdown appears when there is a discount, shipping or a fee",
+  msg.includes("Subtotal: ₱6,250") &&
+    msg.includes("Discount (WELCOME10): -₱500") &&
+    msg.includes("Shipping (Lalamove): ₱150") &&
+    msg.includes("Service fee: ₱100") &&
+    msg.includes("Total: ₱6,000"),
+  JSON.stringify(msg),
+);
+eq(
+  "the message's total is the number the screen shows",
+  msg.includes(`Total: ₱${view.totals.total.toLocaleString()}`),
+  true,
+);
+
+const bareMsg = formatOrderMessage(bare, { brandName: "Peptide Lab" });
+ok(
+  "a plain order gets one Total line, no breakdown",
+  bareMsg.includes("Total: ₱6,250") &&
+    !bareMsg.includes("Subtotal:") &&
+    !bareMsg.includes("Shipping") &&
+    !bareMsg.includes("Discount"),
+  JSON.stringify(bareMsg),
+);
+
+const noCode = buildOrderConfirmation(
+  { ...order, discount: { label: "Manual discount", amount: 500 } },
+  catalog,
+  { currency: "₱" },
+);
+ok(
+  "a discount with no code leaves no empty parentheses",
+  formatOrderMessage(noCode).includes("Discount: -₱500"),
+  JSON.stringify(formatOrderMessage(noCode)),
+);
+
+const noCourier = buildOrderConfirmation({ ...order, courier: "" }, catalog, { currency: "₱" });
+ok(
+  "shipping with no courier leaves no empty parentheses",
+  formatOrderMessage(noCourier).includes("Shipping: ₱150"),
+  JSON.stringify(formatOrderMessage(noCourier)),
+);
+
+ok(
+  "the customer block carries name, email and phone",
+  msg.includes("Name: Ada Reyes") &&
+    msg.includes("Email: ada@example.com") &&
+    msg.includes("Phone: 09171234567"),
+  JSON.stringify(msg),
+);
+ok(
+  "the ship-to line is the same one-line address the screen shows",
+  msg.includes(`Ship to: ${view.shipping.address}`),
+  JSON.stringify(msg),
+);
+ok("the payment method is carried", msg.includes("Payment: GCash"), JSON.stringify(msg));
+
+// The whole point of this button is that it works when the automatic prefill
+// didn't. A message with "undefined" in it is worse than no message.
+ok(
+  "the message never prints undefined, null or NaN",
+  !/undefined|null|NaN/.test(msg),
+  JSON.stringify(msg),
+);
+const sparseMsg = formatOrderMessage(
+  buildOrderConfirmation(
+    {
+      id: "ord_2",
+      customer: { name: "", email: "", phone: "" },
+      shipping: { address: "" },
+      items: [{ name: "Mystery vial", qty: 1, price: 100 }],
+    },
+    [],
+    {},
+  ),
+);
+ok(
+  "an order missing every optional field still formats cleanly",
+  !/undefined|null|NaN/.test(sparseMsg) && sparseMsg.includes("• Mystery vial ×1 — 100"),
+  JSON.stringify(sparseMsg),
+);
+
+const viewBefore = JSON.stringify(view);
+formatOrderMessage(view, { brandName: "Peptide Lab" });
+eq("formatting the message does not mutate the view", JSON.stringify(view), viewBefore);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\n${checks} checks, ${failures} failure(s)`);
