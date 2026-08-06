@@ -9044,6 +9044,64 @@
 
 .sf-root .sf-confirm__channel { min-width: 160px; }
 
+/* The paste-it-yourself escape hatch, sitting under the channel buttons: quieter
+   than them (this is the second choice, not a rival call to action) but always
+   present, because nothing on the page can detect a chat app that opened with an
+   empty compose box. */
+.sf-root .sf-confirm__fallback {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--brand-border);
+}
+
+.sf-root .sf-confirm__fallback-note {
+  margin: 0 0 0.9rem;
+  font-size: 0.86rem;
+  opacity: 0.66;
+}
+
+.sf-root .sf-confirm__fallback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.sf-root .sf-confirm__reveal {
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.86rem;
+  opacity: 0.66;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+.sf-root .sf-confirm__reveal:hover { opacity: 1; }
+
+.sf-root .sf-confirm__message {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-surface);
+  color: inherit;
+  /* Monospace and pre-wrap so the block on screen looks exactly like what lands
+     in the chat — line breaks and all. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  resize: vertical;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .sf-root .sf-confirm__copy { transition: none; }
+  .sf-root .sf-confirm__copy,
+  .sf-root .sf-confirm__reveal { transition: none; }
 }

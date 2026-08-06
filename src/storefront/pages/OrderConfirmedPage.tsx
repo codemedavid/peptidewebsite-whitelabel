@@ -21,6 +21,7 @@ import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import {
   buildOrderConfirmation,
+  formatOrderMessage,
   CONFIRM_HANDOFF_KEY,
 } from "@/lib/storefront/order-confirmation";
 import { activeChannels, channelUrl, channelPrefills, CHANNEL_LABELS } from "../checkout";
@@ -37,6 +38,46 @@ function readHandoff(): Handoff | null {
     return { orderId: parsed.orderId, message: parsed.message };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Copy with a fallback, because the customers who most need this button are on
+ * the browsers that break it. `navigator.clipboard` is undefined outside a
+ * secure context and is denied outright by several in-app browsers (the
+ * Facebook and Instagram webviews among them) — exactly where the chat hand-off
+ * is least reliable too. The legacy execCommand path still works there.
+ *
+ * Returns false when both paths fail, so the caller can fall back to putting the
+ * text on screen for the customer to select by hand.
+ */
+async function copyText(text: string): Promise<boolean> {
+  if (typeof document === "undefined" || !text) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* denied or unavailable — try the legacy path before giving up */
+  }
+  try {
+    const scratch = document.createElement("textarea");
+    scratch.value = text;
+    scratch.setAttribute("readonly", "");
+    // Off-screen but still selectable: display:none or visibility:hidden would
+    // make the selection — and so the copy — a no-op.
+    scratch.style.position = "fixed";
+    scratch.style.top = "-9999px";
+    scratch.style.opacity = "0";
+    document.body.appendChild(scratch);
+    scratch.select();
+    scratch.setSelectionRange(0, text.length);
+    const copied = document.execCommand("copy");
+    document.body.removeChild(scratch);
+    return copied;
+  } catch {
+    return false;
   }
 }
 
@@ -69,32 +110,53 @@ export function OrderConfirmedPage({
   const channels = activeChannels(brand);
   const money = (n: number) => `${view?.currency ?? ""}${n.toLocaleString()}`;
 
+  // The message the customer sends. Normally it is the one the checkout already
+  // wrote; when sessionStorage was unavailable (private tab, storage full, a
+  // session restored into a new tab) we rebuild it from the same view the
+  // customer is looking at. Before, a missing hand-off left every channel button
+  // inert — the one case where the customer most needed a way out.
+  const messageText = useMemo(() => {
+    if (handoff?.message) return handoff.message;
+    return view ? formatOrderMessage(view, { brandName: brand.name }) : "";
+  }, [handoff, view, brand.name]);
+
+  // Shown only when copying fails outright, so the customer can still select the
+  // text by hand — plus a manual toggle, since some people just want to see it.
+  const [showMessage, setShowMessage] = useState(false);
+
   const send = async (type: string) => {
     const channel = channels.find((c) => c.type === type);
-    if (!channel || !handoff) return;
-    const url = channelUrl(channel, handoff.message);
+    if (!channel) return;
+    const url = channelUrl(channel, messageText);
     // Telegram / Messenger / Instagram cannot carry a prefilled DM, so the
     // summary goes to the clipboard as a paste-in fallback. Awaited so the write
     // completes before we navigate the tab away.
     if (!channelPrefills(channel.type)) {
-      try {
-        await navigator.clipboard?.writeText(handoff.message);
-        toast(`Order copied — paste it in ${CHANNEL_LABELS[channel.type]}`);
-      } catch {
-        /* clipboard denied — the link still opens */
-      }
+      const copied = await copyText(messageText);
+      toast(
+        copied
+          ? `Order copied — paste it in ${CHANNEL_LABELS[channel.type]}`
+          : `Opening ${CHANNEL_LABELS[channel.type]} — use "Copy order details" if it opens blank`,
+      );
     }
     if (typeof window !== "undefined") window.location.href = url;
   };
 
   const copyReference = async () => {
     if (!view) return;
-    try {
-      await navigator.clipboard?.writeText(view.reference);
-      toast("Order reference copied");
-    } catch {
-      /* clipboard denied — the reference is on screen to read */
+    if (await copyText(view.reference)) toast("Order reference copied");
+    // Otherwise: it's printed right there on screen to read off.
+  };
+
+  const copyOrder = async () => {
+    if (await copyText(messageText)) {
+      toast("Order details copied — paste them into your message");
+      return;
     }
+    // Both clipboard paths refused. Put the text on screen so the customer is
+    // never stuck retyping their own order.
+    setShowMessage(true);
+    toast("Copy blocked by your browser — select the text below instead");
   };
 
   if (!order || !view) {
@@ -253,6 +315,48 @@ export function OrderConfirmedPage({
               </div>
             </>
           )}
+
+          {/* ── Manual fallback ─────────────────────────────────────────
+              Deliberately always visible, not revealed after a failure: the
+              page cannot detect that a chat app opened with an empty compose
+              box, so the customer has to be able to reach for this themselves. */}
+          <div className="sf-confirm__fallback">
+            <p className="sf-confirm__fallback-note">
+              Opened blank, or the details didn&rsquo;t come through? Copy your order and
+              paste it into the chat.
+            </p>
+            <div className="sf-confirm__fallback-actions">
+              <button
+                type="button"
+                className="sf-confirm__copy"
+                onClick={() => void copyOrder()}
+              >
+                Copy order details
+              </button>
+              <button
+                type="button"
+                className="sf-confirm__reveal"
+                onClick={() => setShowMessage((shown) => !shown)}
+                aria-expanded={showMessage}
+                aria-controls="confirm-message"
+              >
+                {showMessage ? "Hide order text" : "Show order text"}
+              </button>
+            </div>
+            {showMessage && (
+              <textarea
+                id="confirm-message"
+                className="sf-confirm__message"
+                readOnly
+                rows={14}
+                value={messageText}
+                aria-label="Your order details, ready to copy"
+                // Tapping it selects the lot, so a customer whose browser blocks
+                // the clipboard entirely still only needs one gesture.
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            )}
+          </div>
         </section>
       </div>
     </section>
