@@ -172,3 +172,75 @@ export function buildOrderConfirmation(
     },
   };
 }
+
+/**
+ * The reviewed order as one pasteable block of text.
+ *
+ * Only WhatsApp and Gmail carry a prefilled body; Telegram, Messenger and
+ * Instagram open an empty compose box, and even a prefilling channel can land
+ * empty (an in-app browser that drops the query string, a link opened in the
+ * wrong app). When that happens the customer's only recourse used to be
+ * retyping the order — so the confirmation screen offers this text on a button.
+ *
+ * Built from the already-built VIEW, not from the order, so the pasted message
+ * and the table the customer just read are the same numbers by construction.
+ * The layout deliberately mirrors `buildOrderMessage` in storefront/checkout.ts
+ * — the seller should not be able to tell whether a message was prefilled or
+ * pasted.
+ */
+export function formatOrderMessage(
+  view: OrderConfirmation,
+  opts: { brandName?: string } = {},
+): string {
+  const amount = (n: number) => `${view.currency}${n.toLocaleString()}`;
+  // The view renders missing values as a dash, which is right for a table. In a
+  // chat message "Shipping (—)" reads as a glitch, so absent means absent here.
+  const present = (v: string) => (v && v !== DASH ? v : "");
+
+  const brandName = opts.brandName?.trim();
+  const header = `Order #${view.reference}${brandName ? ` — ${brandName}` : ""}`;
+
+  const items = view.items.map((item) => {
+    const option = item.variation.trim();
+    // The cart stamps the chosen option into the stored line name at placement
+    // ("Semaglutide — 5mg"), so appending it again would print the size twice.
+    // Only spell it out when the name doesn't already carry it.
+    const label = option && !item.name.includes(option) ? `${item.name} (${option})` : item.name;
+    return `• ${label} ×${item.qty} — ${amount(item.lineTotal)}`;
+  });
+
+  const { subtotal, discount, discountCode, shipping, fee, feeLabel, total } = view.totals;
+  const courier = present(view.shipping.courier);
+  // Show the arithmetic only when something moved the total off the subtotal —
+  // otherwise a simple order reads as a wall of identical figures.
+  const totals =
+    discount > 0 || shipping > 0 || fee > 0
+      ? [
+          `Subtotal: ${amount(subtotal)}`,
+          ...(discount > 0
+            ? [`Discount${discountCode ? ` (${discountCode})` : ""}: -${amount(discount)}`]
+            : []),
+          ...(shipping > 0
+            ? [`Shipping${courier ? ` (${courier})` : ""}: ${amount(shipping)}`]
+            : []),
+          ...(fee > 0 ? [`${feeLabel || "Fee"}: ${amount(fee)}`] : []),
+          `Total: ${amount(total)}`,
+        ]
+      : [`Total: ${amount(total)}`];
+
+  return [
+    header,
+    "",
+    "Items:",
+    ...items,
+    "",
+    ...totals,
+    "",
+    "Customer:",
+    `Name: ${view.customer.name}`,
+    `Email: ${view.customer.email}`,
+    `Phone: ${view.customer.phone}`,
+    `Ship to: ${view.shipping.address}`,
+    `Payment: ${view.paymentMethod}`,
+  ].join("\n");
+}
