@@ -40,6 +40,7 @@
     "test:two-ways-home": "tsx scripts/test-two-ways-home.ts",
     "test:two-ways-cart": "tsx scripts/test-two-ways-cart.ts",
     "test:two-ways-mode": "tsx scripts/test-two-ways-mode.ts",
+    "test:store-status": "tsx scripts/test-store-status.ts",
     "test:gb-content": "tsx scripts/test-gb-content.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
     "test:gb-cart-doses": "tsx scripts/test-gb-cart-doses.ts",
