@@ -7,6 +7,7 @@ import type { StorefrontBanner } from "@/lib/storefront/banner";
 import type { HeroMedia } from "@/lib/storefront/hero-media";
 import type { GroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
+import type { StoreStatus } from "@/lib/storefront/store-status";
 import type { ProductClass } from "@/lib/storefront/product-class";
 import type { SortCategory } from "@/lib/storefront/sort-categories";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
@@ -519,6 +520,12 @@ export type Brand = {
   // lib/storefront/two-ways-mode.resolveWays). A store that sells only one way
   // (group-buy-only) hides the other here. Absent = both open.
   twoWaysMode?: TwoWaysMode;
+  // The owner's shop switch (store admin → Store Status). Closed keeps the whole
+  // catalog browsable — prices and all — but every buy control reads "Closed"
+  // and nothing reaches the cart. Sits ABOVE twoWaysMode: that closes one order
+  // path, this closes the shop. Normalized server-side via normalizeStoreStatus;
+  // absent = open, so no existing tenant moves.
+  storeStatus?: StoreStatus;
   // The resolved storefront gate for the live run(s): which products are covered
   // and whether on-hand products are blocked. Computed server-side in page.tsx
   // so a stale client can't bypass it; absent = no live run / module off.
@@ -608,9 +615,6 @@ export type Brand = {
   catalogTitle: string;
   catalogShowSearch: boolean;
   catalogShowSort: boolean;
-  /** Wording for the sort dropdown's resting option — the owner's own catalog
-   *  arrangement, before any sort is picked. Absent → "Sort: Featured". */
-  catalogSortLabel?: string;
   catalogShowCount: boolean;
   /** Which sort dropdown the catalog renders — "classic" (default) is today's
    *  Name / Price low-high / Price high-low menu; "simple" is the 3-option

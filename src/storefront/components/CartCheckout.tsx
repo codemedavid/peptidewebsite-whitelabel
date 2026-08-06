@@ -39,6 +39,7 @@ import {
   unitPrice,
   type CheckoutCustomer,
 } from "../checkout";
+import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 
 type Step = "cart" | "details" | "payment";
 
@@ -218,7 +219,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     () => [...checkoutViolations, ...(ratioV ? [ratioV] : []), ...stockV],
     [checkoutViolations, ratioV, stockV],
   );
-  const blocked = violations.some((v) => v.blocking);
+  // The owner closed the shop while this cart was sitting open. Kept out of
+  // `violations` on purpose: that list models the owner's CHECKOUT RULES, and a
+  // shut shop is not a rule about this cart — it outranks every one of them.
+  // placeStorefrontOrderAction re-checks it, so this is the friendly stop, not
+  // the gate.
+  const storeClosed = isStoreClosed(brand.storeStatus);
+  const blocked = storeClosed || violations.some((v) => v.blocking);
 
   // The store collects payment up-front only when it has methods configured;
   // otherwise checkout hands off to a channel straight from the details step.
@@ -934,6 +941,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
             {step === "cart" ? (
               <>
+                {storeClosed && (
+                  <div className="sf-cart__rules">
+                    <p className="sf-cart__error" role="alert">
+                      {STORE_CLOSED_BLOCK_MESSAGE}
+                    </p>
+                  </div>
+                )}
                 {violations.length > 0 && (
                   <div className="sf-cart__rules">
                     {violations.map((v) => (

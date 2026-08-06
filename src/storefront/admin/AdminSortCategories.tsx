@@ -24,6 +24,7 @@ import type { SortCategory, SortCategoryKind } from "@/lib/storefront/sort-categ
  *  developer. "group" is handled separately (it needs a name, not a behavior),
  *  so it is deliberately absent here. */
 const BUILT_IN_KINDS: { kind: Exclude<SortCategoryKind, "group">; label: string }[] = [
+  { kind: "featured", label: "Featured" },
   { kind: "name", label: "Name (A–Z)" },
   { kind: "price-asc", label: "Price: Low to High" },
   { kind: "price-desc", label: "Price: High to Low" },

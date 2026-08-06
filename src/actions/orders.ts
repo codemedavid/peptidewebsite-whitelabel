@@ -68,6 +68,7 @@ import {
 import { hasFeature } from "@/lib/features/entitlements";
 import { isBusinessExclusiveLocked, getTrialState } from "@/lib/trial/trial-info";
 import { isTrialPaused } from "@/lib/trial/trial-state";
+import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import { FEATURES } from "@/lib/features/catalog";
 import {
   isOrderStatus,
@@ -870,6 +871,14 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // branding config at placement (any client-supplied value is discarded) and
     // snapshotted on the order so a later config change never rewrites it.
     const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+    // The owner closed the shop (store admin → Store Status). Same rule the
+    // storefront renders and the cart enforces, re-checked here because this is
+    // the boundary: a stale tab, a replayed request or a hand-rolled POST must
+    // not be able to order into a closed store. Demo and DB paths BOTH guard —
+    // this branch returns before the DB one is ever reached.
+    if (isStoreClosed(config.storeStatus)) {
+      return { error: STORE_CLOSED_BLOCK_MESSAGE };
+    }
     // Smart Checkout rules — reject the order when it violates a blocking rule.
     // Entitlement-gated: a tenant without the feature keeps any saved rules
     // dormant, matching the storefront (which strips brand.checkoutRules).
@@ -926,6 +935,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // storefront (which renders from the same cache) displayed.
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
+
+    // The owner closed the shop (store admin → Store Status). Checked here,
+    // before the catalog load and any write, for the same reason the trial-pause
+    // guard above it is: the client's refusal is UX, this is the rule. Read from
+    // the same tag-invalidated cache the storefront rendered from, so the two
+    // cannot disagree about whether the shop was open.
+    if (isStoreClosed(config.storeStatus)) {
+      return { error: STORE_CLOSED_BLOCK_MESSAGE };
+    }
 
     // Load the live catalog FIRST (full rows — the stock guard, Smart Checkout
     // rules and re-pricing below all key off it). Reading through the same

@@ -13,6 +13,7 @@ import { Header } from "./components/Header";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { NoticeModal } from "./components/NoticeModal";
 import { StorePaused } from "./components/StorePaused";
+import { StoreClosedNotice } from "./components/StoreClosedNotice";
 import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
@@ -240,6 +241,11 @@ function Shell() {
       )}
 
       <AnnouncementBanner brand={brand} onRoute={goToRoute} />
+
+      {/* Owner's shop switch. Sits inside the shared chrome so a shopper who
+          deep-links to #groupbuy or #catalog is told the shop is shut too — not
+          only whoever lands on the home page. Renders nothing when open. */}
+      <StoreClosedNotice brand={brand} />
 
       {/* Per-tenant notice/disclaimer — pops on every visit when the operator has
           granted it AND the owner enabled it (gate lives in the modal). */}

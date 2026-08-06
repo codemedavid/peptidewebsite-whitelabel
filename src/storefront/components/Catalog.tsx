@@ -12,6 +12,7 @@ import {
 } from "@/lib/storefront/variations";
 import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { buildProductCta } from "@/lib/storefront/product-cta";
+import { isStoreClosed } from "@/lib/storefront/store-status";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
 import {
   normalizeSortCategories,
@@ -36,6 +37,7 @@ export function ProductCard({
   design,
   rating,
   gbBlocked,
+  storeClosed,
   defaultImage,
 }: {
   product: Product;
@@ -52,6 +54,10 @@ export function ProductCard({
    *  blocked from the cart by the owner's on-hand setting. Shows but disables
    *  buying — the store.addToCart gate and the server both re-check it. */
   gbBlocked?: boolean;
+  /** True when the owner has closed the whole shop (Admin → Store Status). The
+   *  card still renders in full — image, name, price — but the buy controls read
+   *  "Closed" and are inert. Outranks every per-product state. */
+  storeClosed?: boolean;
   /** Brand-level fallback photo (brand.defaultProductImage) shown when the
    *  product has no image of its own. Prop (not useStore) because the platform
    *  admin's CardDesignPicker renders this card outside the StoreProvider. */
@@ -88,7 +94,7 @@ export function ProductCard({
   // ("Select an option") on a product whose every option is sold out. It also
   // carries the stock the stepper caps against: the SELECTED option's units,
   // falling back to the base column for a single-price product.
-  const cta = buildProductCta(product, optIdx, { gbBlocked });
+  const cta = buildProductCta(product, optIdx, { gbBlocked, storeClosed });
   const { stock } = cta;
   const productOut = productOutOfStock(product);
   // "Price on request": on hand but no fixed price. Show a label instead of a
@@ -311,6 +317,7 @@ function ProductDetailModal({
   onAddToCart,
   defaultImage,
   gbBlocked,
+  storeClosed,
 }: {
   product: Product;
   onClose: () => void;
@@ -321,6 +328,9 @@ function ProductDetailModal({
   ) => void;
   defaultImage?: string | null;
   gbBlocked?: boolean;
+  /** The owner closed the whole shop — see ProductCard's note. Passed through so
+   *  the modal and the card it opened from can't disagree. */
+  storeClosed?: boolean;
 }) {
   const detail = buildProductDetail(product, defaultImage);
   const [qty, setQty] = useState(1);
@@ -337,7 +347,7 @@ function ProductDetailModal({
   const displayPrice = resolveSelectedPrice(product, optIdx);
   // Same shared rule the card runs, so the modal it opened from can't disagree
   // about the label, the disabled state, or the stepper's cap.
-  const cta = buildProductCta(product, optIdx, { gbBlocked });
+  const cta = buildProductCta(product, optIdx, { gbBlocked, storeClosed });
   const selectedStock = cta.stock;
   const canBuy = !cta.disabled;
 
@@ -515,6 +525,11 @@ export function Catalog({
   onAddToCart: (p: Product, qty?: number, variation?: { name: string; price: number }) => void;
   brand: Brand;
 }) {
+  // The owner shut the whole shop (Admin → Store Status). The catalog still
+  // renders in full — that is the point of "closed" rather than "hidden" — but
+  // every card's buy control goes inert. store.addToCart and the server's order
+  // placement re-check the same rule, so this is presentation, not the gate.
+  const storeClosed = isStoreClosed(brand.storeStatus);
   const [query, setQuery] = useState("");
   // "" = no explicit pick yet → the catalog shows the owner's configured order
   // (products blocked by sort category, featured pinned above everything).
@@ -533,6 +548,12 @@ export function Catalog({
   );
   const sortOptions = sortCategoryOptions(sortCategories);
 
+  // The resting state is the FIRST row of the owner's menu — "Sort: Featured"
+  // by default, but whatever they drag to the top after reordering, renaming or
+  // deleting it. There is deliberately no unnamed placeholder option any more:
+  // every row the shopper sees is a row the owner controls.
+  const effectiveSort = sort || sortOptions[0]?.value || "";
+
   const filtered = useMemo(() => {
     let list = products;
     if (category && category !== "all") {
@@ -549,15 +570,18 @@ export function Catalog({
     // No explicit pick → the owner's configured order: one block per sort
     // category, in admin order, unassigned products last. An explicit pick runs
     // that entry (a group floats its members; a built-in sorts everything).
-    const sorted = sort
-      ? sortByCategory(list, sort, sortCategories, { bestSellerCounts: brand.bestSellerCounts })
+    const sorted = effectiveSort
+      ? sortByCategory(list, effectiveSort, sortCategories, { bestSellerCounts: brand.bestSellerCounts })
       : orderCatalogByCategories(list, sortCategories);
 
     // Featured products pin to the very top — but only on the default view and
     // on group picks. Pinning under an explicit "Price: Low to High" would put a
     // pricier featured item above a cheaper one and just read as a broken sort.
-    const picked = sortCategories.find((c) => c.id === sort);
-    const pinnable = !sort || picked?.kind === "group";
+    // A group pick still floats featured products above its members. The
+    // "featured" kind pins inside sortByCategory itself, so it is excluded here
+    // to keep exactly one owner of that rule.
+    const picked = sortCategories.find((c) => c.id === effectiveSort);
+    const pinnable = !effectiveSort || picked?.kind === "group";
     const ranked = pinnable ? pinFeatured(sorted) : sorted;
 
     // On a "per-vial-first" store the packaging tier outranks everything above:
@@ -565,7 +589,7 @@ export function Catalog({
     // order computed above holds within each tier (orderOnHandProducts is
     // stable). Every other store is a pass-through.
     return orderOnHandProducts(ranked, normalizeOnHandOrder(brand.onHandOrder));
-  }, [products, category, query, sort, sortCategories, brand.bestSellerCounts, brand.onHandOrder]);
+  }, [products, category, query, effectiveSort, sortCategories, brand.bestSellerCounts, brand.onHandOrder]);
 
   return (
     <section className="catalog section" id="catalog">
@@ -601,11 +625,10 @@ export function Catalog({
                   <line x1="7" y1="12" x2="20" y2="12" />
                   <line x1="10" y1="18" x2="20" y2="18" />
                 </svg>
-                <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                  {/* The resting state: the owner's own arrangement. Named
-                      explicitly so the control never renders blank and the
-                      shopper has a way back after picking a sort. */}
-                  <option value="">{brand.catalogSortLabel || "Sort: Featured"}</option>
+                <select value={effectiveSort} onChange={(e) => setSort(e.target.value)}>
+                  {/* Every option comes from the owner's list — including the
+                      Featured row, which used to be hardcoded here and was the
+                      one entry they could not rename, reorder or remove. */}
                   {sortOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
@@ -631,6 +654,7 @@ export function Catalog({
               design={brand.cardDesign}
               defaultImage={brand.defaultProductImage}
               gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
+              storeClosed={storeClosed}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
               onOpenDetail={() => setSelected(p)}
             />
@@ -655,6 +679,7 @@ export function Catalog({
           onAddToCart={onAddToCart}
           defaultImage={brand.defaultProductImage}
           gbBlocked={isOnHandBlocked(selected.id, brand.groupBuyGate)}
+          storeClosed={storeClosed}
         />
       )}
     </section>

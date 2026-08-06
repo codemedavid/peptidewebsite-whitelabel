@@ -129,20 +129,25 @@ eq("normalization does not mutate its input", JSON.stringify(dirty), dirtyBefore
 // Every live store must open on exactly the menu it had before this feature.
 console.log("seedSortCategories");
 
+// Featured now LEADS every seed. This is not a change to the shopper's menu:
+// the catalog previously rendered a hardcoded "Sort: Featured" option ahead of
+// the seeded entries, so the visible list was always Featured + the classic
+// three. The only difference is that the row is now the owner's to rename,
+// reorder, hide or delete.
 eq(
-  "classic seeds today's three classic labels",
+  "classic seeds Featured + today's three classic labels",
   seedSortCategories("classic").map((c) => c.label),
-  ["Sort: Name", "Price: Low to High", "Price: High to Low"],
+  ["Sort: Featured", "Sort: Name", "Price: Low to High", "Price: High to Low"],
 );
 eq(
-  "simple seeds the HP Glow three",
+  "simple seeds Featured + the HP Glow three",
   seedSortCategories("simple").map((c) => c.label),
-  ["Sort by Name", "Sort by Price", "Sort by Best Sellers"],
+  ["Sort: Featured", "Sort by Name", "Sort by Price", "Sort by Best Sellers"],
 );
 eq(
   "unset style seeds classic (the default for every store)",
   seedSortCategories(undefined).map((c) => c.label),
-  ["Sort: Name", "Price: Low to High", "Price: High to Low"],
+  ["Sort: Featured", "Sort: Name", "Price: Low to High", "Price: High to Low"],
 );
 eq("seeded entries are all enabled", seedSortCategories("simple").every((c) => c.enabled), true);
 eq(
@@ -335,6 +340,107 @@ eq("empty list → empty list", pinFeatured([]), []);
 const featuredBefore = ids(featuredCatalog);
 pinFeatured(featuredCatalog);
 eq("pinning does not mutate the input", ids(featuredCatalog), featuredBefore);
+
+// ── The Featured entry is a first-class, editable row ────────────────────────
+// "Sort: Featured" used to be hardcoded in Catalog.tsx as an <option value="">
+// outside the owner's list, so it alone could not be renamed, reordered, hidden
+// or deleted. It is now a built-in KIND like any other, which is what makes the
+// whole menu editable "just like the categories".
+console.log("featured as an editable entry");
+
+const featuredRow: SortCategory = {
+  id: "featured",
+  label: "Sort: Featured",
+  kind: "featured",
+  enabled: true,
+};
+
+eq(
+  "a stored featured row survives normalization (the kind is recognised)",
+  normalizeSortCategories([featuredRow]),
+  [featuredRow],
+);
+
+eq(
+  "the classic seed LEADS with Featured, preserving today's resting menu",
+  seedSortCategories(undefined)[0],
+  featuredRow,
+);
+eq(
+  "the simple seed also leads with Featured",
+  seedSortCategories("simple")[0].kind,
+  "featured",
+);
+
+ok(
+  "Featured is never assignable on the product form (a behavior, not a bucket)",
+  assignableSortCategories([featuredRow, { id: "g", label: "Healing", kind: "group", enabled: true }])
+    .every((c) => c.kind === "group"),
+);
+
+ok(
+  "Featured is offered in the storefront dropdown",
+  sortCategoryOptions([featuredRow]).some((o) => o.value === "featured"),
+);
+
+// Picking Featured must reproduce the OLD resting view exactly: the owner's
+// group blocks in admin order, unassigned last, featured products pinned above
+// everything. This is the behavior the hardcoded option used to provide.
+const fCats: SortCategory[] = [
+  featuredRow,
+  { id: "heal", label: "Healing", kind: "group", enabled: true },
+  { id: "name", label: "Sort: Name", kind: "name", enabled: true },
+];
+const fCatalog: P[] = [
+  { id: "a", name: "Alpha", price: 30 },
+  { id: "b", name: "Bravo", price: 10, sortCategory: "heal" },
+  { id: "c", name: "Charlie", price: 20, featured: true },
+  { id: "d", name: "Delta", price: 40, sortCategory: "heal", featured: true },
+];
+
+eq(
+  "picking Featured = featured pinned above the owner's category blocks",
+  ids(sortByCategory(fCatalog, "featured", fCats)),
+  ids(pinFeatured(orderCatalogByCategories(fCatalog, fCats))),
+);
+eq(
+  "…which is Delta+Charlie (featured) then Bravo (Healing) then Alpha (tail)",
+  ids(sortByCategory(fCatalog, "featured", fCats)),
+  ["d", "c", "b", "a"],
+);
+eq(
+  "Featured never drops a product from the shelf",
+  ids(sortByCategory(fCatalog, "featured", fCats)).sort(),
+  ["a", "b", "c", "d"],
+);
+
+// The owner is allowed to delete it — the menu must still work afterwards.
+const withoutFeatured = fCats.filter((c) => c.kind !== "featured");
+eq(
+  "deleting Featured leaves a usable menu, not an empty one",
+  sortCategoryOptions(withoutFeatured).length,
+  2,
+);
+ok(
+  "deleting Featured hides no products (the remaining sort still lists all 4)",
+  sortByCategory(fCatalog, "name", withoutFeatured).length === 4,
+);
+
+// …and to hide or rename it.
+eq(
+  "a disabled Featured row leaves the dropdown",
+  sortCategoryOptions([{ ...featuredRow, enabled: false }, ...withoutFeatured]).map((o) => o.value),
+  ["heal", "name"],
+);
+eq(
+  "a renamed Featured row keeps its behavior, only its wording changes",
+  ids(sortByCategory(fCatalog, "featured", [{ ...featuredRow, label: "Our Picks" }, ...withoutFeatured])),
+  ["d", "c", "b", "a"],
+);
+
+const fBefore = ids(fCatalog);
+sortByCategory(fCatalog, "featured", fCats);
+eq("sorting by Featured does not mutate the catalog", ids(fCatalog), fBefore);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\n${checks} checks, ${failures} failure(s)`);

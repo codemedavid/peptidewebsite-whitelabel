@@ -19,6 +19,7 @@ export const CTA_COPY = {
   soldOut: "Sold out",
   selectOption: "Select an option",
   addToCart: "Add to Cart",
+  closed: "Closed",
   messageToOrder: "Message to order",
   messageForPrice: "Message for price",
   afterGroupBuy: "Available after group buy",
@@ -45,6 +46,11 @@ export type ProductCta = {
  *
  * Precedence, highest first:
  *
+ *  0. `storeClosed` — the owner shut the whole shop (Admin → Store Status). Top
+ *     of the ladder because it is the most global thing the owner can say: with
+ *     the shop closed there is nothing to message about, nothing to select and
+ *     no point naming a stock state. Every other branch below describes ONE
+ *     product; this one describes the business.
  *  1. `priceOnRequest` — on hand but unpriced; the customer messages the store.
  *  2. `purchasable === false` — the owner paused THIS product (Group Buys →
  *     Pricing). Above the gate and sold-out because both of those clear on their
@@ -66,7 +72,7 @@ export type ProductCta = {
 export function buildProductCta(
   product: Product,
   selectedIndex: number,
-  opts: { gbBlocked?: boolean } = {},
+  opts: { gbBlocked?: boolean; storeClosed?: boolean } = {},
 ): ProductCta {
   const options = buildProductOptions(product);
   const selected =
@@ -76,6 +82,18 @@ export function buildProductCta(
   const stock = selected
     ? optionStock(product, selected)
     : Math.max(0, product.stock || 0);
+
+  // The shop itself is shut. The price stays on screen — the catalog is still
+  // browsable by design, and a shopper deciding whether to come back needs to
+  // see what things cost. Only the buying stops.
+  if (opts.storeClosed) {
+    return {
+      priceLabel: null,
+      ctaLabel: CTA_COPY.closed,
+      disabled: true,
+      stock,
+    };
+  }
 
   if (product.priceOnRequest === true) {
     return {

@@ -64,6 +64,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   // ── Daily ────────────────────────────────────────────────────────────────
   { view: "dashboard", label: "Dashboard", hint: "Today at a glance", icon: "home", tint: "pink", group: "daily" },
   { view: "orders", label: "Orders", hint: "View transactions", icon: "cart", tint: "yellow", group: "daily" },
+  { view: "store-status", label: "Store Status", hint: "Open or close the shop", icon: "shield", tint: "red", group: "daily" },
   { view: "add-product", label: "Add Product", hint: "Create new item", icon: "plus", tint: "pink", group: "daily" },
   { view: "products", label: "Manage Products", hint: "Edit existing items", icon: "box", tint: "green", group: "daily" },
   { view: "inv", label: "Inventory", hint: "Track stock", icon: "inbox", tint: "orange", group: "daily" },

@@ -15,6 +15,8 @@ import { useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { baseProductId } from "../checkout";
+import { CTA_COPY } from "@/lib/storefront/product-cta";
+import { isStoreClosed } from "@/lib/storefront/store-status";
 import {
   buildTwoWaysHomeView,
   groupBuyCtaTarget,
@@ -42,6 +44,9 @@ export function TwoWaysHome({
 }) {
   const { products, cart, addToCart, decrementCart } = useStore();
   const currency = brand.currency || "₱";
+  // The owner shut the whole shop. Both ways still render — the shopper can see
+  // what the store sells either way — but every buy control goes inert.
+  const storeClosed = isStoreClosed(brand.storeStatus);
   // brand.onHandOrder decides whether the on-hand shelf leads with the store's
   // single per-vial listings (K Glow) or keeps plain catalog order (everyone
   // else). Either way the same products render — only their order changes.
@@ -169,6 +174,7 @@ export function TwoWaysHome({
                 qty={qtyOf(line.product.id)}
                 addToCart={addToCart}
                 decrementCart={decrementCart}
+                storeClosed={storeClosed}
               />
             ))}
           </ul>
@@ -261,6 +267,7 @@ function OnHandRow({
   qty,
   addToCart,
   decrementCart,
+  storeClosed,
 }: {
   line: OnHandLine<Product>;
   image: string | null;
@@ -268,6 +275,9 @@ function OnHandRow({
   qty: number;
   addToCart: AddToCart;
   decrementCart: (productId: string) => void;
+  /** The owner shut the whole shop (Admin → Store Status). The row still shows
+   *  the product and its price; the buy control becomes an inert "Closed". */
+  storeClosed: boolean;
 }) {
   const p = line.product;
   const options = buildProductOptions(p);
@@ -314,7 +324,11 @@ function OnHandRow({
       </div>
       <div className="sf-twh__row-buy">
         <div className="sf-twh__row-price">{p.priceOnRequest ? "Ask" : displayPrice}</div>
-        {canBuy && line.buyable && (
+        {storeClosed ? (
+          <button type="button" className="sf-twh__add" disabled>
+            {CTA_COPY.closed}
+          </button>
+        ) : canBuy && line.buyable ? (
           showSelector ? (
             <>
               <button
@@ -341,7 +355,7 @@ function OnHandRow({
               </button>
             </div>
           )
-        )}
+        ) : null}
       </div>
     </li>
   );

@@ -37,6 +37,7 @@ import {
   buildBestSellerCounts,
   type BestSellerOrderInput,
 } from "@/lib/storefront/catalog-sort";
+import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import type { Brand, Product } from "@/storefront/types";
 
 // Dynamic-by-default because we read the tenant from the request host
@@ -372,6 +373,11 @@ export default async function HomePage() {
   // a failed read degrades to no counts (best → name order) — the storefront
   // never blocks on analytics.
   brand.catalogSortStyle = normalizeCatalogSortStyle(config.catalogSortStyle);
+  // The owner's shop switch. Normalized HERE, server-side, so a stale or
+  // hand-edited client can't reopen a closed store by rewriting the config it
+  // was handed — placeStorefrontOrderAction re-checks the same rule at the
+  // boundary regardless. Absent/junk → open, so no live tenant moves.
+  brand.storeStatus = normalizeStoreStatus(config.storeStatus);
   if (brand.catalogSortStyle === "simple") {
     try {
       let orderRows: BestSellerOrderInput[];

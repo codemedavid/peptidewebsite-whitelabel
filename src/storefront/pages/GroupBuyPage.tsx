@@ -25,6 +25,7 @@ import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
+import { isStoreClosed } from "@/lib/storefront/store-status";
 
 export function GroupBuyPage({
   brand,
@@ -38,6 +39,9 @@ export function GroupBuyPage({
 }) {
   const { products, cart, addToCart, decrementCart } = useStore();
   const currency = brand.currency || "₱";
+  // The owner shut the whole shop — the round still advertises itself, but no
+  // one can join it. store.addToCart and the server re-check the same rule.
+  const storeClosed = isStoreClosed(brand.storeStatus);
   const view = buildGroupBuyPageView(
     products.filter((p) => p.available !== false),
     brand.groupBuyBanner ?? null,
@@ -126,6 +130,7 @@ export function GroupBuyPage({
               cart={cart}
               addToCart={addToCart}
               decrementCart={decrementCart}
+              storeClosed={storeClosed}
             />
           ))}
         </div>
@@ -185,12 +190,16 @@ function GbProductCard({
   cart,
   addToCart,
   decrementCart,
+  storeClosed,
 }: {
   line: GroupBuyPageLine<Product>;
   image: string | null;
   cart: Product[];
   addToCart: (product: Product, qty?: number, variation?: { name: string; price: number }) => void;
   decrementCart: (productId: string) => void;
+  /** The owner shut the whole shop (Admin → Store Status). The round and its
+   *  prices still show; joining is off. */
+  storeClosed: boolean;
 }) {
   const p = line.product;
   const options = line.options;
@@ -203,7 +212,9 @@ function GbProductCard({
   // round still advertises them — but can't be joined. Stock is deliberately NOT
   // consulted: group-buy lines are pre-orders (isGroupBuyPreorder), so a stock-0
   // round product must keep its live "Join GB".
-  const blocked = p.purchasable === false || p.priceOnRequest === true;
+  // A closed shop outranks both: a group buy is still an order, so a store that
+  // isn't trading can't take pre-orders either.
+  const blocked = storeClosed || p.purchasable === false || p.priceOnRequest === true;
   // The cart line THIS selection lands on, so the stepper counts and removes the
   // chosen dose rather than every dose of the product at once.
   const entryId = chosen.variation ? variationEntryId(p.id, chosen.variation.name) : p.id;
@@ -249,7 +260,11 @@ function GbProductCard({
         </div>
         {blocked ? (
           <button type="button" className="gbpage__join" disabled>
-            {p.priceOnRequest ? CTA_COPY.messageToOrder : CTA_COPY.notAvailable}
+            {storeClosed
+              ? CTA_COPY.closed
+              : p.priceOnRequest
+                ? CTA_COPY.messageToOrder
+                : CTA_COPY.notAvailable}
           </button>
         ) : qty === 0 ? (
           <button type="button" className="gbpage__join" onClick={join}>

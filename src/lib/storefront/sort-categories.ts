@@ -27,6 +27,7 @@ import type { BestSellerCounts } from "./catalog-sort";
 
 /** What an entry actually does when the shopper picks it. */
 export type SortCategoryKind =
+  | "featured"
   | "name"
   | "price-asc"
   | "price-desc"
@@ -67,6 +68,7 @@ interface SortableProduct {
 }
 
 const KINDS: readonly SortCategoryKind[] = [
+  "featured",
   "name",
   "price-asc",
   "price-desc",
@@ -82,6 +84,7 @@ const isKind = (v: unknown): v is SortCategoryKind =>
  *  one. Kept as the hard fallback so a tenant with broken config still gets a
  *  working menu instead of an empty <select>. */
 export const DEFAULT_SORT_CATEGORIES: readonly SortCategory[] = [
+  { id: "featured", label: "Sort: Featured", kind: "featured", enabled: true },
   { id: "name", label: "Sort: Name", kind: "name", enabled: true },
   { id: "price-asc", label: "Price: Low to High", kind: "price-asc", enabled: true },
   { id: "price-desc", label: "Price: High to Low", kind: "price-desc", enabled: true },
@@ -89,6 +92,7 @@ export const DEFAULT_SORT_CATEGORIES: readonly SortCategory[] = [
 
 /** The "simple" HP Glow menu, seeded for tenants already on that style. */
 const SIMPLE_SORT_CATEGORIES: readonly SortCategory[] = [
+  { id: "featured", label: "Sort: Featured", kind: "featured", enabled: true },
   { id: "name", label: "Sort by Name", kind: "name", enabled: true },
   { id: "price-asc", label: "Sort by Price", kind: "price-asc", enabled: true },
   { id: "best", label: "Sort by Best Sellers", kind: "best-sellers", enabled: true },
@@ -174,7 +178,7 @@ function unitsSold(p: SortableProduct, counts: BestSellerCounts): number {
  *  the result is deterministic no matter what the data looks like. */
 function sortByKind<T extends SortableProduct>(
   products: readonly T[],
-  kind: Exclude<SortCategoryKind, "group">,
+  kind: Exclude<SortCategoryKind, "group" | "featured">,
   ctx: SortContext,
 ): T[] {
   const counts = ctx.bestSellerCounts ?? {};
@@ -210,6 +214,12 @@ export function sortByCategory<T extends SortableProduct>(
 ): T[] {
   const category = categories.find((c) => c.id === categoryId);
   if (!category) return sortByKind(products, "name", ctx);
+  // Featured is the owner's own arrangement — their category blocks in admin
+  // order — with featured products floated above the lot. It is the resting
+  // view the catalog used to hardcode as an unnamed <option value="">.
+  if (category.kind === "featured") {
+    return pinFeatured(orderCatalogByCategories(products, categories));
+  }
   if (category.kind !== "group") return sortByKind(products, category.kind, ctx);
 
   const members: T[] = [];

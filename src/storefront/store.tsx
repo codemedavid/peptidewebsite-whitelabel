@@ -50,6 +50,7 @@ import { priceFontVar } from "@/lib/storefront/price-font";
 import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
 import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
 import { TWO_WAYS_MODE_DEFAULT } from "@/lib/storefront/two-ways-mode";
+import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import {
   gbScopeFromBanner,
   isGroupBuyPreorder,
@@ -466,6 +467,16 @@ export function StoreProvider({
       qty: number = 1,
       variation?: { name: string; price: number },
     ) => {
+      // The owner closed the whole shop (Admin → Store Status). First guard in
+      // the list because it outranks every per-product reason below: with the
+      // store shut it does not matter whether this item is priced, paused, in a
+      // group buy or in stock. buildProductCta already renders the button as
+      // "Closed", but a stale tab or a re-add from the cart can still land here
+      // — and placeStorefrontOrderAction re-checks it server-side regardless.
+      if (isStoreClosed(brand.storeStatus)) {
+        toast(STORE_CLOSED_BLOCK_MESSAGE);
+        return;
+      }
       // Price-on-request items are on hand but have no fixed price — they can't
       // be bought through the cart; the customer messages the store to order.
       if (product.priceOnRequest) {

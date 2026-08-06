@@ -7734,6 +7734,61 @@
   margin-top: 10px;
 }
 
+/* Closed store — the owner's banner ABOVE a still-browsable catalog (store
+   admin → Store Status). Not to be confused with .sf-paused below, which
+   replaces the whole storefront on trial expiry. Every colour comes from the
+   brand tokens, so it reads as part of the tenant's own design. */
+.sf-root .sf-closed {
+  display: block;
+  background: var(--brand-surface);
+  border-bottom: var(--brand-border-width) solid var(--brand-border);
+}
+.sf-root .sf-closed__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.sf-root .sf-closed__badge {
+  flex: none;
+  margin-top: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--brand-text);
+  color: var(--brand-surface);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sf-root .sf-closed__copy { min-width: 0; }
+.sf-root .sf-closed__headline {
+  font-family: var(--brand-font-display, inherit);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--brand-text);
+  margin: 0;
+}
+.sf-root .sf-closed__message {
+  color: var(--brand-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 6px 0 0;
+  /* The owner's copy is free text — keep their line breaks, but never let a
+     pasted URL blow the layout out horizontally. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Admin preview — the same banner, boxed rather than full-bleed. */
+.sf-root .sf-closed--preview {
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 14px;
+}
+.sf-root .sf-closed--preview .sf-closed__inner { padding: 14px 16px; }
+
 /* Paused storefront — the branded card shown in place of the public store */
 .sf-root .sf-paused {
   min-height: 80vh;

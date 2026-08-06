@@ -22,6 +22,7 @@ import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
 import { AdminBilling } from "./AdminBilling";
 import { AdminNoticeModal } from "./AdminNoticeModal";
+import { AdminStoreStatus } from "./AdminStoreStatus";
 import { AdminTrackNote } from "./AdminTrackNote";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
@@ -81,6 +82,7 @@ type View =
   | "staff-form"
   | "notify"
   | "notice"
+  | "store-status"
   | "tracknote"
   | "billing"
   | "upgrade";
@@ -272,6 +274,7 @@ export function AdminPage({
   if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "billing") return <AdminBilling brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "store-status") return <AdminStoreStatus brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
