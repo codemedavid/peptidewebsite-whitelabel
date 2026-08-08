@@ -821,6 +821,19 @@ export async function uploadPaymentProofAction(formData: FormData): Promise<Uplo
  * per tenant, and returned so the UI/chat/tracking all reference the exact value
  * that was stored. Any client-supplied orderNumber is ignored.
  */
+/**
+ * The display symbol the demo fixture rows should carry.
+ *
+ * The demo paths used to hand `dbProductToStorefront` a literal "₱", which
+ * pinned a demo tenant to pesos however its branding was configured — the live
+ * path beside them already reads the setting. Empty string is a valid answer:
+ * dbProductToStorefront falls back on its own when the store has set nothing.
+ */
+function demoDisplaySymbol(slug: string): string {
+  const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+  return String(config.currency ?? "");
+}
+
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
@@ -852,7 +865,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const demoProductsRaw =
       getDemoStoreProducts(slug) ??
       getDemoProducts(slug).map((dp) =>
-        dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
+        dbProductToStorefront(dp as unknown as DbProductRowMap, demoDisplaySymbol(slug)),
       );
     // Reseller wholesale pricing is entitlement-gated: strip the legs before
     // ANY pricing/rules surface reads the catalog, so an unentitled tenant's
@@ -1320,7 +1333,7 @@ export async function updateStorefrontOrderAction(
       const products =
         getDemoStoreProducts(slug) ??
         getDemoProducts(slug).map((dp) =>
-          dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"),
+          dbProductToStorefront(dp as unknown as DbProductRowMap, demoDisplaySymbol(slug)),
         );
       saveDemoStoreProducts(slug, adjustProductStock(products, next.items, move));
       revalidateTenant(slug, slug);
@@ -1574,7 +1587,7 @@ export async function bulkUpdateStorefrontOrderStatusAction(
     const target = new Set(list);
     let products =
       getDemoStoreProducts(slug) ??
-      getDemoProducts(slug).map((dp) => dbProductToStorefront(dp as unknown as DbProductRowMap, "₱"));
+      getDemoProducts(slug).map((dp) => dbProductToStorefront(dp as unknown as DbProductRowMap, demoDisplaySymbol(slug)));
     let changed = 0;
     let stockMoved = false;
     const nextOrders = getDemoStoreOrders(slug).map((o) => {

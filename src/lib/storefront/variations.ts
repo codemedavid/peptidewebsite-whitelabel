@@ -7,6 +7,8 @@
 // the rules across the two is how a variation ends up sellable at a price the
 // editor never meant to allow.
 
+import { formatMoney } from "./currency";
+
 /**
  * A dose written into a name — "5mg", "0.1 mg", "10ml", "500mcg", "10iu".
  *
@@ -97,7 +99,7 @@ export function shouldShowOptionPicker(product: OptionSource): boolean {
  *  catalog card + detail modal instead render the bare `option.name` and reveal
  *  the price only once a pill is clicked (see resolveSelectedPrice). */
 export function optionLabel(option: ProductOption, currency: string): string {
-  return `${option.name} · ${currency}${option.price.toLocaleString()}`;
+  return `${option.name} · ${formatMoney(option.price, currency, { decimals: false })}`;
 }
 
 /**

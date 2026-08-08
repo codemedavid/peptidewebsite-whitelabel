@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Brand, Order } from "../types";
 import { listStorefrontOrdersAction } from "@/actions/orders";
 import { ADMIN_TINTS } from "./shared";
+import { formatMoney, normalizeCurrency } from "@/lib/storefront/currency";
 
 // Sales analytics over the tenant's DB-backed orders. Reads via the same
 // server action as AdminOrders (demo/DB branching lives server-side); all
@@ -36,24 +37,28 @@ function totalOf(o: Order): number {
   );
 }
 
-function formatPHP(n: number): string {
-  return (
-    "₱" +
-    (n || 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
+// Analytics reports the STORE's revenue, so every figure prints in the store's
+// currency. These three used to hardcode the peso, which meant a shop trading in
+// riyals read its own takings in a currency it never sells in.
+
+function formatPHP(n: number, currency?: unknown): string {
+  return formatMoney(n, currency);
 }
 
-function formatPHPWhole(n: number): string {
-  return "₱" + Math.round(n || 0).toLocaleString();
+function formatPHPWhole(n: number, currency?: unknown): string {
+  return formatMoney(Math.round(n || 0), currency, { decimals: false });
 }
 
-function compactPHP(n: number): string {
-  if (n >= 1_000_000) return "₱" + (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M";
-  if (n >= 1_000) return "₱" + (n / 1_000).toFixed(n >= 10_000 ? 0 : 1) + "k";
-  return "₱" + Math.round(n).toLocaleString();
+/** Axis / tile shorthand: "SAR 1.2M", "₱950". The suffix forms build their own
+ *  string, so the symbol and its spacing come from normalizeCurrency rather than
+ *  being concatenated by hand. */
+function compactPHP(n: number, currency?: unknown): string {
+  const money = normalizeCurrency(currency);
+  const gap = /[A-Za-z]{2,}/.test(money.symbol) ? " " : "";
+  if (n >= 1_000_000)
+    return `${money.symbol}${gap}${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${money.symbol}${gap}${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return formatMoney(Math.round(n), currency, { decimals: false });
 }
 
 function startOfDay(d: Date): Date {
@@ -426,8 +431,8 @@ export function AdminAnalytics({
   const kpis = [
     {
       label: "Revenue",
-      value: formatPHPWhole(a.revenue),
-      sub: `${formatPHPWhole(a.paidRevenue)} paid · ${formatPHPWhole(a.pendingRevenue)} pending`,
+      value: formatPHPWhole(a.revenue, brand.currency),
+      sub: `${formatPHPWhole(a.paidRevenue, brand.currency)} paid · ${formatPHPWhole(a.pendingRevenue, brand.currency)} pending`,
       icon: "trend",
       tint: "green",
       delta: a.revenueDelta,
@@ -442,7 +447,7 @@ export function AdminAnalytics({
     },
     {
       label: "Avg. Order Value",
-      value: formatPHPWhole(a.aov),
+      value: formatPHPWhole(a.aov, brand.currency),
       sub: "per non-cancelled order",
       icon: "tag",
       tint: "purple",
@@ -549,7 +554,7 @@ export function AdminAnalytics({
             <div className="admin-card admin-analytics__card">
               <h2 className="admin-card__title">Revenue Over Time</h2>
               <div className="admin-card__caption">
-                {formatPHP(a.revenue)} across {a.sales.length.toLocaleString()} order(s) · per{" "}
+                {formatPHP(a.revenue, brand.currency)} across {a.sales.length.toLocaleString()} order(s) · per{" "}
                 {bucketUnit}
                 {a.capped ? ` · showing the last ${MAX_MONTH_BUCKETS} months` : ""}
               </div>
@@ -557,9 +562,9 @@ export function AdminAnalytics({
                 <>
                   <div className="admin-chart">
                     <div className="admin-chart__ylabels">
-                      <span>{compactPHP(a.maxBucket)}</span>
-                      <span>{compactPHP(a.maxBucket / 2)}</span>
-                      <span>₱0</span>
+                      <span>{compactPHP(a.maxBucket, brand.currency)}</span>
+                      <span>{compactPHP(a.maxBucket / 2, brand.currency)}</span>
+                      <span>{compactPHP(0, brand.currency)}</span>
                     </div>
                     <div className="admin-chart__plot">
                       <div className="admin-chart__gridline" style={{ top: 0 }} />
@@ -569,7 +574,7 @@ export function AdminAnalytics({
                           <div
                             key={b.key}
                             className="admin-chart__col"
-                            title={`${b.full}: ${formatPHP(b.revenue)} · ${b.orders} order(s)`}
+                            title={`${b.full}: ${formatPHP(b.revenue, brand.currency)} · ${b.orders} order(s)`}
                           >
                             {b.revenue > 0 && (
                               <div
@@ -608,7 +613,7 @@ export function AdminAnalytics({
                         key={p.name}
                         name={p.name}
                         meta={`${p.value.qty.toLocaleString()} sold · ${shareLabel(p.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(p.value.revenue)}
+                        amount={formatPHP(p.value.revenue, brand.currency)}
                         pct={(p.value.revenue / (a.topProducts[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -629,7 +634,7 @@ export function AdminAnalytics({
                         key={m.name}
                         name={m.name}
                         meta={`${m.value.count.toLocaleString()} order(s) · ${shareLabel(m.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(m.value.revenue)}
+                        amount={formatPHP(m.value.revenue, brand.currency)}
                         pct={(m.value.revenue / (a.methods[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -675,7 +680,7 @@ export function AdminAnalytics({
                         key={p.name}
                         name={p.name}
                         meta={`${p.value.count.toLocaleString()} order(s) · ${shareLabel(p.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(p.value.revenue)}
+                        amount={formatPHP(p.value.revenue, brand.currency)}
                         pct={(p.value.revenue / (a.places[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -700,7 +705,7 @@ export function AdminAnalytics({
                         key={g.name + i}
                         name={g.name}
                         meta={`${g.orders.toLocaleString()} order(s) · ${g.qty.toLocaleString()} unit(s) · ${shareLabel(g.revenue, a.groupBuyRevenue)} of group-buy revenue`}
-                        amount={formatPHP(g.revenue)}
+                        amount={formatPHP(g.revenue, brand.currency)}
                         pct={(g.revenue / (a.groupBuys[0].revenue || 1)) * 100}
                         color={barColor(i)}
                       />

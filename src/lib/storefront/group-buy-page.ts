@@ -14,6 +14,7 @@ import {
   type TwoWaysInput,
 } from "./two-ways";
 import type { GroupBuyBanner } from "./group-buy-banner";
+import { formatMoney } from "./currency";
 import {
   buildProductOptions,
   DOSE_PATTERN,
@@ -47,10 +48,14 @@ export function productInitial(name: string): string {
   return ch ? ch.toUpperCase() : "•";
 }
 
-/** "₱1,200" — the currency glyph + grouped amount, matching the catalog card.
- *  Negative amounts (never expected, but guarded) render as the zero baseline. */
+/** "₱1,200" — the store's currency + grouped amount, matching the catalog card.
+ *  Negative amounts (never expected, but guarded) render as the zero baseline.
+ *
+ *  Goes through formatMoney so a word-like currency is spaced off its digits
+ *  ("SAR 1,200"). This used to concatenate, which read fine while every store
+ *  sold pesos and rendered "SAR1,200" the moment one didn't. */
 export function formatGbMoney(currency: string, amount: number): string {
-  return `${currency}${Math.max(0, amount || 0).toLocaleString()}`;
+  return formatMoney(Math.max(0, amount || 0), currency, { decimals: false });
 }
 
 /**

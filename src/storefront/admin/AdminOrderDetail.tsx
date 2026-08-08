@@ -5,7 +5,7 @@ import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
 import {
-  formatPHP,
+  formatOrderMoney,
   formatOrderDate,
   orEmDash,
   buildAddressLine,
@@ -147,7 +147,9 @@ export function AdminOrderDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [isProofOpen]);
 
-  void brand;
+  /** Every figure on this screen is the STORE's money, so it prints in the
+   *  store's currency — not the peso this screen used to assume. */
+  const money = (n: number) => formatOrderMoney(n, brand.currency);
 
   const totals = computeOrderTotals(o);
   const addressLine = buildAddressLine(o.shipping);
@@ -409,11 +411,11 @@ export function AdminOrderDetail({
                     <div className="od-item-main">
                       <div className="od-item-name">{it.name}</div>
                       <div className="od-item-meta">
-                        Qty {it.qty} · {formatPHP(it.price)} each
+                        Qty {it.qty} · {money(it.price)} each
                       </div>
                     </div>
                     <div className="od-item-total">
-                      {formatPHP(it.price * it.qty)}
+                      {money(it.price * it.qty)}
                     </div>
                   </div>
                 ))}
@@ -520,28 +522,28 @@ export function AdminOrderDetail({
               <div className="od-totals">
                 <div className="od-totals-row">
                   <span>Subtotal</span>
-                  <span>{formatPHP(totals.subtotal)}</span>
+                  <span>{money(totals.subtotal)}</span>
                 </div>
                 {totals.discount > 0 && (
                   <div className="od-totals-row">
                     <span>{o.discount?.label || "Discount"}</span>
-                    <span>−{formatPHP(totals.discount)}</span>
+                    <span>−{money(totals.discount)}</span>
                   </div>
                 )}
                 <div className="od-totals-row">
                   <span>Shipping Fee</span>
-                  <span>{formatPHP(totals.shipping)}</span>
+                  <span>{money(totals.shipping)}</span>
                 </div>
                 {totals.fee > 0 && (
                   <div className="od-totals-row">
                     <span>{o.adminFee?.label || "Admin fee"}</span>
-                    <span>{formatPHP(totals.fee)}</span>
+                    <span>{money(totals.fee)}</span>
                   </div>
                 )}
               </div>
               <div className="od-total">
                 <span className="od-total-label">Total</span>
-                <span className="od-total-value">{formatPHP(totals.total)}</span>
+                <span className="od-total-value">{money(totals.total)}</span>
               </div>
             </section>
           </div>

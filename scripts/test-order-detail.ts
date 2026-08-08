@@ -5,7 +5,7 @@
  * sidebar) can re-skin the markup without changing what the screen computes:
  *
  *   src/storefront/admin/order-detail.ts
- *     formatPHP(n)              — "₱1,200.00" money formatting (peso, 2dp).
+ *     formatOrderMoney(n, cur)  — "₱1,200.00" / "SAR 1,200.00" money formatting.
  *     formatOrderDate(iso)      — "Jun 28, 2026 · 10:42 AM" in the store's
  *                                 timezone (Asia/Manila); raw string on bad input.
  *     orEmDash(value)           — blank/whitespace → "—" (address fallbacks).
@@ -22,7 +22,7 @@ import assert from "node:assert";
 
 import type { Order } from "../src/storefront/types";
 import {
-  formatPHP,
+  formatOrderMoney,
   formatOrderDate,
   orEmDash,
   buildAddressLine,
@@ -81,14 +81,21 @@ function makeOrder(over: Partial<Order> = {}): Order {
 
 console.log("\nOrder Detail presentation helpers — pure core\n");
 
-// ── formatPHP ────────────────────────────────────────────────────────────────
-check("formatPHP renders peso with 2 decimals + thousands separators", () => {
-  assert.strictEqual(formatPHP(1200), "₱1,200.00");
-  assert.strictEqual(formatPHP(0), "₱0.00");
+// ── formatOrderMoney ─────────────────────────────────────────────────────────
+// Was formatPHP, which hardcoded the peso. An order detail is the STORE's own
+// money, so it now takes the store's currency — with the peso as the fallback,
+// which is what keeps every tenant alive today reading exactly as it did.
+check("formatOrderMoney renders peso with 2 decimals + thousands separators", () => {
+  assert.strictEqual(formatOrderMoney(1200), "₱1,200.00");
+  assert.strictEqual(formatOrderMoney(0), "₱0.00");
 });
-check("formatPHP coerces NaN/undefined to ₱0.00", () => {
-  assert.strictEqual(formatPHP(Number.NaN), "₱0.00");
-  assert.strictEqual(formatPHP(undefined as unknown as number), "₱0.00");
+check("formatOrderMoney coerces NaN/undefined to ₱0.00", () => {
+  assert.strictEqual(formatOrderMoney(Number.NaN), "₱0.00");
+  assert.strictEqual(formatOrderMoney(undefined as unknown as number), "₱0.00");
+});
+check("formatOrderMoney prints the store's currency when it has one", () => {
+  assert.strictEqual(formatOrderMoney(1200, "SAR"), "SAR 1,200.00");
+  assert.strictEqual(formatOrderMoney(1200, "₱"), "₱1,200.00");
 });
 
 // ── formatOrderDate ──────────────────────────────────────────────────────────

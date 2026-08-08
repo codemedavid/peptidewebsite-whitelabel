@@ -5,21 +5,22 @@
 // See scripts/test-order-detail.ts (npm run test:order-detail).
 
 import type { Order } from "../types";
+import { formatMoney } from "@/lib/storefront/currency";
 
 /** The store operates in the Philippines; order timestamps are stored as ISO
  *  UTC strings (orders.ts) but should read in the store's local time. */
 const STORE_TIMEZONE = "Asia/Manila";
 
-/** Peso money formatting: "₱1,200.00". Coerces NaN/undefined to ₱0.00. */
-export function formatPHP(n: number): string {
-  const value = Number.isFinite(n) ? n : 0;
-  return (
-    "₱" +
-    value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
+/**
+ * Order money at full precision: "₱1,200.00", "SAR 1,200.00". Coerces
+ * NaN/undefined to zero rather than printing "NaN" beside a customer's total.
+ *
+ * Takes the store's currency because an order detail is the tenant's OWN money
+ * — this was `formatPHP` and hardcoded the peso, so a store trading in riyals
+ * read every order it had ever taken in the wrong currency.
+ */
+export function formatOrderMoney(n: number, currency?: unknown): string {
+  return formatMoney(n, currency);
 }
 
 /** Format an order's ISO timestamp for the "Placed …" header line, e.g.

@@ -9,6 +9,7 @@ import {
   purgeStorefrontOrdersAction,
   bulkUpdateStorefrontOrderStatusAction,
 } from "@/actions/orders";
+import { formatMoney } from "@/lib/storefront/currency";
 
 const STATUS_OPTIONS: { value: Order["status"]; label: string }[] = [
   { value: "new", label: "New" },
@@ -30,15 +31,6 @@ function totalOf(o: Order): number {
   );
 }
 
-function formatPHP(n: number): string {
-  return (
-    "₱" +
-    (n || 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
-}
 
 function formatDate(d: string): string {
   const dt = new Date(d);
@@ -101,7 +93,9 @@ export function AdminOrders({
   const [bulkStatus, setBulkStatus] = useState<Order["status"]>("confirmed");
   const [busy, setBusy] = useState<boolean>(false);
 
-  void brand;
+  /** Order totals are the STORE's money — printed in the store's currency, not
+   *  the peso this table used to hardcode. */
+  const money = (n: number) => formatMoney(n, brand.currency);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -576,11 +570,11 @@ export function AdminOrders({
               <div>
                 <div className="admin-order-card__col-label">Total</div>
                 <div className="admin-order-card__col-main">
-                  {formatPHP(totalOf(o))}
+                  {money(totalOf(o))}
                 </div>
                 <div className="admin-order-card__col-sub">
-                  + {formatPHP(o.shipping?.fee || 0)} shipping
-                  {(o.adminFee?.amount ?? 0) > 0 && <> · + {formatPHP(o.adminFee!.amount)} fee</>}
+                  + {money(o.shipping?.fee || 0)} shipping
+                  {(o.adminFee?.amount ?? 0) > 0 && <> · + {money(o.adminFee!.amount)} fee</>}
                 </div>
               </div>
               <div>

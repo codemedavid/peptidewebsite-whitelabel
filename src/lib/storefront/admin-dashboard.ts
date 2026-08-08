@@ -18,6 +18,7 @@
  */
 
 import type { Brand, Category, Order, Product } from "@/storefront/types";
+import { formatMoney } from "./currency";
 import { isAdminViewVisible } from "@/storefront/visibility";
 import { isViewAllowed, type StaffActor } from "@/storefront/admin/staff-permissions";
 
@@ -134,8 +135,15 @@ function orderDate(o: Order): Date {
   return new Date(o.date);
 }
 
-function formatPeso(n: number): string {
-  return "₱" + Math.round(n || 0).toLocaleString();
+/**
+ * Dashboard money: whole units, grouped — "₱1,200", "SAR 1,200". The tiles have
+ * always shown rounded amounts, and that stays; only the currency is now the
+ * store's own rather than a hardcoded peso.
+ *
+ * Exported so the gate can call it directly (npm run test:currency-surfaces).
+ */
+export function formatDashboardMoney(n: number, currency?: unknown): string {
+  return formatMoney(Math.round(n || 0), currency, { decimals: false });
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -164,8 +172,12 @@ export function buildMetricTiles(input: {
   products: Product[];
   orders: Order[];
   now?: Date;
+  /** The store's currency. Optional so existing callers keep compiling and keep
+   *  printing pesos — the fallback every tenant has today. */
+  currency?: string;
 }): MetricTile[] {
-  const { caps, products, orders } = input;
+  const { caps, products, orders, currency } = input;
+  const money = (n: number) => formatDashboardMoney(n, currency);
   const now = input.now ?? new Date();
   const today = startOfDay(now).getTime();
 
@@ -192,8 +204,8 @@ export function buildMetricTiles(input: {
     tiles.push({
       id: "revenue-today",
       label: "Revenue today",
-      value: formatPeso(revenue),
-      sub: `Avg. order ${formatPeso(avg)}`,
+      value: money(revenue),
+      sub: `Avg. order ${money(avg)}`,
     });
   } else {
     tiles.push({

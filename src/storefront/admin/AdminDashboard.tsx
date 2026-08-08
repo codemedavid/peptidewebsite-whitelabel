@@ -13,6 +13,7 @@ import {
   buildRevenueSeries,
   buildStockPanel,
   dashboardLayoutFor,
+  formatDashboardMoney,
   type DashboardCaps,
 } from "@/lib/storefront/admin-dashboard";
 
@@ -23,9 +24,6 @@ import {
  * sparkline; without it, the same region carries stock levels and recent orders.
  */
 
-function formatPeso(n: number): string {
-  return "₱" + Math.round(n || 0).toLocaleString();
-}
 
 function formatDay(iso: string): string {
   const d = new Date(iso);
@@ -84,8 +82,8 @@ export function AdminDashboard({
 
   const layout = dashboardLayoutFor(caps);
   const tiles = useMemo(
-    () => buildMetricTiles({ caps, products, orders }),
-    [caps, products, orders],
+    () => buildMetricTiles({ caps, products, orders, currency: brand.currency }),
+    [caps, products, orders, brand.currency],
   );
   const revenue = useMemo(() => buildRevenueSeries({ caps, orders }), [caps, orders]);
   const stock = useMemo(() => buildStockPanel(products), [products]);
@@ -129,7 +127,7 @@ export function AdminDashboard({
             <span className="adm-table__strong">{o.code}</span>
             <span>{o.customer}</span>
             <span className="adm-table__muted">{o.items}</span>
-            <span className="adm-table__strong">{formatPeso(o.total)}</span>
+            <span className="adm-table__strong">{formatDashboardMoney(o.total, brand.currency)}</span>
             <span className="adm-table__muted">{formatDay(o.date)}</span>
             <span>
               <span className="adm-status" data-status={o.status}>
@@ -228,7 +226,7 @@ export function AdminDashboard({
                 </button>
               </header>
               <div className="adm-revenue__figure">
-                <span className="adm-revenue__total">{formatPeso(revenue.total)}</span>
+                <span className="adm-revenue__total">{formatDashboardMoney(revenue.total, brand.currency)}</span>
                 {revenue.deltaPct !== null && (
                   <span
                     className="adm-revenue__delta"
