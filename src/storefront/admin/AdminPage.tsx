@@ -23,6 +23,7 @@ import { AdminOrderNotifications } from "./AdminOrderNotifications";
 import { AdminBilling } from "./AdminBilling";
 import { AdminNoticeModal } from "./AdminNoticeModal";
 import { AdminStoreStatus } from "./AdminStoreStatus";
+import { AdminCurrency } from "./AdminCurrency";
 import { AdminTrackNote } from "./AdminTrackNote";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
@@ -51,6 +52,7 @@ import { getStorefrontAdminSessionAction, type StaffListItem } from "@/actions/s
 
 type View =
   | "dashboard"
+  | "currency"
   | "add-product"
   | "products"
   | "categories"
@@ -275,6 +277,7 @@ export function AdminPage({
   if (activeView === "billing") return <AdminBilling brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "store-status") return <AdminStoreStatus brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "currency") return <AdminCurrency brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;

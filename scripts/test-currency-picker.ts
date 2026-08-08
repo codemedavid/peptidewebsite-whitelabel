@@ -91,7 +91,7 @@ check(
   `got ${JSON.stringify(riyal.brandConfig.currency)}`,
 );
 check(
-  "StoreSettings carries the ISO code",
+  "TenantSettings carries the ISO code",
   riyal.settings.currency === "SAR",
   `got ${JSON.stringify(riyal.settings.currency)}`,
 );
@@ -172,9 +172,9 @@ check(
   "a tampered form post must not store a value the storefront reads differently",
 );
 check(
-  "the action syncs StoreSettings",
-  /saveCurrencyAction[\s\S]{0,1400}?storeSettings\.upsert/.test(actions),
-  "StoreSettings.currency would keep the old ISO code",
+  "the action syncs TenantSettings",
+  /saveCurrencyAction[\s\S]{0,1400}?tenantSettings\.upsert/.test(actions),
+  "TenantSettings.currency would keep the old ISO code",
 );
 check(
   "the action re-stamps existing product rows",

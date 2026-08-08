@@ -25,6 +25,7 @@ import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
+import { normalizeCurrency } from "@/lib/storefront/currency";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -325,6 +326,80 @@ export async function saveStoreStatusAction(input: unknown): Promise<ActionResul
       where: { tenantId },
       update: { config: config as Prisma.InputJsonValue },
       create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Switch the currency the store trades in.
+ *
+ * Three places store a currency and all three must move together, or the shop
+ * renders two currencies at once:
+ *
+ *   branding.config.currency — the SYMBOL every storefront surface reads
+ *   StoreSettings.currency   — the ISO CODE, the tenant-level record
+ *   Product.currency + metadata.currencySymbol — captured per row at creation
+ *
+ * That last one is why this is an action and not a one-field form. A product row
+ * keeps the symbol it was created with, so without the re-stamp a store that
+ * switched to riyals would keep showing pesos on every card made before the
+ * switch. Prices are NOT converted — the numbers are the owner's to decide, and
+ * silently converting them would misprice a whole catalog.
+ *
+ * The input is re-normalized here rather than trusted: normalizeCurrency is the
+ * same pure function the storefront reads through, so a tampered form post can't
+ * store a value the rest of the system would interpret differently.
+ */
+export async function saveCurrencyAction(input: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("currency");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const money = normalizeCurrency(input);
+  const current = await readConfig(tenantId);
+  const config = { ...current, currency: money.symbol };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+    revalidateTenant(tenantId, slug);
+    return { ok: true };
+  }
+
+  await prisma.branding.upsert({
+    where: { tenantId },
+    update: { config: config as Prisma.InputJsonValue },
+    create: { tenantId, config: config as Prisma.InputJsonValue },
+  });
+
+  // A custom glyph has no ISO identity, so the code columns keep whatever the
+  // store already had rather than being filled with something invented.
+  const iso = money.code;
+  if (iso) {
+    await prisma.tenantSettings.upsert({
+      where: { tenantId },
+      update: { currency: iso },
+      create: { tenantId, currency: iso },
+    });
+    await prisma.product.updateMany({ where: { tenantId }, data: { currency: iso } });
+  }
+
+  // The display symbol lives inside each row's metadata JSON, which updateMany
+  // cannot reach into — so the rows are read and rewritten individually. A
+  // tenant's catalog is small (tens to low hundreds), so this stays cheap.
+  const rows = await prisma.product.findMany({
+    where: { tenantId },
+    select: { id: true, metadata: true },
+  });
+  for (const row of rows) {
+    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    if (meta.currencySymbol === money.symbol) continue;
+    await prisma.product.update({
+      where: { id: row.id },
+      data: { metadata: { ...meta, currencySymbol: money.symbol } as Prisma.InputJsonValue },
     });
   }
 

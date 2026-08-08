@@ -6,8 +6,8 @@
 
 import type { Brand, Category, ContactChannel, PaymentMethod, Product } from "@/storefront/types";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
+import { normalizeCurrency } from "@/lib/storefront/currency";
 import {
-  currencySymbolToIso,
   productToDbWrite,
   slugify,
   type ProductDbWrite,
@@ -32,9 +32,24 @@ function starterPageToggles(selected: string[]): Partial<Brand> {
   };
 }
 
-// The business is PH-focused (GCash/Maya/bank). Peso is the storefront default.
+// The platform was born PH-focused (GCash/Maya/bank), so the peso is the
+// DEFAULT — not the only option. A store sold in riyals is provisioned in
+// riyals; passing nothing keeps the peso every existing caller expects.
 const CURRENCY_SYMBOL = "₱";
 const CURRENCY_ISO = "PHP";
+
+/** The symbol + ISO code one provisioning run should stamp everywhere.
+ *
+ *  Both matter and they are not the same field: brand config and product cards
+ *  render the SYMBOL, while StoreSettings.currency and Product.currency hold the
+ *  ISO CODE. Deriving both from one normalizeCurrency call is what stops a store
+ *  being written as "SAR" in one column and "PHP" in the next. */
+function currencyFor(currency?: unknown): { symbol: string; iso: string } {
+  const money = normalizeCurrency(currency);
+  // A bare custom glyph ("₸") has no ISO identity we can honestly claim, so the
+  // ISO column falls back rather than inventing a code the world doesn't use.
+  return { symbol: money.symbol, iso: money.code || CURRENCY_ISO };
+}
 
 export type ProvisioningPlan = {
   brandConfig: Partial<Brand>;
@@ -89,11 +104,11 @@ function categoriesFrom(payload: OnboardingPayload): Category[] {
 /** Build the Partial<Brand> config blob written to Branding.config. Only fields
  *  the client actually provided are set, so the chosen theme palette still drives
  *  surfaces/fonts for everything left blank. */
-function brandConfigFrom(payload: OnboardingPayload): Partial<Brand> {
+function brandConfigFrom(payload: OnboardingPayload, symbol: string): Partial<Brand> {
   const config: Partial<Brand> = {
     name: payload.businessName,
     industry: payload.businessType || "small business",
-    currency: CURRENCY_SYMBOL,
+    currency: symbol,
     contactChannels: contactChannelsFrom(payload),
     paymentMethods: paymentMethodsFrom(payload),
     categories: categoriesFrom(payload),
@@ -125,7 +140,11 @@ function brandConfigFrom(payload: OnboardingPayload): Partial<Brand> {
   return config;
 }
 
-function productWritesFrom(payload: OnboardingPayload): ProductDbWrite[] {
+function productWritesFrom(
+  payload: OnboardingPayload,
+  symbol: string,
+  iso: string,
+): ProductDbWrite[] {
   return payload.products
     .filter((p) => p.name.trim())
     .map((p) => {
@@ -133,24 +152,37 @@ function productWritesFrom(payload: OnboardingPayload): ProductDbWrite[] {
         name: p.name,
         description: p.description ?? "",
         price: p.price,
-        currency: CURRENCY_SYMBOL,
+        currency: symbol,
         category: p.category ?? "",
         featured: false,
         image: p.imageUrl || null,
         available: true,
       } as Product;
-      return productToDbWrite(product, currencySymbolToIso(CURRENCY_SYMBOL), CURRENCY_SYMBOL);
+      return productToDbWrite(product, iso, symbol);
     });
 }
 
-export function buildProvisioning(payload: OnboardingPayload): ProvisioningPlan {
+/**
+ * Turn a validated onboarding payload into the writes that create a tenant.
+ *
+ * `currency` is optional and defaults to the peso, so every existing caller —
+ * the public wizard, the operator's onboarding screen, the provisioning scripts
+ * — keeps producing exactly the store it produces today. Pass one to sell a shop
+ * in another currency; it is stamped on the brand config, on every product row
+ * and on StoreSettings in a single consistent pair.
+ */
+export function buildProvisioning(
+  payload: OnboardingPayload,
+  currency?: unknown,
+): ProvisioningPlan {
+  const { symbol, iso } = currencyFor(currency);
   return {
-    brandConfig: brandConfigFrom(payload),
-    productWrites: productWritesFrom(payload),
+    brandConfig: brandConfigFrom(payload, symbol),
+    productWrites: productWritesFrom(payload, symbol, iso),
     settings: {
       storeName: payload.businessName,
       supportEmail: payload.email,
-      currency: CURRENCY_ISO,
+      currency: iso,
     },
   };
 }

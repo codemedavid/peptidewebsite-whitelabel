@@ -27,6 +27,7 @@ export type StaffModule = { key: string; label: string };
  */
 export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "store-status", label: "Store Status" },
+  { key: "currency", label: "Currency" },
   { key: "add-product", label: "Add Product" },
   { key: "products", label: "Manage Products" },
   { key: "categories", label: "Categories" },
