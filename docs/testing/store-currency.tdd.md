@@ -135,16 +135,62 @@ Deliberately **out of scope**, and still peso:
   structural scan strips comments before looking, so it stays a gate about
   behavior rather than prose.
 
-**Not yet built (follow-on work):**
+**No schema change was required:** `Product.currency`, `Order.currency` and
+`TenantSettings.currency` already exist in `prisma/schema.prisma`.
 
-1. **The owner-facing picker.** `branding.config.currency` is read everywhere but
-   there is no store-admin screen to write it, and no `saveCurrencyAction`. Until
-   that ships the setting is operator-set only. It should also sync
-   `StoreSettings.currency` and re-stamp `Product.currency` /
-   `metadata.currencySymbol` so no row keeps a stale symbol.
-2. **`src/lib/onboarding/mapping.ts:36`** still has `const CURRENCY_SYMBOL = "₱"`,
-   so a tenant provisioned through onboarding is stamped peso regardless of the
-   currency chosen. Needs to become a parameter defaulting to `₱`.
-3. **No schema change is required** for any of this: `Product.currency`,
-   `Order.currency` and `StoreSettings.currency` already exist in
-   `prisma/schema.prisma`.
+---
+
+## Phase 3 — the owner's picker (`beb11fb` RED → `303a86f` GREEN)
+
+Phase 2 left the setting readable everywhere but writable nowhere, which made it
+operator-only — a shop could be provisioned in riyals and its owner could never
+change it. The request was *"so i can freely change currency"*, which is a
+screen, not just a resolver.
+
+**Shipped:** `src/storefront/admin/AdminCurrency.tsx` (registry picker + free-text
+box for unregistered currencies, with a before/after price preview),
+`saveCurrencyAction` in `src/actions/storefront-admin.ts`, a `currency` staff
+permission, an `admin-nav` entry, and the `AdminPage` route.
+
+Two deliberate non-behaviours, both stated on screen:
+
+- **Prices are not converted.** Switching to SAR relabels `1,500` as
+  `SAR 1,500`; it does not apply an exchange rate. Rates move daily and the right
+  price in a new market is a business decision — silently repricing a catalog
+  would be the worst possible default.
+- **The owner is not restricted to the list**, per the open-list rule.
+
+`buildProvisioning(payload, currency?)` gained an optional second argument so a
+store sold in riyals is provisioned in riyals across brand config, product rows
+and `TenantSettings` in one consistent symbol/ISO pair. Omitting it keeps the
+peso, so every existing caller is unchanged.
+
+| # | What is guaranteed | Test | Result |
+|---|---|---|---|
+| 15 | No-argument provisioning still yields `₱` / `PHP` / peso product rows | `test-currency-picker.ts` | PASS |
+| 16 | A chosen currency reaches brand config, every product row, and settings as a matching symbol/ISO pair | `test-currency-picker.ts` | PASS |
+| 17 | An unregistered code provisions as itself; junk falls back to the peso | `test-currency-picker.ts` | PASS |
+| 18 | The picker exists, is listed in the nav, and is mounted by the view router | `test-currency-picker.ts` | PASS |
+| 19 | The screen is gated by a labelled `currency` staff permission | `test-currency-picker.ts` | PASS |
+| 20 | The save action is permission-gated, re-normalizes input, syncs `TenantSettings`, and re-stamps product rows | `test-currency-picker.ts` | PASS |
+
+```
+RED:   npm run test:currency-picker → 15 currency-picker check(s) FAILED.
+GREEN: npm run test:currency-picker → All currency-picker checks passed.
+       npx tsc --noEmit → 0 errors;  20 related gates pass.
+```
+
+**Corrections made during this phase**, recorded because they were wrong facts,
+not style choices:
+
+1. The RED gate initially died on a **broken fixture** (payload missing
+   `paymentMethods`) rather than the intended defect. That is not a valid RED
+   under this workflow; the fixture was fixed and RED re-established before any
+   production code was touched.
+2. The gate asserted a `storeSettings` Prisma model. **No such model exists** —
+   the schema calls it `TenantSettings`. Both the gate and the action were
+   corrected to the real name.
+
+**Still outstanding:** nothing in the currency feature itself. The remaining work
+is the Pureluxxe tenant provisioning, which consumes
+`buildProvisioning(payload, "SAR")`.
