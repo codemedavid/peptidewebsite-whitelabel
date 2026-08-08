@@ -63,14 +63,19 @@ const QUOTED: Record<string, number> = {
 };
 const QUOTED_TOTAL = 4990;
 
+/** The catalog. `products` is optional on the wizard's input type (a half-filled
+ *  form has none yet), but a brief with no catalog is not a brief — an empty
+ *  list fails the count check below rather than silently skipping it. */
+const PRODUCTS = BRIEF.products ?? [];
+
 console.log("Pureluxxe — the tenant brief\n");
 
 // ── The price list ──────────────────────────────────────────────────────────
 console.log("every price matches the list the client sent");
 
-check("the catalog has all 21 products", BRIEF.products.length === 21, `got ${BRIEF.products.length}`);
+check("the catalog has all 21 products", PRODUCTS.length === 21, `got ${PRODUCTS.length}`);
 
-const byName = new Map(BRIEF.products.map((p) => [p.name, p.price]));
+const byName = new Map(PRODUCTS.map((p) => [p.name, p.price]));
 for (const [name, price] of Object.entries(QUOTED)) {
   const got = byName.get(name);
   check(
@@ -80,7 +85,7 @@ for (const [name, price] of Object.entries(QUOTED)) {
   );
 }
 
-const total = BRIEF.products.reduce((sum, p) => sum + p.price, 0);
+const total = PRODUCTS.reduce((sum, p) => sum + p.price, 0);
 check(
   "the catalog totals the same as the list",
   total === QUOTED_TOTAL,
@@ -88,17 +93,17 @@ check(
 );
 check(
   "no product is unpriced",
-  BRIEF.products.every((p) => p.price > 0),
+  PRODUCTS.every((p) => p.price > 0),
   "a live shop must not list a 0 product",
 );
 check(
   "every product is filed under a category",
-  BRIEF.products.every((p) => (p.category ?? "").trim().length > 0),
+  PRODUCTS.every((p) => (p.category ?? "").trim().length > 0),
   "an uncategorised product falls out of the catalog's browse UI",
 );
 check(
   "PRICE_LIST agrees with the brief",
-  PRICE_LIST.length === BRIEF.products.length &&
+  PRICE_LIST.length === PRODUCTS.length &&
     PRICE_LIST.every((row) => byName.get(row.name) === row.price),
 );
 
@@ -121,7 +126,12 @@ check("the owner's email is the one given", BRIEF.email === "jgraceparfan@gmail.
 // A storefront whose WhatsApp number is wrong takes orders nobody receives.
 console.log("\ncustomers can actually reach the shop");
 
-check("the WhatsApp number is valid", validateWhatsapp(BRIEF.whatsapp).ok, BRIEF.whatsapp);
+const wa = validateWhatsapp(BRIEF.whatsapp);
+check(
+  "the WhatsApp number is valid",
+  "digits" in wa,
+  "error" in wa ? wa.error : BRIEF.whatsapp,
+);
 check(
   "it dials the Saudi number given",
   toWaDigits(BRIEF.whatsapp) === "966592302130",
