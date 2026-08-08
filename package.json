@@ -43,6 +43,7 @@
     "test:store-status": "tsx scripts/test-store-status.ts",
     "test:currency": "tsx scripts/test-currency.ts",
     "test:currency-surfaces": "tsx scripts/test-currency-surfaces.ts",
+    "test:currency-picker": "tsx scripts/test-currency-picker.ts",
     "test:order-trash": "tsx scripts/test-order-trash.ts",
     "test:gb-content": "tsx scripts/test-gb-content.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
