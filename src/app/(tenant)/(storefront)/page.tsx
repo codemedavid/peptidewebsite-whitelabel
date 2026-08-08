@@ -5,6 +5,7 @@ import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders }
 import { orderCountsAsDemand, DEMAND_EXCLUDED_STATUS_LIST } from "@/lib/storefront/group-buy";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
+import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { StorefrontApp } from "@/storefront/StorefrontApp";
 import { resolveShowReviews, resolveEntitledPage, newModulesFor } from "@/storefront/visibility";
@@ -298,13 +299,15 @@ export default async function HomePage() {
       let filled = 0;
       try {
         if (isDemoMode()) {
-          filled = getDemoStoreOrders(slug).filter(
+          filled = activeOrders(getDemoStoreOrders(slug)).filter(
             (o) => o.groupBuyId === bannerId && orderCountsAsDemand(o.status),
           ).length;
         } else {
           filled = await withTenant(tenantId, (db) =>
             db.storefrontOrder.count({
               where: {
+                // A trashed order is not demand — it must not fill the bar.
+                ...ACTIVE_ORDERS_WHERE,
                 tenantId,
                 groupBuyId: bannerId,
                 // Same demand definition the demo path uses (orderCountsAsDemand)
@@ -381,12 +384,16 @@ export default async function HomePage() {
   if (brand.catalogSortStyle === "simple") {
     try {
       let orderRows: BestSellerOrderInput[];
+      // Best sellers count real demand, so a trashed order sells nothing.
       if (isDemoMode()) {
         const slug = (await getTenantSlug()) ?? tenantId;
-        orderRows = getDemoStoreOrders(slug);
+        orderRows = activeOrders(getDemoStoreOrders(slug));
       } else {
         const rows = await withTenant(tenantId, (db) =>
-          db.storefrontOrder.findMany({ select: { status: true, items: true } }),
+          db.storefrontOrder.findMany({
+            where: ACTIVE_ORDERS_WHERE,
+            select: { status: true, items: true },
+          }),
         );
         orderRows = rows.map((r) => ({
           status: r.status,

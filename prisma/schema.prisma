@@ -432,10 +432,22 @@ model StorefrontOrder {
   // which is what makes it safe to link its lines to real productIds.
   imported Boolean @default(false)
 
+  // In the owner's TRASH (see lib/orders/trash). Deleting an order from the
+  // admin stamps this instead of dropping the row, so a mis-click on "Delete
+  // All Orders" is recoverable; Restore clears it, and permanent delete — the
+  // only path that really removes a row — refuses to touch anything where this
+  // is still NULL. A trashed order is excluded from EVERY count, report and
+  // revenue figure, exactly as a hard-deleted one was. NULL = a live order,
+  // which is what every existing row reads as.
+  deletedAt DateTime?
+
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
   @@index([tenantId, groupBuyId])
+  // The Orders screen and every aggregate filter on deletedAt now, so keep them
+  // off a scan of the tenant's trash.
+  @@index([tenantId, deletedAt])
   @@map("storefront_orders")
 }
 

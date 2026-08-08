@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Brand, Order } from "../types";
 import {
   listStorefrontOrdersAction,
-  deleteStorefrontOrdersAction,
+  trashStorefrontOrdersAction,
+  restoreStorefrontOrdersAction,
+  purgeStorefrontOrdersAction,
   bulkUpdateStorefrontOrderStatusAction,
 } from "@/actions/orders";
 
@@ -88,6 +90,10 @@ export function AdminOrders({
   // Orders are DB-backed (source of truth). Load the tenant's set on mount and
   // re-fetch after deletes / on Refresh, rather than reading browser localStorage.
   const [orders, setOrders] = useState<Order[]>([]);
+  // The trash is fetched alongside the working list rather than on demand, so
+  // the tab can carry a count and switching views costs nothing.
+  const [trashed, setTrashed] = useState<Order[]>([]);
+  const [view, setView] = useState<"active" | "trash">("active");
   const [loading, setLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<string>("all");
   const [query, setQuery] = useState<string>("");
@@ -99,11 +105,25 @@ export function AdminOrders({
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const res = await listStorefrontOrdersAction();
-    if ("ok" in res) setOrders(res.orders);
-    else alert(res.error);
+    const [live, binned] = await Promise.all([
+      listStorefrontOrdersAction(),
+      listStorefrontOrdersAction("trash"),
+    ]);
+    if ("ok" in live) setOrders(live.orders);
+    else alert(live.error);
+    if ("ok" in binned) setTrashed(binned.orders);
     setLoading(false);
   }, []);
+
+  const showingTrash = view === "trash";
+  const visible = showingTrash ? trashed : orders;
+
+  /** Switching views clears the selection — the ids belong to the other list. */
+  const switchView = (next: "active" | "trash") => {
+    setView(next);
+    setSelected(new Set());
+    setFilter("all");
+  };
 
   useEffect(() => {
     void refresh();
@@ -127,7 +147,7 @@ export function AdminOrders({
     (stats.cancelled || 0);
 
   const filtered = useMemo(() => {
-    let list = orders;
+    let list = visible;
     if (filter !== "all") list = list.filter((o) => o.status === filter);
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -141,7 +161,7 @@ export function AdminOrders({
       );
     }
     return list;
-  }, [orders, filter, query]);
+  }, [visible, filter, query]);
 
   const cards: {
     id: string;
@@ -210,16 +230,40 @@ export function AdminOrders({
     else setSelected(new Set(filtered.map((o) => o.id)));
   };
 
-  const deleteSelected = async () => {
-    if (!selected.size) return;
-    if (!confirm(`Delete ${selected.size} order(s)?`)) return;
-    const res = await deleteStorefrontOrdersAction([...selected]);
+  /** Run one bulk mutation, then re-read both lists so the counts stay honest. */
+  const runBulk = async (action: () => Promise<{ ok: true } | { error: string }>) => {
+    if (busy) return;
+    setBusy(true);
+    const res = await action();
+    setBusy(false);
     if ("error" in res) {
       alert(res.error);
       return;
     }
     setSelected(new Set());
     await refresh();
+  };
+
+  const trashSelected = async () => {
+    if (!selected.size) return;
+    if (!confirm(`Move ${selected.size} order(s) to the trash?`)) return;
+    await runBulk(() => trashStorefrontOrdersAction([...selected]));
+  };
+
+  const restoreSelected = async () => {
+    if (!selected.size) return;
+    await runBulk(() => restoreStorefrontOrdersAction([...selected]));
+  };
+
+  // The one irreversible button in the screen, so it asks for the word rather
+  // than an OK a hand already on the mouse can give by reflex.
+  const purge = async (ids: string[], what: string) => {
+    if (!ids.length) return;
+    const typed = prompt(
+      `Permanently delete ${what}? This cannot be undone.\n\nType DELETE to confirm.`,
+    );
+    if (typed?.trim().toUpperCase() !== "DELETE") return;
+    await runBulk(() => purgeStorefrontOrdersAction(ids));
   };
 
   const bulkChangeStatus = async () => {
@@ -237,16 +281,12 @@ export function AdminOrders({
     await refresh();
   };
 
-  const deleteAll = async () => {
-    if (!confirm(`Delete ALL ${orders.length} orders? This cannot be undone.`))
-      return;
-    const res = await deleteStorefrontOrdersAction(orders.map((o) => o.id));
-    if ("error" in res) {
-      alert(res.error);
-      return;
-    }
-    setSelected(new Set());
-    await refresh();
+  // Still here, but no longer the end of the world: everything lands in the
+  // trash, where it can be picked back out.
+  const trashAll = async () => {
+    if (!orders.length) return;
+    if (!confirm(`Move ALL ${orders.length} orders to the trash?`)) return;
+    await runBulk(() => trashStorefrontOrdersAction(orders.map((o) => o.id)));
   };
 
   return (
@@ -299,6 +339,45 @@ export function AdminOrders({
           </button>
         </div>
 
+        <div className="admin-orders__views" role="tablist" aria-label="Orders or trash">
+          <button
+            className={`admin-btn ${showingTrash ? "" : "admin-btn--primary"}`}
+            role="tab"
+            aria-selected={!showingTrash}
+            onClick={() => switchView("active")}
+          >
+            Orders ({orders.length.toLocaleString()})
+          </button>
+          <button
+            className={`admin-btn ${showingTrash ? "admin-btn--primary" : ""}`}
+            role="tab"
+            aria-selected={showingTrash}
+            onClick={() => switchView("trash")}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+            Trash ({trashed.length.toLocaleString()})
+          </button>
+        </div>
+
+        {showingTrash && (
+          <div className="admin-note" style={{ marginBottom: 14 }}>
+            Deleted orders wait here until you empty the trash. They count for
+            nothing while they wait — no revenue, no reports, no stock — and
+            restoring one puts it back exactly as it was.
+          </div>
+        )}
+
+        {!showingTrash && (
         <div className="admin-orders__stats">
           {cards.map((c) => (
             <div
@@ -314,6 +393,7 @@ export function AdminOrders({
             </div>
           ))}
         </div>
+        )}
 
         <div className="admin-orders__search">
           <label className="input-wrap">
@@ -349,67 +429,111 @@ export function AdminOrders({
             <span>Select All ({filtered.length})</span>
           </label>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div className="admin-orders__bulkstatus">
-              <label className="od-sr-only" htmlFor="bulk-status-select">
-                Change status of selected orders
-              </label>
-              <select
-                id="bulk-status-select"
-                className="admin-select"
-                value={bulkStatus}
-                disabled={!selected.size || busy}
-                onChange={(e) => setBulkStatus(e.target.value as Order["status"])}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="admin-btn"
-                disabled={!selected.size || busy}
-                onClick={bulkChangeStatus}
-              >
-                {busy ? "Updating…" : "Change Status"}
-              </button>
-            </div>
-            <button
-              className="admin-btn admin-btn--danger-soft"
-              disabled={!selected.size || busy}
-              onClick={deleteSelected}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              </svg>
-              Delete Selected
-            </button>
-            <button
-              className="admin-btn admin-btn--danger"
-              disabled={busy}
-              onClick={deleteAll}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              </svg>
-              Delete All Orders
-            </button>
+            {showingTrash ? (
+              <>
+                <button
+                  className="admin-btn admin-btn--primary"
+                  disabled={!selected.size || busy}
+                  onClick={restoreSelected}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  {busy ? "Working…" : "Restore Selected"}
+                </button>
+                <button
+                  className="admin-btn admin-btn--danger-soft"
+                  disabled={!selected.size || busy}
+                  onClick={() => void purge([...selected], `${selected.size} order(s)`)}
+                >
+                  Delete Permanently
+                </button>
+                <button
+                  className="admin-btn admin-btn--danger"
+                  disabled={!trashed.length || busy}
+                  onClick={() =>
+                    void purge(
+                      trashed.map((o) => o.id),
+                      `all ${trashed.length} order(s) in the trash`,
+                    )
+                  }
+                >
+                  Empty Trash
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="admin-orders__bulkstatus">
+                  <label className="od-sr-only" htmlFor="bulk-status-select">
+                    Change status of selected orders
+                  </label>
+                  <select
+                    id="bulk-status-select"
+                    className="admin-select"
+                    value={bulkStatus}
+                    disabled={!selected.size || busy}
+                    onChange={(e) => setBulkStatus(e.target.value as Order["status"])}
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="admin-btn"
+                    disabled={!selected.size || busy}
+                    onClick={bulkChangeStatus}
+                  >
+                    {busy ? "Updating…" : "Change Status"}
+                  </button>
+                </div>
+                <button
+                  className="admin-btn admin-btn--danger-soft"
+                  disabled={!selected.size || busy}
+                  onClick={trashSelected}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  </svg>
+                  Move to Trash
+                </button>
+                <button
+                  className="admin-btn admin-btn--danger"
+                  disabled={!orders.length || busy}
+                  onClick={trashAll}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  </svg>
+                  Move All to Trash
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -460,38 +584,68 @@ export function AdminOrders({
                 </div>
               </div>
               <div>
-                <div className="admin-order-card__col-label">Date</div>
+                <div className="admin-order-card__col-label">
+                  {showingTrash && o.deletedAt ? "Deleted" : "Date"}
+                </div>
                 <div className="admin-order-card__col-main">
-                  {formatDate(o.date)}
+                  {formatDate(showingTrash && o.deletedAt ? o.deletedAt : o.date)}
                 </div>
                 <div className="admin-order-card__col-sub">
-                  {formatTime(o.date)}
+                  {formatTime(showingTrash && o.deletedAt ? o.deletedAt : o.date)}
                 </div>
               </div>
-              <button
-                className="admin-order-card__view"
-                onClick={() => onView(o)}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {showingTrash ? (
+                // No View Details from the trash: the detail screen edits status
+                // and tracking, and the server refuses both on a trashed order.
+                // Restore it first, then open it.
+                <button
+                  className="admin-order-card__view"
+                  disabled={busy}
+                  onClick={() => void runBulk(() => restoreStorefrontOrdersAction([o.id]))}
                 >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                View Details
-              </button>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  Restore
+                </button>
+              ) : (
+                <button
+                  className="admin-order-card__view"
+                  onClick={() => onView(o)}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  View Details
+                </button>
+              )}
             </div>
           </div>
         ))}
 
         {filtered.length === 0 && (
           <div className="admin-empty-set" style={{ padding: "60px 20px" }}>
-            {loading ? "Loading orders…" : "No orders match the current filter."}
+            {loading
+              ? "Loading orders…"
+              : showingTrash
+                ? "The trash is empty — nothing has been deleted."
+                : "No orders match the current filter."}
           </div>
         )}
       </main>

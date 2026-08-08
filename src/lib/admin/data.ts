@@ -16,6 +16,7 @@ import { planMeta } from "@/lib/admin/plans";
 import { planConfigPriceCents } from "@/lib/platform/plan-config";
 import { aggregatePlanDistribution, type PlanDistribution } from "@/lib/admin/plan-distribution";
 import { getPlanConfig } from "@/lib/platform/plan-config-server";
+import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
 import { getSubscriptionState, getSubscriptionMeta } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom, type BrandSubscription } from "@/lib/subscription/subscription-state";
 import { isBillingCycle, type BillingCycle } from "@/lib/subscription/billing-cycle";
@@ -562,6 +563,8 @@ const _cachedAdminTenants = unstable_cache(
       }),
       prisma.order.groupBy({ by: ["tenantId"], _sum: { totalCents: true } }),
       prisma.storefrontOrder.findMany({
+        // An order the tenant moved to their trash is not revenue.
+        where: ACTIVE_ORDERS_WHERE,
         select: { tenantId: true, status: true, items: true, shipping: true, adminFee: true, discount: true },
       }),
     ]);
@@ -746,6 +749,9 @@ export async function getPlatformOverview(): Promise<OverviewData> {
       }),
       safeRecentEvents(),
       prisma.storefrontOrder.findMany({
+        // Trashed orders drop out of the operator's feed too — the owner has
+        // deleted them, and the console must not contradict the store admin.
+        where: ACTIVE_ORDERS_WHERE,
         orderBy: { placedAt: "desc" },
         select: {
           tenantId: true,
@@ -925,7 +931,7 @@ const _cachedTenantDetail = unstable_cache(
       safeTenantEvents(t.id),
       getEntitlements(t.id),
       prisma.storefrontOrder.findMany({
-        where: { tenantId: t.id },
+        where: { ...ACTIVE_ORDERS_WHERE, tenantId: t.id },
         orderBy: { placedAt: "desc" },
         select: {
           orderNumber: true,

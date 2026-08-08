@@ -41,6 +41,7 @@
     "test:two-ways-cart": "tsx scripts/test-two-ways-cart.ts",
     "test:two-ways-mode": "tsx scripts/test-two-ways-mode.ts",
     "test:store-status": "tsx scripts/test-store-status.ts",
+    "test:currency": "tsx scripts/test-currency.ts",
     "test:order-trash": "tsx scripts/test-order-trash.ts",
     "test:gb-content": "tsx scripts/test-gb-content.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",

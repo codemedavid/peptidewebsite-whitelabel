@@ -150,7 +150,7 @@ check(
 );
 check(
   "the result is a NEW array, not the input",
-  (activeOrders(sample as { deletedAt?: string | null }[]) as unknown) !== (sample as unknown),
+  (activeOrders(sample) as unknown) !== (sample as unknown),
 );
 check(
   "the id cap matches the one the existing bulk actions already enforce",
@@ -186,15 +186,26 @@ function callSites(source: string, ops: string[]): { index: number; args: string
   return found;
 }
 
-/** A read site is compliant when it filters, or is explicitly marked exempt. */
+/**
+ * A site carries the filter when it names deletedAt or — better — spreads one
+ * of the shared fragments, which is what keeps the rule in one place.
+ */
+const FILTERED = /deletedAt|ACTIVE_ORDERS_WHERE|TRASHED_ORDERS_WHERE|ordersWhere\(/;
+
+/**
+ * A read site is compliant when it filters, or carries a `trash-exempt` marker
+ * on the line immediately above it. The marker window is deliberately tight:
+ * an exemption has to be written on the query it excuses, not somewhere in the
+ * surrounding prose where it could drift onto a query added later.
+ */
 function audit(rel: string, ops = ["findMany", "findFirst", "count"]) {
   const source = src(rel);
   const sites = callSites(source, ops);
-  const filtered = sites.filter((s) => /deletedAt/.test(s.args));
+  const filtered = sites.filter((s) => FILTERED.test(s.args));
   const exempt = sites.filter(
     (s) =>
-      !/deletedAt/.test(s.args) &&
-      /trash-exempt/.test(source.slice(Math.max(0, s.index - 400), s.index)),
+      !FILTERED.test(s.args) &&
+      /trash-exempt/.test(source.slice(Math.max(0, s.index - 160), s.index)),
   );
   return { total: sites.length, filtered: filtered.length, exempt: exempt.length };
 }
@@ -298,14 +309,18 @@ check("restoring clears deletedAt", /deletedAt:\s*null/.test(restoreFn));
 
 // The single most important line in the feature: an active order must be
 // unreachable from the permanent-delete path, whatever ids the client sends.
+// Scoped to the TRASHED fragment specifically — a purge carrying the active
+// filter instead would be the exact inversion of the intent, and a looser check
+// would wave it through.
 check(
   "permanent delete can only ever remove rows ALREADY in the trash",
-  /deleteMany/.test(purgeFn) && /deletedAt/.test(purgeFn),
-  "purge without a deletedAt scope would hard-delete live orders on a crafted id list",
+  /deleteMany/.test(purgeFn) &&
+    /TRASHED_ORDERS_WHERE|deletedAt:\s*\{\s*not:\s*null/.test(purgeFn),
+  "purge without a trashed-only scope would hard-delete live orders on a crafted id list",
 );
 check(
   "emptying the trash is owner-only — staff can trash and restore, never purge",
-  /actor\.kind\s*===\s*"owner"/.test(purgeFn),
+  /actor\.kind\s*[!=]==\s*"owner"/.test(purgeFn),
   "trash is not a safety net if the same hand that deletes can also empty it",
 );
 

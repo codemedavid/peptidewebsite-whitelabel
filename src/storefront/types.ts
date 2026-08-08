@@ -185,6 +185,11 @@ export type Order = {
    *  like any other order, but its stock moved on the old system — so a status
    *  change never deducts or restocks it (see order-status/inventoryMove). */
   imported?: boolean;
+  /** When the owner moved this order to the TRASH (ISO). Absent = a live order,
+   *  which is every order that has never been deleted. A trashed order is
+   *  excluded from every list, count and report until it is restored — see
+   *  lib/orders/trash. Set from the DB row only, never from checkout input. */
+  deletedAt?: string;
 };
 
 export type ShippingLocation = {

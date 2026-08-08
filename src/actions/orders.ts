@@ -22,6 +22,17 @@ import { prisma } from "@/lib/db/prisma";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
+import {
+  ACTIVE_ORDERS_WHERE,
+  MAX_TRASH_IDS,
+  TRASHED_ORDERS_WHERE,
+  activeOrders,
+  isTrashed,
+  normalizeTrashScope,
+  ordersWhere,
+  trashedOrders,
+  type TrashScope,
+} from "@/lib/orders/trash";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
@@ -685,6 +696,7 @@ type DbOrderRow = {
   groupBuyId?: string | null;
   groupBuyName?: string | null;
   imported?: boolean;
+  deletedAt?: Date | string | null;
 };
 
 function dbOrderToStorefront(row: DbOrderRow): Order {
@@ -710,8 +722,13 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
   });
   // Set from the ROW, never through normalizeOrderInput — that function also
   // parses untrusted checkout payloads, and a buyer who could declare their own
-  // order "imported" would place orders that never deduct stock.
-  return row.imported ? { ...base, imported: true } : base;
+  // order "imported" would place orders that never deduct stock. `deletedAt`
+  // rides the same rule for the same reason: a buyer able to set it would place
+  // orders that land straight in the trash, invisible to the owner.
+  const withImported = row.imported ? { ...base, imported: true } : base;
+  const deletedAt =
+    row.deletedAt instanceof Date ? row.deletedAt.toISOString() : row.deletedAt || null;
+  return deletedAt ? { ...withImported, deletedAt } : withImported;
 }
 
 /** Shape the normalized Order into the columns/JSON the DB row expects.
@@ -1079,8 +1096,14 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
   const clientId = p.id || undefined;
 
   // Fast path: this exact submission is already stored (a retry) → return it.
+  // @@unique([tenantId, clientId]) still counts a trashed row, so filtering one
+  // out here would turn a retry into a unique-constraint error on a draft the
+  // buyer already paid for. Returning the trashed row is right: the order
+  // exists, and whether the owner has since binned it is not the buyer's
+  // problem.
   if (clientId) {
     const existing = await withTenant(tenantId, (db) =>
+      // trash-exempt: sees trashed rows on purpose — see above.
       db.storefrontOrder.findFirst({ where: { clientId } }),
     );
     if (existing) return { row: existing, created: false };
@@ -1102,6 +1125,8 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
         //    draft already won the race → that row IS this order (idempotent).
         if (clientId) {
           const existing = await withTenant(tenantId, (db) =>
+            // trash-exempt: the unique key counts trashed rows, so this probe
+            // has to see them too — same reason as the fast path above.
             db.storefrontOrder.findFirst({ where: { clientId } }),
           );
           if (existing) return { row: existing, created: false };
@@ -1167,15 +1192,17 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
     (o.orderNumber || "").toUpperCase() === code.toUpperCase() ||
     o.id.toUpperCase() === code.toUpperCase();
 
+  // A trashed order reads as "not found" — the same answer the buyer got when
+  // deleting was a hard DELETE. Restoring it makes the code work again.
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    const found = getDemoStoreOrders(slug).find(matches);
+    const found = activeOrders(getDemoStoreOrders(slug)).find(matches);
     return { ok: true, order: found ? pick(found) : null };
   }
 
   try {
     const row = await withTenant(tenantId, (db) =>
-      db.storefrontOrder.findFirst({ where: { orderNumber: code } }),
+      db.storefrontOrder.findFirst({ where: { ...ACTIVE_ORDERS_WHERE, orderNumber: code } }),
     );
     return { ok: true, order: row ? pick(dbOrderToStorefront(row as DbOrderRow)) : null };
   } catch (e) {
@@ -1185,20 +1212,34 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
 
 // ── Admin: list ───────────────────────────────────────────────────────────────
 
-/** The tenant's storefront orders, newest first, for the admin Orders screen. */
-export async function listStorefrontOrdersAction(): Promise<ListOrdersResult> {
+/**
+ * The tenant's storefront orders, newest first, for the admin Orders screen.
+ *
+ * `scope` picks which half: the working list ("active", the default and what
+ * every existing caller gets) or the trash. Defaulting to active is what keeps
+ * the Analytics and Dashboard screens correct without touching them — a trashed
+ * order must not reach a revenue figure.
+ */
+export async function listStorefrontOrdersAction(scope?: unknown): Promise<ListOrdersResult> {
   const ctx = await requireStaffPermission("orders");
   if (!ctx) return { error: "Not signed in to the store admin." };
   const tenantId = ctx.tenantId;
+  const view: TrashScope = normalizeTrashScope(scope);
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    return { ok: true, orders: getDemoStoreOrders(slug) };
+    const all = getDemoStoreOrders(slug);
+    return { ok: true, orders: view === "trash" ? trashedOrders(all) : activeOrders(all) };
   }
 
   try {
     const rows = await withTenant(tenantId, (db) =>
-      db.storefrontOrder.findMany({ orderBy: { createdAt: "desc" } }),
+      db.storefrontOrder.findMany({
+        where: ordersWhere(view),
+        // The trash reads newest-DELETED first, which is the order the owner
+        // undoing a mis-click is looking for.
+        orderBy: view === "trash" ? { deletedAt: "desc" } : { createdAt: "desc" },
+      }),
     );
     return { ok: true, orders: rows.map((r) => dbOrderToStorefront(r as DbOrderRow)) };
   } catch (e) {
@@ -1244,7 +1285,9 @@ export async function updateStorefrontOrderAction(
     const slug = (await getTenantSlug()) ?? tenantId;
     const list = getDemoStoreOrders(slug);
     const i = list.findIndex((x) => x.id === orderId);
-    if (i < 0) return { error: "Order not found." };
+    // A trashed order is out of the fulfilment flow entirely — editing one
+    // would let a deleted order be confirmed and quietly deduct stock.
+    if (i < 0 || isTrashed(list[i])) return { error: "Order not found." };
     const newStatus = data.status as Order["status"] | undefined;
     // Same per-order decision the DB path and the bulk action use: append a
     // journey event only on a real change, and learn the inventory move.
@@ -1289,7 +1332,12 @@ export async function updateStorefrontOrderAction(
     const result = await withTenant(tenantId, async (db) => {
       // Read the current row first so we can append to the journey only when the
       // status actually changes (and never lose earlier events).
-      const current = await db.storefrontOrder.findFirst({ where: { id: orderId } });
+      // Scoped to live orders: a trashed one is out of the fulfilment flow, so
+      // it must not be confirmable (which would deduct stock for a deletion the
+      // owner believes they undid nothing of).
+      const current = await db.storefrontOrder.findFirst({
+        where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
+      });
       if (!current) return null;
       const next: Prisma.StorefrontOrderUpdateInput = { ...data };
       const newStatus = data.status as Order["status"] | undefined;
@@ -1309,7 +1357,10 @@ export async function updateStorefrontOrderAction(
         next.statusHistory = plan.statusHistory as unknown as Prisma.InputJsonValue;
       }
       // updateMany is tenant-scoped by the extension; the bare-id update isn't.
-      await db.storefrontOrder.updateMany({ where: { id: orderId }, data: next });
+      await db.storefrontOrder.updateMany({
+        where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
+        data: next,
+      });
 
       // Confirmed → deduct each line item from the tenant's inventory;
       // cancelled after a deduction → put it back. Lines match by productId
@@ -1320,7 +1371,9 @@ export async function updateStorefrontOrderAction(
         await applyOrderStockMove(db, normalizeItems(current.items), move);
       }
       return {
-        row: await db.storefrontOrder.findFirst({ where: { id: orderId } }),
+        row: await db.storefrontOrder.findFirst({
+          where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
+        }),
         moved: !!move,
         prevStatus: current.status,
         statusChanged: !!plan?.changed,
@@ -1355,29 +1408,137 @@ export async function updateStorefrontOrderAction(
   }
 }
 
-// ── Admin: delete ───────────────────────────────────────────────────────────
+// ── Admin: trash / restore / purge ──────────────────────────────────────────
+//
+// Deleting an order is reversible. The admin's delete SOFT-deletes (stamps
+// deletedAt); the Trash view lists what was removed; Restore puts it back; and
+// only the owner can destroy a row for good — and only one already in the
+// trash. See lib/orders/trash for the shared rules, and note what NONE of these
+// three do: move stock. A hard delete never restocked either, because the goods
+// left the shelf when the order was confirmed; the trip through the trash is
+// bookkeeping, not fulfilment.
 
-/** Delete one or more of the tenant's storefront orders by id (store admin only). */
-export async function deleteStorefrontOrdersAction(ids: unknown): Promise<DeleteOrdersResult> {
+/** Sanitize an untrusted id list from the admin client. */
+function cleanTrashIds(ids: unknown): string[] {
+  return Array.isArray(ids)
+    ? ids.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, MAX_TRASH_IDS)
+    : [];
+}
+
+/**
+ * Move one or more of the tenant's orders to the trash (store admin only).
+ * They leave every list, count and report immediately — the same disappearance
+ * the old hard delete produced — but the rows survive for Restore.
+ */
+export async function trashStorefrontOrdersAction(ids: unknown): Promise<DeleteOrdersResult> {
   const ctx = await requireStaffPermission("orders");
   if (!ctx) return { error: "Not signed in to the store admin." };
   const tenantId = ctx.tenantId;
 
-  const list = Array.isArray(ids)
-    ? ids.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 1000)
-    : [];
+  const list = cleanTrashIds(ids);
   if (!list.length) return { ok: true };
+  const now = new Date();
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    const remove = new Set(list);
-    saveDemoStoreOrders(slug, getDemoStoreOrders(slug).filter((o) => !remove.has(o.id)));
+    const target = new Set(list);
+    saveDemoStoreOrders(
+      slug,
+      getDemoStoreOrders(slug).map((o) =>
+        target.has(o.id) && !isTrashed(o) ? { ...o, deletedAt: now.toISOString() } : o,
+      ),
+    );
     return { ok: true };
   }
 
   try {
     await withTenant(tenantId, (db) =>
-      db.storefrontOrder.deleteMany({ where: { id: { in: list } } }),
+      db.storefrontOrder.updateMany({
+        // Scoped to live orders so re-trashing an already-trashed one can't
+        // reset its timestamp and push it back up the Trash list.
+        where: { ...ACTIVE_ORDERS_WHERE, id: { in: list } },
+        data: { deletedAt: now },
+      }),
+    );
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't move the orders to the trash." };
+  }
+}
+
+/**
+ * Put trashed orders back (store admin only). The order returns exactly as it
+ * was — same status, same journey, same totals — because nothing about it was
+ * ever changed except the deletedAt stamp.
+ */
+export async function restoreStorefrontOrdersAction(ids: unknown): Promise<DeleteOrdersResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const tenantId = ctx.tenantId;
+
+  const list = cleanTrashIds(ids);
+  if (!list.length) return { ok: true };
+
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const target = new Set(list);
+    saveDemoStoreOrders(
+      slug,
+      getDemoStoreOrders(slug).map((o) => {
+        if (!target.has(o.id) || !isTrashed(o)) return o;
+        const { deletedAt: _removed, ...restored } = o;
+        return restored;
+      }),
+    );
+    return { ok: true };
+  }
+
+  try {
+    await withTenant(tenantId, (db) =>
+      db.storefrontOrder.updateMany({
+        where: { ...TRASHED_ORDERS_WHERE, id: { in: list } },
+        data: { deletedAt: null },
+      }),
+    );
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't restore the orders." };
+  }
+}
+
+/**
+ * Destroy trashed orders for good (store OWNER only).
+ *
+ * Two guards, both load-bearing. Owner-only, because a trash the same hand can
+ * empty is not a safety net — staff can delete and restore, but only the owner
+ * can make it final. And the delete is scoped to rows ALREADY trashed, so no id
+ * list, however it was crafted or however stale the client's selection is, can
+ * reach a live order through this path.
+ */
+export async function purgeStorefrontOrdersAction(ids: unknown): Promise<DeleteOrdersResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  if (ctx.actor.kind !== "owner") {
+    return { error: "Only the store owner can delete orders permanently." };
+  }
+  const tenantId = ctx.tenantId;
+
+  const list = cleanTrashIds(ids);
+  if (!list.length) return { ok: true };
+
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const target = new Set(list);
+    saveDemoStoreOrders(
+      slug,
+      getDemoStoreOrders(slug).filter((o) => !(target.has(o.id) && isTrashed(o))),
+    );
+    return { ok: true };
+  }
+
+  try {
+    await withTenant(tenantId, (db) =>
+      db.storefrontOrder.deleteMany({ where: { ...TRASHED_ORDERS_WHERE, id: { in: list } } }),
     );
     return { ok: true };
   } catch (e) {
@@ -1417,7 +1578,10 @@ export async function bulkUpdateStorefrontOrderStatusAction(
     let changed = 0;
     let stockMoved = false;
     const nextOrders = getDemoStoreOrders(slug).map((o) => {
-      if (!target.has(o.id)) return o;
+      // Trashed orders are skipped, not just filtered out of the map: they have
+      // to stay in the saved list, and confirming one would deduct stock for an
+      // order the owner has deleted.
+      if (!target.has(o.id) || isTrashed(o)) return o;
       const plan = planStatusChange(
         {
           status: o.status,
@@ -1445,7 +1609,9 @@ export async function bulkUpdateStorefrontOrderStatusAction(
 
   try {
     const result = await withTenant(tenantId, async (db) => {
-      const rows = await db.storefrontOrder.findMany({ where: { id: { in: list } } });
+      const rows = await db.storefrontOrder.findMany({
+        where: { ...ACTIVE_ORDERS_WHERE, id: { in: list } },
+      });
       const changedOrders: { order: Order; prevStatus: string }[] = [];
       let moved = false;
       for (const current of rows) {
@@ -1460,7 +1626,7 @@ export async function bulkUpdateStorefrontOrderStatusAction(
         );
         if (!plan.changed) continue;
         await db.storefrontOrder.updateMany({
-          where: { id: current.id },
+          where: { ...ACTIVE_ORDERS_WHERE, id: current.id },
           data: {
             status: plan.status,
             statusHistory: plan.statusHistory as unknown as Prisma.InputJsonValue,
@@ -1470,7 +1636,9 @@ export async function bulkUpdateStorefrontOrderStatusAction(
           await applyOrderStockMove(db, normalizeItems(current.items), plan.move);
           moved = true;
         }
-        const updatedRow = await db.storefrontOrder.findFirst({ where: { id: current.id } });
+        const updatedRow = await db.storefrontOrder.findFirst({
+          where: { ...ACTIVE_ORDERS_WHERE, id: current.id },
+        });
         if (updatedRow) {
           changedOrders.push({
             order: dbOrderToStorefront(updatedRow as DbOrderRow),

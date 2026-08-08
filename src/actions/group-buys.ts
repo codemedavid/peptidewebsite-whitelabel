@@ -23,6 +23,7 @@ import { getTenantSlug } from "@/lib/tenant/headers";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
 import {
   isDemoMode,
   getDemoBranding,
@@ -245,8 +246,10 @@ async function loadCandidateOrders(
   slug: string,
   rounds: GroupBuy[],
 ): Promise<LinkableOrder[]> {
+  // Trashed orders are out of the round entirely — they must not reach a
+  // supplier report the owner is about to order and pay against.
   if (isDemoMode()) {
-    return getDemoStoreOrders(slug).map(toLinkableOrder);
+    return activeOrders(getDemoStoreOrders(slug)).map(toLinkableOrder);
   }
   const starts = rounds
     .map((r) => r.startsAt)
@@ -255,9 +258,12 @@ async function loadCandidateOrders(
   const earliest = starts[0] ? new Date(starts[0]) : null;
   const rows = await withTenant(tenantId, (db) =>
     db.storefrontOrder.findMany({
-      where: earliest
-        ? { OR: [{ NOT: { groupBuyId: null } }, { placedAt: { gte: earliest } }] }
-        : { NOT: { groupBuyId: null } },
+      where: {
+        ...ACTIVE_ORDERS_WHERE,
+        ...(earliest
+          ? { OR: [{ NOT: { groupBuyId: null } }, { placedAt: { gte: earliest } }] }
+          : { NOT: { groupBuyId: null } }),
+      },
       select: {
         orderNumber: true,
         status: true,
@@ -776,13 +782,16 @@ export async function getGroupBuySupplierReportAction(
     // round are excluded in SQL — they already belong somewhere else.
     let candidates: LinkableOrder[];
     if (isDemoMode()) {
-      candidates = getDemoStoreOrders(slug)
+      candidates = activeOrders(getDemoStoreOrders(slug))
         .filter((o) => !o.groupBuyId || o.groupBuyId === gbId)
         .map(toLinkableOrder);
     } else {
       const rows = await withTenant(tenantId, (db) =>
         db.storefrontOrder.findMany({
-          where: { OR: [{ groupBuyId: gbId }, { groupBuyId: null }] },
+          where: {
+            ...ACTIVE_ORDERS_WHERE,
+            OR: [{ groupBuyId: gbId }, { groupBuyId: null }],
+          },
           select: {
             orderNumber: true,
             status: true,
