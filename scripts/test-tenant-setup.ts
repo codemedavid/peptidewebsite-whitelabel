@@ -112,8 +112,12 @@ check("server action wrapper enforces platform operator auth", () => {
   assert.ok(action.includes("FORBIDDEN"));
 });
 
-check("MCP endpoint exposes the create tenant tool", () => {
+check("MCP endpoint exposes tenant, product, and hero image tools", () => {
   assert.ok(mcpRoute.includes("create_whitelabel_tenant"));
+  assert.ok(mcpRoute.includes("bulk_add_products"));
+  assert.ok(mcpRoute.includes("update_products"));
+  assert.ok(mcpRoute.includes("delete_products"));
+  assert.ok(mcpRoute.includes("upload_hero_image"));
   assert.ok(mcpRoute.includes("tools/list"));
   assert.ok(mcpRoute.includes("tools/call"));
 });
@@ -149,11 +153,17 @@ async function main() {
     assert.ok(capabilities.tools, "initialize result does not declare tools");
   });
 
-  await checkAsync("tools/list returns create_whitelabel_tenant schema", async () => {
+  await checkAsync("tools/list returns tenant, product, and hero tool schemas", async () => {
     const json = await mcpPost({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const result = json.result as { tools?: { name?: string; inputSchema?: unknown }[] };
-    assert.equal(result.tools?.[0]?.name, "create_whitelabel_tenant");
-    assert.ok(result.tools?.[0]?.inputSchema, "tool is missing inputSchema");
+    const tools = result.tools ?? [];
+    const names = tools.map((tool) => tool.name);
+    assert.ok(names.includes("create_whitelabel_tenant"));
+    assert.ok(names.includes("bulk_add_products"));
+    assert.ok(names.includes("update_products"));
+    assert.ok(names.includes("delete_products"));
+    assert.ok(names.includes("upload_hero_image"));
+    for (const tool of tools) assert.ok(tool.inputSchema, `${tool.name} is missing inputSchema`);
   });
 
   if (failed) {
