@@ -17,6 +17,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { isBusinessExclusiveLocked } from "@/lib/trial/trial-info";
 import { normalizeHeroLinks } from "@/lib/storefront/hero-links";
+import { normalizeHeroContent } from "@/lib/storefront/hero-content";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import { normalizeBanner } from "@/lib/storefront/banner";
 import { normalizeFaqGroups } from "@/lib/storefront/faq";
@@ -685,33 +686,6 @@ export async function saveTrackNoteAction(input: unknown): Promise<ActionResult>
 }
 
 // ── Hero copy (homepage hero section) ────────────────────────────────────────
-
-/**
- * The editable hero copy fields. These are the SAME `hero*` keys the platform
- * operator edits in the Branding editor's Hero tab — the store owner can now
- * edit the text themselves. Only the copy is exposed here (chip, headline lines,
- * tagline, CTA labels); layout/typography/variant stay operator-controlled.
- */
-const HERO_COPY_FIELDS = [
-  "heroChipLabel",
-  "heroLine1",
-  "heroLine2",
-  "heroSub",
-  "heroCta1",
-  "heroCta2",
-] as const;
-
-/** Coerce untrusted client input into clean hero copy strings (trimmed, capped). */
-function normalizeHeroContent(input: unknown): Record<string, string> {
-  const o = (input ?? {}) as Record<string, unknown>;
-  const out: Record<string, string> = {};
-  for (const key of HERO_COPY_FIELDS) {
-    // Headline lines and CTA labels are short; the tagline gets more room.
-    const cap = key === "heroSub" ? 400 : 120;
-    out[key] = String(o[key] ?? "").slice(0, cap).trim();
-  }
-  return out;
-}
 
 // Hero CTA link normalization (whitelist + http(s)-only URL sanitizing) lives in
 // the shared pure core so the storefront resolves the same config it was saved
