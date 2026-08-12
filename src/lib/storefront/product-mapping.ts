@@ -80,6 +80,9 @@ export type ProductMetadata = {
   /** On-hand item with no fixed price — see Product.priceOnRequest. Persisted
    *  only as `true` (absent = a normal priced product). */
   priceOnRequest?: true;
+  /** Any checkout containing this product gets the configured shipping fee
+   *  waived. Persisted only as `true` (absent = normal shipping). */
+  freeShipping?: true;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -206,6 +209,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
     purchasable: meta.purchasable !== false,
     priceOnRequest: meta.priceOnRequest === true,
+    freeShipping: meta.freeShipping === true,
   };
 }
 
@@ -329,6 +333,7 @@ export function productToDbWrite(
       // Only the restrictive value persists; compactMetadata keeps `false`.
       purchasable: p.purchasable === false ? false : undefined,
       priceOnRequest: p.priceOnRequest ? true : undefined,
+      freeShipping: p.freeShipping ? true : undefined,
     }),
   };
 }

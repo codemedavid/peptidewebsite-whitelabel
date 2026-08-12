@@ -116,8 +116,9 @@ check("MCP endpoint exposes tenant, product, and hero image tools", () => {
   assert.ok(mcpRoute.includes("create_whitelabel_tenant"));
   assert.ok(mcpRoute.includes("bulk_add_products"));
   assert.ok(mcpRoute.includes("update_products"));
-  assert.ok(mcpRoute.includes("delete_products"));
+  assert.ok(!mcpRoute.includes('name: "delete_products"'));
   assert.ok(mcpRoute.includes("upload_hero_image"));
+  assert.ok(mcpRoute.includes("imageAsset"));
   assert.ok(mcpRoute.includes("tools/list"));
   assert.ok(mcpRoute.includes("tools/call"));
 });
@@ -161,9 +162,34 @@ async function main() {
     assert.ok(names.includes("create_whitelabel_tenant"));
     assert.ok(names.includes("bulk_add_products"));
     assert.ok(names.includes("update_products"));
-    assert.ok(names.includes("delete_products"));
+    assert.ok(!names.includes("delete_products"));
     assert.ok(names.includes("upload_hero_image"));
     for (const tool of tools) assert.ok(tool.inputSchema, `${tool.name} is missing inputSchema`);
+
+    const add = tools.find((tool) => tool.name === "bulk_add_products") as {
+      inputSchema?: { properties?: { product?: { properties?: Record<string, unknown> } } };
+    };
+    assert.ok(add.inputSchema?.properties?.product?.properties?.imageAsset);
+  });
+
+  await checkAsync("MCP writes require the platform token and deletion is unavailable", async () => {
+    const unauthorized = await mcpPost({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "bulk_add_products", arguments: { tenantSlug: "demo", product: { name: "Test" } } },
+    });
+    const unauthorizedResult = unauthorized.result as { isError?: boolean; content?: { text?: string }[] };
+    assert.equal(unauthorizedResult.isError, true);
+    assert.match(unauthorizedResult.content?.[0]?.text ?? "", /MCP_ADMIN_TOKEN|Invalid or missing/);
+
+    const deleted = await mcpPost({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: { name: "delete_products", arguments: { tenantSlug: "demo" } },
+    });
+    assert.match(String((deleted.error as { message?: string })?.message), /Unknown tool/);
   });
 
   if (failed) {

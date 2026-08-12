@@ -201,6 +201,16 @@ check("a normally-priced product never persists a priceOnRequest key", () => {
   assert.ok(!("priceOnRequest" in roundTrip({ name: "BPC-157", price: 1800 }).metadata));
 });
 
+check("freeShipping:true survives the full save pipeline", () => {
+  const out = roundTrip({ name: "Tirzepatide 60mg", freeShipping: true });
+  assert.equal(out.metadata.freeShipping, true);
+  assert.equal(out.product.freeShipping, true);
+});
+
+check("normal products never persist a freeShipping key", () => {
+  assert.ok(!("freeShipping" in roundTrip({ name: "BPC-157", price: 1800 }).metadata));
+});
+
 check("the group-buy price + tag survive alongside the availability flags", () => {
   // All four Group Buy Pricing fields are written by the same tab, so they have
   // to round-trip together — not just one at a time.

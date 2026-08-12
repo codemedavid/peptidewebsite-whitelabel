@@ -26,7 +26,11 @@ import {
   resolveLiveProduct,
   liveCartLines,
   authoritativeItemPrice,
+  cartLines,
   cartTotal,
+  effectiveShippingFee,
+  hasFreeShippingLine,
+  orderHasFreeShippingProduct,
   makeVariationEntry,
   unitPrice,
 } from "../src/storefront/checkout";
@@ -153,6 +157,38 @@ check("a variation line and its base product stay distinct lines", () => {
   assert.equal(lines.length, 2);
   const variantLine = lines.find((l) => l.product.variantName === "10mg");
   assert.equal(variantLine?.product.price, 180, "variation re-priced live");
+});
+
+console.log("free shipping products");
+
+check("cart detects an owner-tagged free-shipping product", () => {
+  const lines = cartLines([product({ freeShipping: true }), product({ id: "p2" })]);
+  assert.equal(hasFreeShippingLine(lines), true);
+});
+
+check("cart without tagged products keeps normal shipping", () => {
+  assert.equal(hasFreeShippingLine(cartLines([product()])), false);
+  assert.equal(effectiveShippingFee(150, false), 150);
+});
+
+check("free-shipping product waives a configured shipping fee", () => {
+  assert.equal(effectiveShippingFee(150, true), 0);
+});
+
+check("server detects free shipping from the live catalog by product id", () => {
+  const catalog = [product({ id: "p1", freeShipping: true })];
+  assert.equal(orderHasFreeShippingProduct([{ productId: "p1", name: "BPC-157" }], catalog), true);
+});
+
+check("server ignores a client label when the matched live product is not tagged", () => {
+  const catalog = [product({ id: "p1", name: "BPC-157", freeShipping: false })];
+  assert.equal(
+    orderHasFreeShippingProduct(
+      [{ productId: "p1", name: "BPC-157 (Free Shipping Nationwide)" }],
+      catalog,
+    ),
+    false,
+  );
 });
 
 // ──────────────────────────── authoritativeItemPrice ────────────────────────

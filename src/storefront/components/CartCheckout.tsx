@@ -28,6 +28,8 @@ import {
   cartDisplayName,
   cartLines,
   cartTotal,
+  effectiveShippingFee,
+  hasFreeShippingLine,
   liveCartLines,
   channelPrefills,
   CHANNEL_LABELS,
@@ -149,7 +151,10 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // A COD/no-location courier needs no location pick and carries no fee.
   const codCourier = selectedCourier?.noLocation === true;
   const selectedLocation = courierLocations.find((l) => l.id === locationId);
-  const shippingFee = codCourier ? 0 : selectedLocation?.price ?? 0;
+  const cartHasFreeShipping = useMemo(() => hasFreeShippingLine(lines), [lines]);
+  const shippingBaseFee = codCourier ? 0 : selectedLocation?.price ?? 0;
+  const shippingFee = effectiveShippingFee(shippingBaseFee, cartHasFreeShipping);
+  const shippingWaived = cartHasFreeShipping && shippingBaseFee > 0;
   // Shipping is required to proceed only when the store actually offers it. A COD
   // courier just needs to be picked; a location-based one also needs a location.
   const shippingValid =
@@ -889,7 +894,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         {lines.length > 0 && (
           <footer className="sf-cart__foot">
             <div className="sf-cart__totals">
-              {(adminFee || shippingFee > 0 || discountAmount > 0) && (
+              {(adminFee || shippingFee > 0 || shippingWaived || discountAmount > 0) && (
                 <>
                   <div className="sf-cart__total sf-cart__total--sub">
                     <span>Subtotal</span>
@@ -907,15 +912,21 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       </span>
                     </div>
                   )}
-                  {shippingFee > 0 && (
+                  {(shippingFee > 0 || shippingWaived) && (
                     <div className="sf-cart__total sf-cart__total--sub">
                       <span>
                         Shipping
                         {selectedLocation ? ` · ${selectedLocation.name}` : ""}
                       </span>
                       <span>
-                        {currency}
-                        {shippingFee.toLocaleString()}
+                        {shippingWaived ? (
+                          "Free"
+                        ) : (
+                          <>
+                            {currency}
+                            {shippingFee.toLocaleString()}
+                          </>
+                        )}
                       </span>
                     </div>
                   )}

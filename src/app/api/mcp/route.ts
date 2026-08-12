@@ -7,8 +7,13 @@ import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
+import {
+  fetchMcpImageAsset,
+  validatePublicMcpImageUrl,
+  type McpImageAsset,
+} from "@/lib/mcp/image-assets";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
-import { normalizeHeroMedia, safeImageSrc } from "@/lib/storefront/hero-media";
+import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import {
   currencySymbolToIso,
   dbProductToStorefront,
@@ -26,7 +31,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = {
   name: "pepweb-whitelabel-admin",
   title: "Pepweb Whitelabel Admin",
-  version: "1.0.0",
+  version: "1.1.0",
 };
 
 type JsonRpcId = string | number | null;
@@ -142,6 +147,26 @@ const CREATE_TENANT_TOOL = {
   },
 };
 
+const MCP_ASSET_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    url: {
+      type: "string",
+      description:
+        "Public http(s) image URL. By default the server downloads and rehosts it to the tenant ImageKit folder.",
+    },
+    dataUrl: { type: "string", description: "Base64 data URL, e.g. data:image/png;base64,..." },
+    dataBase64: { type: "string", description: "Raw base64 file bytes." },
+    mimeType: { type: "string", description: "Required with dataBase64, e.g. image/png." },
+    fileName: { type: "string" },
+    upload: {
+      type: "boolean",
+      description: "Defaults to true. Set false to store an existing hosted URL directly instead of rehosting it.",
+    },
+  },
+};
+
 const PRODUCT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -154,7 +179,15 @@ const PRODUCT_SCHEMA = {
     purity: { type: "string" },
     category: { type: "string", description: "Storefront filter/category label. Required unless defaultCategory is set." },
     featured: { type: "boolean" },
-    image: { type: "string", description: "Hosted product image URL. Base64 data URLs are rejected." },
+    image: {
+      type: "string",
+      description: "Existing public hosted product image URL. Do not combine this with imageAsset.",
+    },
+    imageAsset: {
+      ...MCP_ASSET_SCHEMA,
+      description:
+        "Product image to upload from a public URL, data URL, or raw base64 bytes. JPG, PNG, or WebP; max 10 MB. Do not combine this with image.",
+    },
     stock: { type: "number" },
     available: { type: "boolean", description: "False creates the product as draft/unavailable." },
     discountPrice: { type: "number" },
@@ -227,26 +260,6 @@ const PRODUCT_IDENTIFIER_SCHEMA = {
   },
 };
 
-const MCP_ASSET_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    url: {
-      type: "string",
-      description:
-        "Public http(s) image URL. By default the server downloads and rehosts it to the tenant ImageKit folder.",
-    },
-    dataUrl: { type: "string", description: "Base64 data URL, e.g. data:image/png;base64,..." },
-    dataBase64: { type: "string", description: "Raw base64 file bytes." },
-    mimeType: { type: "string", description: "Required with dataBase64, e.g. image/png." },
-    fileName: { type: "string" },
-    upload: {
-      type: "boolean",
-      description: "Defaults to true. Set false to store an existing hosted URL directly instead of rehosting it.",
-    },
-  },
-};
-
 const BULK_ADD_PRODUCTS_TOOL = {
   name: "bulk_add_products",
   title: "Add/Bulk Add Products",
@@ -292,7 +305,7 @@ const BULK_ADD_PRODUCTS_TOOL = {
   annotations: {
     destructiveHint: false,
     idempotentHint: false,
-    openWorldHint: false,
+    openWorldHint: true,
   },
 };
 
@@ -348,51 +361,7 @@ const UPDATE_PRODUCTS_TOOL = {
   annotations: {
     destructiveHint: false,
     idempotentHint: false,
-    openWorldHint: false,
-  },
-};
-
-const DELETE_PRODUCTS_TOOL = {
-  name: "delete_products",
-  title: "Delete Products",
-  description:
-    "Use this when a platform operator asks ChatGPT to delete or archive products from an existing Pepweb whitelabel tenant. Archive is the default because hard deletes can fail when carts or orders reference a product.",
-  inputSchema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      adminToken: {
-        type: "string",
-        description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
-      },
-      tenantSlug: {
-        type: "string",
-        description: "Existing tenant slug, e.g. pepglow-by-elle.",
-      },
-      deleteMode: {
-        type: "string",
-        enum: ["archive", "hard"],
-        description: "archive marks products archived/unavailable. hard physically deletes rows. Defaults to archive.",
-      },
-      match: PRODUCT_IDENTIFIER_SCHEMA,
-      matches: {
-        type: "array",
-        minItems: 1,
-        maxItems: 100,
-        items: PRODUCT_IDENTIFIER_SCHEMA,
-      },
-      ids: { type: "array", items: { type: "string" } },
-      slugs: { type: "array", items: { type: "string" } },
-      skus: { type: "array", items: { type: "string" } },
-      names: { type: "array", items: { type: "string" } },
-    },
-    required: ["tenantSlug"],
-  },
-  annotations: {
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: false,
+    openWorldHint: true,
   },
 };
 
@@ -557,80 +526,39 @@ function cleanString(value: unknown, max = 200): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-function assetFileName(asset: Record<string, unknown>, fallback: string): string {
-  const raw = cleanString(asset.fileName, 180) || fallback;
-  return raw.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
-}
-
-function parseDataAsset(asset: Record<string, unknown>): { bytes: Buffer; mimeType: string } | null {
-  const dataUrl = cleanString(asset.dataUrl, 12_000_000);
-  if (dataUrl) {
-    const match = /^data:([^;,]+);base64,([a-z0-9+/=]+)$/i.exec(dataUrl);
-    if (!match) throw new Error("Invalid dataUrl asset.");
-    return { mimeType: match[1], bytes: Buffer.from(match[2], "base64") };
-  }
-
-  const dataBase64 = cleanString(asset.dataBase64, 12_000_000);
-  if (dataBase64) {
-    const mimeType = cleanString(asset.mimeType, 100);
-    if (!mimeType) throw new Error("Base64 assets need a mimeType.");
-    return { mimeType, bytes: Buffer.from(dataBase64, "base64") };
-  }
-
-  return null;
-}
-
-async function fetchMcpAsset(
-  asset: Record<string, unknown>,
-  fallbackName: string,
-): Promise<{ bytes: Buffer; mimeType: string; fileName: string }> {
-  const data = parseDataAsset(asset);
-  if (data) return { ...data, fileName: assetFileName(asset, fallbackName) };
-
-  const url = cleanString(asset.url, 2_000);
-  if (!url) throw new Error(`${fallbackName} is missing.`);
-  const safeUrl = safeImageSrc(url);
-  if (!safeUrl) throw new Error(`${fallbackName} must be a safe http(s) image URL.`);
-
-  const res = await fetch(safeUrl);
-  if (!res.ok) throw new Error(`Could not download ${fallbackName} (${res.status}).`);
-  const mimeType = (res.headers.get("content-type") ?? "").split(";")[0].trim() || "application/octet-stream";
-  return {
-    mimeType,
-    bytes: Buffer.from(await res.arrayBuffer()),
-    fileName: assetFileName(asset, safeUrl.split("/").pop() || fallbackName),
-  };
-}
-
-async function resolveMcpHeroImage(
+async function resolveMcpImage(
   tenantId: string,
-  asset: Record<string, unknown>,
+  asset: McpImageAsset,
+  kind: "hero" | "product",
 ): Promise<{ url: string; fileId?: string }> {
+  const label = kind === "hero" ? "hero image" : "product image";
   const needsUpload =
-    asset.upload !== false || Boolean(cleanString(asset.dataUrl, 20) || cleanString(asset.dataBase64, 20));
+    asset.upload !== false || Boolean(String(asset.dataUrl ?? "").trim() || String(asset.dataBase64 ?? "").trim());
   if (!needsUpload) {
-    const url = safeImageSrc(cleanString(asset.url, 2_000));
-    if (!url) throw new Error("hero image must be a safe http(s) image URL.");
-    return { url };
+    return { url: await validatePublicMcpImageUrl(asset.url, label) };
   }
 
-  const file = await fetchMcpAsset(asset, "hero");
-  if (!file.mimeType.startsWith("image/")) {
-    throw new Error(`hero: Unsupported type: ${file.mimeType || "unknown"}.`);
-  }
+  const file = await fetchMcpImageAsset(asset, label);
+  const mediaType = kind === "hero" ? "branding:hero" : "product";
 
   const uploaded = await uploadTenantMedia({
     tenantId,
     file: file.bytes,
-    fileName: `hero-${file.fileName}`,
-    tags: ["branding:hero", "hero"],
+    fileName: `${kind}-${file.fileName}`,
+    tags: kind === "hero" ? ["branding:hero", "hero"] : ["product"],
   });
 
-  await withTenant(tenantId, (db) =>
-    db.mediaAsset.create({
-      data: { tenantId, imagekitId: uploaded.fileId, url: uploaded.url, type: "branding:hero" },
-    }),
-  );
+  // The image is already safely hosted if this audit row fails, so match the
+  // existing storefront upload behavior and keep the successful URL usable.
+  try {
+    await withTenant(tenantId, (db) =>
+      db.mediaAsset.create({
+        data: { tenantId, imagekitId: uploaded.fileId, url: uploaded.url, type: mediaType },
+      }),
+    );
+  } catch {
+    // Best-effort media-library record only.
+  }
 
   return { url: uploaded.url, fileId: uploaded.fileId };
 }
@@ -711,6 +639,37 @@ function productPatchFrom(raw: unknown): Record<string, unknown> {
   return plainObject(raw) ?? {};
 }
 
+function productImageInputError(input: Record<string, unknown>): string | null {
+  if (input.imageAsset !== undefined && !plainObject(input.imageAsset)) {
+    return "imageAsset must be an object.";
+  }
+  if (cleanString(input.image, 2_000) && plainObject(input.imageAsset)) {
+    return "Provide either image or imageAsset, not both.";
+  }
+  return null;
+}
+
+async function resolveProductImageInput(
+  tenantId: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { imageAsset: rawAsset, ...cleanInput } = input;
+  const asset = plainObject(rawAsset);
+  if (asset) {
+    const uploaded = await resolveMcpImage(tenantId, asset, "product");
+    return { ...cleanInput, image: uploaded.url };
+  }
+
+  const image = cleanString(input.image, 2_000);
+  if (image) {
+    return {
+      ...cleanInput,
+      image: await validatePublicMcpImageUrl(image, "product image"),
+    };
+  }
+  return cleanInput;
+}
+
 function mergeProductPatch(existing: McpProductRow, displaySymbol: string, patch: Record<string, unknown>) {
   const current = dbProductToStorefront(existing, displaySymbol);
   const { id: _id, productId: _productId, slug: _slug, productSlug: _productSlug, sku: _sku, ...cleanPatch } = patch;
@@ -773,7 +732,7 @@ async function callBulkAddProducts(req: NextRequest, args: Record<string, unknow
   const resellerEntitled = await hasFeature(tenant.id, FEATURES.STORE_RESELLER_PORTAL);
 
   try {
-    const result = await withTenant(tenant.id, async (db) => {
+    const context = await withTenant(tenant.id, async (db) => {
       const branding = await db.branding.findUnique({
         where: { tenantId: tenant.id },
         select: { config: true },
@@ -786,95 +745,120 @@ async function callBulkAddProducts(req: NextRequest, args: Record<string, unknow
         where: { status: { not: "archived" } },
         select: { name: true, slug: true, sku: true },
       });
-      const nameSet = new Set(existing.map((p) => lowerName(p.name)));
-      const slugSet = new Set(existing.map((p) => p.slug).filter((s): s is string => !!s));
-      const skuSet = new Set(existing.map((p) => p.sku));
-      const skipped: { index: number; name: string; reason: string }[] = [];
-      const errors: { index: number; name?: string; error: string }[] = [];
-      const pending: {
-        displaySymbol: string;
-        data: {
-          tenantId: string;
-          sku: string;
-          slug: string;
-          name: string;
-          description: string | null;
-          priceCents: number;
-          currency: string;
-          stock: number;
-          status: string;
-          active: boolean;
-          images: string[];
-          metadata: Record<string, unknown>;
-        };
-      }[] = [];
+      return { defaultCurrency, existing };
+    });
 
-      rawProducts.forEach((raw, index) => {
-        const product = plainObject(raw);
-        if (!product) {
-          errors.push({ index, error: "Product must be an object." });
-          return;
-        }
+    const nameSet = new Set(context.existing.map((p) => lowerName(p.name)));
+    const slugSet = new Set(context.existing.map((p) => p.slug).filter((s): s is string => !!s));
+    const skuSet = new Set(context.existing.map((p) => p.sku));
+    const skipped: { index: number; name: string; reason: string }[] = [];
+    const errors: { index: number; name?: string; error: string }[] = [];
+    const candidates: {
+      index: number;
+      input: Record<string, unknown>;
+      name: string;
+      slug: string;
+      sku: string;
+    }[] = [];
 
-        const input = {
-          ...product,
-          currency: cleanString(product.currency, 8) || defaultCurrency,
-          category: cleanString(product.category, 64) || defaultCategory,
-        };
-        const p = normalizeProductInput(input);
+    rawProducts.forEach((raw, index) => {
+      const product = plainObject(raw);
+      if (!product) {
+        errors.push({ index, error: "Product must be an object." });
+        return;
+      }
 
-        if (!p.name) {
-          errors.push({ index, error: "Product name is required." });
-          return;
-        }
-        if (!p.category) {
-          errors.push({ index, name: p.name, error: "Product category is required." });
-          return;
-        }
-        if (p.image?.startsWith("data:")) {
-          errors.push({ index, name: p.name, error: "Product image must be a hosted URL, not a data URL." });
-          return;
-        }
-
+      const imageError = productImageInputError(product);
+      const input = {
+        ...product,
+        currency: cleanString(product.currency, 8) || context.defaultCurrency,
+        category: cleanString(product.category, 64) || defaultCategory,
+      };
+      const p = normalizeProductInput(input);
+      if (!p.name) errors.push({ index, error: "Product name is required." });
+      else if (!p.category) errors.push({ index, name: p.name, error: "Product category is required." });
+      else if (imageError) errors.push({ index, name: p.name, error: imageError });
+      else {
         const nameKey = lowerName(p.name);
         if (duplicateMode === "skip" && nameSet.has(nameKey)) {
           skipped.push({ index, name: p.name, reason: "A product with this name already exists." });
           return;
         }
-
-        const write = productToDbWrite(p, currencySymbolToIso(p.currency), p.currency);
         const baseSlug = slugify(p.name);
         const finalSlug = uniqueize(baseSlug, slugSet);
         const finalSku = uniqueize(skuBase(product, baseSlug), skuSet);
         slugSet.add(finalSlug);
         skuSet.add(finalSku);
         nameSet.add(nameKey);
+        candidates.push({ index, input, name: p.name, slug: finalSlug, sku: finalSku });
+      }
+    });
 
-        pending.push({
-          displaySymbol: p.currency,
-          data: {
-            tenantId: tenant.id,
-            sku: finalSku,
-            slug: finalSlug,
-            name: write.name,
-            description: write.description,
-            priceCents: write.priceCents,
-            currency: write.currency,
-            stock: write.stock,
-            status: write.status,
-            active: write.active,
-            images: write.images,
-            metadata: preserveResellerMetadata(
-              write.metadata as Record<string, unknown>,
-              undefined,
-              resellerEntitled,
-            ),
-          },
-        });
-      });
+    const pending: {
+      displaySymbol: string;
+      data: {
+        tenantId: string;
+        sku: string;
+        slug: string;
+        name: string;
+        description: string | null;
+        priceCents: number;
+        currency: string;
+        stock: number;
+        status: string;
+        active: boolean;
+        images: string[];
+        metadata: Record<string, unknown>;
+      };
+    }[] = [];
 
-      if (errors.length) return { tenant, added: [], skipped, errors };
+    if (!errors.length) {
+      for (const candidate of candidates) {
+        try {
+          const resolvedInput = await resolveProductImageInput(tenant.id, candidate.input);
+          const p = normalizeProductInput(resolvedInput);
+          const write = productToDbWrite(p, currencySymbolToIso(p.currency), p.currency);
+          pending.push({
+            displaySymbol: p.currency,
+            data: {
+              tenantId: tenant.id,
+              sku: candidate.sku,
+              slug: candidate.slug,
+              name: write.name,
+              description: write.description,
+              priceCents: write.priceCents,
+              currency: write.currency,
+              stock: write.stock,
+              status: write.status,
+              active: write.active,
+              images: write.images,
+              metadata: preserveResellerMetadata(
+                write.metadata as Record<string, unknown>,
+                undefined,
+                resellerEntitled,
+              ),
+            },
+          });
+        } catch (e) {
+          errors.push({
+            index: candidate.index,
+            name: candidate.name,
+            error: e instanceof Error ? e.message : "Product image upload failed.",
+          });
+        }
+      }
+    }
 
+    if (errors.length) {
+      const result = { tenant, added: [], skipped, errors };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+        isError: true,
+      };
+    }
+
+    const added = await withTenant(tenant.id, async (db) => {
       const added = [];
       for (const item of pending) {
         const saved = await db.product.create({
@@ -886,17 +870,10 @@ async function callBulkAddProducts(req: NextRequest, args: Record<string, unknow
         });
         added.push(dbProductToStorefront(saved as DbProductRow, item.displaySymbol));
       }
-
-      return { tenant, added, skipped, errors };
+      return added;
     });
 
-    if (result.errors.length) {
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        structuredContent: result,
-        isError: true,
-      };
-    }
+    const result = { tenant, added, skipped, errors };
 
     if (result.added.length) revalidateTenant(tenant.id, tenant.slug);
 
@@ -969,7 +946,7 @@ async function callUpdateProducts(req: NextRequest, args: Record<string, unknown
   const resellerEntitled = await hasFeature(tenant.id, FEATURES.STORE_RESELLER_PORTAL);
 
   try {
-    const result = await withTenant(tenant.id, async (db) => {
+    const context = await withTenant(tenant.id, async (db) => {
       const branding = await db.branding.findUnique({
         where: { tenantId: tenant.id },
         select: { config: true },
@@ -982,76 +959,96 @@ async function callUpdateProducts(req: NextRequest, args: Record<string, unknown
         where: { status: { not: "archived" } },
         orderBy: { createdAt: "asc" },
       })) as McpProductRow[];
+      return { defaultCurrency, rows };
+    });
 
-      const errors: { index: number; match: string; error: string }[] = [];
-      const pending: {
-        index: number;
-        match: string;
-        row: McpProductRow;
-        displaySymbol: string;
-        patch: Record<string, unknown>;
-      }[] = [];
-      const seen = new Set<string>();
+    const errors: { index: number; match: string; error: string }[] = [];
+    const candidates: {
+      index: number;
+      match: string;
+      row: McpProductRow;
+      displaySymbol: string;
+      patch: Record<string, unknown>;
+    }[] = [];
+    const seen = new Set<string>();
 
-      rawUpdates.forEach((raw, index) => {
-        const update = plainObject(raw);
-        if (!update) {
-          errors.push({ index, match: "invalid", error: "Update must be an object." });
-          return;
-        }
+    rawUpdates.forEach((raw, index) => {
+      const update = plainObject(raw);
+      if (!update) {
+        errors.push({ index, match: "invalid", error: "Update must be an object." });
+        return;
+      }
 
-        const match = productMatchFrom(update);
-        const resolved = resolveProductMatch(rows, match);
-        if (!isProductRow(resolved)) {
-          errors.push({ index, match: matchLabel(match), error: resolved.error });
-          return;
-        }
-        if (seen.has(resolved.id)) {
-          errors.push({ index, match: matchLabel(match), error: "This product is already being updated in this call." });
-          return;
-        }
+      const match = productMatchFrom(update);
+      const label = matchLabel(match);
+      const resolved = resolveProductMatch(context.rows, match);
+      if (!isProductRow(resolved)) {
+        errors.push({ index, match: label, error: resolved.error });
+        return;
+      }
+      if (seen.has(resolved.id)) {
+        errors.push({ index, match: label, error: "This product is already being updated in this call." });
+        return;
+      }
 
-        const patch = productPatchFrom(update.patch);
-        if (!Object.keys(patch).length) {
-          errors.push({ index, match: matchLabel(match), error: "Patch is empty." });
-          return;
-        }
-
+      const patch = productPatchFrom(update.patch);
+      const imageError = productImageInputError(patch);
+      if (!Object.keys(patch).length) errors.push({ index, match: label, error: "Patch is empty." });
+      else if (imageError) errors.push({ index, match: label, error: imageError });
+      else {
         seen.add(resolved.id);
-        pending.push({
+        candidates.push({
           index,
-          match: matchLabel(match),
+          match: label,
           row: resolved,
-          displaySymbol: cleanString(patch.currency, 8) || defaultCurrency,
+          displaySymbol: cleanString(patch.currency, 8) || context.defaultCurrency,
           patch,
         });
-      });
+      }
+    });
 
-      if (errors.length) return { tenant, updated: [], errors };
+    const pending: {
+      row: McpProductRow;
+      displaySymbol: string;
+      write: ReturnType<typeof productToDbWrite>;
+    }[] = [];
 
-      const updated = [];
-      for (const item of pending) {
-        const p = mergeProductPatch(item.row, item.displaySymbol, item.patch);
-
-        if (!p.name) {
-          errors.push({ index: item.index, match: item.match, error: "Product name is required." });
-          continue;
-        }
-        if (!p.category && !defaultCategory) {
-          errors.push({ index: item.index, match: item.match, error: "Product category is required." });
-          continue;
-        }
-        if (!p.category && defaultCategory) p.category = defaultCategory;
-        if (p.image?.startsWith("data:")) {
+    if (!errors.length) {
+      for (const item of candidates) {
+        try {
+          const resolvedPatch = await resolveProductImageInput(tenant.id, item.patch);
+          const p = mergeProductPatch(item.row, item.displaySymbol, resolvedPatch);
+          if (!p.name) throw new Error("Product name is required.");
+          if (!p.category && !defaultCategory) throw new Error("Product category is required.");
+          if (!p.category) p.category = defaultCategory;
+          pending.push({
+            row: item.row,
+            displaySymbol: p.currency,
+            write: productToDbWrite(p, currencySymbolToIso(p.currency), p.currency),
+          });
+        } catch (e) {
           errors.push({
             index: item.index,
             match: item.match,
-            error: "Product image must be a hosted URL, not a data URL.",
+            error: e instanceof Error ? e.message : "Product update validation failed.",
           });
-          continue;
         }
+      }
+    }
 
-        const write = productToDbWrite(p, currencySymbolToIso(p.currency), p.currency);
+    if (errors.length) {
+      const result = { tenant, updated: [], errors };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+        isError: true,
+      };
+    }
+
+    const updated = await withTenant(tenant.id, async (db) => {
+      const savedProducts = [];
+      for (const item of pending) {
+        const write = item.write;
         const saved = await db.product.update({
           where: { id: item.row.id },
           data: {
@@ -1070,19 +1067,11 @@ async function callUpdateProducts(req: NextRequest, args: Record<string, unknown
             ) as Prisma.InputJsonValue,
           },
         });
-        updated.push(dbProductToStorefront(saved as DbProductRow, p.currency));
+        savedProducts.push(dbProductToStorefront(saved as DbProductRow, item.displaySymbol));
       }
-
-      return { tenant, updated, errors };
+      return savedProducts;
     });
-
-    if (result.errors.length) {
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        structuredContent: result,
-        isError: true,
-      };
-    }
+    const result = { tenant, updated, errors };
 
     if (result.updated.length) revalidateTenant(tenant.id, tenant.slug);
 
@@ -1094,145 +1083,6 @@ async function callUpdateProducts(req: NextRequest, args: Record<string, unknown
   } catch (e) {
     return {
       content: [{ type: "text", text: e instanceof Error ? e.message : "Failed to update products." }],
-      isError: true,
-    };
-  }
-}
-
-function deleteMatchesFromArgs(args: Record<string, unknown>): ProductMatch[] {
-  const matches: ProductMatch[] = [];
-  if (args.match !== undefined) matches.push(productMatchFrom(args.match));
-  if (Array.isArray(args.matches)) matches.push(...args.matches.map(productMatchFrom));
-  if (Array.isArray(args.ids)) {
-    matches.push(...args.ids.map((id) => ({ id: cleanString(id, 80) })).filter((m) => m.id));
-  }
-  if (Array.isArray(args.slugs)) {
-    matches.push(...args.slugs.map((slug) => ({ slug: cleanString(slug, 200) })).filter((m) => m.slug));
-  }
-  if (Array.isArray(args.skus)) {
-    matches.push(...args.skus.map((sku) => ({ sku: cleanString(sku, 200) })).filter((m) => m.sku));
-  }
-  if (Array.isArray(args.names)) {
-    matches.push(...args.names.map((name) => ({ name: cleanString(name, 200) })).filter((m) => m.name));
-  }
-  return matches;
-}
-
-async function callDeleteProducts(req: NextRequest, args: Record<string, unknown>) {
-  const authError = requireMcpAuth(req, args);
-  if (authError) {
-    return {
-      content: [{ type: "text", text: authError }],
-      isError: true,
-    };
-  }
-
-  const tenantSlug = cleanString(args.tenantSlug ?? args.slug, 80).toLowerCase();
-  if (!tenantSlug) {
-    return {
-      content: [{ type: "text", text: "tenantSlug is required." }],
-      isError: true,
-    };
-  }
-
-  const matches = deleteMatchesFromArgs(args);
-  if (!matches.length) {
-    return {
-      content: [{ type: "text", text: "Provide match, matches, ids, slugs, skus, or names." }],
-      isError: true,
-    };
-  }
-  if (matches.length > 100) {
-    return {
-      content: [{ type: "text", text: "Product deletes are limited to 100 products per call." }],
-      isError: true,
-    };
-  }
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true, slug: true, name: true },
-  });
-  if (!tenant) {
-    return {
-      content: [{ type: "text", text: `Tenant "${tenantSlug}" was not found.` }],
-      isError: true,
-    };
-  }
-
-  const deleteMode = args.deleteMode === "hard" ? "hard" : "archive";
-
-  try {
-    const result = await withTenant(tenant.id, async (db) => {
-      const rows = (await db.product.findMany({ orderBy: { createdAt: "asc" } })) as McpProductRow[];
-      const errors: { index: number; match: string; error: string }[] = [];
-      const selected: McpProductRow[] = [];
-      const seen = new Set<string>();
-
-      matches.forEach((match, index) => {
-        const resolved = resolveProductMatch(rows, match);
-        if (!isProductRow(resolved)) {
-          errors.push({ index, match: matchLabel(match), error: resolved.error });
-          return;
-        }
-        if (seen.has(resolved.id)) return;
-        seen.add(resolved.id);
-        selected.push(resolved);
-      });
-
-      if (errors.length) return { tenant, deleteMode, deleted: [], archived: [], errors };
-
-      const ids = selected.map((p) => p.id);
-      if (deleteMode === "hard") {
-        await db.product.deleteMany({ where: { id: { in: ids } } });
-        return {
-          tenant,
-          deleteMode,
-          deleted: selected.map((p) => ({ id: p.id, name: p.name, slug: p.slug, sku: p.sku })),
-          archived: [],
-          errors,
-        };
-      }
-
-      await db.product.updateMany({
-        where: { id: { in: ids } },
-        data: { status: "archived", active: false },
-      });
-      return {
-        tenant,
-        deleteMode,
-        deleted: [],
-        archived: selected.map((p) => ({ id: p.id, name: p.name, slug: p.slug, sku: p.sku })),
-        errors,
-      };
-    });
-
-    if (result.errors.length) {
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        structuredContent: result,
-        isError: true,
-      };
-    }
-
-    if (result.deleted.length || result.archived.length) revalidateTenant(tenant.id, tenant.slug);
-
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      structuredContent: result,
-      isError: false,
-    };
-  } catch (e) {
-    const text =
-      deleteMode === "hard"
-        ? e instanceof Error
-          ? `${e.message} Use deleteMode="archive" if the product is referenced by orders or carts.`
-          : "Hard delete failed. Use deleteMode=\"archive\" if the product is referenced by orders or carts."
-        : e instanceof Error
-          ? e.message
-          : "Failed to delete products.";
-    return {
-      content: [{ type: "text", text }],
       isError: true,
     };
   }
@@ -1275,7 +1125,7 @@ async function callUploadHeroImage(req: NextRequest, args: Record<string, unknow
   }
 
   try {
-    const heroImage = await resolveMcpHeroImage(tenant.id, image);
+    const heroImage = await resolveMcpImage(tenant.id, image, "hero");
     const result = await withTenant(tenant.id, async (db) => {
       const branding = await db.branding.findUnique({
         where: { tenantId: tenant.id },
@@ -1346,7 +1196,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, adds/edits/deletes products on existing tenants, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a tenant. Only call product tools after the operator explicitly asks to add, edit, or delete products for an existing tenant. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, adds or edits products on existing tenants, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a tenant. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1359,7 +1209,6 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
         CREATE_TENANT_TOOL,
         BULK_ADD_PRODUCTS_TOOL,
         UPDATE_PRODUCTS_TOOL,
-        DELETE_PRODUCTS_TOOL,
         UPLOAD_HERO_IMAGE_TOOL,
       ],
     });
@@ -1377,9 +1226,6 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     }
     if (name === UPDATE_PRODUCTS_TOOL.name) {
       return jsonRpcResult(message.id, await callUpdateProducts(req, args));
-    }
-    if (name === DELETE_PRODUCTS_TOOL.name) {
-      return jsonRpcResult(message.id, await callDeleteProducts(req, args));
     }
     if (name === UPLOAD_HERO_IMAGE_TOOL.name) {
       return jsonRpcResult(message.id, await callUploadHeroImage(req, args));

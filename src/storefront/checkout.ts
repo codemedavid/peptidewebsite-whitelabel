@@ -245,6 +245,33 @@ export function cartTotal(lines: CartLine[], scope: GroupBuyPriceScope | null = 
   return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, scope) * l.qty, 0);
 }
 
+/** A cart with at least one owner-tagged product pays no configured shipping
+ *  location fee. Variations inherit the flag because makeVariationEntry spreads
+ *  the base product into the cart entry. */
+export function hasFreeShippingLine(lines: CartLine[]): boolean {
+  return lines.some((l) => l.product.freeShipping === true);
+}
+
+/** Server-side analogue of hasFreeShippingLine: order items carry only the base
+ *  product id / name, so match against the live catalog before deciding. */
+export function orderHasFreeShippingProduct(
+  items: Array<{ productId?: string; name: string }>,
+  catalog: Product[],
+): boolean {
+  return items.some((it) => {
+    const prod = catalog.find((p) =>
+      it.productId ? p.id === it.productId : p.name === it.name,
+    );
+    return prod?.freeShipping === true;
+  });
+}
+
+/** Apply the product-level free-shipping waiver to a configured shipping fee. */
+export function effectiveShippingFee(baseFee: unknown, freeShipping: boolean): number {
+  const fee = Math.max(0, Number(baseFee) || 0);
+  return freeShipping ? 0 : fee;
+}
+
 // ── Always-live pricing ───────────────────────────────────────────────────────
 // A cart entry is a SNAPSHOT taken at add-time (price, discount, reseller tier,
 // or — for a variation clone — the option's price). The catalog is the DB's

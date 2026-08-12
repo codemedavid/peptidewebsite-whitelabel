@@ -248,6 +248,7 @@ export function AdminAddProduct({
   const [stock, setStock]           = useState<number | string>(initial?.stock ?? 0);
   const [featured, setFeatured]     = useState<boolean>(initial?.featured || false);
   const [available, setAvailable]   = useState<boolean>(initial?.available !== false);
+  const [freeShipping, setFreeShipping] = useState<boolean>(initial?.freeShipping === true);
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   // Group Buy product: lists under the storefront's Group Buy section (priced by
@@ -353,6 +354,7 @@ export function AdminAddProduct({
       stock: Number(stock) || 0,
       featured,
       available,
+      freeShipping,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
       productType: isGroupBuy ? "gb" : "onhand",
@@ -619,6 +621,11 @@ export function AdminAddProduct({
                 <input type="checkbox" checked={available}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAvailable(e.target.checked)} />
                 <span>✅ Available</span>
+              </label>
+              <label className="admin-check">
+                <input type="checkbox" checked={freeShipping}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFreeShipping(e.target.checked)} />
+                <span>Free shipping</span>
               </label>
             </div>
           </div>

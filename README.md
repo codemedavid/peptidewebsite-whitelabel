@@ -75,6 +75,17 @@ npm run dev
 Then visit **http://acme.localhost:3000** (browsers resolve `*.localhost`
 automatically). Platform admin: **http://admin.localhost:3000**.
 
+## ChatGPT MCP administration
+
+After deployment, connect ChatGPT to `https://<your-app-host>/api/mcp` and
+configure the same bearer value as `MCP_ADMIN_TOKEN`. The platform connector can
+create tenants, add or edit tenant products, and upload tenant hero images
+without a tenant-admin login. Product deletion is intentionally unavailable.
+
+Product and hero images can be supplied as a public URL, data URL, or raw base64
+bytes. Uploaded images are limited to JPG, PNG, or WebP up to 10 MB and are
+rehosted inside the selected tenant's ImageKit folder.
+
 ## Dynamic theming
 
 `Branding` → `resolveCssVars()` → inline CSS variables on the storefront layout,

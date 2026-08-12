@@ -99,6 +99,9 @@ export type Product = {
    *  shows an "On hand — message for price" label instead of a price and blocks
    *  add-to-cart (the customer messages the store to order). */
   priceOnRequest?: boolean;
+  /** When true, any checkout containing this product waives the configured
+   *  shipping-location fee. Stored in Product.metadata.freeShipping. */
+  freeShipping?: boolean;
 };
 
 export type Category = { id: string; label: string };

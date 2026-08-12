@@ -95,7 +95,11 @@ import {
   promoLabel,
 } from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
-import { authoritativeItemPrice } from "@/storefront/checkout";
+import {
+  authoritativeItemPrice,
+  effectiveShippingFee,
+  orderHasFreeShippingProduct,
+} from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import { after } from "next/server";
@@ -319,7 +323,8 @@ function repriceItems(
  * sent). An unknown or inactive locationId zeroes the fee and clears the courier
  * — a pick that no longer exists can't smuggle a charge through.
  */
-function stampShipping(config: Record<string, unknown>, p: Order): void {
+function stampShipping(config: Record<string, unknown>, p: Order, catalog: Product[]): void {
+  const freeShipping = orderHasFreeShippingProduct(p.items, catalog);
   const locationId = p.shipping.locationId;
   const couriers = Array.isArray(config.couriers)
     ? (config.couriers as Array<Record<string, unknown>>)
@@ -354,7 +359,7 @@ function stampShipping(config: Record<string, unknown>, p: Order): void {
     p.courier = "";
     return;
   }
-  p.shipping.fee = Math.max(0, num(loc.price));
+  p.shipping.fee = effectiveShippingFee(loc.price, freeShipping);
   // Re-stamp the courier NAME from config so it matches the linked courier;
   // fall back to the client-sent name only when the courier was since removed.
   const courier = couriers.find((c) => String((c ?? {}).id ?? "") === String(loc.courierId ?? ""));
@@ -932,7 +937,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       : undefined;
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
-    stampShipping(config, p);
+    stampShipping(config, p, demoProducts);
     // Discount — re-derived from the tenant's promo codes by the applied code,
     // never trusted from the client. Rejected (not silently dropped) when the
     // code is no longer valid, so the customer never pays a higher total than
@@ -1017,7 +1022,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       : undefined;
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
-    stampShipping(config, p);
+    stampShipping(config, p, catalog);
     // Discount — re-derived from the tenant's promo codes by the applied code,
     // never trusted from the client. Rejected (not silently dropped) when the
     // code is no longer valid, so the customer never pays a higher total than

@@ -120,6 +120,7 @@
     "test:hero-wordmark": "tsx scripts/test-hero-wordmark.ts",
     "test:header-logo": "tsx scripts/test-header-logo.ts",
     "test:tenant-setup": "tsx scripts/test-tenant-setup.ts",
+    "test:mcp-images": "tsx scripts/test-mcp-image-assets.ts",
     "test:product-cta": "tsx scripts/test-product-cta.ts",
     "test:gb-pricing": "tsx scripts/test-gb-pricing.ts",
     "test:hero-media": "tsx scripts/test-hero-media.ts",

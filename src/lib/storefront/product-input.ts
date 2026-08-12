@@ -87,6 +87,9 @@ export function normalizeProductInput(input: unknown): Product {
     purchasable: o.purchasable !== false,
     // Same round-trip contract for "message for price" on-hand items.
     priceOnRequest: o.priceOnRequest === true,
+    // Product-level shipping promo edited in the product form. Default false so
+    // old products and omitted client payloads keep normal shipping.
+    freeShipping: o.freeShipping === true,
     // The editor's "Order ratio class" tag. Narrowed to a real ProductClass, so
     // an unknown value becomes undefined and Order Ratio Control falls back to
     // its name heuristic — never passed through raw. Dropping this key silently
