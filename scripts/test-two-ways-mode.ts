@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { isLinkHidden } from "../src/storefront/visibility";
+import { isLinkHidden, isPageVisible } from "../src/storefront/visibility";
 import type { Brand } from "../src/storefront/types";
 
 import {
@@ -254,6 +254,51 @@ check(
 check(
   "hiding on-hand does not hide unrelated links",
   isLinkHidden(brandWays({ onHand: "hidden", groupBuy: "open" }), "#track") === false,
+);
+
+// ── The group buy page survives the round closing ────────────────────────────
+// The page used to be reachable ONLY while a round was live, so the moment one
+// closed the owner's whole group-buy catalogue became unreachable. Keeping it up
+// as a pricing reference is the point of view-only mode: visibility is the
+// owner's call (the way state), not an accident of whether a round is running.
+//
+// groupBuyListingCount is the server-resolved number of gb-tagged, available
+// products (page.tsx). It is 0 for tenants without the Group Buy module, which
+// is what keeps this widening off every non-GB store.
+const brandGb = (mode: unknown, extra: Record<string, unknown> = {}) =>
+  ({ twoWaysMode: mode, ...extra }) as unknown as Brand;
+
+check(
+  "a live round still shows the Group Buy page",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "open" }, { groupBuyBanner: { id: "r1" } }), "groupbuy") === true,
+);
+check(
+  "no round but gb-tagged listings → the page stays up, view-only",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "open" }, { groupBuyListingCount: 25 }), "groupbuy") === true,
+);
+check(
+  "a CLOSED group-buy way keeps the page (that IS view-only mode)",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "closed" }, { groupBuyListingCount: 25 }), "groupbuy") === true,
+);
+check(
+  "a HIDDEN group-buy way drops the page even with listings to show",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "hidden" }, { groupBuyListingCount: 25 }), "groupbuy") === false,
+);
+check(
+  "a HIDDEN group-buy way drops the page even while a round is live",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "hidden" }, { groupBuyBanner: { id: "r1" } }), "groupbuy") === false,
+);
+check(
+  "no round and nothing tagged → no empty page, no nav link",
+  isPageVisible(brandGb({ onHand: "open", groupBuy: "open" }, { groupBuyListingCount: 0 }), "groupbuy") === false,
+);
+check(
+  "a store without the Group Buy module is untouched (no count, no round)",
+  isPageVisible({} as unknown as Brand, "groupbuy") === false,
+);
+check(
+  "the Group Buy nav link follows the page",
+  isLinkHidden(brandGb({ onHand: "open", groupBuy: "open" }, { groupBuyListingCount: 25 }), "#groupbuy") === false,
 );
 
 console.log(
