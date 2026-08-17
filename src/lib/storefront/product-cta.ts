@@ -24,6 +24,10 @@ export const CTA_COPY = {
   messageForPrice: "Message for price",
   afterGroupBuy: "Available after group buy",
   notAvailable: "Not available",
+  /** The group buy is showing as a pricing reference only — either no round is
+   *  running, or the owner turned ordering off while keeping the page up. Names
+   *  the GROUP BUY specifically, unlike `closed` (the whole shop). */
+  groupBuyClosed: "Group Buy Ordering Closed",
 } as const;
 
 export type ProductCta = {

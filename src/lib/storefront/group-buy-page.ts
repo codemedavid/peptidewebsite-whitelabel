@@ -97,6 +97,34 @@ export function gbDisplayName(
   return `${base} ${suffix}`.trim();
 }
 
+/** The two lines of the view-only notice card. */
+export type GbClosedNotice = { title: string; message: string };
+
+/**
+ * The notice a view-only group buy page shows above its listing.
+ *
+ * Two reasons to be view-only, and the copy must not confuse them: with NO round
+ * running the honest explanation is that there isn't one, but while a round IS
+ * running and the owner has simply turned ordering off, "there is no active
+ * Group Buy" would be a lie the countdown on the same page contradicts.
+ *
+ * Deliberately worded as a status, not a failure — no "sorry", no "unavailable",
+ * no error vocabulary. The page is doing exactly what the owner asked: showing
+ * prices for reference. A shopper who reads this should understand they can look
+ * now and buy later, not that something broke.
+ */
+export function gbClosedNotice(live: boolean): GbClosedNotice {
+  const why = live
+    ? "ordering is currently closed for this group buy"
+    : "there is no active Group Buy";
+  return {
+    title: "Group Buy Currently Closed",
+    message:
+      `Please note that these items are currently not available for ordering because ${why}. ` +
+      "Products and prices are displayed for viewing purposes only.",
+  };
+}
+
 /** The minimal product shape the page reads. Generic so the caller keeps its own
  *  concrete Product type through the view (id/name/image for the card, and the
  *  variations the dose is read from — see gbDisplayName). */

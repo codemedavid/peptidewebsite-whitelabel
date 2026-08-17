@@ -18,6 +18,7 @@ import { baseProductId, unitPrice, variationEntryId } from "../checkout";
 import {
   buildGroupBuyPageView,
   gbCardAddition,
+  gbClosedNotice,
   groupBuyCartSummary,
   type GroupBuyPageLine,
 } from "@/lib/storefront/group-buy-page";
@@ -46,16 +47,21 @@ export function GroupBuyPage({
     products.filter((p) => p.available !== false),
     brand.groupBuyBanner ?? null,
     currency,
+    undefined,
+    brand.twoWaysMode?.groupBuy,
   );
 
   // Owner-editable GB copy — the same content object the two-ways home renders
   // (branding.config.groupBuyContent), so both surfaces stay in sync.
   const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
 
-  // The (defensive) empty state — the route is gated on a live round, but a
-  // round with no assigned products, or a race where the banner cleared, lands
-  // here rather than on a blank screen.
-  if (!view.live || view.count === 0) {
+  // The empty state — nothing to list at all. Keyed on the LISTING, not on the
+  // round: a view-only page has no live round but plenty to show, and testing
+  // `!view.live` here hid the entire catalogue behind "No group buy right now"
+  // the moment a round closed. isPageVisible normally keeps a shopper away from
+  // an empty page; this stays as the defensive fallback for a round with no
+  // assigned products, or a race where the banner cleared mid-render.
+  if (view.count === 0) {
     return (
       <section className="page gbpage" id="groupbuy">
         <div className="page__container gbpage__narrow">
@@ -77,6 +83,7 @@ export function GroupBuyPage({
   // total). Each entry is priced with the SAME unitPrice the checkout charges,
   // so a variation clone counts at its own price — the bar and the receipt
   // can't disagree.
+  const notice = gbClosedNotice(view.live);
   const scope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
   const entries = cart.map((c) => ({
     id: baseProductId(c),
@@ -90,27 +97,36 @@ export function GroupBuyPage({
       <div className="page__container gbpage__narrow">
         <BackLink onClick={onBack} label="Back to store" />
 
-        {/* Live-round status banner */}
-        <div className="gbpage__status" role="status" aria-label={`Group buy live: ${view.name}`}>
-          <div className="gbpage__status-top">
-            <span className="gbpage__pill">● {view.name} is live</span>
-            {view.countdown && <span className="gbpage__countdown">{view.countdown}</span>}
+        {/* Status: the live-round banner, or the view-only closed notice. Never
+            both — a countdown beside "ordering is closed" reads as a bug. */}
+        {view.viewOnly ? (
+          <div className="gbpage__notice" role="status">
+            <span className="gbpage__notice-tag">○ Viewing only</span>
+            <div className="gbpage__notice-title font-display">{notice.title}</div>
+            <p className="gbpage__notice-copy">{notice.message}</p>
           </div>
-          {view.slots.enabled && (
-            <div className="gbpage__slots">
-              <div className="gbpage__slots-row">
-                <span>
-                  {view.slots.filled} of {view.slots.goal} slots filled
-                </span>
-                <span>{view.slots.pctLabel}</span>
-              </div>
-              <div className="gbpage__bar">
-                <div className="gbpage__bar-fill" style={{ width: view.slots.pctWidth }} />
-              </div>
+        ) : (
+          <div className="gbpage__status" role="status" aria-label={`Group buy live: ${view.name}`}>
+            <div className="gbpage__status-top">
+              <span className="gbpage__pill">● {view.name} is live</span>
+              {view.countdown && <span className="gbpage__countdown">{view.countdown}</span>}
             </div>
-          )}
-          <p className="gbpage__terms">{renderGbCopy(content.terms, view.deliveryEta)}</p>
-        </div>
+            {view.slots.enabled && (
+              <div className="gbpage__slots">
+                <div className="gbpage__slots-row">
+                  <span>
+                    {view.slots.filled} of {view.slots.goal} slots filled
+                  </span>
+                  <span>{view.slots.pctLabel}</span>
+                </div>
+                <div className="gbpage__bar">
+                  <div className="gbpage__bar-fill" style={{ width: view.slots.pctWidth }} />
+                </div>
+              </div>
+            )}
+            <p className="gbpage__terms">{renderGbCopy(content.terms, view.deliveryEta)}</p>
+          </div>
+        )}
 
         {/* Listing header */}
         <div className="gbpage__listhead">
@@ -131,6 +147,7 @@ export function GroupBuyPage({
               addToCart={addToCart}
               decrementCart={decrementCart}
               storeClosed={storeClosed}
+              viewOnly={view.viewOnly}
             />
           ))}
         </div>
@@ -149,8 +166,10 @@ export function GroupBuyPage({
         </div>
       </div>
 
-      {/* Sticky checkout bar — running total + saving, then the checkout CTA */}
-      {summary.hasItems && (
+      {/* Sticky checkout bar — running total + saving, then the checkout CTA.
+          Never in view-only mode: nothing on this page can be ordered, so a
+          checkout button here would only lead to a refusal. */}
+      {!view.viewOnly && summary.hasItems && (
         <div className="gbpage__cartbar">
           <div className="gbpage__narrow gbpage__cartbar-inner">
             <div className="gbpage__cartbar-row">
@@ -191,6 +210,7 @@ function GbProductCard({
   addToCart,
   decrementCart,
   storeClosed,
+  viewOnly,
 }: {
   line: GroupBuyPageLine<Product>;
   image: string | null;
@@ -200,6 +220,9 @@ function GbProductCard({
   /** The owner shut the whole shop (Admin → Store Status). The round and its
    *  prices still show; joining is off. */
   storeClosed: boolean;
+  /** The group buy is a pricing reference right now — no round running, or the
+   *  owner turned ordering off. Everything renders; only the buying stops. */
+  viewOnly: boolean;
 }) {
   const p = line.product;
   const options = line.options;
@@ -213,8 +236,16 @@ function GbProductCard({
   // consulted: group-buy lines are pre-orders (isGroupBuyPreorder), so a stock-0
   // round product must keep its live "Join GB".
   // A closed shop outranks both: a group buy is still an order, so a store that
-  // isn't trading can't take pre-orders either.
-  const blocked = storeClosed || p.purchasable === false || p.priceOnRequest === true;
+  // isn't trading can't take pre-orders either. View-only sits alongside them —
+  // the cart (store.tsx) and the server both refuse these lines, so the button
+  // must never look live.
+  const productBlocked = p.purchasable === false || p.priceOnRequest === true;
+  const blocked = storeClosed || viewOnly || productBlocked;
+  // The dose picker is a BROWSING control, not a buy control: the whole point of
+  // view-only mode is to let a shopper read the price of each size. It stays
+  // visible whenever there is a real price behind it, and only drops for a
+  // paused / price-on-request product where there is nothing to reveal.
+  const showOptions = options.length > 0 && !productBlocked;
   // The cart line THIS selection lands on, so the stepper counts and removes the
   // chosen dose rather than every dose of the product at once.
   const entryId = chosen.variation ? variationEntryId(p.id, chosen.variation.name) : p.id;
@@ -239,7 +270,7 @@ function GbProductCard({
           <div className="gbpage__card-name">{line.displayName}</div>
           <div className="gbpage__card-note">COA ✓ · third-party tested</div>
         </div>
-        {options.length > 0 && !blocked && (
+        {showOptions && (
           <select
             className="gbpage__opts"
             aria-label={`Dose for ${p.name}`}
@@ -262,9 +293,11 @@ function GbProductCard({
           <button type="button" className="gbpage__join" disabled>
             {storeClosed
               ? CTA_COPY.closed
-              : p.priceOnRequest
-                ? CTA_COPY.messageToOrder
-                : CTA_COPY.notAvailable}
+              : viewOnly
+                ? CTA_COPY.groupBuyClosed
+                : p.priceOnRequest
+                  ? CTA_COPY.messageToOrder
+                  : CTA_COPY.notAvailable}
           </button>
         ) : qty === 0 ? (
           <button type="button" className="gbpage__join" onClick={join}>
@@ -302,6 +335,29 @@ const gbPageCss = `
   border-radius: 20px;
   padding: 18px;
   box-shadow: 0 6px 20px color-mix(in oklab, var(--brand-main) 32%, transparent);
+}
+/* View-only notice. Deliberately NOT the filled brand card the live round gets,
+   and deliberately not an error surface either: a soft tint of the brand colour
+   with a solid left rule reads as "a state worth noticing" rather than "a thing
+   went wrong". No red anywhere — the page is working exactly as the owner set
+   it. color-mix keeps it white-label, so it re-tints with every tenant theme. */
+.sf-root .gbpage__notice {
+  margin: 8px 0 20px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in oklab, var(--brand-main) 26%, transparent);
+  border-left: 4px solid var(--brand-main);
+  background: color-mix(in oklab, var(--brand-main) 8%, var(--brand-surface, #fff));
+  color: var(--brand-text);
+}
+.sf-root .gbpage__notice-tag {
+  display: inline-block;
+  font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--brand-main);
+}
+.sf-root .gbpage__notice-title { font-size: 19px; font-weight: 700; margin-top: 6px; }
+.sf-root .gbpage__notice-copy {
+  margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--brand-text-muted);
 }
 .sf-root .gbpage__status-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sf-root .gbpage__pill {
