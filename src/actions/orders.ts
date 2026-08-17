@@ -87,6 +87,11 @@ import {
   planStatusChange,
   type InventoryMove,
 } from "@/lib/storefront/order-status";
+import { planBulkStatusChange, type BulkStatusChanged } from "@/lib/storefront/bulk-status";
+import {
+  applyOrderStockMovesBatched,
+  type StockMoveDb,
+} from "@/lib/storefront/stock-move-db";
 import {
   findPromoCode,
   normalizePromoCodes,
@@ -415,48 +420,55 @@ function adjustProductStock(
 }
 
 /**
+ * Adapt the tenant transaction client to the narrow surface the batched stock
+ * engine needs (lib/storefront/stock-move-db). Keeping that engine free of
+ * Prisma types is what lets a test substitute a round-trip-counting fake.
+ *
+ * updateMany rather than update: the tenant extension scopes updateMany by
+ * tenantId, while a bare-id update is not tenant-scoped (see lib/db/tenant-client).
+ */
+function stockMoveDb(db: TenantTx): StockMoveDb {
+  return {
+    findProducts: ({ ids, names }) =>
+      db.product.findMany({
+        where: {
+          OR: [
+            ...(ids.length ? [{ id: { in: ids } }] : []),
+            ...(names.length ? [{ name: { in: names } }] : []),
+          ],
+        },
+        select: { id: true, name: true, stock: true, metadata: true },
+      }),
+    updateProduct: async (id, data) => {
+      await db.product.updateMany({
+        where: { id },
+        data: {
+          ...(data.stock !== undefined ? { stock: data.stock } : {}),
+          ...(data.metadata !== undefined
+            ? { metadata: data.metadata as unknown as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
+    },
+  };
+}
+
+/**
  * Apply an order's line items to the tenant's DB inventory (− on deduct, + on
  * restock), clamping at zero. The DB analogue of adjustProductStock: lines match
  * by productId when present, by exact name for legacy orders. Shared by the
  * single-order update and the bulk status action so both move stock identically.
  * Runs inside a withTenant() transaction (the passed `db` is already scoped).
+ *
+ * One order's worth of the batched engine: 1 read + at most 1 write per product,
+ * never per line item. That budget is the whole point — see stock-move-db.
  */
 async function applyOrderStockMove(
   db: TenantTx,
   items: OrderItem[],
   move: Exclude<InventoryMove, null>,
 ): Promise<void> {
-  const dir = move === "deduct" ? -1 : 1;
-  for (const it of items) {
-    const prod = await db.product.findFirst({
-      where: it.productId ? { id: it.productId } : { name: it.name },
-      select: { id: true, stock: true, metadata: true },
-    });
-    if (!prod) continue;
-
-    const meta = (prod.metadata ?? {}) as unknown as ProductMetadata;
-    const variations = Array.isArray(meta.variations) ? meta.variations : [];
-    const tracked =
-      !!it.variation &&
-      variations.some((v) => v.name === it.variation && typeof v.stock === "number");
-
-    if (tracked) {
-      // Move the variation's OWN pool inside metadata; the base column is left
-      // untouched (that's what an untracked/no-variation line uses instead).
-      const nextVariations = applyVariationStock(variations, it.variation!, dir * it.qty);
-      await db.product.updateMany({
-        where: { id: prod.id },
-        data: {
-          metadata: { ...meta, variations: nextVariations } as unknown as Prisma.InputJsonValue,
-        },
-      });
-    } else {
-      await db.product.updateMany({
-        where: { id: prod.id },
-        data: { stock: Math.max(0, (prod.stock ?? 0) + dir * it.qty) },
-      });
-    }
-  }
+  await applyOrderStockMovesBatched(stockMoveDb(db), [{ items, move }]);
 }
 
 /**
@@ -1444,7 +1456,7 @@ export async function updateStorefrontOrderAction(
     if (result.moved) revalidateTenant(tenantId, slug);
     return { ok: true, order: updatedOrder };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Couldn't update the order." };
+    return { error: orderActionError(e, "Couldn't update the order.") };
   }
 }
 
@@ -1589,11 +1601,48 @@ export async function purgeStorefrontOrdersAction(ids: unknown): Promise<DeleteO
 // ── Admin: bulk status change ─────────────────────────────────────────────────
 
 /**
+ * How many orders one write transaction may carry.
+ *
+ * Every tenant DB call runs inside a withTenant() interactive transaction over
+ * a pooled connection, capped at 20s. A round trip on that path was measured at
+ * ~320ms against live data, and a chunk costs roughly
+ * `1 + chunkSize + 1 + productsTouched` round trips — so 20 keeps a chunk near
+ * 10s, comfortably inside the cap while still cutting the number of
+ * transactions by an order of magnitude versus one per order.
+ */
+const BULK_STATUS_CHUNK = 20;
+
+/** Split a selection into fixed-size chunks, preserving order. */
+function chunkOrders<T>(rows: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Turn a failure into something a store owner can act on.
+ *
+ * Prisma's transaction-timeout error (P2028) reads "Transaction not found.
+ * Transaction ID is invalid, refers to an old closed transaction…" — internals
+ * that used to land verbatim in an alert() in the store admin. The owner can
+ * act on "select fewer orders"; they can do nothing with a transaction id.
+ */
+function orderActionError(e: unknown, fallback: string): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : "";
+  if (code === "P2028" || /Transaction (?:API error|not found)/i.test(message)) {
+    return "That took too long to save. Please select fewer orders and try again.";
+  }
+  return message || fallback;
+}
+
+/**
  * Move many of the tenant's orders to one status in a single action (store admin
  * only). Reuses the SAME per-order decision as updateStorefrontOrderAction
- * (planStatusChange): a journey event is appended only on a real change, and
- * inventory deducts on confirm / restocks on cancel — never twice. Orders already
- * at the target status are skipped, so the count reflects genuine changes only.
+ * (planStatusChange, via planBulkStatusChange): a journey event is appended only
+ * on a real change, and inventory deducts on confirm / restocks on cancel —
+ * never twice. Orders already at the target status are skipped, so the count
+ * reflects genuine changes only.
  */
 export async function bulkUpdateStorefrontOrderStatusAction(
   ids: unknown,
@@ -1648,70 +1697,89 @@ export async function bulkUpdateStorefrontOrderStatusAction(
   }
 
   try {
-    const result = await withTenant(tenantId, async (db) => {
-      const rows = await db.storefrontOrder.findMany({
+    // Read the whole selection once, outside the write transactions.
+    const rows = await withTenant(tenantId, (db) =>
+      db.storefrontOrder.findMany({
         where: { ...ACTIVE_ORDERS_WHERE, id: { in: list } },
-      });
-      const changedOrders: { order: Order; prevStatus: string }[] = [];
-      let moved = false;
-      for (const current of rows) {
-        const plan = planStatusChange(
-          {
-            status: current.status as Order["status"],
-            statusHistory: normalizeStatusHistory(current.statusHistory),
-            imported: current.imported,
-          },
-          status,
-          now,
-        );
-        if (!plan.changed) continue;
-        await db.storefrontOrder.updateMany({
-          where: { ...ACTIVE_ORDERS_WHERE, id: current.id },
-          data: {
-            status: plan.status,
-            statusHistory: plan.statusHistory as unknown as Prisma.InputJsonValue,
-          },
-        });
-        if (plan.move) {
-          await applyOrderStockMove(db, normalizeItems(current.items), plan.move);
-          moved = true;
-        }
-        const updatedRow = await db.storefrontOrder.findFirst({
-          where: { ...ACTIVE_ORDERS_WHERE, id: current.id },
-        });
-        if (updatedRow) {
-          changedOrders.push({
-            order: dbOrderToStorefront(updatedRow as DbOrderRow),
-            prevStatus: current.status,
+      }),
+    );
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    const applied: BulkStatusChanged[] = [];
+    let moved = false;
+
+    // Persist in chunks, one transaction per chunk. Each transaction costs
+    // 1 set_config + (orders in chunk) writes + 1 product read + (products
+    // touched) writes, so its duration is bounded no matter how large the
+    // owner's selection is. Chunking trades all-or-nothing across the whole
+    // selection for a bounded transaction: what stays atomic is the pair that
+    // matters — an order's status change and its stock movement never separate.
+    for (const chunk of chunkOrders(rows, BULK_STATUS_CHUNK)) {
+      const plan = planBulkStatusChange(
+        chunk.map((r) => ({
+          id: r.id,
+          status: r.status as Order["status"],
+          statusHistory: normalizeStatusHistory(r.statusHistory),
+          imported: r.imported,
+          items: normalizeItems(r.items),
+        })),
+        status,
+        now,
+      );
+      if (plan.writes.length === 0) continue;
+
+      const written = await withTenant(tenantId, async (db) => {
+        for (const w of plan.writes) {
+          await db.storefrontOrder.updateMany({
+            where: { ...ACTIVE_ORDERS_WHERE, id: w.id },
+            data: {
+              status: w.status,
+              statusHistory: w.statusHistory as unknown as Prisma.InputJsonValue,
+            },
           });
         }
-      }
-      return { changedOrders, moved };
-    });
+        return applyOrderStockMovesBatched(stockMoveDb(db), plan.stockMoves);
+      });
+
+      if (written > 0) moved = true;
+      applied.push(...plan.changed);
+    }
 
     const slug = await getTenantSlug();
-    if (result.changedOrders.length > 0) {
+    if (applied.length > 0) {
       // Resolve branding once, then emit one order_status_changed per genuinely
       // changed order (fire-and-forget) so the tenant's PostHog workflow can email
       // each customer — same event the single-order update emits.
+      //
+      // The order handed to the payload is rebuilt from the row we already read
+      // plus the status/journey we just computed — never re-read. That re-read
+      // cost one round trip per order and is what pushed this transaction past
+      // its budget in the first place.
       const { branding } = await getTenantContext(tenantId);
       const emailBrand = buildEmailBrand(
         (branding?.config ?? {}) as Record<string, unknown>,
         storefrontOrigin(slug),
       );
-      for (const { order, prevStatus } of result.changedOrders) {
+      for (const ch of applied) {
+        const row = byId.get(ch.id);
+        if (!row) continue;
+        const order = dbOrderToStorefront({
+          ...row,
+          status: ch.status,
+          statusHistory: ch.statusHistory,
+        } as DbOrderRow);
         after(() =>
           capturePostHogEvent(
             tenantId,
-            buildStatusChangedPayload(order, prevStatus, order.status, emailBrand),
+            buildStatusChangedPayload(order, ch.prevStatus, order.status, emailBrand),
           ),
         );
       }
     }
     // Any stock movement → refresh the cached storefront so the catalog shows it.
-    if (result.moved) revalidateTenant(tenantId, slug);
-    return { ok: true, changed: result.changedOrders.length };
+    if (moved) revalidateTenant(tenantId, slug);
+    return { ok: true, changed: applied.length };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Couldn't update the orders." };
+    return { error: orderActionError(e, "Couldn't update the orders.") };
   }
 }

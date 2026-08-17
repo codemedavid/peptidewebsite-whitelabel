@@ -68,45 +68,86 @@ export function applyVariationStock(
   );
 }
 
+/** Just the product fields a stock movement touches. Structural so a DB row
+ *  with only these columns selected can be moved without inflating it into a
+ *  full `Product` — see lib/storefront/stock-move-db. */
+export type MovableProduct = {
+  id: string;
+  name: string;
+  stock?: number | null;
+  variations?: Variation[];
+};
+
+/** One order's contribution to a batch: its lines and the direction they move. */
+export type StockMoveEntry = {
+  items: readonly OrderItem[];
+  move: "deduct" | "restock";
+};
+
 /**
- * Apply an order's line items to a product list (− on deduct, + on restock),
- * per variation, clamping at zero. Lines match by `productId` when present, by
+ * Apply MANY orders' line items to a product list in one pass (− on deduct,
+ * + on restock), per variation. Lines match by `productId` when present, by
  * exact `name` for legacy orders — the same rule the checkout guard uses.
  *
  * A line for a TRACKED variation moves that variation's own pool and leaves the
  * base column untouched; a line for an untracked variation (or no variation)
- * moves the base column. Immutable — returns a new product list.
+ * moves the base column. Immutable — returns a new product list, and returns
+ * the ORIGINAL object identity for any product nothing touched, which is what
+ * lets the DB layer write only what genuinely changed.
+ *
+ * Base-column deltas from every order are summed BEFORE the zero clamp: a
+ * deduct and a matching restock in the same batch cancel out exactly, instead
+ * of clamping to zero in between and inventing units on the way back up.
+ *
+ * Generic in the product shape so the demo path (full `Product`) and the DB
+ * path (four selected columns) share one engine.
+ */
+export function applyStockMovesToProducts<T extends MovableProduct>(
+  products: readonly T[],
+  moves: readonly StockMoveEntry[],
+): T[] {
+  return products.map((p) => {
+    let variations = p.variations;
+    let baseDelta = 0;
+
+    for (const { items, move } of moves) {
+      const dir = move === "deduct" ? -1 : 1;
+      for (const it of items) {
+        const matches = it.productId ? it.productId === p.id : it.name === p.name;
+        if (!matches) continue;
+        const qty = it.qty || 0;
+        if (qty <= 0) continue;
+        // Tracked-ness is read from the ORIGINAL product: a variation either has
+        // its own pool or it doesn't, and folding several orders must not change
+        // that answer partway through the fold.
+        const tracked = variationStock(p, it.variation) !== undefined;
+        if (it.variation && tracked) {
+          variations = applyVariationStock(variations ?? [], it.variation, dir * qty);
+        } else {
+          baseDelta += dir * qty;
+        }
+      }
+    }
+
+    if (variations === p.variations && baseDelta === 0) return p;
+    const patch: Partial<MovableProduct> = {};
+    if (variations !== p.variations) patch.variations = variations;
+    if (baseDelta !== 0) patch.stock = Math.max(0, (p.stock || 0) + baseDelta);
+    return { ...p, ...patch } as T;
+  });
+}
+
+/**
+ * Apply a SINGLE order's line items to a product list. The one-order case of
+ * applyStockMovesToProducts, kept as its own name because that is how the demo
+ * path and the single-order update read.
  */
 export function applyStockMoveToProducts(
   products: readonly Product[],
   items: readonly OrderItem[],
   move: "deduct" | "restock",
 ): Product[] {
-  const dir = move === "deduct" ? -1 : 1;
-  return products.map((p) => {
-    const matches = items.filter((it) =>
-      it.productId ? it.productId === p.id : it.name === p.name,
-    );
-    if (matches.length === 0) return p;
-
-    let variations = p.variations;
-    let baseDelta = 0;
-    for (const it of matches) {
-      const qty = it.qty || 0;
-      if (qty <= 0) continue;
-      const tracked = variationStock(p, it.variation) !== undefined;
-      if (it.variation && tracked) {
-        variations = applyVariationStock(variations ?? [], it.variation, dir * qty);
-      } else {
-        baseDelta += dir * qty;
-      }
-    }
-
-    const next: Product = { ...p };
-    if (variations !== p.variations) next.variations = variations;
-    if (baseDelta !== 0) next.stock = Math.max(0, (p.stock || 0) + baseDelta);
-    return next;
-  });
+  return applyStockMovesToProducts(products, [{ items, move }]);
 }
 
 /** Available units for one option on the card/modal — the base price ("Standard")
