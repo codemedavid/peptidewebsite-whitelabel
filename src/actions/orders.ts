@@ -82,7 +82,12 @@ import {
   planStatusChange,
   type InventoryMove,
 } from "@/lib/storefront/order-status";
-import { planBulkStatusChange, type BulkStatusChanged } from "@/lib/storefront/bulk-status";
+import {
+  planBulkStatusChange,
+  bulkStatusFailureMessage,
+  isTransactionTimeout,
+  type BulkStatusChanged,
+} from "@/lib/storefront/bulk-status";
 import {
   applyOrderStockMovesBatched,
   type StockMoveDb,
@@ -1623,12 +1628,10 @@ function chunkOrders<T>(rows: readonly T[], size: number): T[][] {
  * act on "select fewer orders"; they can do nothing with a transaction id.
  */
 function orderActionError(e: unknown, fallback: string): string {
-  const code = (e as { code?: unknown } | null)?.code;
-  const message = e instanceof Error ? e.message : "";
-  if (code === "P2028" || /Transaction (?:API error|not found)/i.test(message)) {
+  if (isTransactionTimeout(e)) {
     return "That took too long to save. Please select fewer orders and try again.";
   }
-  return message || fallback;
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
 /**
@@ -1702,6 +1705,11 @@ export async function bulkUpdateStorefrontOrderStatusAction(
 
     const applied: BulkStatusChanged[] = [];
     let moved = false;
+    // A chunk failure does NOT discard what earlier chunks already committed —
+    // those orders really did change, so their emails must still go out and the
+    // catalog must still be revalidated. The failure is held here and reported
+    // after that work, never instead of it.
+    let failure: unknown = null;
 
     // Persist in chunks, one transaction per chunk. Each transaction costs
     // 1 set_config + (orders in chunk) writes + 1 product read + (products
@@ -1723,21 +1731,28 @@ export async function bulkUpdateStorefrontOrderStatusAction(
       );
       if (plan.writes.length === 0) continue;
 
-      const written = await withTenant(tenantId, async (db) => {
-        for (const w of plan.writes) {
-          await db.storefrontOrder.updateMany({
-            where: { ...ACTIVE_ORDERS_WHERE, id: w.id },
-            data: {
-              status: w.status,
-              statusHistory: w.statusHistory as unknown as Prisma.InputJsonValue,
-            },
-          });
-        }
-        return applyOrderStockMovesBatched(stockMoveDb(db), plan.stockMoves);
-      });
+      try {
+        const written = await withTenant(tenantId, async (db) => {
+          for (const w of plan.writes) {
+            await db.storefrontOrder.updateMany({
+              where: { ...ACTIVE_ORDERS_WHERE, id: w.id },
+              data: {
+                status: w.status,
+                statusHistory: w.statusHistory as unknown as Prisma.InputJsonValue,
+              },
+            });
+          }
+          return applyOrderStockMovesBatched(stockMoveDb(db), plan.stockMoves);
+        });
 
-      if (written > 0) moved = true;
-      applied.push(...plan.changed);
+        if (written > 0) moved = true;
+        applied.push(...plan.changed);
+      } catch (e) {
+        // Stop here rather than pressing on: whatever slowed this chunk down
+        // (or dropped it) will very likely take the next one too.
+        failure = e;
+        break;
+      }
     }
 
     const slug = await getTenantSlug();
@@ -1772,7 +1787,12 @@ export async function bulkUpdateStorefrontOrderStatusAction(
       }
     }
     // Any stock movement → refresh the cached storefront so the catalog shows it.
+    // Runs before the failure is reported: the stock of the chunks that DID
+    // commit has already moved, so a stale catalog would oversell it.
     if (moved) revalidateTenant(tenantId, slug);
+    // Only now, with the committed work fully accounted for, surface the failure
+    // — including how much of the selection actually changed.
+    if (failure) return { error: bulkStatusFailureMessage(applied.length, failure) };
     return { ok: true, changed: applied.length };
   } catch (e) {
     return { error: orderActionError(e, "Couldn't update the orders.") };

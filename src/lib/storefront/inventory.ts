@@ -106,14 +106,26 @@ export function applyStockMovesToProducts<T extends MovableProduct>(
   products: readonly T[],
   moves: readonly StockMoveEntry[],
 ): T[] {
-  return products.map((p) => {
+  // A name-matched line resolves to exactly ONE product, the first row carrying
+  // that name. Product names are not unique — duplicate listings genuinely
+  // exist — and letting a legacy line (no productId) move every row sharing its
+  // name would deduct the same units two or more times. This mirrors the
+  // findFirst the DB path used before these moves were batched.
+  const firstIndexByName = new Map<string, number>();
+  products.forEach((p, i) => {
+    if (!firstIndexByName.has(p.name)) firstIndexByName.set(p.name, i);
+  });
+
+  return products.map((p, index) => {
     let variations = p.variations;
     let baseDelta = 0;
 
     for (const { items, move } of moves) {
       const dir = move === "deduct" ? -1 : 1;
       for (const it of items) {
-        const matches = it.productId ? it.productId === p.id : it.name === p.name;
+        const matches = it.productId
+          ? it.productId === p.id
+          : it.name === p.name && firstIndexByName.get(p.name) === index;
         if (!matches) continue;
         const qty = it.qty || 0;
         if (qty <= 0) continue;

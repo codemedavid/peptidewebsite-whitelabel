@@ -86,3 +86,36 @@ export function planBulkStatusChange(
 
   return { writes, stockMoves, changed };
 }
+
+/**
+ * Is this Prisma's interactive-transaction timeout (P2028)?
+ *
+ * Over a PgBouncer-pooled connection it always means "the transaction took too
+ * long", never "the connection dropped" — but its message reads like the
+ * latter: "Transaction not found. Transaction ID is invalid, refers to an old
+ * closed transaction Prisma doesn't have information about anymore…".
+ */
+export function isTransactionTimeout(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (code === "P2028") return true;
+  const message = e instanceof Error ? e.message : "";
+  return /Transaction (?:API error|not found)/i.test(message);
+}
+
+/**
+ * What to tell the owner when a bulk run stopped partway.
+ *
+ * Because the writes are chunked, a failure can arrive AFTER earlier chunks
+ * already committed. Saying only "try again" would hide that: the owner would
+ * re-select everything, see a smaller number change the second time, and have
+ * no idea which orders had already moved. So the count leads.
+ */
+export function bulkStatusFailureMessage(saved: number, e: unknown): string {
+  if (!isTransactionTimeout(e)) {
+    return e instanceof Error && e.message ? e.message : "Couldn't update the orders.";
+  }
+  if (saved > 0) {
+    return `Saved ${saved} order${saved === 1 ? "" : "s"} before running out of time. The rest were left unchanged — select them and try again.`;
+  }
+  return "That took too long to save. Please select fewer orders and try again.";
+}
