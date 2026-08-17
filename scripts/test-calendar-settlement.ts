@@ -34,11 +34,17 @@
 
 import assert from "node:assert";
 
-import { deriveTenantEvents, gridRange, type CalendarTenantInput } from "../src/lib/admin/calendar-core";
+import {
+  deriveTenantEvents,
+  gridRange,
+  type CalendarEvent,
+  type CalendarTenantInput,
+} from "../src/lib/admin/calendar-core";
 import {
   CALENDAR_SETTLEMENT_NOTE,
   buildSettlementIndex,
   defaultNextDueDay,
+  monthMoney,
   planSettlement,
   planSettlementReversal,
   settlementEvents,
@@ -543,6 +549,113 @@ check("a payment with no recorded term start cannot restore one", () => {
 
 check("a payment with no recorded term end cannot restore one", () => {
   assert.strictEqual(ok(reversal({ settlement: { periodEndIso: null } })).restore, null);
+});
+
+// ───────────────────── the month's expected vs received ─────────────────────
+console.log("\nmonthMoney — the header figures");
+
+/** A due date on the grid, unpaid. */
+function dueEvent(day: string, amountCents: number): CalendarEvent {
+  return {
+    id: `renewal:${day}`,
+    kind: "renewal",
+    day,
+    at: `${day}T00:00:00.000Z`,
+    title: "BeautyStack",
+    urgency: "due_soon",
+    projected: false,
+    amountCents,
+  };
+}
+
+/** An operator-authored billing for an off-platform client. */
+function entryEvent(day: string, amountCents: number | undefined, done: boolean): CalendarEvent {
+  return {
+    id: `entry:${day}`,
+    kind: "manual",
+    day,
+    at: `${day}T00:00:00.000Z`,
+    title: "bbg",
+    urgency: "scheduled",
+    projected: false,
+    amountCents,
+    done,
+    paid: done,
+  };
+}
+
+const AUG_PREFIX = "2026-08";
+
+check("a tenant due date counts toward what the month should bring in", () => {
+  const money = monthMoney([dueEvent("2026-08-21", 149_900)], [], AUG_PREFIX);
+  assert.strictEqual(money.expectedCents, 149_900);
+  assert.strictEqual(money.collectedCents, 0);
+});
+
+check("an operator entry with an amount counts too — this is the gap being closed", () => {
+  // "bbg", "diamond glow", "slimdose": billings that aren't platform tenants.
+  const money = monthMoney([entryEvent("2026-08-08", 150_000, false)], [], AUG_PREFIX);
+  assert.strictEqual(money.expectedCents, 150_000);
+});
+
+check("an entry with no amount is a reminder, and moves no money", () => {
+  const money = monthMoney([entryEvent("2026-08-08", undefined, false)], [], AUG_PREFIX);
+  assert.strictEqual(money.expectedCents, 0);
+  assert.strictEqual(money.collectedCents, 0);
+});
+
+check("ticking an entry off collects its amount", () => {
+  const money = monthMoney([entryEvent("2026-08-08", 150_000, true)], [], AUG_PREFIX);
+  assert.strictEqual(money.expectedCents, 150_000);
+  assert.strictEqual(money.collectedCents, 150_000);
+});
+
+check("a settled subscription counts as received on the day the money landed", () => {
+  const money = monthMoney([], [{ paidDay: "2026-08-18", amountCents: 159_000 }], AUG_PREFIX);
+  assert.strictEqual(money.collectedCents, 159_000);
+});
+
+check("money received this month for another month's term still counts this month", () => {
+  const money = monthMoney([], [{ paidDay: "2026-08-30", amountCents: 50_000 }], AUG_PREFIX);
+  assert.strictEqual(money.collectedCents, 50_000);
+});
+
+check("a payment received in another month does not count in this one", () => {
+  const money = monthMoney([], [{ paidDay: "2026-07-30", amountCents: 50_000 }], AUG_PREFIX);
+  assert.strictEqual(money.collectedCents, 0);
+});
+
+check("the grid's neighbouring-month cells are excluded from both figures", () => {
+  // The 6x7 grid shows late July and early September; neither is this month.
+  const money = monthMoney(
+    [dueEvent("2026-07-30", 100_000), entryEvent("2026-09-01", 200_000, true)],
+    [],
+    AUG_PREFIX,
+  );
+  assert.strictEqual(money.expectedCents, 0);
+  assert.strictEqual(money.collectedCents, 0);
+});
+
+check("tenant dues and operator billings add up together", () => {
+  const money = monthMoney(
+    [
+      dueEvent("2026-08-21", 149_900),
+      entryEvent("2026-08-08", 150_000, true),
+      entryEvent("2026-08-30", 90_000, false),
+    ],
+    [{ paidDay: "2026-08-18", amountCents: 159_000 }],
+    AUG_PREFIX,
+  );
+  assert.strictEqual(money.expectedCents, 149_900 + 150_000 + 90_000);
+  assert.strictEqual(money.collectedCents, 150_000 + 159_000);
+});
+
+check("a settled due date is not double-counted as expected", () => {
+  // The paid chip replaces the renewal it settled; only one of them is on the grid.
+  const paid = settlementEvents(buildSettlementIndex([row()]).values(), NAMES, AUG);
+  const money = monthMoney(paid, [{ paidDay: "2026-08-18", amountCents: 149_900 }], AUG_PREFIX);
+  assert.strictEqual(money.expectedCents, 149_900);
+  assert.strictEqual(money.collectedCents, 149_900);
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────

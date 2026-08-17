@@ -533,6 +533,87 @@ check("the day is anchored at midnight UTC, matching parseDay", () => {
   );
 });
 
+check("an entry with no amount carries none", () => {
+  // Most entries are reminders, not billings — an amount is optional.
+  assert.strictEqual(ok({ title: "Call supplier", day: "2026-08-19" }).amountCents, null);
+});
+
+check("a blank amount is treated as no amount, not as zero", () => {
+  assert.strictEqual(ok({ title: "x", day: "2026-08-19", amount: "  " }).amountCents, null);
+});
+
+check("an entry can carry what the client owes", () => {
+  const value = ok({ title: "bbg", day: "2026-08-08", amount: "1500" });
+  assert.strictEqual(value.amountCents, 150_000);
+});
+
+check("a peso-formatted entry amount is accepted", () => {
+  assert.strictEqual(ok({ title: "x", day: "2026-08-19", amount: "₱2,499.50" }).amountCents, 249_950);
+});
+
+check("a non-numeric entry amount is refused rather than silently dropped", () => {
+  assert.match(rejected({ title: "x", day: "2026-08-19", amount: "bayad na" }), /amount/i);
+});
+
+check("a zero entry amount is refused", () => {
+  assert.match(rejected({ title: "x", day: "2026-08-19", amount: "0" }), /amount/i);
+});
+
+check("a negative entry amount is refused", () => {
+  assert.match(rejected({ title: "x", day: "2026-08-19", amount: "-200" }), /amount/i);
+});
+
+check("a stored entry amount reaches the calendar event", () => {
+  const e = toManualEvent(
+    {
+      id: "m9",
+      tenantId: null,
+      clientLabel: "bbg",
+      title: "bbg",
+      notes: null,
+      startsAt: "2026-08-08T00:00:00.000Z",
+      kind: "payment",
+      doneAt: null,
+      amountCents: 150_000,
+    },
+    {},
+  );
+  assert.strictEqual(e.amountCents, 150_000);
+});
+
+check("an entry with no stored amount leaves the event's amount unset", () => {
+  const e = toManualEvent(
+    {
+      id: "m10",
+      tenantId: null,
+      clientLabel: null,
+      title: "Call supplier",
+      notes: null,
+      startsAt: "2026-08-08T00:00:00.000Z",
+      kind: "note",
+      doneAt: null,
+    },
+    {},
+  );
+  assert.strictEqual(e.amountCents, undefined);
+});
+
+check("a ticked-off entry is marked collected, an open one is not", () => {
+  const row = {
+    id: "m11",
+    tenantId: null,
+    clientLabel: "slimdose",
+    title: "slimdose",
+    notes: null,
+    startsAt: "2026-08-30T00:00:00.000Z",
+    kind: "payment",
+    doneAt: null as string | null,
+    amountCents: 90_000,
+  };
+  assert.strictEqual(toManualEvent(row, {}).paid, false);
+  assert.strictEqual(toManualEvent({ ...row, doneAt: "2026-08-31T00:00:00.000Z" }, {}).paid, true);
+});
+
 check("a blank title is rejected", () => {
   assert.match(rejected({ title: "   ", day: "2026-08-19" }), /title/i);
 });
