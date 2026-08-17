@@ -27,7 +27,12 @@
 import assert from "node:assert";
 
 import type { OrderItem, OrderStatus, OrderStatusEvent } from "../src/storefront/types";
-import { planBulkStatusChange, type BulkOrderRow } from "../src/lib/storefront/bulk-status";
+import {
+  planBulkStatusChange,
+  bulkStatusFailureMessage,
+  isTransactionTimeout,
+  type BulkOrderRow,
+} from "../src/lib/storefront/bulk-status";
 import { applyStockMovesToProducts } from "../src/lib/storefront/inventory";
 import {
   applyOrderStockMovesBatched,
@@ -248,6 +253,34 @@ async function main() {
     assert.equal(next[0].stock, 5);
   });
 
+  // The DB path used to resolve a name-matched line with findFirst — exactly ONE
+  // row. Duplicate product names do exist in live data, so matching every row
+  // with that name would move the same units twice.
+  await check("a name-matched line moves exactly ONE row when two share the name", () => {
+    const products = [
+      { id: "p-1", name: "Glow Duo", stock: 10 },
+      { id: "p-2", name: "Glow Duo", stock: 10 },
+    ];
+    const next = applyStockMovesToProducts(products, [
+      { items: [line("Glow Duo", 3)], move: "deduct" },
+    ]);
+    const movedRows = next.filter((p, i) => p.stock !== products[i].stock);
+    assert.equal(movedRows.length, 1, "only one duplicate row may take the delta");
+    assert.equal(movedRows[0].stock, 7);
+  });
+
+  await check("an id-matched line still targets its own row despite a duplicate name", () => {
+    const products = [
+      { id: "p-1", name: "Glow Duo", stock: 10 },
+      { id: "p-2", name: "Glow Duo", stock: 10 },
+    ];
+    const next = applyStockMovesToProducts(products, [
+      { items: [line("Glow Duo", 3, "p-2")], move: "deduct" },
+    ]);
+    assert.equal(next[0].stock, 10, "the untargeted duplicate is untouched");
+    assert.equal(next[1].stock, 7);
+  });
+
   // ── applyOrderStockMovesBatched: THE round-trip budget ────────────────────
   console.log("\napplyOrderStockMovesBatched() — round-trip budget");
 
@@ -364,6 +397,43 @@ async function main() {
       { items: [line("Ghost", 5, "p-ghost")], move: "deduct" },
     ]);
     assert.equal(f.writes.length, 0);
+  });
+
+  await check("writes one row, not two, when the matched name is duplicated", async () => {
+    const f = fakeDb([productRow("p-1", "Glow Duo", 10), productRow("p-2", "Glow Duo", 10)]);
+    await applyOrderStockMovesBatched(f.db, [
+      { items: [line("Glow Duo", 3)], move: "deduct" },
+    ]);
+    assert.equal(f.writes.length, 1, `expected 1 write, made ${f.writes.length}`);
+    assert.deepEqual(f.writes[0].data, { stock: 7 });
+  });
+
+  // ── partial-failure reporting ─────────────────────────────────────────────
+  console.log("\nbulkStatusFailureMessage()");
+
+  const p2028 = Object.assign(new Error("Transaction API error: Transaction not found."), {
+    code: "P2028",
+  });
+
+  await check("recognises Prisma's interactive-transaction timeout", () => {
+    assert.equal(isTransactionTimeout(p2028), true);
+    assert.equal(isTransactionTimeout(new Error("boom")), false);
+  });
+
+  await check("asks for a smaller selection when nothing was saved", () => {
+    const msg = bulkStatusFailureMessage(0, p2028);
+    assert.match(msg, /fewer orders/i);
+    assert.doesNotMatch(msg, /\b0\b/, "don't tell the owner zero orders were saved");
+  });
+
+  await check("says how many orders were saved when a later chunk fails", () => {
+    const msg = bulkStatusFailureMessage(60, p2028);
+    assert.match(msg, /60/, "the owner must learn 60 orders already changed");
+    assert.doesNotMatch(msg, /Transaction/i, "no Prisma internals");
+  });
+
+  await check("passes a non-timeout failure through with its own message", () => {
+    assert.match(bulkStatusFailureMessage(0, new Error("connection refused")), /connection refused/);
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
