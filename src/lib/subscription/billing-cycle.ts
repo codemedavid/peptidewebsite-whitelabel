@@ -41,8 +41,10 @@ export function isBillingCycle(value: unknown): value is BillingCycle {
   return typeof value === "string" && (BILLING_CYCLES as readonly string[]).includes(value);
 }
 
-/** Days in the given UTC month (0-based month, e.g. 1 = February). */
-function daysInUtcMonth(year: number, month: number): number {
+/** Days in the given UTC month (0-based month, e.g. 1 = February). Exported so
+ *  the Super Admin calendar grid measures months with the same math the cycle
+ *  clamping uses, instead of re-deriving it. */
+export function daysInUtcMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 

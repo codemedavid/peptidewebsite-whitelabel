@@ -477,13 +477,26 @@ check("bucketing an empty list yields an empty map", () => {
   assert.strictEqual(bucketByDay([]).size, 0);
 });
 
-check("overdue events sort ahead of scheduled ones on the same day", () => {
-  const buckets = bucketByDay([
-    ...derive([tenant({ id: "a", name: "Scheduled", subscriptionEndsAt: "2026-08-20T00:00:00.000Z" })]),
-    ...derive([tenant({ id: "b", name: "Overdue", subscriptionEndsAt: "2026-08-10T00:00:00.000Z" })]),
-  ]);
-  assert.strictEqual(buckets.get("2026-08-20")?.[0].title, "Scheduled");
-  assert.strictEqual(buckets.get("2026-08-10")?.[0].title, "Overdue");
+check("the more urgent event sorts first within a day", () => {
+  // A due_soon renewal and an operator note both land on the 20th; the money
+  // owed must read first regardless of the order they were merged in.
+  const note = toManualEvent(
+    {
+      id: "m9",
+      tenantId: null,
+      clientLabel: null,
+      title: "Operator note",
+      notes: null,
+      startsAt: "2026-08-20T00:00:00.000Z",
+      kind: "note",
+      doneAt: null,
+    },
+    {},
+  );
+  const buckets = bucketByDay([note, ...derive([tenant({ name: "Due tenant" })])]);
+  const day = buckets.get("2026-08-20");
+  assert.strictEqual(day?.length, 2);
+  assert.strictEqual(day?.[0].title, "Due tenant");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
