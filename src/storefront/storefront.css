@@ -1114,9 +1114,15 @@
   }
 }
 
-/* --- HERO — small-screen polish (applies across variants) --- */
+/* --- HERO — small-screen polish (applies across the WRITTEN variants) ---
+   The :not() is load-bearing, not decoration. This block sits ~60 lines below
+   `.hero--media { padding: 0 }` and carried the SAME specificity, so on a phone
+   it silently won and wrapped every uploaded banner in a ~63px band of page
+   background — the banner stopped meeting the header and the section below it.
+   An image hero runs edge to edge at every width; only the written hero wants
+   breathing room. Guarded by `npm run test:hero-flush`. */
 @media (max-width: 600px) {
-  .sf-root .hero { padding-block: clamp(40px, 12vw, 72px); }
+  .sf-root .hero:not(.hero--media) { padding-block: clamp(40px, 12vw, 72px); }
   .sf-root .hero__inner { gap: 22px; }
   .sf-root .hero__headline { font-size: clamp(36px, 11vw, 64px); }
   .sf-root .hero__sub { font-size: 15px; }
