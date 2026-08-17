@@ -246,6 +246,38 @@ console.log("Journey 9 — identity + catalog copy round-trip");
   check("overlong copy rejected", long.errors.length > 0, long.errors);
 }
 
+console.log("Journey 10 — typography");
+{
+  const out = buildTenantBrandingUpdate(CURRENT, { fonts: { heading: "Instrument Serif", body: "Inter" } });
+  check("no errors", out.errors.length === 0, out.errors);
+  check("heading maps to headingFont", out.config.headingFont === "Instrument Serif", out.config.headingFont);
+  check("body maps to bodyFont", out.config.bodyFont === "Inter", out.config.bodyFont);
+  check("unpatched font keys absent", out.config.priceFont === undefined, out.config.priceFont);
+
+  // "" is how an operator hands a face back to the theme default.
+  const inherit = buildTenantBrandingUpdate({ themeId: "clinical-white", config: { ...LIVE_CONFIG, priceFont: "Georgia" } }, {
+    fonts: { price: "" },
+  });
+  check("empty font string clears the override", inherit.config.priceFont === "" && inherit.errors.length === 0, inherit);
+
+  check("unknown font key rejected", buildTenantBrandingUpdate(CURRENT, { fonts: { headline: "Inter" } }).errors.length > 0);
+  check("non-string font rejected", buildTenantBrandingUpdate(CURRENT, { fonts: { body: 12 } }).errors.length > 0);
+}
+
+console.log("Journey 11 — a tenant with no branding config yet");
+{
+  // A Branding row can exist with an empty config, or not exist at all. Either
+  // way the patch must still land rather than throw on a missing base object.
+  for (const bare of [{ themeId: "clinical-white", config: {} }, { config: undefined }, { config: null }]) {
+    const out = buildTenantBrandingUpdate(bare, { colors: { text: "#1C1917", background: "#FFFFFF" } });
+    check(`patch applies over ${JSON.stringify(bare.config)}`, out.errors.length === 0 && out.config.text === "#1C1917", out);
+  }
+
+  // No stored themeId → any known preset is a genuine change, not a no-op.
+  const themed = buildTenantBrandingUpdate({ config: {} }, { themeId: "clinical-white" });
+  check("theme set on a themeless row", themed.themeId === "clinical-white" && themed.errors.length === 0, themed);
+}
+
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);
   process.exit(1);
