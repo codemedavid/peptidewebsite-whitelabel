@@ -9,10 +9,12 @@
 
 import {
   groupBuyLine,
+  isGroupBuyProduct,
   slotProgress,
   type SlotProgress,
   type TwoWaysInput,
 } from "./two-ways";
+import type { WayState } from "./two-ways-mode";
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { formatMoney } from "./currency";
 import {
@@ -233,9 +235,17 @@ export type GroupBuyCartSummary = {
   hasItems: boolean;
 };
 
-/** The full page view-model for a live round (or an empty, not-live shell). */
+/** The full page view-model: a live round, or the view-only pricing reference. */
 export type GroupBuyPageView<T extends GbPageProduct = GbPageProduct> = {
+  /** Is a group-buy round actually running? Drives the round CHROME (status
+   *  pill, countdown, slot bar) — all of which is meaningless between rounds. */
   live: boolean;
+  /** Can nothing here be ordered? True when no round is running, or when the
+   *  owner turned the group-buy way off. The page still renders products and
+   *  prices — it shows the "Group Buy Currently Closed" notice and inert buy
+   *  controls instead. Always the inverse of "a live round on an open way", so a
+   *  surface can never render a buy button the cart would refuse. */
+  viewOnly: boolean;
   name: string;
   description: string;
   deliveryEta: string;
@@ -309,32 +319,60 @@ export function groupBuyCartSummary<T extends GbPageProduct>(
 }
 
 /**
- * Build the group-buy page view-model. The LIVE ROUND is the source of truth for
- * what's in the group buy — a product is listed when it's in the round's scope
- * (coversAll, or its id is in the round's assigned productIds), regardless of the
- * product's productType tag. This is the SAME membership rule the two-ways home
- * uses (buildTwoWaysHomeView), so the home and this page never disagree about
- * whether a round is open. Pricing still honours gbPrice (groupBuyLine): an
- * assigned product with a gbPrice shows its saving, an untagged one lists at its
- * regular price. A null banner (no live round) yields a not-live, empty shell the
- * page renders as its "no group buy right now" state. Order is preserved.
+ * Build the group-buy page view-model.
+ *
+ * WHAT IS LISTED, in two regimes:
+ *
+ *  • A round is LIVE — the round is the source of truth. A product is listed
+ *    when it's in the round's scope (coversAll, or its id is in the assigned
+ *    productIds), regardless of its productType tag: an owner can pull an
+ *    untagged product into a round. This is the SAME membership rule the
+ *    two-ways home uses (buildTwoWaysHomeView), so the home teaser and this page
+ *    never disagree about what a round covers.
+ *
+ *  • BETWEEN rounds — there is no scope to read, so membership falls back to the
+ *    productType "gb" TAG. That is exactly the rule that keeps those pre-orders
+ *    OFF the on-hand shelf (two-ways-home.isOnHandStock), so the shelf and this
+ *    page stay exact complements: every product sits on precisely one of them,
+ *    never both and never neither. Listing them is what lets an owner keep the
+ *    group buy up as a catalog/pricing reference between rounds.
+ *
+ * WHAT IS ORDERABLE is a separate question, answered by `viewOnly`: only a LIVE
+ * round on an OPEN way can be joined. A closed way, or no round at all, still
+ * renders every product and price — the page just shows the closed notice and
+ * inert buy controls. `groupBuyWay` defaults to "open" so a caller that doesn't
+ * manage per-way state gets exactly the previous live-round behaviour.
+ *
+ * Pricing is identical in both regimes and always honours gbPrice
+ * (groupBuyLine): a product with a gbPrice lists at it, one without lists at its
+ * regular price, so a reference price is never a phantom discount. Order is
+ * preserved and the input is never mutated.
  */
 export function buildGroupBuyPageView<T extends GbPageProduct>(
   products: T[],
   banner: GroupBuyBanner | null,
   currency: string,
   now: Date = new Date(),
+  groupBuyWay: WayState = "open",
 ): GroupBuyPageView<T> {
+  // Only a live round on an open way can be joined. Everything else — a closed
+  // or hidden way, or no round at all — is a browsable pricing reference.
+  const viewOnly = !banner || groupBuyWay !== "open";
+
   if (!banner) {
+    // Between rounds: the tag is the only membership signal left. The round
+    // chrome stays empty because there is no round to describe.
+    const lines = products.filter(isGroupBuyProduct).map((p) => pageLine(p, currency));
     return {
       live: false,
+      viewOnly,
       name: "",
       description: "",
       deliveryEta: "",
       countdown: "",
       slots: slotProgress(0, 0),
-      count: 0,
-      lines: [],
+      count: lines.length,
+      lines,
     };
   }
   const covered = !banner.coversAll ? new Set(banner.productIds) : null;
@@ -342,6 +380,7 @@ export function buildGroupBuyPageView<T extends GbPageProduct>(
   const lines = products.filter(inRound).map((p) => pageLine(p, currency));
   return {
     live: true,
+    viewOnly,
     name: banner.name,
     description: banner.description,
     deliveryEta: banner.deliveryEta,
