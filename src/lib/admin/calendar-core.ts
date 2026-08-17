@@ -52,7 +52,7 @@ const MONTH_NAMES = [
 /** Weekday headers, Sunday-first — matches buildMonthGrid's row alignment. */
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-export type CalendarEventKind = "renewal" | "trial_end" | "manual";
+export type CalendarEventKind = "renewal" | "trial_end" | "manual" | "payment";
 
 /** Same vocabulary the Income page uses, so badges read consistently. */
 export type CalendarUrgency = "overdue" | "due_soon" | "scheduled";
@@ -79,6 +79,12 @@ export type CalendarEvent = {
   entryKind?: string;
   /** Manual entries only — ticked off by the operator. */
   done?: boolean;
+  /** True for a settled subscription term (kind "payment"). */
+  paid?: boolean;
+  /** The SubscriptionPayment behind a paid event — what undo targets. */
+  settlementId?: string;
+  /** UTC day the money landed, when it differs from the day settled. */
+  paidDay?: string;
 };
 
 export type DayCell = {
@@ -135,6 +141,16 @@ export function utcDayIso(value: Date | string): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${date.getUTCFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Index key pairing a tenant with one of its due days — `tenantId:YYYY-MM-DD`.
+ * Lives here (rather than in calendar-settlement.ts, which re-exports it) so the
+ * suppression set this module reads and the settlement index that fills it are
+ * built by the same function and can never drift apart.
+ */
+export function settlementKey(tenantId: string, day: string): string {
+  return `${tenantId}:${day}`;
 }
 
 /** Month navigation that rolls over year boundaries in both directions. */
@@ -221,12 +237,18 @@ function renewalEvent(
  * Suspended tenants are deliberately included — unlike the Income page, which
  * counts active tenants only. A suspended tenant's unpaid due date is exactly
  * the one the operator needs to chase.
+ *
+ * `settled` carries the tenant+day keys the operator has already marked paid
+ * (settlementKey in calendar-settlement.ts). Those due dates are skipped here
+ * because the settlement renders its own paid chip — without the skip a square
+ * would read "due" and "paid" at once.
  */
 export function deriveTenantEvents(
   tenants: readonly CalendarTenantInput[],
-  opts: { now: Date; rangeStart: Date; rangeEnd: Date },
+  opts: { now: Date; rangeStart: Date; rangeEnd: Date; settled?: ReadonlySet<string> },
 ): CalendarEvent[] {
-  const { now, rangeStart, rangeEnd } = opts;
+  const { now, rangeStart, rangeEnd, settled } = opts;
+  const isSettled = (tenantId: string, day: string) => settled?.has(settlementKey(tenantId, day)) ?? false;
   const events: CalendarEvent[] = [];
 
   for (const tenant of tenants) {
@@ -254,7 +276,7 @@ export function deriveTenantEvents(
     const endsAt = toValidDate(tenant.subscriptionEndsAt);
     if (!endsAt) continue;
 
-    if (inRange(endsAt, rangeStart, rangeEnd)) {
+    if (inRange(endsAt, rangeStart, rangeEnd) && !isSettled(tenant.id, utcDayIso(endsAt))) {
       const { level } = subscriptionUrgency(
         {
           status: tenant.status,
@@ -273,7 +295,7 @@ export function deriveTenantEvents(
 
     let cursor = addBillingCycle(endsAt, cycle);
     for (let i = 0; i < MAX_PROJECTIONS && cursor.getTime() <= rangeEnd.getTime(); i++) {
-      if (cursor.getTime() >= rangeStart.getTime()) {
+      if (cursor.getTime() >= rangeStart.getTime() && !isSettled(tenant.id, utcDayIso(cursor))) {
         events.push(renewalEvent(tenant, cursor, "scheduled", true));
       }
       cursor = addBillingCycle(cursor, cycle);
