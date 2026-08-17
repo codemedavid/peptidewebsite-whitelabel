@@ -838,7 +838,13 @@ model PlatformCalendarEvent {
   allDay      Boolean   @default(true)
   // note | meeting | follow_up | payment (string-enum, see lib/admin/calendar-core.ts)
   kind        String    @default("note")
-  // Set when the operator ticks the entry off; null while it's still open.
+  // What this entry is worth, in centavos — the operator billing a client who
+  // isn't a platform tenant (or an ad-hoc charge to one). Null = a plain
+  // reminder with no money attached, which is most entries. Feeds the
+  // calendar's "expected this month"; counts as collected once doneAt is set.
+  amountCents Int?
+  // Set when the operator ticks the entry off; null while it's still open. For
+  // an entry carrying an amount this doubles as "collected".
   doneAt      DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt

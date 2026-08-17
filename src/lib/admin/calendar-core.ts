@@ -23,6 +23,7 @@
 
 import { addBillingCycle, daysInUtcMonth, isBillingCycle } from "@/lib/subscription/billing-cycle";
 import { subscriptionUrgency } from "@/lib/subscription/near-due";
+import { parsePaymentAmountCents } from "@/lib/subscription/payments";
 
 export { daysInUtcMonth };
 
@@ -130,6 +131,8 @@ export type ManualEventRow = {
   startsAt: Date | string;
   kind: string;
   doneAt: Date | string | null;
+  /** What the operator is owed for this entry, centavos. Null = a reminder. */
+  amountCents?: number | null;
 };
 
 function toValidDate(value: Date | string | null | undefined): Date | null {
@@ -312,6 +315,10 @@ export function deriveTenantEvents(
  * Project a stored operator entry onto the calendar. The subtitle resolves to
  * the platform tenant's name when the entry is linked to one, and otherwise to
  * the free-text label used for clients who aren't on the whitelabel at all.
+ *
+ * An entry carrying an amount is a billing, not just a reminder, so `done`
+ * doubles as `paid`: ticking it off is how the operator says the money for an
+ * off-platform client actually came in.
  */
 export function toManualEvent(
   row: ManualEventRow,
@@ -320,6 +327,7 @@ export function toManualEvent(
   const startsAt = toValidDate(row.startsAt) ?? new Date(0);
   const linkedName = row.tenantId ? tenantNameById[row.tenantId] : undefined;
   const subtitle = linkedName ?? row.clientLabel ?? undefined;
+  const done = row.doneAt != null;
 
   return {
     id: row.id,
@@ -333,7 +341,9 @@ export function toManualEvent(
     projected: false,
     notes: row.notes ?? undefined,
     entryKind: row.kind,
-    done: row.doneAt != null,
+    done,
+    paid: done,
+    amountCents: row.amountCents ?? undefined,
   };
 }
 
@@ -364,6 +374,8 @@ export type CalendarEventInput = {
   /** "YYYY-MM-DD" straight from an <input type="date">. */
   day?: string | null;
   kind?: string | null;
+  /** Raw peso amount owed, as typed ("1500", "₱2,499.50"). Blank = none. */
+  amount?: string | null;
 };
 
 export type NormalizedCalendarEvent = {
@@ -373,6 +385,8 @@ export type NormalizedCalendarEvent = {
   notes: string | null;
   startsAt: Date;
   kind: CalendarEntryKind;
+  /** Centavos owed, or null for a reminder with no money attached. */
+  amountCents: number | null;
 };
 
 export type CalendarNormalizeResult =
@@ -422,6 +436,18 @@ export function normalizeCalendarEventInput(raw: CalendarEventInput): CalendarNo
     return { ok: false, error: `Keep the note under ${NOTES_MAX} characters.` };
   }
 
+  // An amount is optional — most entries are reminders. But a typo must not
+  // silently become "no amount", or the operator's billing quietly vanishes
+  // from the month's expected total.
+  let amountCents: number | null = null;
+  const rawAmount = trimmedOrNull(raw.amount);
+  if (rawAmount !== null) {
+    amountCents = parsePaymentAmountCents(rawAmount);
+    if (amountCents == null) {
+      return { ok: false, error: "Enter a valid amount, or leave it blank." };
+    }
+  }
+
   const tenantId = trimmedOrNull(raw.tenantId);
   // A tenant link and a free-text client label would name two different owners
   // for one entry; the concrete tenant wins.
@@ -432,7 +458,15 @@ export function normalizeCalendarEventInput(raw: CalendarEventInput): CalendarNo
 
   return {
     ok: true,
-    value: { tenantId, clientLabel, title, notes, startsAt, kind: kindRaw as CalendarEntryKind },
+    value: {
+      tenantId,
+      clientLabel,
+      title,
+      notes,
+      startsAt,
+      kind: kindRaw as CalendarEntryKind,
+      amountCents,
+    },
   };
 }
 

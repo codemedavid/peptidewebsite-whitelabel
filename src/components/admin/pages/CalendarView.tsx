@@ -68,9 +68,18 @@ const TONE: Record<CalendarEvent["urgency"], string> = {
   scheduled: "badge-neutral",
 };
 
-/** The chip's colour band. Paid outranks urgency — it's a settled fact. */
+/**
+ * Money actually in. A ticked-off entry only counts as collected when it
+ * carries an amount — ticking off a plain reminder settles nothing, and must
+ * not read green or add to the received figure.
+ */
+function isMoneyIn(event: CalendarEvent): boolean {
+  return event.paid === true && event.amountCents != null;
+}
+
+/** The chip's colour band. Collected outranks urgency — it's a settled fact. */
 function chipTone(event: CalendarEvent): string {
-  if (event.paid) return "cal-chip-paid";
+  if (isMoneyIn(event)) return "cal-chip-paid";
   if (event.kind === "manual") return "cal-chip-entry";
   if (event.urgency === "overdue") return "cal-chip-overdue";
   if (event.urgency === "due_soon") return "cal-chip-soon";
@@ -79,9 +88,10 @@ function chipTone(event: CalendarEvent): string {
 
 /** The short label on a day-panel row. */
 function eventLabel(event: CalendarEvent): string {
-  if (event.paid) return "Paid";
+  if (event.kind === "payment") return "Paid";
   if (event.kind === "renewal") return event.projected ? "Projected" : "Due";
   if (event.kind === "trial_end") return "Trial";
+  if (isMoneyIn(event)) return "Collected";
   return CALENDAR_ENTRY_KIND_LABELS[(event.entryKind ?? "note") as CalendarEntryKind];
 }
 
@@ -105,10 +115,27 @@ type DraftState = {
   kind: CalendarEntryKind;
   tenantId: string;
   clientLabel: string;
+  /** Raw peso amount owed, as typed. Blank = a reminder, not a billing. */
+  amount: string;
 };
 
 function emptyDraft(day: string): DraftState {
-  return { id: null, day, title: "", notes: "", kind: "note", tenantId: "", clientLabel: "" };
+  return {
+    id: null,
+    day,
+    title: "",
+    notes: "",
+    kind: "note",
+    tenantId: "",
+    clientLabel: "",
+    amount: "",
+  };
+}
+
+/** Centavos -> a plain peso string the operator can edit ("1500", "1499.50"). */
+function pesoInput(cents?: number): string {
+  if (cents == null || !Number.isFinite(cents)) return "";
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
 }
 
 /** How many chips fit in a day square before we collapse to "+N more". */
@@ -136,7 +163,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
     return {
       due: all.filter((e) => e.kind === "renewal" && !e.projected).length,
       overdue: all.filter((e) => e.urgency === "overdue").length,
-      paid: all.filter((e) => e.paid).length,
+      paid: all.filter(isMoneyIn).length,
       entries: all.filter((e) => e.kind === "manual").length,
     };
   }, [eventsByDay]);
@@ -170,6 +197,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
       kind: draft.kind,
       tenantId: draft.tenantId || null,
       clientLabel: draft.clientLabel || null,
+      amount: draft.amount || null,
     };
     run(
       () => (draft.id ? updateCalendarEventAction(draft.id, input) : createCalendarEventAction(input)),
@@ -383,7 +411,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                           className={`cal-chip ${chipTone(event)}${event.projected ? " cal-chip-projected" : ""}${event.done ? " cal-chip-done" : ""}`}
                         >
                           <span className="cal-chip-name">{event.title}</span>
-                          {event.amountCents != null && event.kind !== "manual" && (
+                          {event.amountCents != null && (
                             <span className="cal-chip-amt">{pesoShort(event.amountCents)}</span>
                           )}
                         </span>
@@ -446,10 +474,10 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
             )}
 
             {selectedEvents.map((event) => (
-              <div key={event.id} className={`cal-item${event.paid ? " cal-item-paid" : ""}`}>
+              <div key={event.id} className={`cal-item${isMoneyIn(event) ? " cal-item-paid" : ""}`}>
                 <div className="cal-item-main">
                   <div className="cal-item-title">
-                    <span className={`badge ${event.paid ? "badge-success" : TONE[event.urgency]}`}>
+                    <span className={`badge ${isMoneyIn(event) ? "badge-success" : TONE[event.urgency]}`}>
                       {eventLabel(event)}
                     </span>
                     <strong className={event.done ? "cal-strike" : undefined}>{event.title}</strong>
@@ -459,7 +487,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                   {event.paid && event.paidDay && event.paidDay !== event.day && (
                     <div className="cal-item-sub">Received {readableDay(event.paidDay)}</div>
                   )}
-                  {event.amountCents != null && event.kind !== "manual" && (
+                  {event.amountCents != null && (
                     <div className="cal-item-amt">{peso(event.amountCents)}</div>
                   )}
                 </div>
@@ -531,6 +559,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                             kind: (event.entryKind ?? "note") as CalendarEntryKind,
                             tenantId: event.tenantId ?? "",
                             clientLabel: event.tenantId ? "" : (event.subtitle ?? ""),
+                            amount: pesoInput(event.amountCents),
                           })
                         }
                       >
@@ -600,6 +629,23 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                 value={draft.day}
                 onChange={(e) => setDraft({ ...draft, day: e.target.value })}
               />
+
+              <label className="field-label" htmlFor="cal-amount">
+                Amount due
+              </label>
+              <input
+                id="cal-amount"
+                className="input"
+                inputMode="decimal"
+                value={draft.amount}
+                placeholder="1500"
+                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+              />
+              <div className="field-hint mb-3">
+                What this client owes you. Counts toward the month&rsquo;s expected income, and
+                toward received once you tick it <strong>Done</strong>. Leave blank for a plain
+                reminder.
+              </div>
 
               <label className="field-label" htmlFor="cal-kind">
                 Kind

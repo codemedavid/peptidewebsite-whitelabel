@@ -324,6 +324,56 @@ export function planSettlement(input: SettlementPlanInput): SettlementResult<Set
   };
 }
 
+/** What the month's header figures are computed over. */
+export type MonthMoney = {
+  /** Everything billable landing in this month, settled or not. */
+  expectedCents: number;
+  /** What actually came in during this month. */
+  collectedCents: number;
+};
+
+/**
+ * The two numbers at the top of the calendar, for one month.
+ *
+ * EXPECTED counts every event on a day of this month that carries an amount —
+ * tenant subscription dues AND the operator's own billings for clients who
+ * aren't platform tenants. An entry with no amount is a plain reminder and
+ * moves nothing. The 6x7 grid's leading/trailing cells belong to the
+ * neighbouring months, so the day-prefix test excludes them.
+ *
+ * COLLECTED is measured on when money LANDED, not on the term it settles: a
+ * subscription counts on its `paidDay` (so a payment taken in August against
+ * September's term still counts in August), and an operator billing counts once
+ * it's ticked off. Settled subscriptions come in through `settlements` rather
+ * than through their paid chips, because the chip sits on the day the term ends
+ * while the money may have arrived in a different month entirely.
+ */
+export function monthMoney(
+  events: readonly CalendarEvent[],
+  settlements: readonly { paidDay: string; amountCents: number }[],
+  monthPrefix: string,
+): MonthMoney {
+  let expectedCents = 0;
+  let collectedCents = 0;
+
+  for (const event of events) {
+    if (!event.day.startsWith(monthPrefix)) continue;
+    const amount = event.amountCents ?? 0;
+    if (amount === 0) continue;
+
+    expectedCents += amount;
+    // Only operator entries settle here — a subscription's money is counted
+    // from the ledger below, on the day it actually arrived.
+    if (event.kind === "manual" && event.done) collectedCents += amount;
+  }
+
+  for (const settlement of settlements) {
+    if (settlement.paidDay.startsWith(monthPrefix)) collectedCents += settlement.amountCents;
+  }
+
+  return { expectedCents, collectedCents };
+}
+
 export type SettlementReversalInput = {
   settlement: {
     periodStartIso: string | null;

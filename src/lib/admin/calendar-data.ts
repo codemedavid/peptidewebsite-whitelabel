@@ -37,6 +37,7 @@ import {
 } from "./calendar-core";
 import {
   buildSettlementIndex,
+  monthMoney,
   settlementEvents,
   type SettlementRow,
 } from "./calendar-settlement";
@@ -131,6 +132,7 @@ async function loadManualEvents(
         startsAt: true,
         kind: true,
         doneAt: true,
+        amountCents: true,
       },
     });
     return { rows, available: true };
@@ -229,14 +231,7 @@ export async function getCalendarMonth(
   for (const tenant of tenants) tenantNameById[tenant.id] = tenant.name;
 
   const settlements = buildSettlementIndex(settled.rows);
-
-  // Money received IN this month, keyed on the day it landed — not on the term
-  // it settled, which may sit in another month entirely.
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  let collectedCents = 0;
-  for (const settlement of settlements.values()) {
-    if (settlement.paidDay.startsWith(monthPrefix)) collectedCents += settlement.amountCents;
-  }
 
   const events: CalendarEvent[] = [
     ...deriveTenantEvents(tenants, {
@@ -253,15 +248,13 @@ export async function getCalendarMonth(
   const eventsByDay: Record<string, CalendarEvent[]> = {};
   for (const [day, dayEvents] of bucketByDay(events)) eventsByDay[day] = dayEvents;
 
-  // Expected = every subscription amount landing on a day of THIS month, settled
-  // or not. The grid's leading/trailing cells belong to the neighbouring months,
-  // so they're excluded by the same prefix test the collected total uses.
-  let expectedCents = 0;
-  for (const event of events) {
-    if (!event.day.startsWith(monthPrefix)) continue;
-    if (event.kind !== "renewal" && event.kind !== "payment") continue;
-    expectedCents += event.amountCents ?? 0;
-  }
+  // Expected vs received for the month — tenant dues AND the operator's own
+  // billings. Pure, so the rules stay testable (npm run test:calendar-paid).
+  const { expectedCents, collectedCents } = monthMoney(
+    events,
+    [...settlements.values()],
+    monthPrefix,
+  );
 
   return {
     grid: buildMonthGrid(year, month, todayIso),
