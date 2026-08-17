@@ -102,10 +102,16 @@ check("catalog-wide round routes all products to the group buy", () => {
 //    page. That guarantee is pinned by npm run test:group-buy-page
 //    ("each line exposes gb price, regular price and the saving, all labelled").
 
-// 3. No live round (null banner) → the GB path is closed and empty.
+// 3. No live round (null banner) → the GB path is closed and empty, and a
+//    gb-TAGGED product does NOT fall back onto the ships-now shelf. The tag is
+//    the intrinsic split (a group-buy listing is a pre-order priced at gbPrice);
+//    only genuinely on-hand products may be sold as ships-now between rounds.
 check("no live round yields a closed, empty group-buy path", () => {
   const view = buildTwoWaysHomeView(
-    [product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" })],
+    [
+      product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
+      product({ id: "oh", name: "Ready stock", price: 1200 }),
+    ],
     null,
     "₱",
     NOW,
@@ -113,8 +119,39 @@ check("no live round yields a closed, empty group-buy path", () => {
   assert.equal(view.gb.open, false);
   assert.equal(view.gb.count, 0);
   assert.equal(view.gb.countdown, "");
-  // No round → every product is on-hand (nothing is "in the group buy").
-  assert.equal(view.onHand.count, 1);
+  // Only the untagged product is on-hand; the gb listing is not ships-now stock.
+  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["oh"]);
+});
+
+// 3b. REGRESSION (k-glow, 2026-08-17): "when the group buy is closed the on-hand
+//     page gets the group-buy prices". k-glow's catalog is ~25 productType "gb"
+//     PasaBuy listings plus 6 separately-seeded on-hand rows ("-OH" SKUs, no
+//     productType — see scripts/seed-kglow-onhand.ts). Membership was resolved
+//     from the LIVE ROUND ALONE, so a null banner (round closed) returned every
+//     group-buy listing to the ships-now shelf at its group-buy price.
+check("a closed round never returns group-buy listings to the on-hand shelf", () => {
+  const catalog = [
+    product({ id: "gb-tirz", name: "Tirzepatide", price: 3000, productType: "gb" }),
+    product({ id: "gb-ghk", name: "GHK-CU", price: 1595, productType: "gb" }),
+    product({ id: "oh-tirz", name: "Tirzepatide", price: 3200 }), // the "-OH" row
+    product({ id: "oh-ghk", name: "GHK-CU", price: 1800 }),
+  ];
+  const live = buildTwoWaysHomeView(
+    catalog,
+    banner({ coversAll: false, productIds: ["gb-tirz", "gb-ghk"] }),
+    "₱",
+    NOW,
+  );
+  const shelfWhileLive = live.onHand.lines.map((l) => l.product.id);
+  assert.deepEqual(shelfWhileLive, ["oh-tirz", "oh-ghk"]);
+
+  // The round closes. The shelf must not change.
+  const closed = buildTwoWaysHomeView(catalog, null, "₱", NOW);
+  assert.deepEqual(
+    closed.onHand.lines.map((l) => l.product.id),
+    shelfWhileLive,
+    "closing the round must leave the on-hand shelf exactly as it was",
+  );
 });
 
 // 4. A live round wires the round chrome: name, countdown, slot progress.
@@ -134,13 +171,15 @@ check("live round wires name, countdown and slot progress", () => {
   assert.equal(view.gb.slots.pct, 60);
 });
 
-// 5. A scoped round claims only its assigned products — a gb-tagged product
-//    OUTSIDE the round stays on the on-hand shelf (the round, not the tag, is
-//    the membership rule).
+// 5. A scoped round claims only its assigned products for the TEASER — but a
+//    gb-tagged product OUTSIDE the round is still not ships-now stock, so it
+//    stays off the on-hand shelf too. Round scope drives what the teaser counts;
+//    the tag drives what may be sold as on-hand.
 check("scoped round claims only assigned products, even among gb-tagged ones", () => {
   const products = [
     product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
     product({ id: "d", name: "Delta", price: 900, gbPrice: 700, productType: "gb" }),
+    product({ id: "e", name: "Echo", price: 500 }),
   ];
   const view = buildTwoWaysHomeView(
     products,
@@ -150,7 +189,7 @@ check("scoped round claims only assigned products, even among gb-tagged ones", (
   );
   assert.equal(view.gb.count, 1);
   assert.deepEqual(view.gb.productIds, ["c"]);
-  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["d"]);
+  assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["e"]);
 });
 
 // 6. On-hand line reports stock state for the "N in stock" badge.
