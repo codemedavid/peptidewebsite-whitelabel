@@ -28,6 +28,10 @@ import {
   resolveWays,
   visibleWayCount,
   wayBlockMessage,
+  wayIsVisible,
+  wayAcceptsOrders,
+  setWayVisible,
+  setWayAcceptOrders,
   waysHeading,
   type TwoWaysMode,
 } from "../src/lib/storefront/two-ways-mode";
@@ -226,6 +230,80 @@ check(
     return /saveTwoWaysModeAction/.test(src) && /Ways to order/.test(src);
   })(),
   "AdminGroupBuys must expose a 'Ways to order' control",
+);
+
+// ── Two owner controls over ONE stored state ─────────────────────────────────
+// The store admin presents Visibility (Visible / Hidden) and Accept Orders
+// (Enabled / Disabled) as separate switches, because that is how an owner thinks
+// about it. They are PROJECTIONS of the single WayState, not a second source of
+// truth — a standalone "accept orders" boolean would make "hidden + accepting
+// orders" representable, which is meaningless, and would let the two drift.
+
+check("visible is everything except hidden", (() =>
+  wayIsVisible("open") && wayIsVisible("closed") && !wayIsVisible("hidden"))());
+
+check("only an OPEN way accepts orders", (() =>
+  wayAcceptsOrders("open") && !wayAcceptsOrders("closed") && !wayAcceptsOrders("hidden"))());
+
+check(
+  "hiding a way is one click from any state",
+  setWayVisible("open", false) === "hidden" &&
+    setWayVisible("closed", false) === "hidden" &&
+    setWayVisible("hidden", false) === "hidden",
+);
+
+check(
+  "un-hiding lands on open — the plain reading of 'make it visible'",
+  setWayVisible("hidden", true) === "open",
+);
+
+check(
+  "flipping Visibility on an ALREADY visible way changes nothing",
+  // The owner has "visible + not accepting orders" set up deliberately; toggling
+  // the other control must not silently re-open the shop.
+  setWayVisible("closed", true) === "closed" && setWayVisible("open", true) === "open",
+);
+
+check(
+  "Accept Orders drives open ↔ closed and never touches visibility",
+  setWayAcceptOrders("open", false) === "closed" &&
+    setWayAcceptOrders("closed", true) === "open" &&
+    setWayAcceptOrders("open", true) === "open" &&
+    setWayAcceptOrders("closed", false) === "closed",
+);
+
+check(
+  "Accept Orders can never un-hide a way (that's the other control's job)",
+  setWayAcceptOrders("hidden", true) === "hidden" &&
+    setWayAcceptOrders("hidden", false) === "hidden",
+);
+
+check(
+  "the two controls round-trip every state they can express",
+  (["open", "closed", "hidden"] as const).every((state) => {
+    const back = wayIsVisible(state)
+      ? setWayAcceptOrders(setWayVisible(state, true), wayAcceptsOrders(state))
+      : setWayVisible(state, false);
+    return back === state;
+  }),
+);
+
+// The owner-facing control must exist, and must speak in those two words.
+check(
+  "AdminGroupBuys exposes Visibility and Accept Orders for the group buy",
+  (() => {
+    const src = readFileSync(
+      join(__dirname, "..", "src/storefront/admin/AdminGroupBuys.tsx"),
+      "utf8",
+    );
+    return (
+      /Accept orders/i.test(src) &&
+      /Visibility/i.test(src) &&
+      /setWayVisible/.test(src) &&
+      /setWayAcceptOrders/.test(src)
+    );
+  })(),
+  "the admin must drive the way state through the shared projections",
 );
 
 // ── Hiding a way removes its nav link ────────────────────────────────────────
