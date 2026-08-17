@@ -7,11 +7,9 @@ import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
-import {
-  fetchMcpImageAsset,
-  validatePublicMcpImageUrl,
-  type McpImageAsset,
-} from "@/lib/mcp/image-assets";
+import { validatePublicMcpImageUrl } from "@/lib/mcp/image-assets";
+import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
+import { UPDATE_BRANDING_TOOL, callUpdateBranding } from "@/lib/mcp/update-branding-tool";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import {
@@ -31,7 +29,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = {
   name: "pepweb-whitelabel-admin",
   title: "Pepweb Whitelabel Admin",
-  version: "1.1.0",
+  version: "1.2.0",
 };
 
 type JsonRpcId = string | number | null;
@@ -144,26 +142,6 @@ const CREATE_TENANT_TOOL = {
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: true,
-  },
-};
-
-const MCP_ASSET_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    url: {
-      type: "string",
-      description:
-        "Public http(s) image URL. By default the server downloads and rehosts it to the tenant ImageKit folder.",
-    },
-    dataUrl: { type: "string", description: "Base64 data URL, e.g. data:image/png;base64,..." },
-    dataBase64: { type: "string", description: "Raw base64 file bytes." },
-    mimeType: { type: "string", description: "Required with dataBase64, e.g. image/png." },
-    fileName: { type: "string" },
-    upload: {
-      type: "boolean",
-      description: "Defaults to true. Set false to store an existing hosted URL directly instead of rehosting it.",
-    },
   },
 };
 
@@ -524,43 +502,6 @@ function plainObject(value: unknown): Record<string, unknown> | null {
 
 function cleanString(value: unknown, max = 200): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
-async function resolveMcpImage(
-  tenantId: string,
-  asset: McpImageAsset,
-  kind: "hero" | "product",
-): Promise<{ url: string; fileId?: string }> {
-  const label = kind === "hero" ? "hero image" : "product image";
-  const needsUpload =
-    asset.upload !== false || Boolean(String(asset.dataUrl ?? "").trim() || String(asset.dataBase64 ?? "").trim());
-  if (!needsUpload) {
-    return { url: await validatePublicMcpImageUrl(asset.url, label) };
-  }
-
-  const file = await fetchMcpImageAsset(asset, label);
-  const mediaType = kind === "hero" ? "branding:hero" : "product";
-
-  const uploaded = await uploadTenantMedia({
-    tenantId,
-    file: file.bytes,
-    fileName: `${kind}-${file.fileName}`,
-    tags: kind === "hero" ? ["branding:hero", "hero"] : ["product"],
-  });
-
-  // The image is already safely hosted if this audit row fails, so match the
-  // existing storefront upload behavior and keep the successful URL usable.
-  try {
-    await withTenant(tenantId, (db) =>
-      db.mediaAsset.create({
-        data: { tenantId, imagekitId: uploaded.fileId, url: uploaded.url, type: mediaType },
-      }),
-    );
-  } catch {
-    // Best-effort media-library record only.
-  }
-
-  return { url: uploaded.url, fileId: uploaded.fileId };
 }
 
 function lowerName(value: string): string {
@@ -1196,7 +1137,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, adds or edits products on existing tenants, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a tenant. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, hero copy, hero image, logo, favicon — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1207,6 +1148,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     return jsonRpcResult(message.id, {
       tools: [
         CREATE_TENANT_TOOL,
+        UPDATE_BRANDING_TOOL,
         BULK_ADD_PRODUCTS_TOOL,
         UPDATE_PRODUCTS_TOOL,
         UPLOAD_HERO_IMAGE_TOOL,
@@ -1220,6 +1162,13 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     const args = paramsObject(params.arguments);
     if (name === CREATE_TENANT_TOOL.name) {
       return jsonRpcResult(message.id, await callCreateTenant(req, args));
+    }
+    if (name === UPDATE_BRANDING_TOOL.name) {
+      const authError = requireMcpAuth(req, args);
+      if (authError) {
+        return jsonRpcResult(message.id, { content: [{ type: "text", text: authError }], isError: true });
+      }
+      return jsonRpcResult(message.id, await callUpdateBranding(args));
     }
     if (name === BULK_ADD_PRODUCTS_TOOL.name) {
       return jsonRpcResult(message.id, await callBulkAddProducts(req, args));

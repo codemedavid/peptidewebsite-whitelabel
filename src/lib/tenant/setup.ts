@@ -181,6 +181,21 @@ async function uploadBrandingAsset(
   return { url: uploaded.url, fileId: uploaded.fileId };
 }
 
+/**
+ * Upload a branding asset supplied by an untrusted caller (the MCP connector's
+ * update tool). Parses the raw object through the same `assetSchema` the create
+ * flow uses, so download/validation/ImageKit/MediaAsset behavior can't drift
+ * between provisioning a tenant and restyling one.
+ */
+export async function uploadTenantBrandingAsset(
+  tenantId: string,
+  kind: BrandingAssetKind,
+  raw: unknown,
+): Promise<AssetUpload | null> {
+  const asset = assetSchema.parse(raw);
+  return uploadBrandingAsset(tenantId, kind, asset);
+}
+
 async function resolveHeroImage(tenantId: string, asset: ParsedAsset | undefined): Promise<AssetUpload | null> {
   if (!asset) return null;
   const needsUpload = asset.upload !== false || Boolean(asset.dataUrl || asset.dataBase64);
