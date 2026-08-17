@@ -504,10 +504,20 @@ export function StoreProvider({
       // still reach a product, and letting it into the cart only to bounce it
       // at the end of checkout is the worse failure. Same decision function the
       // server runs at placement, so the two can't disagree.
+      // productType is the product's INTRINSIC path tag: between rounds there is
+      // no round scope to classify by, and the view-only group-buy page lists
+      // those pre-orders — so without the tag a closed group-buy way would let
+      // one into the cart. The server re-resolves the tag from the catalog.
       const wayBlock = decideWayBlock({
         ways: brand.twoWaysMode ?? TWO_WAYS_MODE_DEFAULT,
         gate: brand.groupBuyGate ?? GROUP_BUY_GATE_OPEN,
-        items: [{ productId: baseProductId(product), name: product.name }],
+        items: [
+          {
+            productId: baseProductId(product),
+            name: product.name,
+            productType: product.productType,
+          },
+        ],
       });
       if (wayBlock) {
         toast(wayBlock);

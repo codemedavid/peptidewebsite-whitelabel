@@ -31,8 +31,17 @@ export const ON_HAND_GATE_UNVERIFIED_MESSAGE =
   "We couldn't verify your cart against the current group buy. Please try again.";
 
 /** Structural view of an order line — only the fields the gate needs. Any
- *  OrderItem satisfies it. */
-export type OnHandGateItem = { productId?: string | null; name?: string | null };
+ *  OrderItem satisfies it.
+ *
+ *  `productType` is the product's intrinsic order-path tag (Product.productType,
+ *  set per product in Add/Edit Product). Optional because an order line doesn't
+ *  carry it — the caller resolves it from the catalog. Absent reads as untagged,
+ *  which is exactly the pre-tag behaviour. See decideWayBlock. */
+export type OnHandGateItem = {
+  productId?: string | null;
+  name?: string | null;
+  productType?: "gb" | "onhand" | null;
+};
 
 /** Deps the server injects; tests pass stubs. Kept narrow so the pure module
  *  never imports the server-only group-buy-server / DB layer. */
@@ -70,10 +79,25 @@ export function decideOnHandBlock(args: {
  * setting. Returns the shopper-facing message for the first way that isn't
  * selling, or null. Never throws.
  *
- * An item counts as GROUP BUY when a live round covers it — the same rule the
- * storefront home uses to split the two shelves — and as ON-HAND otherwise. A
- * line with no productId (a custom/manual line) belongs to neither and is never
- * blocked here.
+ * An item counts as GROUP BUY for either of two independent reasons — the same
+ * two-reason rule the on-hand shelf uses (two-ways-home.isOnHandStock), so the
+ * shelf and this gate can never disagree about which path a product sells on:
+ *
+ *   • the productType "gb" TAG — the intrinsic split. A group-buy listing is a
+ *     pre-order priced at gbPrice with no ready stock behind it, whether or not
+ *     a round happens to be running.
+ *   • the LIVE ROUND's scope — an owner can pull an untagged product into a
+ *     round, and while that round runs it sells on group-buy terms.
+ *
+ * Reading the round ALONE was the view-only hole: between rounds there is no
+ * banner, so every item read as on-hand and a gb-tagged pre-order sailed past a
+ * closed group-buy way (and, worse, got refused by the on-hand way with the
+ * wrong message). Now that the view-only page LISTS those products between
+ * rounds, a stale tab or a re-add from the cart can reach one.
+ *
+ * A line with no productId (a custom/manual line) belongs to neither path and is
+ * never blocked here. An item with no resolved productType is untagged, so it is
+ * judged by the round alone — exactly the previous behaviour.
  */
 export function decideWayBlock(args: {
   ways: TwoWaysMode;
@@ -88,7 +112,8 @@ export function decideWayBlock(args: {
 
   for (const item of items) {
     if (!item.productId) continue;
-    const way = inRound(item.productId) ? "groupBuy" : "onHand";
+    const isGroupBuy = item.productType === "gb" || inRound(item.productId);
+    const way = isGroupBuy ? "groupBuy" : "onHand";
     if (ways[way] !== "open") return WAY_BLOCK_MESSAGES[way];
   }
   return null;

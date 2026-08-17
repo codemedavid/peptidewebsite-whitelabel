@@ -68,7 +68,7 @@ import {
 } from "@/lib/storefront/checkout-rules";
 import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
-import { evaluateOnHandGate } from "@/lib/storefront/on-hand-gate";
+import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import {
   groupBuyViolations,
@@ -507,10 +507,32 @@ async function groupBuyOnHandViolation(
   tenantId: string,
   demoSlug: string,
   items: OrderItem[],
+  catalog: Product[],
 ): Promise<string | null> {
-  return evaluateOnHandGate(config, tenantId, demoSlug, items, {
+  return evaluateOnHandGate(config, tenantId, demoSlug, withProductTypes(items, catalog), {
     resolveCaps: resolveGroupBuyCaps,
     loadGroupBuys,
+  });
+}
+
+/**
+ * Attach each line's intrinsic order-path tag (Product.productType) from the
+ * live catalog, for the per-way gate (storefront/on-hand-gate.decideWayBlock).
+ *
+ * An OrderItem doesn't carry the tag — the client never sends it, and it
+ * wouldn't be trustworthy if it did — so it is resolved SERVER-SIDE here, by the
+ * same match rule the re-price uses (checkout.authoritativeItemPrice): by
+ * productId when present, else by name. A line matching no catalog product stays
+ * untagged, the same skip rule the stock and re-price checks apply.
+ *
+ * Without this the gate saw every line as untagged, so between rounds a
+ * group-buy pre-order read as ships-now stock and sailed past a closed
+ * group-buy way.
+ */
+function withProductTypes(items: OrderItem[], catalog: Product[]): OnHandGateItem[] {
+  return items.map((it) => {
+    const live = catalog.find((p) => (it.productId ? p.id === it.productId : p.name === it.name));
+    return { productId: it.productId, name: it.name, productType: live?.productType };
   });
 }
 
@@ -945,7 +967,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const demoDiscountError = stampDiscount(config, p);
     if (demoDiscountError) return { error: demoDiscountError };
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
-    const demoGbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
+    const demoGbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, demoProducts);
     if (demoGbOnHand) return { error: demoGbOnHand };
     // (Group-buy attribution already ran above, before re-pricing.)
     // Server-authoritative, per-tenant number (file-backed analogue of orderSeq).
@@ -1062,7 +1084,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
     // (`slug` + group-buy attribution already ran above, before re-pricing.)
-    const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items);
+    const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, catalog);
     if (gbOnHand) return { error: gbOnHand };
 
     const { row, created } = await createStorefrontOrder(tenantId, p);
