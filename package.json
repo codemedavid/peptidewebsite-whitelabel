@@ -134,7 +134,8 @@
     "test:admin-session-reset": "tsx scripts/test-admin-session-reset.ts",
     "backfill:admin-credentials": "tsx scripts/backfill-admin-credentials.ts",
     "test:gate-admin-login": "tsx scripts/test-gate-admin-login.ts",
-    "test:storefront-css-vars": "tsx scripts/test-storefront-css-vars.ts"
+    "test:storefront-css-vars": "tsx scripts/test-storefront-css-vars.ts",
+    "test:calendar": "tsx scripts/test-calendar.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
