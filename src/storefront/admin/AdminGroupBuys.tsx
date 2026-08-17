@@ -33,9 +33,12 @@ import {
 } from "@/actions/group-buys";
 import {
   normalizeTwoWaysMode,
+  setWayAcceptOrders,
+  setWayVisible,
+  wayAcceptsOrders,
+  wayIsVisible,
   type TwoWaysMode,
   type WayKey,
-  type WayState,
 } from "@/lib/storefront/two-ways-mode";
 
 // The two order paths, each paired with the OTHER one so the control can refuse
@@ -45,12 +48,17 @@ const WAY_ROWS: { key: WayKey; other: WayKey; label: string }[] = [
   { key: "groupBuy", other: "onHand", label: "Group Buy (ships after close)" },
 ];
 
-// "Removed" rather than "Hidden" in the UI: the owner is deciding what they
-// sell, not managing a visibility flag.
-const WAY_CHOICES: { value: WayState; label: string }[] = [
-  { value: "open", label: "Open" },
-  { value: "closed", label: "Closed" },
-  { value: "hidden", label: "Removed" },
+// Each way is edited as TWO switches (see two-ways-mode: they're projections of
+// one stored WayState, not separate fields). Visibility decides whether the
+// section exists at all; Accept orders decides whether it sells. The pair is
+// what lets an owner keep a group buy up as a pricing reference between rounds.
+const VISIBILITY_CHOICES: { visible: boolean; label: string }[] = [
+  { visible: true, label: "Visible" },
+  { visible: false, label: "Hidden" },
+];
+const ACCEPT_CHOICES: { accept: boolean; label: string }[] = [
+  { accept: true, label: "Enabled" },
+  { accept: false, label: "Disabled" },
 ];
 import {
   GB_CONTENT_LIMITS,
@@ -1276,53 +1284,120 @@ export function AdminGroupBuys({
           >
             <div style={{ fontWeight: 600 }}>Ways to order</div>
             <div className="admin-field__hint" style={{ marginTop: 2 }}>
-              Which order paths your storefront offers. <strong>Open</strong> sells normally.{" "}
-              <strong>Closed</strong> still shows the section, marked closed, but nothing can be
-              added to cart. <strong>Removed</strong> takes it off the storefront entirely — the
-              store reads as a one-way store. You can’t remove both.
+              Two separate switches per order path. <strong>Visibility</strong> decides whether
+              customers see the section at all — <strong>Hidden</strong> takes it off the
+              storefront entirely and the store reads as a one-way store (you can’t hide both).{" "}
+              <strong>Accept orders</strong> decides whether they can buy: turn it{" "}
+              <strong>Disabled</strong> to keep the products and prices on show for reference while
+              nothing can be added to cart or checked out.
             </div>
-            {WAY_ROWS.map((row) => (
-              <div
-                key={row.key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  marginTop: 10,
-                }}
-              >
-                <span>{row.label}</span>
-                <div role="group" aria-label={`${row.label} availability`} style={{ display: "flex", gap: 6 }}>
-                  {WAY_CHOICES.map((choice) => {
-                    // Never offer the click that would remove the last way — the
-                    // server refuses it anyway, so the button would just bounce.
-                    const wouldEmptyStore =
-                      choice.value === "hidden" && ways[row.other] === "hidden";
-                    const active = ways[row.key] === choice.value;
-                    return (
-                      <button
-                        key={choice.value}
-                        type="button"
-                        className={`admin-btn${active ? "" : " admin-btn--ghost"}`}
-                        style={{ padding: "4px 10px", fontSize: 12 }}
-                        aria-pressed={active}
-                        disabled={savingWays || wouldEmptyStore}
-                        title={
-                          wouldEmptyStore
-                            ? "Your store needs at least one way to order."
-                            : undefined
-                        }
-                        onClick={() => saveWays({ ...ways, [row.key]: choice.value })}
-                      >
-                        {choice.label}
-                      </button>
-                    );
-                  })}
+            {WAY_ROWS.map((row) => {
+              const state = ways[row.key];
+              const visible = wayIsVisible(state);
+              // Never offer the click that would remove the last way — the
+              // server refuses it anyway, so the button would just bounce.
+              const wouldEmptyStore = !wayIsVisible(ways[row.other]);
+              return (
+                <div
+                  key={row.key}
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 10,
+                    borderTop: "1px solid var(--brand-border, rgba(0,0,0,.08))",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      marginTop: 8,
+                    }}
+                  >
+                    <span className="admin-field__hint">Visibility</span>
+                    <div
+                      role="group"
+                      aria-label={`${row.label} visibility`}
+                      style={{ display: "flex", gap: 6 }}
+                    >
+                      {VISIBILITY_CHOICES.map((choice) => {
+                        const active = visible === choice.visible;
+                        const blocked = !choice.visible && wouldEmptyStore;
+                        return (
+                          <button
+                            key={choice.label}
+                            type="button"
+                            className={`admin-btn${active ? "" : " admin-btn--ghost"}`}
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            aria-pressed={active}
+                            disabled={savingWays || blocked}
+                            title={
+                              blocked ? "Your store needs at least one way to order." : undefined
+                            }
+                            onClick={() =>
+                              saveWays({ ...ways, [row.key]: setWayVisible(state, choice.visible) })
+                            }
+                          >
+                            {choice.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      marginTop: 8,
+                    }}
+                  >
+                    <span className="admin-field__hint">Accept orders</span>
+                    <div
+                      role="group"
+                      aria-label={`${row.label} accept orders`}
+                      style={{ display: "flex", gap: 6 }}
+                    >
+                      {ACCEPT_CHOICES.map((choice) => {
+                        const active = wayAcceptsOrders(state) === choice.accept;
+                        return (
+                          <button
+                            key={choice.label}
+                            type="button"
+                            className={`admin-btn${active ? "" : " admin-btn--ghost"}`}
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            aria-pressed={active}
+                            // A hidden way sells nothing by definition, so the
+                            // switch is moot until it's visible again.
+                            disabled={savingWays || !visible}
+                            title={!visible ? "Make this way visible first." : undefined}
+                            onClick={() =>
+                              saveWays({
+                                ...ways,
+                                [row.key]: setWayAcceptOrders(state, choice.accept),
+                              })
+                            }
+                          >
+                            {choice.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {row.key === "groupBuy" && visible && !wayAcceptsOrders(state) && (
+                    <div className="admin-field__hint" style={{ marginTop: 8 }}>
+                      Customers can browse the group buy products and prices, and see a “Group Buy
+                      Currently Closed” notice. Nothing can be added to cart.
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

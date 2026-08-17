@@ -124,6 +124,58 @@ export function wayBlockMessage(way: WayKey, ways: TwoWaysMode): string | null {
   return ways[way] === "open" ? null : WAY_BLOCK_MESSAGES[way];
 }
 
+// ── The two owner-facing controls ────────────────────────────────────────────
+// The store admin presents each way as TWO switches, because that is how an
+// owner thinks about it:
+//
+//   Visibility    Visible / Hidden
+//   Accept orders Enabled / Disabled
+//
+// Both are PROJECTIONS of the single WayState above, never a second stored
+// field. A standalone "accept orders" boolean would make "hidden but accepting
+// orders" representable — a state with no meaning — and would give the
+// storefront two things to consult that could disagree. One state, two views of
+// it, so they cannot drift.
+//
+//   open   = Visible + Enabled
+//   closed = Visible + Disabled
+//   hidden = Hidden  (the Accept Orders switch is moot, and is disabled in the UI)
+
+/** Does this way appear on the storefront at all? */
+export function wayIsVisible(state: WayState): boolean {
+  return state !== "hidden";
+}
+
+/** Can shoppers actually order through this way? */
+export function wayAcceptsOrders(state: WayState): boolean {
+  return state === "open";
+}
+
+/**
+ * Apply the Visibility switch. Hiding is one click from anywhere; un-hiding
+ * lands on "open", the plain reading of "make it visible" (the owner can then
+ * turn ordering off, which is a second, deliberate click).
+ *
+ * Flipping it ON for a way that is ALREADY visible is a no-op, so an owner who
+ * has set up "visible but not accepting orders" can't have the shop silently
+ * re-opened by the other control.
+ */
+export function setWayVisible(state: WayState, visible: boolean): WayState {
+  if (!visible) return "hidden";
+  return state === "hidden" ? "open" : state;
+}
+
+/**
+ * Apply the Accept Orders switch. Moves between open and closed and NEVER
+ * touches visibility — a hidden way stays hidden, so this control can't
+ * accidentally put a removed order path back on the storefront. Making it
+ * visible again is the other switch's job.
+ */
+export function setWayAcceptOrders(state: WayState, accept: boolean): WayState {
+  if (state === "hidden") return "hidden";
+  return accept ? "open" : "closed";
+}
+
 /** How many order paths the page actually shows. A CLOSED way still counts —
  *  it renders, marked closed. Only "hidden" drops out. */
 export function visibleWayCount(ways: TwoWaysMode): number {
