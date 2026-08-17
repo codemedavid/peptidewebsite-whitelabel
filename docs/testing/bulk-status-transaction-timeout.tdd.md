@@ -168,6 +168,39 @@ tsc --noEmit             0 errors
 - Chunk-boundary failure (chunk 1 commits, chunk 2 fails) is reasoned about but not simulated in a test.
 - The measured ~321 ms/round-trip came from a developer laptop, **not** from production. If Vercel's functions sit far from the Supabase region, production pays a similar tax on every call site in the app, not just this one. Worth measuring separately; out of scope here.
 
+## Follow-up: two defects found in code review
+
+Reviewing this change surfaced two real defects in it. Both were reproduced RED first (`8bbe05c`), then fixed (`8088767`).
+
+### A. Duplicate product names double-moved stock
+
+Batching replaced the DB path's `findFirst({ where: { name } })` — exactly one row — with `findMany` + "match every row with this name". A legacy order line carrying no `productId` therefore moved the same units once *per duplicate listing*.
+
+Checked against live data:
+
+```
+duplicate (tenant,name) product pairs: 1
+worst: Glow Sculpt Duo (Tirzepatide 30mg & GHK-CU 100mg) - FREE SHIPPING NATIONWIDE=2
+live non-imported orders: 428
+  with >=1 line lacking productId: 0 (lines: 0)
+```
+
+So it was **latent, not firing**: the duplicate exists, but no live non-imported order currently has a `productId`-less line. Still a real regression — `normalizeItems` permits such lines and legacy orders are exactly the case the name-match path exists for. RED reproduced it precisely: `expected 1 write, made 2`.
+
+`applyStockMovesToProducts` now resolves a name-matched line to the *first* row carrying that name, restoring `findFirst` semantics. Id-matched lines are untouched.
+
+### B. Partial bulk failure lost emails and left the catalog stale
+
+Chunking introduced a path that all-or-nothing had made impossible: a later chunk fails *after* earlier ones committed. The `catch` returned before the PostHog emit loop and before `revalidateTenant`. Concretely — an owner bulk-confirms 100 orders, chunk 4 fails: orders 1–60 are committed with stock deducted, but none of those 60 customers get a status email, the catalog keeps serving pre-deduction stock, and retrying is a no-op for the 60 (`planStatusChange` skips them), so those emails are lost permanently.
+
+The chunk loop now holds the failure, completes the emit + revalidate for everything that committed, and only then reports — leading with the count saved:
+
+> Saved 60 orders before running out of time. The rest were left unchanged — select them and try again.
+
+**Honest limit:** the *control flow* guarantee (emit-before-report) is verified by reading, not by an automated test — the server action needs auth, tenant headers and a writable DB to drive. What is unit-tested is the pure decision it depends on, `bulkStatusFailureMessage` / `isTransactionTimeout` (4 cases). A true test of the ordering would need a seeded, writable test database.
+
+`test:bulk-status-batching` is now **26/26** (was 19; RED at 20 passed / 6 failed).
+
 ## Merge evidence
 
 If these commits are squashed, preserve:
