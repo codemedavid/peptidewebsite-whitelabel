@@ -50,13 +50,8 @@ import {
 import {
   dbProductToStorefront,
   type DbProductRow as DbProductRowMap,
-  type ProductMetadata,
 } from "@/lib/storefront/product-mapping";
-import {
-  effectiveStock,
-  applyVariationStock,
-  applyStockMoveToProducts,
-} from "@/lib/storefront/inventory";
+import { effectiveStock, applyStockMoveToProducts } from "@/lib/storefront/inventory";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
