@@ -1,25 +1,31 @@
 "use client";
 
 /**
- * The Super Admin calendar. One month grid carrying two kinds of thing:
+ * The Super Admin calendar. One month grid carrying three kinds of thing:
  *
- *   - tenant due dates, derived live from each tenant's subscription window
- *     (read-only here — the window is edited on the tenant detail page)
- *   - the operator's own entries, which can be filed against a platform tenant,
- *     against an off-platform client by name, or against nobody at all
+ *   - tenant due dates, derived live from each tenant's subscription window;
+ *   - settled terms — a due date the operator has ticked off as paid, which
+ *     rolls that tenant's window forward and lands in My Income;
+ *   - the operator's own entries, filed against a platform tenant, against an
+ *     off-platform client by name, or against nobody at all.
  *
- * Month nav goes through the URL (?y=&m=) so a month is linkable and the back
- * button works. Writes go through the admin-calendar actions and then
+ * The page leads with the money question it exists to answer — expected this
+ * month vs actually received — because that is what the operator opens it for.
+ * The year strip below it makes every month of the year one click away.
+ *
+ * Month/year nav goes through the URL (?y=&m=) so a month is linkable and the
+ * back button works. Writes go through the admin-calendar actions and then
  * router.refresh(), matching TenantDetailView's useTransition + toast idiom.
  */
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import {
   CALENDAR_ENTRY_KINDS,
   CALENDAR_ENTRY_KIND_LABELS,
+  MONTH_SHORT_LABELS,
   WEEKDAY_LABELS,
   shiftMonth,
   type CalendarEntryKind,
@@ -32,10 +38,27 @@ import {
   toggleCalendarEventDoneAction,
   updateCalendarEventAction,
 } from "@/actions/admin-calendar";
+import {
+  markSubscriptionPaidAction,
+  undoSubscriptionPaidAction,
+} from "@/actions/admin-calendar-payments";
+import {
+  CalendarMarkPaidDrawer,
+  type MarkPaidTarget,
+  type MarkPaidValues,
+} from "./CalendarMarkPaidDrawer";
 
+/** Whole pesos — the calendar never needs centavo precision. */
 function peso(cents?: number): string {
-  if (cents == null || !Number.isFinite(cents)) return "";
+  if (cents == null || !Number.isFinite(cents)) return "—";
   return `₱${Math.round(cents / 100).toLocaleString("en-PH")}`;
+}
+
+/** Compact money for a day chip, where horizontal room is scarce. */
+function pesoShort(cents?: number): string {
+  if (cents == null || !Number.isFinite(cents)) return "";
+  const pesos = Math.round(cents / 100);
+  return pesos >= 10_000 ? `₱${(pesos / 1000).toFixed(1)}k` : `₱${pesos.toLocaleString("en-PH")}`;
 }
 
 /** Urgency -> the .sa badge tone, so chips read like the rest of the console. */
@@ -44,6 +67,35 @@ const TONE: Record<CalendarEvent["urgency"], string> = {
   due_soon: "badge-warn",
   scheduled: "badge-neutral",
 };
+
+/** The chip's colour band. Paid outranks urgency — it's a settled fact. */
+function chipTone(event: CalendarEvent): string {
+  if (event.paid) return "cal-chip-paid";
+  if (event.kind === "manual") return "cal-chip-entry";
+  if (event.urgency === "overdue") return "cal-chip-overdue";
+  if (event.urgency === "due_soon") return "cal-chip-soon";
+  return "cal-chip-sched";
+}
+
+/** The short label on a day-panel row. */
+function eventLabel(event: CalendarEvent): string {
+  if (event.paid) return "Paid";
+  if (event.kind === "renewal") return event.projected ? "Projected" : "Due";
+  if (event.kind === "trial_end") return "Trial";
+  return CALENDAR_ENTRY_KIND_LABELS[(event.entryKind ?? "note") as CalendarEntryKind];
+}
+
+/** "2026-08-21" -> "Fri, 21 Aug". UTC, matching how the grid buckets days. */
+function readableDay(day: string): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return day;
+  return date.toLocaleDateString("en-PH", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
 
 type DraftState = {
   id: string | null;
@@ -59,6 +111,9 @@ function emptyDraft(day: string): DraftState {
   return { id: null, day, title: "", notes: "", kind: "note", tenantId: "", clientLabel: "" };
 }
 
+/** How many chips fit in a day square before we collapse to "+N more". */
+const CHIPS_PER_DAY = 3;
+
 export function CalendarView({ data }: { data: CalendarMonthData }) {
   const router = useRouter();
   const { showToast } = useAdminUI();
@@ -66,8 +121,9 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
 
   const [selectedDay, setSelectedDay] = useState<string>(data.todayIso);
   const [draft, setDraft] = useState<DraftState | null>(null);
+  const [payTarget, setPayTarget] = useState<MarkPaidTarget | null>(null);
 
-  const { grid, eventsByDay, tenantOptions, entriesAvailable } = data;
+  const { grid, eventsByDay, tenantOptions, entriesAvailable, paidAvailable } = data;
 
   const prev = shiftMonth(grid.year, grid.month, -1);
   const next = shiftMonth(grid.year, grid.month, 1);
@@ -75,14 +131,21 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
 
   const selectedEvents = eventsByDay[selectedDay] ?? [];
 
-  const monthTotals = useMemo(() => {
+  const totals = useMemo(() => {
     const all = Object.values(eventsByDay).flat();
     return {
       due: all.filter((e) => e.kind === "renewal" && !e.projected).length,
       overdue: all.filter((e) => e.urgency === "overdue").length,
+      paid: all.filter((e) => e.paid).length,
       entries: all.filter((e) => e.kind === "manual").length,
     };
   }, [eventsByDay]);
+
+  const collectedPct =
+    data.expectedCents > 0
+      ? Math.min(100, Math.round((data.collectedCents / data.expectedCents) * 100))
+      : 0;
+  const outstandingCents = Math.max(0, data.expectedCents - data.collectedCents);
 
   function run(action: () => Promise<{ ok: true } | { error: string }>, success: string) {
     startTransition(async () => {
@@ -93,6 +156,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
       }
       showToast(success);
       setDraft(null);
+      setPayTarget(null);
       router.refresh();
     });
   }
@@ -108,10 +172,43 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
       clientLabel: draft.clientLabel || null,
     };
     run(
-      () =>
-        draft.id ? updateCalendarEventAction(draft.id, input) : createCalendarEventAction(input),
+      () => (draft.id ? updateCalendarEventAction(draft.id, input) : createCalendarEventAction(input)),
       draft.id ? "Entry updated" : "Entry added",
     );
+  }
+
+  function markPaid(values: MarkPaidValues) {
+    if (!payTarget) return;
+    const target = payTarget;
+    run(
+      () =>
+        markSubscriptionPaidAction({
+          tenantId: target.tenantId,
+          dueDay: target.dueDay,
+          ...values,
+        }),
+      `${target.tenantName} marked paid`,
+    );
+  }
+
+  /** Arrow keys walk the grid a day/week at a time, like a native date picker. */
+  function onGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step =
+      event.key === "ArrowLeft"
+        ? -1
+        : event.key === "ArrowRight"
+          ? 1
+          : event.key === "ArrowUp"
+            ? -7
+            : event.key === "ArrowDown"
+              ? 7
+              : 0;
+    if (step === 0) return;
+    const index = grid.cells.findIndex((cell) => cell.day === selectedDay);
+    const target = grid.cells[index + step];
+    if (index < 0 || !target) return;
+    event.preventDefault();
+    setSelectedDay(target.day);
   }
 
   return (
@@ -120,7 +217,8 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
         <div>
           <h1 className="page-title">Calendar</h1>
           <p className="page-sub">
-            Every tenant&rsquo;s subscription due date, plus your own schedule — in one month view
+            Every tenant&rsquo;s subscription due date, what you&rsquo;ve collected, and your own
+            schedule — in one month view
           </p>
         </div>
         <div className="page-actions">
@@ -139,15 +237,83 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
         </div>
       </div>
 
-      {!entriesAvailable && (
-        <div className="card mb-4">
-          <div className="card-body" style={{ padding: 12, color: "var(--ink-500)" }}>
-            Tenant due dates below are live. Your own entries need the
-            <span className="mono"> platform_calendar_events </span> table — run
-            <span className="mono"> npm run db:push </span> to switch them on.
+      {/* The money question first — expected vs actually received this month. */}
+      <section className="cal-money" aria-label={`Subscription income for ${grid.label}`}>
+        <div className="cal-money-main">
+          <div className="cal-money-label">Received in {grid.label}</div>
+          <div className="cal-money-value">{peso(data.collectedCents)}</div>
+          <div className="cal-meter" role="img" aria-label={`${collectedPct}% of expected collected`}>
+            <span className="cal-meter-fill" style={{ width: `${collectedPct}%` }} />
+          </div>
+          <div className="cal-money-foot">
+            <span className="cal-dot cal-dot-paid" /> {collectedPct}% of {peso(data.expectedCents)}{" "}
+            expected
           </div>
         </div>
+
+        <div className="cal-money-side">
+          <div className="cal-stat">
+            <div className="cal-stat-label">Expected</div>
+            <div className="cal-stat-value">{peso(data.expectedCents)}</div>
+            <div className="cal-stat-foot">{totals.due + totals.paid} due dates this month</div>
+          </div>
+          <div className="cal-stat">
+            <div className="cal-stat-label">Still to collect</div>
+            <div className={`cal-stat-value${outstandingCents > 0 ? " cal-stat-open" : ""}`}>
+              {peso(outstandingCents)}
+            </div>
+            <div className="cal-stat-foot">{totals.due} still unpaid</div>
+          </div>
+          <div className="cal-stat">
+            <div className="cal-stat-label">Overdue</div>
+            <div className={`cal-stat-value${totals.overdue > 0 ? " cal-stat-bad" : ""}`}>
+              {totals.overdue}
+            </div>
+            <div className="cal-stat-foot">
+              {totals.paid} settled · {totals.entries} entries
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {!entriesAvailable && (
+        <div className="cal-note">
+          Tenant due dates below are live. Your own entries need the
+          <span className="mono"> platform_calendar_events </span> table — run
+          <span className="mono"> npm run db:push </span> to switch them on.
+        </div>
       )}
+
+      {/* The whole year, one click per month. */}
+      <nav className="cal-year" aria-label="Jump to a month">
+        <a
+          className="cal-year-nav"
+          href={monthHref({ year: grid.year - 1, month: grid.month })}
+          aria-label={`Go to ${grid.year - 1}`}
+        >
+          <Ic.ChevronLeft />
+        </a>
+        <span className="cal-year-num">{grid.year}</span>
+        <div className="cal-year-months">
+          {MONTH_SHORT_LABELS.map((label, index) => (
+            <a
+              key={label}
+              className={`cal-month-pill${index === grid.month ? " is-active" : ""}`}
+              href={monthHref({ year: grid.year, month: index })}
+              aria-current={index === grid.month ? "page" : undefined}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+        <a
+          className="cal-year-nav"
+          href={monthHref({ year: grid.year + 1, month: grid.month })}
+          aria-label={`Go to ${grid.year + 1}`}
+        >
+          <Ic.ChevronRight />
+        </a>
+      </nav>
 
       <div className="cal-layout">
         <div className="card">
@@ -155,7 +321,8 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
             <div>
               <h3 className="card-title">{grid.label}</h3>
               <div className="card-sub">
-                {monthTotals.due} due · {monthTotals.overdue} overdue · {monthTotals.entries} entries
+                {totals.due} due · {totals.overdue} overdue · {totals.paid} paid · {totals.entries}{" "}
+                entries
               </div>
             </div>
             <div className="row" style={{ gap: 6 }}>
@@ -169,20 +336,28 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
           </div>
 
           <div className="card-body" style={{ padding: 12 }}>
-            <div className="cal-grid" role="grid" aria-label={`${grid.label} calendar`}>
+            <div
+              className="cal-grid"
+              role="grid"
+              aria-label={`${grid.label} calendar`}
+              onKeyDown={onGridKeyDown}
+            >
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="cal-weekday" role="columnheader">
                   {label}
                 </div>
               ))}
 
-              {grid.cells.map((cell) => {
+              {grid.cells.map((cell, index) => {
                 const dayEvents = eventsByDay[cell.day] ?? [];
+                const isSelected = cell.day === selectedDay;
+                const isWeekend = index % 7 === 0 || index % 7 === 6;
                 const classes = [
                   "cal-day",
                   cell.inMonth ? "" : "cal-day-muted",
+                  isWeekend ? "cal-day-weekend" : "",
                   cell.isToday ? "cal-day-today" : "",
-                  cell.day === selectedDay ? "cal-day-selected" : "",
+                  isSelected ? "cal-day-selected" : "",
                 ]
                   .filter(Boolean)
                   .join(" ");
@@ -193,36 +368,59 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                     key={cell.day}
                     className={classes}
                     role="gridcell"
+                    // Roving tabindex: one tab stop for the grid, arrows move within it.
+                    tabIndex={isSelected ? 0 : -1}
                     aria-label={`${cell.day}, ${dayEvents.length} item${dayEvents.length === 1 ? "" : "s"}`}
-                    aria-selected={cell.day === selectedDay}
+                    aria-selected={isSelected}
                     onClick={() => setSelectedDay(cell.day)}
                     onDoubleClick={() => entriesAvailable && setDraft(emptyDraft(cell.day))}
                   >
                     <span className="cal-daynum">{cell.dayOfMonth}</span>
                     <span className="cal-chips">
-                      {dayEvents.slice(0, 3).map((event) => (
+                      {dayEvents.slice(0, CHIPS_PER_DAY).map((event) => (
                         <span
                           key={event.id}
-                          className={`cal-chip ${TONE[event.urgency]}${event.projected ? " cal-chip-projected" : ""}${event.done ? " cal-chip-done" : ""}`}
+                          className={`cal-chip ${chipTone(event)}${event.projected ? " cal-chip-projected" : ""}${event.done ? " cal-chip-done" : ""}`}
                         >
-                          {event.title}
+                          <span className="cal-chip-name">{event.title}</span>
+                          {event.amountCents != null && event.kind !== "manual" && (
+                            <span className="cal-chip-amt">{pesoShort(event.amountCents)}</span>
+                          )}
                         </span>
                       ))}
-                      {dayEvents.length > 3 && (
-                        <span className="cal-more">+{dayEvents.length - 3} more</span>
+                      {dayEvents.length > CHIPS_PER_DAY && (
+                        <span className="cal-more">+{dayEvents.length - CHIPS_PER_DAY} more</span>
                       )}
                     </span>
                   </button>
                 );
               })}
             </div>
+
+            <div className="cal-legend">
+              <span>
+                <span className="cal-dot cal-dot-overdue" /> Overdue
+              </span>
+              <span>
+                <span className="cal-dot cal-dot-soon" /> Due soon
+              </span>
+              <span>
+                <span className="cal-dot cal-dot-sched" /> Scheduled
+              </span>
+              <span>
+                <span className="cal-dot cal-dot-paid" /> Paid
+              </span>
+              <span>
+                <span className="cal-dot cal-dot-entry" /> Your entry
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="card">
+        <div className="card cal-side">
           <div className="card-head">
             <div>
-              <h3 className="card-title">{selectedDay}</h3>
+              <h3 className="card-title">{readableDay(selectedDay)}</h3>
               <div className="card-sub">
                 {selectedEvents.length === 0
                   ? "Nothing scheduled"
@@ -233,37 +431,74 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
 
           <div className="card-body" style={{ padding: 12 }}>
             {selectedEvents.length === 0 && (
-              <p className="muted" style={{ margin: 0 }}>
-                Pick another day, or add an entry for this one.
-              </p>
+              <div className="cal-empty">
+                <Ic.Calendar />
+                <p>Nothing on this day.</p>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!entriesAvailable}
+                  onClick={() => setDraft(emptyDraft(selectedDay))}
+                >
+                  Add an entry
+                </button>
+              </div>
             )}
 
             {selectedEvents.map((event) => (
-              <div key={event.id} className="cal-item">
+              <div key={event.id} className={`cal-item${event.paid ? " cal-item-paid" : ""}`}>
                 <div className="cal-item-main">
                   <div className="cal-item-title">
-                    <span className={`badge ${TONE[event.urgency]}`}>
-                      {event.kind === "renewal"
-                        ? event.projected
-                          ? "Projected"
-                          : "Due"
-                        : event.kind === "trial_end"
-                          ? "Trial"
-                          : CALENDAR_ENTRY_KIND_LABELS[
-                              (event.entryKind ?? "note") as CalendarEntryKind
-                            ]}
+                    <span className={`badge ${event.paid ? "badge-success" : TONE[event.urgency]}`}>
+                      {eventLabel(event)}
                     </span>
                     <strong className={event.done ? "cal-strike" : undefined}>{event.title}</strong>
                   </div>
                   {event.subtitle && <div className="cal-item-sub">{event.subtitle}</div>}
                   {event.notes && <div className="cal-item-sub">{event.notes}</div>}
-                  {event.amountCents != null && event.kind === "renewal" && (
-                    <div className="cal-item-sub mono">{peso(event.amountCents)}</div>
+                  {event.paid && event.paidDay && event.paidDay !== event.day && (
+                    <div className="cal-item-sub">Received {readableDay(event.paidDay)}</div>
+                  )}
+                  {event.amountCents != null && event.kind !== "manual" && (
+                    <div className="cal-item-amt">{peso(event.amountCents)}</div>
                   )}
                 </div>
 
                 <div className="cal-item-actions">
-                  {event.kind === "renewal" && event.tenantSlug && (
+                  {event.kind === "renewal" && event.tenantId && paidAvailable && (
+                    <button
+                      type="button"
+                      className="btn btn-accent btn-sm"
+                      disabled={pending}
+                      onClick={() =>
+                        setPayTarget({
+                          tenantId: event.tenantId as string,
+                          tenantName: event.title,
+                          dueDay: event.day,
+                          amountCents: event.amountCents,
+                          cycle: event.cycle,
+                        })
+                      }
+                    >
+                      Mark paid
+                    </button>
+                  )}
+                  {event.paid && event.settlementId && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={pending}
+                      onClick={() =>
+                        run(
+                          () => undoSubscriptionPaidAction(event.settlementId as string),
+                          "Payment undone",
+                        )
+                      }
+                    >
+                      Undo
+                    </button>
+                  )}
+                  {event.tenantSlug && (
                     <a className="btn btn-ghost btn-sm" href={`/tenants/${event.tenantSlug}`}>
                       Open
                     </a>
@@ -317,6 +552,16 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
           </div>
         </div>
       </div>
+
+      {payTarget && (
+        <CalendarMarkPaidDrawer
+          target={payTarget}
+          todayIso={data.todayIso}
+          pending={pending}
+          onCancel={() => setPayTarget(null)}
+          onSave={markPaid}
+        />
+      )}
 
       {draft && (
         <>

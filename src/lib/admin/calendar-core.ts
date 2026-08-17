@@ -49,6 +49,9 @@ const MONTH_NAMES = [
   "December",
 ] as const;
 
+/** Abbreviated month names, January-first — the year strip's jump targets. */
+export const MONTH_SHORT_LABELS = MONTH_NAMES.map((name) => name.slice(0, 3));
+
 /** Weekday headers, Sunday-first — matches buildMonthGrid's row alignment. */
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 

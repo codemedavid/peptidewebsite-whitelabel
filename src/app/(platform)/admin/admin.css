@@ -861,12 +861,173 @@
 }
 
 /* ── Calendar (/admin/calendar) ───────────────────────────────────────────── */
+
+/* Money banner: the page leads with expected-vs-received, because that is the
+   question the operator opens the calendar to answer. */
+.sa .cal-money {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: center;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-c);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--accent-soft) 0%, transparent 58%),
+    var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.sa .cal-money-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.sa .cal-money-value {
+  margin-top: 4px;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.sa .cal-meter {
+  display: block;
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  background: var(--bg-active);
+  border-radius: 999px;
+}
+
+.sa .cal-meter-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--success);
+  border-radius: 999px;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sa .cal-money-foot {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.sa .cal-money-side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+
+.sa .cal-stat {
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+
+.sa .cal-stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.sa .cal-stat-value {
+  margin-top: 4px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.sa .cal-stat-open { color: var(--warn); }
+.sa .cal-stat-bad { color: var(--danger); }
+.sa .cal-stat-foot { margin-top: 3px; font-size: 11.5px; color: var(--ink-400); }
+
+.sa .cal-note {
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: var(--ink-500);
+  background: var(--warn-soft);
+  border-radius: 10px;
+}
+
+/* Year strip — every month of the year one click away. */
+.sa .cal-year {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-c);
+  border-radius: 12px;
+}
+
+.sa .cal-year-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--ink-500);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.sa .cal-year-nav:hover { background: var(--bg-hover); color: var(--ink-900); }
+.sa .cal-year-nav svg { width: 15px; height: 15px; }
+
+.sa .cal-year-num {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.sa .cal-year-months {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sa .cal-month-pill {
+  padding: 5px 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-500);
+  text-align: center;
+  border-radius: 7px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.sa .cal-month-pill:hover { background: var(--bg-hover); color: var(--ink-900); }
+.sa .cal-month-pill.is-active { background: var(--accent); color: #fff; font-weight: 600; }
+
 .sa .cal-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
   align-items: start;
 }
+
+.sa .cal-side { position: sticky; top: 12px; }
 
 .sa .cal-grid {
   display: grid;
@@ -901,58 +1062,171 @@
     background 150ms ease;
 }
 
-.sa .cal-day:hover { background: var(--bg-hover); border-color: var(--border-c); }
+.sa .cal-day:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .sa .cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.sa .cal-day-muted { background: var(--bg-subtle); opacity: 0.55; }
-.sa .cal-day-today { border-color: var(--accent); }
-.sa .cal-day-selected { border-color: var(--accent); background: var(--accent-softer); }
+.sa .cal-day-weekend { background: var(--bg-subtle); }
+.sa .cal-day-muted { background: var(--bg-subtle); opacity: 0.45; }
+.sa .cal-day-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-softer); }
 
-.sa .cal-daynum { font-size: 12px; font-weight: 600; color: var(--ink-700); }
-.sa .cal-day-today .cal-daynum { color: var(--accent); }
-
-.sa .cal-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-
-.sa .cal-chip {
-  display: block;
-  overflow: hidden;
-  padding: 1px 5px;
-  font-size: 10px;
+/* Today reads through its date pill, not a border — the border is the
+   selection ring's job, and one element can be both. */
+.sa .cal-daynum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.5;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  border-radius: 4px;
+  color: var(--ink-700);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
 }
 
+.sa .cal-day-today .cal-daynum { background: var(--accent); color: #fff; }
+
+.sa .cal-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+/* A chip is name + money on one line, with a colour band down its left edge —
+   the band is what makes a month scannable without reading a single word. */
+.sa .cal-chip {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  overflow: hidden;
+  padding: 2px 5px 2px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+}
+
+.sa .cal-chip-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.sa .cal-chip-amt {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 500;
+  opacity: 0.75;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.sa .cal-chip-overdue { background: var(--danger-soft); color: var(--danger); border-left-color: var(--danger); }
+.sa .cal-chip-soon { background: var(--warn-soft); color: var(--warn); border-left-color: var(--warn); }
+.sa .cal-chip-sched { background: var(--bg-active); color: var(--ink-500); border-left-color: var(--ink-200); }
+.sa .cal-chip-paid { background: var(--success-soft); color: var(--success); border-left-color: var(--success); }
+.sa .cal-chip-entry { background: var(--accent-soft); color: var(--accent-ink); border-left-color: var(--accent); }
+
 /* A projected cycle is a forecast, not a real due date — read it back. */
-.sa .cal-chip-projected { opacity: 0.6; border-style: dashed; }
+.sa .cal-chip-projected { opacity: 0.55; }
 .sa .cal-chip-done { opacity: 0.5; text-decoration: line-through; }
-.sa .cal-more { padding-left: 5px; font-size: 10px; color: var(--ink-500); }
+.sa .cal-more { padding-left: 6px; font-size: 10px; color: var(--ink-400); }
+
+/* Legend — the colour bands, named once. */
+.sa .cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 4px 2px;
+  font-size: 11.5px;
+  color: var(--ink-400);
+}
+
+.sa .cal-legend span { display: inline-flex; gap: 5px; align-items: center; }
+
+.sa .cal-dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+.sa .cal-dot-overdue { background: var(--danger); }
+.sa .cal-dot-soon { background: var(--warn); }
+.sa .cal-dot-sched { background: var(--ink-200); }
+.sa .cal-dot-paid { background: var(--success); }
+.sa .cal-dot-entry { background: var(--accent); }
 
 .sa .cal-item {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 10px 0;
+  padding: 12px 10px;
+  margin-bottom: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.sa .cal-item-paid { border-left-color: var(--success); background: var(--success-soft); }
+.sa .cal-item:last-child { margin-bottom: 0; }
+.sa .cal-item-main { flex: 1; min-width: 0; }
+.sa .cal-item-title { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sa .cal-item-sub { margin-top: 3px; font-size: 12px; color: var(--ink-500); }
+
+.sa .cal-item-amt {
+  margin-top: 5px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.sa .cal-item-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.sa .cal-strike { text-decoration: line-through; color: var(--ink-500); }
+
+.sa .cal-empty { padding: 28px 12px; text-align: center; color: var(--ink-400); }
+.sa .cal-empty svg { width: 22px; height: 22px; opacity: 0.5; }
+.sa .cal-empty p { margin: 8px 0 12px; font-size: 12.5px; }
+
+/* Mark-paid drawer: section headers + the outcome sentence. */
+.sa .cal-fieldset-label {
+  margin: 4px 0 10px;
+  padding-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
   border-bottom: 1px solid var(--border-soft);
 }
 
-.sa .cal-item:last-child { border-bottom: 0; }
-.sa .cal-item-main { flex: 1; min-width: 0; }
-.sa .cal-item-title { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.sa .cal-item-sub { margin-top: 2px; font-size: 12px; color: var(--ink-500); }
-.sa .cal-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
-.sa .cal-strike { text-decoration: line-through; color: var(--ink-500); }
+.sa .cal-outcome {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  margin-top: 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-700);
+  background: var(--success-soft);
+  border-radius: 10px;
+}
+
+.sa .cal-outcome svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; color: var(--success); }
+
+@media (max-width: 1240px) {
+  .sa .cal-money { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (max-width: 1024px) {
   .sa .cal-layout { grid-template-columns: minmax(0, 1fr); }
+  .sa .cal-side { position: static; }
 }
 
 @media (max-width: 720px) {
+  .sa .cal-money { padding: 16px; }
+  .sa .cal-money-value { font-size: 27px; }
+  .sa .cal-money-side { grid-template-columns: minmax(0, 1fr); }
+  .sa .cal-year { flex-wrap: wrap; }
+  .sa .cal-year-months { grid-template-columns: repeat(6, minmax(0, 1fr)); order: 3; width: 100%; }
   .sa .cal-day { min-height: 64px; padding: 4px; }
   .sa .cal-chip { font-size: 9px; }
+  .sa .cal-chip-amt { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sa .cal-day { transition: none; }
+  .sa .cal-day,
+  .sa .cal-month-pill,
+  .sa .cal-meter-fill { transition: none; }
 }

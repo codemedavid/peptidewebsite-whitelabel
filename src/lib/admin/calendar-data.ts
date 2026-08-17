@@ -35,6 +35,11 @@ import {
   type ManualEventRow,
   type MonthGrid,
 } from "./calendar-core";
+import {
+  buildSettlementIndex,
+  settlementEvents,
+  type SettlementRow,
+} from "./calendar-settlement";
 
 /** A tenant offered in the "file this against…" picker. */
 export type CalendarTenantOption = { id: string; name: string };
@@ -46,6 +51,12 @@ export type CalendarMonthData = {
   tenantOptions: CalendarTenantOption[];
   /** False when platform_calendar_events isn't in the DB yet. */
   entriesAvailable: boolean;
+  /** False when subscription_payments isn't readable — mark-paid is then hidden. */
+  paidAvailable: boolean;
+  /** Subscription money received in THIS month, centavos (keyed on paidDay). */
+  collectedCents: number;
+  /** What THIS month should bring in: every due date on it, paid or not. */
+  expectedCents: number;
   todayIso: string;
 };
 
@@ -130,6 +141,53 @@ async function loadManualEvents(
 }
 
 /**
+ * Confirmed subscription payments this month's page needs, which is two
+ * overlapping-but-different sets — hence the OR rather than one range:
+ *
+ *   • CHIPS   — a payment settles the day its `periodEnd` falls on, so anything
+ *     whose term ends inside the visible grid gets plotted, however long ago it
+ *     was actually paid.
+ *   • MONEY   — "received this month" is keyed on when the money landed, so a
+ *     payment taken this month against NEXT month's term still counts here.
+ *     Rows with no paidAt fall back to submittedAt, matching the index.
+ *
+ * Fail-open like every other admin loader — a missing subscription_payments
+ * table degrades to "nothing settled" rather than taking the calendar down.
+ */
+async function loadSettlementRows(
+  grid: { start: Date; end: Date },
+  month: { start: Date; end: Date },
+): Promise<{ rows: SettlementRow[]; available: boolean }> {
+  try {
+    const rows = await prisma.subscriptionPayment.findMany({
+      where: {
+        status: "confirmed",
+        OR: [
+          { periodEnd: { gte: grid.start, lte: grid.end } },
+          { paidAt: { gte: month.start, lte: month.end } },
+          { paidAt: null, submittedAt: { gte: month.start, lte: month.end } },
+        ],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        amountCents: true,
+        status: true,
+        method: true,
+        periodStart: true,
+        periodEnd: true,
+        paidAt: true,
+        submittedAt: true,
+        reviewNote: true,
+      },
+    });
+    return { rows, available: true };
+  } catch {
+    return { rows: [], available: false };
+  }
+}
+
+/**
  * Everything the Calendar page renders for one month. `now` is injectable so
  * the page (and any future test) controls "today" rather than the clock.
  */
@@ -147,23 +205,63 @@ export async function getCalendarMonth(
       eventsByDay: {},
       tenantOptions: [],
       entriesAvailable: false,
+      paidAvailable: false,
+      collectedCents: 0,
+      expectedCents: 0,
       todayIso,
     };
   }
 
-  const [tenants, manual] = await Promise.all([loadCalendarTenants(), loadManualEvents(start, end)]);
+  // The month proper (not the 6x7 grid, whose edge cells belong to the
+  // neighbouring months) — what "received this month" is measured over.
+  const monthRange = {
+    start: new Date(Date.UTC(year, month, 1)),
+    end: new Date(Date.UTC(year, month + 1, 1) - 1),
+  };
+
+  const [tenants, manual, settled] = await Promise.all([
+    loadCalendarTenants(),
+    loadManualEvents(start, end),
+    loadSettlementRows({ start, end }, monthRange),
+  ]);
 
   const tenantNameById: Record<string, string> = {};
   for (const tenant of tenants) tenantNameById[tenant.id] = tenant.name;
 
+  const settlements = buildSettlementIndex(settled.rows);
+
+  // Money received IN this month, keyed on the day it landed — not on the term
+  // it settled, which may sit in another month entirely.
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  let collectedCents = 0;
+  for (const settlement of settlements.values()) {
+    if (settlement.paidDay.startsWith(monthPrefix)) collectedCents += settlement.amountCents;
+  }
+
   const events: CalendarEvent[] = [
-    ...deriveTenantEvents(tenants, { now, rangeStart: start, rangeEnd: end }),
+    ...deriveTenantEvents(tenants, {
+      now,
+      rangeStart: start,
+      rangeEnd: end,
+      settled: new Set(settlements.keys()),
+    }),
+    ...settlementEvents(settlements.values(), tenantNameById, { start, end }),
     ...manual.rows.map((row) => toManualEvent(row, tenantNameById)),
   ];
 
   // Map -> plain object so the payload crosses the server/client boundary.
   const eventsByDay: Record<string, CalendarEvent[]> = {};
   for (const [day, dayEvents] of bucketByDay(events)) eventsByDay[day] = dayEvents;
+
+  // Expected = every subscription amount landing on a day of THIS month, settled
+  // or not. The grid's leading/trailing cells belong to the neighbouring months,
+  // so they're excluded by the same prefix test the collected total uses.
+  let expectedCents = 0;
+  for (const event of events) {
+    if (!event.day.startsWith(monthPrefix)) continue;
+    if (event.kind !== "renewal" && event.kind !== "payment") continue;
+    expectedCents += event.amountCents ?? 0;
+  }
 
   return {
     grid: buildMonthGrid(year, month, todayIso),
@@ -172,6 +270,9 @@ export async function getCalendarMonth(
       .map((t) => ({ id: t.id, name: t.name }))
       .sort((a, b) => a.name.localeCompare(b.name)),
     entriesAvailable: manual.available,
+    paidAvailable: settled.available,
+    collectedCents,
+    expectedCents,
     todayIso,
   };
 }
