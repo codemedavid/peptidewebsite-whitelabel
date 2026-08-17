@@ -35,6 +35,7 @@ import {
   deriveTenantEvents,
   toManualEvent,
   bucketByDay,
+  normalizeCalendarEventInput,
   MONTH_GRID_CELLS,
   type CalendarEvent,
   type CalendarTenantInput,
@@ -497,6 +498,101 @@ check("the more urgent event sorts first within a day", () => {
   const day = buckets.get("2026-08-20");
   assert.strictEqual(day?.length, 2);
   assert.strictEqual(day?.[0].title, "Due tenant");
+});
+
+// ──────────────────────── new-entry input validation ────────────────────────
+console.log("\nentry validation");
+
+function ok(raw: Parameters<typeof normalizeCalendarEventInput>[0]) {
+  const result = normalizeCalendarEventInput(raw);
+  assert.strictEqual(result.ok, true, `expected valid, got: ${JSON.stringify(result)}`);
+  if (!result.ok) throw new Error("unreachable");
+  return result.value;
+}
+
+function rejected(raw: Parameters<typeof normalizeCalendarEventInput>[0]) {
+  const result = normalizeCalendarEventInput(raw);
+  assert.strictEqual(result.ok, false, "expected the input to be rejected");
+  if (result.ok) throw new Error("unreachable");
+  return result.error;
+}
+
+check("a minimal valid entry normalizes", () => {
+  const value = ok({ title: "Call supplier", day: "2026-08-19" });
+  assert.strictEqual(value.title, "Call supplier");
+  assert.strictEqual(value.kind, "note");
+  assert.strictEqual(value.startsAt.toISOString(), "2026-08-19T00:00:00.000Z");
+});
+
+check("the day is anchored at midnight UTC, matching parseDay", () => {
+  // Same anchoring actions/admin.ts uses, so a typed date lands on the square
+  // the operator picked rather than a neighbouring one.
+  assert.strictEqual(
+    ok({ title: "x", day: "2026-01-01" }).startsAt.toISOString(),
+    "2026-01-01T00:00:00.000Z",
+  );
+});
+
+check("a blank title is rejected", () => {
+  assert.match(rejected({ title: "   ", day: "2026-08-19" }), /title/i);
+});
+
+check("a missing title is rejected", () => {
+  assert.match(rejected({ day: "2026-08-19" }), /title/i);
+});
+
+check("the title is trimmed", () => {
+  assert.strictEqual(ok({ title: "  Call supplier  ", day: "2026-08-19" }).title, "Call supplier");
+});
+
+check("a missing date is rejected", () => {
+  assert.match(rejected({ title: "x" }), /date/i);
+});
+
+check("a malformed date is rejected", () => {
+  assert.match(rejected({ title: "x", day: "19-08-2026" }), /date/i);
+});
+
+check("a date that does not exist on the calendar is rejected", () => {
+  assert.match(rejected({ title: "x", day: "2026-02-30" }), /date/i);
+});
+
+check("a known entry kind is kept", () => {
+  assert.strictEqual(ok({ title: "x", day: "2026-08-19", kind: "meeting" }).kind, "meeting");
+});
+
+check("an unknown entry kind is rejected rather than silently coerced", () => {
+  assert.match(rejected({ title: "x", day: "2026-08-19", kind: "wedding" }), /kind/i);
+});
+
+check("an off-platform client label is kept", () => {
+  assert.strictEqual(
+    ok({ title: "x", day: "2026-08-19", clientLabel: " Walk-in — Cebu " }).clientLabel,
+    "Walk-in — Cebu",
+  );
+});
+
+check("an empty client label becomes null, not an empty string", () => {
+  assert.strictEqual(ok({ title: "x", day: "2026-08-19", clientLabel: "  " }).clientLabel, null);
+});
+
+check("linking a tenant clears any client label", () => {
+  // Both would render two different owners for one entry; the tenant link wins.
+  const value = ok({ title: "x", day: "2026-08-19", tenantId: "t1", clientLabel: "Someone else" });
+  assert.strictEqual(value.tenantId, "t1");
+  assert.strictEqual(value.clientLabel, null);
+});
+
+check("empty notes become null", () => {
+  assert.strictEqual(ok({ title: "x", day: "2026-08-19", notes: "   " }).notes, null);
+});
+
+check("an over-long title is rejected", () => {
+  assert.match(rejected({ title: "a".repeat(200), day: "2026-08-19" }), /title/i);
+});
+
+check("an over-long note is rejected", () => {
+  assert.match(rejected({ title: "x", day: "2026-08-19", notes: "a".repeat(5000) }), /note/i);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
