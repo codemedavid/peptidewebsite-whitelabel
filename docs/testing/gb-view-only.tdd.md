@@ -199,15 +199,20 @@ GET http://k-glow.lvh.me:3100/  → HTTP 200
   branch in `decideWayBlock`, `buildGroupBuyPageView`, `PAGE_TOGGLE.groupbuy`,
   `GbHomeTeaser.browsable`, `gbClosedNotice` and the four way projections has at
   least one pinned assertion, including the negative and no-op cases.
-- **GAP — visual regression not completed.** The dev server on 3100 is serving
-  `_next/static` as 404/`text/plain`; `.next/static/css/` holds hashed
-  *production-build* files instead of dev assets, i.e. a concurrent
-  `npm run build` clobbered the running dev server (the documented
-  `build-breaks-running-devserver` failure). The page therefore rendered unstyled,
-  so the notice card's *styling* at 375/768/1440 is unverified. The DOM/SSR
-  evidence above still confirms the server-side behaviour. Recovery, when the
-  other session is done: kill dev, `rm -rf .next`, restart, then screenshot
-  `#groupbuy` in all four states.
+- **Visual check — DONE** (see the section below). It was initially blocked: the
+  dev server was serving `_next/static` as 404/`text/plain` because
+  `.next/static/css/` held hashed *production-build* files instead of dev assets —
+  a concurrent `npm run build` had clobbered the running dev server (the
+  documented `build-breaks-running-devserver` failure). Recovered by stopping the
+  server, moving `.next` aside, and restarting; a cache-ignoring reload was then
+  needed because the browser had cached the bad MIME responses.
+- **GAP — breakpoints 768 and 1440 not screenshotted.** 1440 and 375 were
+  captured and are clean; 768 and 1920 were not. There is no Playwright visual
+  regression suite in this repo to pin them.
+- **GAP — the live-round view-only state was not exercised in the browser.**
+  k-glow has no live round, so `viewOnly` with `live: true` (a running round on a
+  closed way, which shows the *other* notice sentence) is covered by unit tests
+  only. Exercising it needs an open round plus Accept orders → Disabled.
 - **GAP — notice copy is not owner-editable.** All other GB copy lives in
   `branding.config.groupBuyContent` (`gb-content.ts`). This ships the brief's
   wording as a constant; making it editable is deliberate follow-up scope.
@@ -218,6 +223,37 @@ GET http://k-glow.lvh.me:3100/  → HTTP 200
 - **Not verified:** `k-glow` is the only tenant with the GB module, a two-ways
   home and gb-tagged products, so it is the only tenant whose behaviour changes.
   No other tenant has `groupBuyListingCount > 0`.
+
+## Browser verification (k-glow `#groupbuy`, Chrome, 1440 and 375)
+
+Live DOM assertions on the rendered page, with no group buy round running:
+
+```
+noticeFound            true
+noticeText             "○ VIEWING ONLY / Group Buy Currently Closed /
+                        Please note that these items are currently not available
+                        for ordering because there is no active Group Buy.
+                        Products and prices are displayed for viewing purposes only."
+statusBannerPresent    false     ← the live-round banner is correctly replaced
+cardCount              48        ← the 48 previously-invisible listings
+pickerCount            42        ← doses browsable
+firstBtnLabel          "Group Buy Ordering Closed"
+firstBtnDisabled       true
+cartBarPresent         false     ← no checkout offered
+nav                    includes "Group Buy"
+```
+
+Rendering: the notice shows as a soft brand-tinted card with a solid left rule and
+a "VIEWING ONLY" tag — noticeable, and clearly not an error surface. Prices render
+(₱3,590 / ₱4,774 / ₱13,826 …), monograms and product photos both render, and every
+buy control is a filled-but-inert pill. 375 px reflows to one column with no
+horizontal overflow.
+
+Console, after the two fixes in `0670925`: no errors, no warnings, no issues
+attributable to this feature. (A 500 on one request traces to
+`prisma.platformSetting.findUnique` → "Timed out fetching a new connection from
+the connection pool" — two dev servers were competing for one database, an
+environment condition unrelated to this change.)
 
 ## Concurrency note
 
