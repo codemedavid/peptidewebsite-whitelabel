@@ -312,6 +312,105 @@ export function toManualEvent(
   };
 }
 
+/** Categories an operator can file an entry under. */
+export const CALENDAR_ENTRY_KINDS = ["note", "meeting", "follow_up", "payment"] as const;
+
+export type CalendarEntryKind = (typeof CALENDAR_ENTRY_KINDS)[number];
+
+export const CALENDAR_ENTRY_KIND_LABELS: Record<CalendarEntryKind, string> = {
+  note: "Note",
+  meeting: "Meeting",
+  follow_up: "Follow-up",
+  payment: "Payment",
+};
+
+const TITLE_MAX = 120;
+const NOTES_MAX = 2000;
+const CLIENT_LABEL_MAX = 80;
+
+/** Same shape actions/admin.ts parseDay accepts, for the same reason. */
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export type CalendarEventInput = {
+  tenantId?: string | null;
+  clientLabel?: string | null;
+  title?: string | null;
+  notes?: string | null;
+  /** "YYYY-MM-DD" straight from an <input type="date">. */
+  day?: string | null;
+  kind?: string | null;
+};
+
+export type NormalizedCalendarEvent = {
+  tenantId: string | null;
+  clientLabel: string | null;
+  title: string;
+  notes: string | null;
+  startsAt: Date;
+  kind: CalendarEntryKind;
+};
+
+export type CalendarNormalizeResult =
+  | { ok: true; value: NormalizedCalendarEvent }
+  | { ok: false; error: string };
+
+function trimmedOrNull(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Validate an operator-submitted entry at the boundary. Returns a friendly
+ * message rather than throwing, matching the `{ ok } | { error }` contract the
+ * platform actions use.
+ *
+ * The date is anchored to midnight UTC exactly like parseDay in
+ * actions/admin.ts, so a typed day lands on the square the operator picked. A
+ * syntactically valid but non-existent date (2026-02-30) is rejected rather
+ * than silently rolling into the next month.
+ */
+export function normalizeCalendarEventInput(raw: CalendarEventInput): CalendarNormalizeResult {
+  const title = trimmedOrNull(raw.title);
+  if (!title) return { ok: false, error: "Give the entry a title." };
+  if (title.length > TITLE_MAX) {
+    return { ok: false, error: `Keep the title under ${TITLE_MAX} characters.` };
+  }
+
+  const day = trimmedOrNull(raw.day);
+  if (!day || !DAY_RE.test(day)) {
+    return { ok: false, error: "Pick a date for the entry." };
+  }
+  const startsAt = new Date(`${day}T00:00:00.000Z`);
+  // Round-trip guards against a well-formed but impossible date (Feb 30),
+  // which Date would otherwise roll forward into the next month.
+  if (Number.isNaN(startsAt.getTime()) || utcDayIso(startsAt) !== day) {
+    return { ok: false, error: "That date doesn't exist — pick another." };
+  }
+
+  const kindRaw = trimmedOrNull(raw.kind) ?? "note";
+  if (!(CALENDAR_ENTRY_KINDS as readonly string[]).includes(kindRaw)) {
+    return { ok: false, error: "Choose a valid entry kind." };
+  }
+
+  const notes = trimmedOrNull(raw.notes);
+  if (notes && notes.length > NOTES_MAX) {
+    return { ok: false, error: `Keep the note under ${NOTES_MAX} characters.` };
+  }
+
+  const tenantId = trimmedOrNull(raw.tenantId);
+  // A tenant link and a free-text client label would name two different owners
+  // for one entry; the concrete tenant wins.
+  const clientLabel = tenantId ? null : trimmedOrNull(raw.clientLabel);
+  if (clientLabel && clientLabel.length > CLIENT_LABEL_MAX) {
+    return { ok: false, error: `Keep the client name under ${CLIENT_LABEL_MAX} characters.` };
+  }
+
+  return {
+    ok: true,
+    value: { tenantId, clientLabel, title, notes, startsAt, kind: kindRaw as CalendarEntryKind },
+  };
+}
+
 const URGENCY_RANK: Record<CalendarUrgency, number> = {
   overdue: 0,
   due_soon: 1,
