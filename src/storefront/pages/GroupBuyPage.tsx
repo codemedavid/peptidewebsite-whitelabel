@@ -273,12 +273,19 @@ function GbProductCard({
         {showOptions && (
           <select
             className="gbpage__opts"
+            // A name (not just aria-label) so the control is a proper form field.
+            name={`gb-dose-${p.id}`}
             aria-label={`Dose for ${p.name}`}
             value={optIdx}
             onChange={(e) => setOptIdx(Number(e.target.value))}
           >
             {options.map((o, i) => (
-              <option key={o.name} value={i}>
+              // Keyed on the INDEX as well as the name: a seller can define two
+              // variations with the same label (k-glow ships duplicate "100mg" /
+              // "500mg" rows), and a bare name key made React drop one of them.
+              // The option list is derived, never reordered, so the index is
+              // stable for the lifetime of the card.
+              <option key={`${o.name}-${i}`} value={i}>
                 {o.name} · {o.priceLabel}
               </option>
             ))}
