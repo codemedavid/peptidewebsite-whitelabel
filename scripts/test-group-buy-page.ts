@@ -26,6 +26,10 @@
  */
 
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { CTA_COPY } from "../src/lib/storefront/product-cta";
 
 import {
   gbCountdownLabel,
@@ -33,6 +37,7 @@ import {
   formatGbMoney,
   gbDisplayName,
   buildGroupBuyPageView,
+  gbClosedNotice,
   groupBuyCartSummary,
 } from "../src/lib/storefront/group-buy-page";
 import { buildTwoWaysHomeView } from "../src/lib/storefront/two-ways-home";
@@ -443,6 +448,71 @@ function main() {
     // teaser advertises a round the page renders empty.
     assert.deepEqual(page.lines.map((l) => l.product.id), home.gb.productIds);
     assert.ok(page.count > 0); // both non-empty → no "open on home, empty on page" split
+  });
+
+  console.log("\nthe closed notice explains WHY ordering is off\n");
+
+  check("between rounds the notice blames the absent round", () => {
+    const notice = gbClosedNotice(false);
+    assert.equal(notice.title, "Group Buy Currently Closed");
+    assert.match(notice.message, /no active Group Buy/);
+    assert.match(notice.message, /viewing purposes only/);
+  });
+
+  check("with a round running the notice blames the owner's setting, not a missing round", () => {
+    // A round IS live and the owner turned ordering off. Saying "there is no
+    // active Group Buy" here would be a lie the countdown on the same page
+    // contradicts.
+    const notice = gbClosedNotice(true);
+    assert.equal(notice.title, "Group Buy Currently Closed");
+    assert.doesNotMatch(notice.message, /no active Group Buy/);
+    assert.match(notice.message, /viewing purposes only/);
+  });
+
+  check("the notice never reads like an error", () => {
+    for (const live of [true, false]) {
+      const { title, message } = gbClosedNotice(live);
+      assert.doesNotMatch(`${title} ${message}`, /error|sorry|unavailable|problem|failed/i);
+    }
+  });
+
+  console.log("\nthe page renders view-only mode (component wiring)\n");
+
+  const gbPageSrc = readFileSync(
+    join(__dirname, "..", "src/storefront/pages/GroupBuyPage.tsx"),
+    "utf8",
+  );
+
+  check("the page shows the closed notice instead of the live-round banner", () => {
+    assert.match(gbPageSrc, /gbClosedNotice\(/, "the notice copy must come from the pure core");
+    assert.match(gbPageSrc, /view\.viewOnly/, "the page must branch on viewOnly");
+  });
+
+  check("the empty state is keyed on having nothing to list, NOT on the round", () => {
+    // `!view.live || view.count === 0` sent every view-only visit to "No group
+    // buy right now" — the whole catalogue, hidden behind the empty state.
+    assert.doesNotMatch(
+      gbPageSrc,
+      /!view\.live\s*\|\|\s*view\.count === 0/,
+      "a view-only page has no live round but plenty to show",
+    );
+  });
+
+  check("the buy control is inert and says so", () => {
+    assert.match(gbPageSrc, /CTA_COPY\.groupBuyClosed/);
+    assert.match(gbPageSrc, /viewOnly/, "the card must receive the view-only state");
+  });
+
+  check("the sticky checkout bar is suppressed in view-only mode", () => {
+    assert.match(
+      gbPageSrc,
+      /!view\.viewOnly && summary\.hasItems/,
+      "a view-only page must not offer a checkout",
+    );
+  });
+
+  check("the CTA copy is a shared constant, not an inline string", () => {
+    assert.equal(CTA_COPY.groupBuyClosed, "Group Buy Ordering Closed");
   });
 
   console.log("\nline surfaces the regular-vs-GB saving (design: save badge + strikethrough)\n");
