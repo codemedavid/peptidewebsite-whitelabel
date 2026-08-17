@@ -59,7 +59,7 @@ model Tenant {
   // (digits only, see lib/admin/whatsapp.ts). Operator-set, not tenant-editable.
   // Null = not connected. Powers the one-tap "Message on WhatsApp" link in the
   // platform tenants console.
-  ownerWhatsapp     String?
+  ownerWhatsapp String?
 
   // Paid subscription window (operator-set, not tenant-editable) that powers the
   // subscription-duration banner in the store admin + the window row in the
@@ -68,8 +68,8 @@ model Tenant {
   // through lib/subscription/subscription-state.ts (pure math, test:subscription-state)
   // and lib/subscription/subscription-info.ts (cached read). Both null = no window,
   // so no banner renders and legacy tenants stay byte-identical.
-  subscriptionStartsAt DateTime?
-  subscriptionEndsAt   DateTime?
+  subscriptionStartsAt    DateTime?
+  subscriptionEndsAt      DateTime?
   // Billing cycle the operator chose for this window: monthly | quarterly |
   // semi_annual | yearly (string-enum, see lib/subscription/billing-cycle.ts).
   // Drives the auto-calculated due date in the tenant-detail setter and the
@@ -77,7 +77,7 @@ model Tenant {
   // Purely descriptive — the countdown math reads the concrete start/end dates,
   // so this never has to agree with the exact day span (an overridden due date
   // keeps its stored cycle label).
-  subscriptionCycle    String?
+  subscriptionCycle       String?
   // What the tenant actually paid for the current subscription term, in centavos
   // (e.g. a yearly plan billed at ₱15,000 → 1500000). Operator-set alongside the
   // window; null = not recorded. Shown as "Amount paid" in the tenant detail.
@@ -88,7 +88,7 @@ model Tenant {
   // Operator-set and per-tenant, distinct from subscriptionAmountCents (an actual
   // past per-term payment). When set it overrides the plan-config monthly price
   // for this tenant's Plan-fee display + MRR (effectivePlanFeeCents); null = plan.
-  subscriptionPriceCents Int?
+  subscriptionPriceCents  Int?
 
   domains           Domain[]
   groupBuys         GroupBuy[]
@@ -121,7 +121,11 @@ model Tenant {
 
   // Proof-of-payment ledger the tenant submits against their subscription term;
   // the operator confirms/rejects each on the platform Billing tab.
-  subscriptionPayments  SubscriptionPayment[]
+  subscriptionPayments SubscriptionPayment[]
+
+  // Operator-authored calendar entries filed against this tenant. SetNull, not
+  // Cascade: deleting a tenant must not wipe the operator's own schedule.
+  calendarEvents PlatformCalendarEvent[]
 
   @@index([planId])
   @@map("tenants")
@@ -152,8 +156,8 @@ model SubscriptionPayment {
 
   // How the tenant paid + their reference number (normalizePaymentMethod keeps
   // method to a known set: GCash | Maya | Bank transfer | Card | Other).
-  method    String @default("Other")
-  reference String @default("")
+  method    String    @default("Other")
+  reference String    @default("")
   // ImageKit-hosted proof screenshot (never a data URL in production). Null =
   // none uploaded (submission still allowed; operator reviews on trust).
   proofUrl  String?
@@ -392,23 +396,23 @@ model StorefrontOrder {
   paymentProofUrl String? // ImageKit-hosted proof of payment (never a data URL)
 
   // Denormalized blobs — the storefront Order type's nested objects.
-  customer Json @default("{}") // { name, email, phone, contactMethod }
-  shipping Json @default("{}") // { address, barangay, city, province, postal, country, region, fee }
-  items    Json @default("[]") // [{ name, qty, price }]
+  customer      Json  @default("{}") // { name, email, phone, contactMethod }
+  shipping      Json  @default("{}") // { address, barangay, city, province, postal, country, region, fee }
+  items         Json  @default("[]") // [{ name, qty, price }]
   // Admin/service fee charged on this order — { label, amount }, snapshotted
   // server-side at placement from branding.config.adminFee so changing the
   // tenant's fee never rewrites existing orders. NULL = no fee was charged.
-  adminFee Json?
+  adminFee      Json?
   // Discount code applied to this order — { code, label, amount }, snapshotted
   // server-side at placement from branding.config.promoCodes (re-derived, never
   // trusted from the client) so the saved amount can't be inflated and a later
   // code edit never rewrites existing orders. It REDUCES the total. NULL = no
   // code was applied.
-  discount Json?
+  discount      Json?
   // Append-only fulfillment journey: one entry per status transition, oldest
   // first, e.g. [{ status: "new", at }, { status: "confirmed", at }, …]. Drives
   // the storefront Track page's timeline. Seeded with the "new" event at create.
-  statusHistory Json @default("[]")
+  statusHistory Json  @default("[]")
 
   courier        String   @default("")
   trackingNumber String   @default("")
@@ -755,7 +759,7 @@ model OnboardingSubmission {
   billingCycle String @default("monthly")
 
   // Step 6 — signed up on the ₱699 1-month Business trial (pro only)
-  trial Boolean @default(false)
+  trial         Boolean   @default(false)
   // Operator-managed trial window (Super Admin → Onboarding → Package stat)
   trialStartsAt DateTime?
   trialEndsAt   DateTime?
@@ -770,7 +774,7 @@ model OnboardingSubmission {
   // Server-computed total the client was asked to pay (centavos): first payment
   // + Starter extras + setup fee — see lib/onboarding/pricing.amountDueFromConfig.
   // Null on submissions predating the stamp.
-  amountDueCents Int?
+  amountDueCents  Int?
 
   // ── Automation / operator workflow ──
   slug        String // generated subdomain label
@@ -801,6 +805,47 @@ model PlatformSetting {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@map("platform_settings")
+}
+
+// ─────────────────────── Super Admin calendar entries ───────────────────────
+// The operator's OWN schedule, shown on /admin/calendar alongside the tenant
+// due dates derived live from Tenant.subscriptionEndsAt (those are computed per
+// request by lib/admin/calendar-core.ts and never stored here — a stored copy
+// would drift the moment a window moved).
+//
+// An entry may be filed against a platform tenant (tenantId) OR against someone
+// who isn't on the whitelabel at all (clientLabel, free text) OR neither, for a
+// plain reminder. onDelete: SetNull so removing a tenant blanks the link but
+// keeps the operator's entry.
+//
+// PLATFORM-LEVEL — deliberately RLS-excluded (see prisma/rls.sql). It carries a
+// "tenantId" but is NOT tenant-owned: only the Super Admin reads or writes it,
+// through the privileged client outside withTenant. Adding it to §1 of rls.sql
+// would leave the GUC unset on every operator read and return zero rows.
+//
+// Dates are stored at midnight UTC (written via parseDay in actions/admin.ts);
+// the grid buckets by UTC day to match. See npm run test:calendar.
+model PlatformCalendarEvent {
+  id          String    @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  // Free-text stand-in for a client with no tenant row (off-platform work).
+  clientLabel String?
+  title       String
+  notes       String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  allDay      Boolean   @default(true)
+  // note | meeting | follow_up | payment (string-enum, see lib/admin/calendar-core.ts)
+  kind        String    @default("note")
+  // Set when the operator ticks the entry off; null while it's still open.
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([startsAt])
+  @@index([tenantId])
+  @@map("platform_calendar_events")
 }
 
 // ──────────────────────────── Store-admin staff ────────────────────────────
@@ -844,7 +889,7 @@ model UpgradeRequest {
   fromPlan String // plan key at request time (audit)
   toPlan   String @default("pro")
   // pending | approved | rejected
-  status String @default("pending")
+  status   String @default("pending")
 
   // Server-stamped order summary at request time (PHP centavos)
   amountCents Int @default(0)

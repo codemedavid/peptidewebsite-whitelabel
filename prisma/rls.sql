@@ -160,6 +160,12 @@ CREATE POLICY anon_read ON media_assets
 --   platform_settings               — PLATFORM-LEVEL key/value config (e.g. the
 --       get-started checkout payment details). Written only by the Super Admin
 --       and read by public marketing pages outside withTenant; no tenantId.
+--   platform_calendar_events        — PLATFORM-LEVEL operator schedule. NOTE it
+--       DOES carry a nullable "tenantId", so it looks tenant-owned and the rule
+--       below appears to apply — it does not. Only the Super Admin reads/writes
+--       it, outside withTenant, so the GUC is unset: a §1 isolation policy would
+--       hide every row from the operator AND reject inserts with a null tenantId
+--       (the off-platform-client case). Same reasoning as onboarding_submissions.
 -- If a future tenant-owned table is added, add it to the array in §1 (or give
 -- it a bespoke policy here) AND grant app_user/anon in prisma/roles.sql.
 -- ============================================================================
