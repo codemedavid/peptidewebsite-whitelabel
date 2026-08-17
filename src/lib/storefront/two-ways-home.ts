@@ -8,7 +8,12 @@
 // alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
 // an SSR compute and is trivially testable (npm run test:two-ways-home).
 
-import { slotProgress, type SlotProgress, type TwoWaysInput } from "./two-ways";
+import {
+  isGroupBuyProduct,
+  slotProgress,
+  type SlotProgress,
+  type TwoWaysInput,
+} from "./two-ways";
 import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-page";
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
@@ -149,10 +154,16 @@ function onHandLine<T extends TwhProduct>(
 
 /**
  * Build the home view-model. The LIVE ROUND is the source of truth for what's in
- * the group buy: a product belongs to the round when it's in the round's scope
- * (coversAll, or its id is in the round's assigned productIds) — matching what the
- * store admin shows, regardless of the product's productType tag. Everything else
- * is ON-HAND.
+ * the round: a product belongs to it when it's in the round's scope (coversAll,
+ * or its id is in the round's assigned productIds) — matching what the store
+ * admin shows, regardless of the product's productType tag.
+ *
+ * The ON-HAND shelf is NOT simply "everything else". A product is ships-now
+ * stock only when it is neither in the round NOR tagged productType "gb": a
+ * group-buy listing is a pre-order with no ready stock behind it, so it must
+ * never appear on the shelf — least of all when a round CLOSES and the round's
+ * scope stops excluding it (the k-glow bug, 2026-08-17). Between rounds the
+ * shelf shows exactly the products it showed while the round was live.
  *
  * An open round NEVER shares this page with the on-hand shelf: the round's
  * products are listed only on the dedicated #groupbuy page, so the home returns
@@ -187,13 +198,27 @@ export function buildTwoWaysHomeView<T extends TwhProduct>(
   const inRound = (p: T): boolean =>
     !!banner && (banner.coversAll || (covered?.has(p.id) ?? false));
 
+  // What may be sold as SHIPS-NOW stock. Two independent reasons to leave the
+  // shelf, and a product needs only one of them:
+  //
+  //   • the productType "gb" TAG — the intrinsic split. A group-buy listing is a
+  //     pre-order priced at gbPrice and has no ready stock behind it, whether or
+  //     not a round happens to be running.
+  //   • the LIVE ROUND's scope — an owner can pull an untagged product into a
+  //     round, and while that round runs it sells on the group-buy terms.
+  //
+  // Reading the round ALONE was the k-glow bug (2026-08-17): its catalog is ~25
+  // tagged PasaBuy listings plus 6 separately-seeded on-hand rows, so the moment
+  // a round closed (null banner) all 25 pre-orders reappeared on the ships-now
+  // shelf at their group-buy prices. The shelf must not change when a round ends.
+  const isOnHandStock = (p: T): boolean => !isGroupBuyProduct(p) && !inRound(p);
+
   const onHandLines =
     mode.onHand === "hidden"
       ? []
-      : orderOnHandProducts(
-          products.filter((p) => !inRound(p)),
-          onHandOrder,
-        ).map((p) => onHandLine(p, currency, mode.onHand === "open"));
+      : orderOnHandProducts(products.filter(isOnHandStock), onHandOrder).map((p) =>
+          onHandLine(p, currency, mode.onHand === "open"),
+        );
   const gbProductIds = banner ? products.filter(inRound).map((p) => p.id) : [];
 
   return {
