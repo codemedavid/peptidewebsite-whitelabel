@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Brand } from "../types";
-import { isLinkHidden } from "../visibility";
+import { isLinkHidden, isPageVisible } from "../visibility";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
 
 export function Header({
@@ -24,16 +24,17 @@ export function Header({
   if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {
     nav.push({ label: "Resellers", href: "#merchant" });
   }
-  // Surface the Group Buy page automatically while a round is live (the server
-  // sets brand.groupBuyBanner) so customers can reach the live round from the
-  // nav. Slotted first — it's the timely, high-intent destination.
+  // Surface the Group Buy page automatically (when not already linked) so
+  // customers can reach it from the nav. Slotted first — while a round is live
+  // it's the timely, high-intent destination.
   //
-  // A store that HID the group-buy way gets no link, even with a round running:
-  // the banner deliberately stays on the brand (it's what keeps the round's
-  // pre-orders off the ships-now shelf), so the way state is what decides
-  // whether the page is offered.
-  const gbWayHidden = brand.twoWaysMode?.groupBuy === "hidden";
-  if (brand.groupBuyBanner && !gbWayHidden && !nav.some((i) => i.href === "#groupbuy")) {
+  // Delegates the whole question to isPageVisible so the link and the page can
+  // never disagree: a HIDDEN way gets no link even with a round running (the
+  // banner deliberately stays on the brand — it's what keeps the round's
+  // pre-orders off the ships-now shelf), and between rounds the link survives
+  // for the view-only pricing reference, but only while there is something
+  // tagged to list.
+  if (isPageVisible(brand, "groupbuy") && !nav.some((i) => i.href === "#groupbuy")) {
     nav.unshift({ label: "Group Buy", href: "#groupbuy" });
   }
   // Surface the reconstitution calculator (default-on) for every tenant — even

@@ -128,6 +128,24 @@ export function TwoWaysHome({
                 Lower prices.{view.gb.deliveryEta ? ` Ships ${view.gb.deliveryEta}.` : " Ships after close."}
               </span>
             </a>
+          ) : view.gb.browsable ? (
+            // Closed, but the page is still up as a pricing reference — so the
+            // card links there rather than dead-ending. The tag still reads
+            // "Closed" so nobody mistakes it for an open round.
+            <a
+              href="#groupbuy"
+              className="sf-twh__way sf-twh__way--gb sf-twh__way--closed"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenGroupBuy();
+              }}
+            >
+              <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Closed</span>
+              <span className="sf-twh__way-name font-display">Group Buy</span>
+              <span className="sf-twh__way-copy">
+                Ordering is closed — browse the group buy prices.
+              </span>
+            </a>
           ) : (
             <div className="sf-twh__way sf-twh__way--closed">
               <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Closed</span>

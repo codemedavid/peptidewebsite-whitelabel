@@ -545,6 +545,13 @@ export type Brand = {
   // exemption + no mixed on-hand/GB carts) as a UX hint — the server re-derives
   // the same scope at placement, so it still never decides what can be bought.
   groupBuyBanner?: GroupBuyBanner;
+  // How many gb-TAGGED, available products the catalog holds. Computed
+  // server-side (page.tsx) and 0 without the Group Buy module. Decides whether
+  // the group buy page stays reachable BETWEEN rounds as a view-only pricing
+  // reference (storefront/visibility.ts) — with no live round the tag is the
+  // only membership signal, and a page with nothing to list must not advertise
+  // itself in the nav.
+  groupBuyListingCount?: number;
   // Owner-editable Group Buy storefront copy: the "How group buys work" section
   // (title + steps) and the live-round terms line, shared by the two-ways home
   // and the group-buy page. Normalized server-side from

@@ -67,6 +67,15 @@ export type GbHomeTeaser = {
    *  renders when open && count > 0. An owner who closed or hid the way stops
    *  the join path here, whatever the round says. */
   open: boolean;
+  /** Does the dedicated group-buy page have anything to show right now? True
+   *  while a round covers products, AND between rounds when the catalog holds
+   *  gb-tagged listings the page can present view-only. False for a hidden way.
+   *
+   *  Lets the way CARD link out even when it reads "Closed", instead of
+   *  dead-ending: the prices are still there to browse. Mirrors the rule in
+   *  storefront/visibility.ts, so the card and the nav link can never disagree
+   *  about whether that page exists. */
+  browsable: boolean;
   /** The group-buy way as the owner set it — what the way CARD renders
    *  (open / marked closed / gone). */
   state: WayState;
@@ -221,12 +230,19 @@ export function buildTwoWaysHomeView<T extends TwhProduct>(
         );
   const gbProductIds = banner ? products.filter(inRound).map((p) => p.id) : [];
 
+  // What the group-buy PAGE would list right now — the round's members while one
+  // runs, else the gb-tagged listings it shows view-only. Same two-regime
+  // membership as buildGroupBuyPageView, so the card never offers a page that
+  // renders empty (nor withholds one that doesn't).
+  const gbPageCount = banner ? gbProductIds.length : products.filter(isGroupBuyProduct).length;
+
   return {
     onHand: { count: onHandLines.length, lines: onHandLines, state: mode.onHand },
     visibleWays: visibleWayCount(mode),
     heading: waysHeading(mode),
     gb: {
       open: !!banner && mode.groupBuy === "open",
+      browsable: mode.groupBuy !== "hidden" && gbPageCount > 0,
       state: mode.groupBuy,
       name: banner?.name ?? "",
       deliveryEta: banner?.deliveryEta ?? "",

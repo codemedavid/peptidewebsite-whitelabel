@@ -16,6 +16,7 @@ import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import { pickFeatureSpotlight } from "@/lib/features/feature-spotlight";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
 import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
+import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { getTrialState } from "@/lib/trial/trial-info";
@@ -368,6 +369,17 @@ export default async function HomePage() {
   // placement so a tampered client can't restore it. DB rows keep their data —
   // re-granting the feature brings the prices back untouched.
   products = stripResellerPricing(products, resellerEntitled);
+
+  // How many group-buy listings exist at all, independent of any round. Between
+  // rounds there is no round scope to read, so the productType "gb" tag is the
+  // only membership signal — this count is what keeps the group buy page (and
+  // its nav link) up as a view-only pricing reference once a round closes, and
+  // what stops an empty page being advertised when there is nothing tagged.
+  // Gated on the Group Buy module so no non-GB tenant ever grows the page.
+  // Mirrors the availability filter the page itself applies.
+  brand.groupBuyListingCount = brand.groupBuyCaps?.enabled
+    ? products.filter((p) => p.available !== false && isGroupBuyProduct(p)).length
+    : 0;
 
   // Catalog sort menu style — "simple" swaps the sort dropdown to the 3-option
   // Sort by Name / Sort by Price / Sort by Best Sellers menu (HP Glow), where

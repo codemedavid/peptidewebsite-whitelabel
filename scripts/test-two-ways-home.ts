@@ -123,6 +123,64 @@ check("no live round yields a closed, empty group-buy path", () => {
   assert.deepEqual(view.onHand.lines.map((l) => l.product.id), ["oh"]);
 });
 
+// ── The group-buy way card must not dead-end between rounds ──────────────────
+// Once a round closes the teaser card reads "Closed" — but the group buy page
+// now stays up view-only, so the card has somewhere to send a shopper. Its
+// `browsable` flag mirrors storefront/visibility.ts exactly, so the card and the
+// nav link can never disagree about whether that page exists.
+
+check("between rounds the card is still browsable when gb listings exist", () => {
+  const view = buildTwoWaysHomeView(
+    [
+      product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" }),
+      product({ id: "oh", name: "Ready stock", price: 1200 }),
+    ],
+    null,
+    "₱",
+    NOW,
+  );
+  assert.equal(view.gb.open, false); // nothing to join…
+  assert.equal(view.gb.browsable, true); // …but the prices are still there to read
+});
+
+check("between rounds with nothing tagged the card dead-ends (no page to open)", () => {
+  const view = buildTwoWaysHomeView([product({ id: "oh", name: "Ready stock", price: 1200 })], null, "₱", NOW);
+  assert.equal(view.gb.browsable, false);
+});
+
+check("a CLOSED group-buy way is browsable while a round runs (view-only)", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" })],
+    banner({ productIds: ["c"], coversAll: false }),
+    "₱",
+    NOW,
+    "catalog",
+    { onHand: "open", groupBuy: "closed" },
+  );
+  assert.equal(view.gb.open, false);
+  assert.equal(view.gb.browsable, true);
+});
+
+check("a HIDDEN group-buy way is never browsable, round or no round", () => {
+  const products = [product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" })];
+  const hidden = { onHand: "open", groupBuy: "hidden" } as const;
+  const live = buildTwoWaysHomeView(products, banner({ productIds: ["c"], coversAll: false }), "₱", NOW, "catalog", hidden);
+  const between = buildTwoWaysHomeView(products, null, "₱", NOW, "catalog", hidden);
+  assert.equal(live.gb.browsable, false);
+  assert.equal(between.gb.browsable, false);
+});
+
+check("an OPEN round with items is browsable (unchanged)", () => {
+  const view = buildTwoWaysHomeView(
+    [product({ id: "c", name: "Charlie", price: 1000, gbPrice: 800, productType: "gb" })],
+    banner({ productIds: ["c"], coversAll: false }),
+    "₱",
+    NOW,
+  );
+  assert.equal(view.gb.open, true);
+  assert.equal(view.gb.browsable, true);
+});
+
 // 3b. REGRESSION (k-glow, 2026-08-17): "when the group buy is closed the on-hand
 //     page gets the group-buy prices". k-glow's catalog is ~25 productType "gb"
 //     PasaBuy listings plus 6 separately-seeded on-hand rows ("-OH" SKUs, no
@@ -486,12 +544,17 @@ check("the storefront page never deletes the banner to hide the group-buy way", 
   assert.match(src, /resolveWays\(/, "the page must resolve the effective per-way states");
 });
 
-check("the header hides the Group Buy nav item when the way is hidden", () => {
+check("the header derives the Group Buy nav item from the page's own visibility", () => {
+  // The Header used to re-implement the rule (banner present && way not hidden).
+  // It now delegates to isPageVisible, which owns the whole question — the way
+  // state, the live round, AND the between-rounds view-only listing — so a link
+  // can never point at a page that isn't served, or be missing from one that is.
+  // The behaviour itself is pinned in npm run test:two-ways-mode.
   const src = readFileSync(join(__dirname, "..", "src/storefront/components/Header.tsx"), "utf8");
   assert.match(
     src,
-    /twoWaysMode[^\n]*groupBuy/,
-    "the Group Buy nav item must be gated on the group-buy way state",
+    /isPageVisible\(brand,\s*"groupbuy"\)/,
+    "the Group Buy nav item must derive from isPageVisible, not its own copy of the rule",
   );
 });
 

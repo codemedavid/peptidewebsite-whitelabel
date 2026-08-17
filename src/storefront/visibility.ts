@@ -43,10 +43,27 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   reviews: (b) => b.showPageReviews !== false,
   // Default OFF — the wholesale page only exists for tenants that opt in.
   merchant: (b) => b.showPageMerchant === true,
-  // The Group Buy page exists only while a round is live — the server sets
-  // brand.groupBuyBanner (buildGroupBuyBanner) when there is one. No round → the
-  // nav link is hidden and a direct #groupbuy visit falls back to home.
-  groupbuy: (b) => !!b.groupBuyBanner,
+  // The Group Buy page. Visibility is the OWNER's call (the group-buy way
+  // state), not an accident of whether a round happens to be running:
+  //
+  //   hidden  → gone, even mid-round. A store that removed the way doesn't serve
+  //             the page at all, and a direct #groupbuy link falls back to home.
+  //   a round is live → shown, as it always has been.
+  //   no round, but gb-tagged listings → shown VIEW-ONLY, so the owner can keep
+  //             the group buy up as a catalog/pricing reference between rounds
+  //             (buildGroupBuyPageView's view-only regime). Without this the
+  //             whole group-buy catalogue became unreachable the moment a round
+  //             closed — and on a two-ways store those products are on no other
+  //             shelf, so they vanished from the site entirely.
+  //   nothing to show → hidden, so a nav link never lands on an empty page.
+  //
+  // groupBuyListingCount is server-resolved (page.tsx) and is 0 for any tenant
+  // without the Group Buy module, which keeps this widening off every non-GB
+  // store. Note it counts the TAG, while a live round is scoped by the round —
+  // the same two-regime membership buildGroupBuyPageView applies.
+  groupbuy: (b) =>
+    normalizeTwoWaysMode(b.twoWaysMode).groupBuy !== "hidden" &&
+    (!!b.groupBuyBanner || (b.groupBuyListingCount ?? 0) > 0),
   // The on-hand shelf IS the catalog, so hiding that way must also drop its nav
   // link — otherwise a group-buy-only store still advertises "Products" and
   // lands the shopper on an empty page. Only an explicit "hidden" does this:
