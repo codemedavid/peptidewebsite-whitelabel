@@ -281,6 +281,73 @@ async function main() {
     assert.equal(msg, null);
   });
 
+  // ── membership by TAG, not just by round (GB view-only mode) ───────────────
+  // Between rounds there is no banner, so the round's scope classifies EVERY
+  // item as on-hand. That was harmless only while a gb-tagged product had
+  // nowhere to be seen; the view-only group-buy page lists them, so a stale tab
+  // or a re-add from the cart can reach one with no round running. Membership
+  // must therefore read the same two-reason rule the on-hand shelf uses
+  // (two-ways-home.isOnHandStock): the round's scope OR the productType tag.
+
+  await check("a CLOSED group-buy way blocks a gb-TAGGED item with no round running", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "closed" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p9", name: "Semaglutide", productType: "gb" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+  });
+
+  await check("a HIDDEN group-buy way blocks a gb-TAGGED item with no round running", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "hidden" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p9", name: "Semaglutide", productType: "gb" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+  });
+
+  await check("an OPEN group-buy way still lets a gb-tagged item through", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p9", name: "Semaglutide", productType: "gb" }],
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("a gb-tagged item is NEVER judged by the on-hand way", () => {
+    // The whole point of the tag: a pre-order listing is not ships-now stock,
+    // so a store that closed its on-hand shelf must not refuse it — and must
+    // not name the on-hand message for it either.
+    const msg = decideWayBlock({
+      ways: { onHand: "closed", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p9", name: "Semaglutide", productType: "gb" }],
+    });
+    assert.equal(msg, null);
+  });
+
+  await check("an ONHAND-tagged item in a live round is still group-buy (round wins)", () => {
+    // The owner can pull an untagged product into a round; while that round
+    // runs it sells on group-buy terms, tag or no tag.
+    const msg = decideWayBlock({
+      ways: { onHand: "open", groupBuy: "closed" },
+      gate: GATE_ROUND_P1,
+      items: [{ productId: "p1", name: "In-buy product", productType: "onhand" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+  });
+
+  await check("an untagged item with no round is still on-hand (no behaviour change)", () => {
+    const msg = decideWayBlock({
+      ways: { onHand: "closed", groupBuy: "open" },
+      gate: GATE_NO_ROUND,
+      items: [{ productId: "p2", name: "On-hand product" }],
+    });
+    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+  });
+
   console.log("evaluateOnHandGate (per-way mode)");
 
   await check("both ways open + on-hand allowed still short-circuits WITHOUT touching deps", async () => {
