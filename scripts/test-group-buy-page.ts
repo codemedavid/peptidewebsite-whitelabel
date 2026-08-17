@@ -347,11 +347,68 @@ function main() {
     assert.equal(view.slots.pct, 60);
   });
 
-  check("no live round (null banner) → not live, empty listing", () => {
+  console.log("\nview-only mode: the page stays browsable between rounds\n");
+
+  // The owner keeps the group buy VISIBLE as a pricing reference while ordering
+  // is off. Two ways to land here: no round is running, or the owner set the
+  // group-buy way to "closed". Either way products + prices render and nothing
+  // is buyable. Membership between rounds is the productType "gb" TAG — the same
+  // rule that keeps those pre-orders off the on-hand shelf.
+
+  check("no live round → VIEW-ONLY listing of the gb-tagged products", () => {
     const view = buildGroupBuyPageView(catalog, null, "₱", NOW);
+    assert.equal(view.live, false); // no round is running…
+    assert.equal(view.viewOnly, true); // …so nothing can be ordered
+    assert.deepEqual(view.lines.map((l) => l.product.id), ["gb-1", "gb-2"]); // oh-1 excluded
+    assert.equal(view.count, 2);
+  });
+
+  check("the view-only listing keeps the group-buy prices, not the regular ones", () => {
+    const view = buildGroupBuyPageView(catalog, null, "₱", NOW);
+    assert.equal(view.lines[0].priceLabel, "₱560"); // gbPrice, not ₱700
+    assert.equal(view.lines[1].priceLabel, "₱840"); // gbPrice, not ₱1,050
+  });
+
+  check("no live round and nothing tagged → genuinely empty (no page to show)", () => {
+    const onHandOnly = [product({ id: "oh-1", name: "Bac Water", price: 120, productType: "onhand" })];
+    const view = buildGroupBuyPageView(onHandOnly, null, "₱", NOW);
     assert.equal(view.live, false);
+    assert.equal(view.viewOnly, true);
     assert.equal(view.count, 0);
     assert.deepEqual(view.lines, []);
+  });
+
+  check("a live round with the group-buy way OPEN is orderable", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW, "open");
+    assert.equal(view.live, true);
+    assert.equal(view.viewOnly, false);
+  });
+
+  check("a live round with the group-buy way CLOSED keeps the round's listing, view-only", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW, "closed");
+    assert.equal(view.live, true); // the round IS running…
+    assert.equal(view.viewOnly, true); // …but the owner turned ordering off
+    assert.deepEqual(view.lines.map((l) => l.product.id), ["gb-1"]); // round scope still wins
+  });
+
+  check("a hidden group-buy way is view-only too (the route guard does the hiding)", () => {
+    const view = buildGroupBuyPageView(catalog, scopedBanner, "₱", NOW, "hidden");
+    assert.equal(view.viewOnly, true);
+  });
+
+  check("between rounds the page and the on-hand shelf stay exact complements", () => {
+    // The load-bearing invariant: a product is on EXACTLY one shelf, never both
+    // and never neither. Reading the round alone put all the pre-orders on the
+    // ships-now shelf the moment a round closed (the k-glow bug); listing them
+    // here must not put them on BOTH.
+    const view = buildGroupBuyPageView(catalog, null, "₱", NOW);
+    const home = buildTwoWaysHomeView(catalog, null, "₱", NOW);
+    const onPage = view.lines.map((l) => l.product.id);
+    const onShelf = home.onHand.lines.map((l) => l.product.id);
+    assert.deepEqual(onPage, ["gb-1", "gb-2"]);
+    assert.deepEqual(onShelf, ["oh-1"]);
+    assert.equal(onPage.filter((id) => onShelf.includes(id)).length, 0); // disjoint
+    assert.equal(onPage.length + onShelf.length, catalog.length); // exhaustive
   });
 
   console.log("\nlive-round membership drives the page (consistent with the two-ways home)\n");
