@@ -34,6 +34,7 @@
 import { contrastRatio, hexToHslTriple } from "@/lib/theme/color";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { MAX_BORDER_WIDTH } from "@/lib/storefront/brand-border";
+import { HOME_LAYOUTS } from "@/lib/storefront/boutique-home";
 
 /** #RGB or #RRGGBB — the same hex discipline as brand-border / cardDesign. */
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -154,6 +155,10 @@ const LAYOUT_ENUMS: Record<string, readonly string[]> = {
   heroBodySize: ["sm", "md", "lg"],
   footerStyle: ["columns", "compact"],
   catalogSortStyle: ["classic", "simple"],
+  // Owner-selectable home layout. "two-ways" additionally needs the operator
+  // grant at render (resolveHomeLayout) — the allow-list only decides what may
+  // be STORED. A value missing here is dropped silently on save.
+  homeLayout: [...HOME_LAYOUTS],
 };
 
 /** Layout keys taking a bounded number: [min, max]. */

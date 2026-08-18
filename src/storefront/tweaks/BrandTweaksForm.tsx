@@ -36,6 +36,7 @@ import {
 import { matchFontPreset } from "@/lib/theme/fontPresets";
 import { LOGO_CURVE_PRESETS, logoCurveLabel } from "@/lib/storefront/logo-curve";
 import { HERO_VARIANTS } from "@/lib/storefront/hero-style";
+import { BoutiqueEditor } from "./BoutiqueEditor";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
@@ -565,6 +566,8 @@ export function BrandTweaksForm({
         onChange={(v) => setTweak("catalogSortStyle", SORT_STYLES[v])}
       />
       <TweakToggle label="Show product count" value={t.catalogShowCount !== false} onChange={(v) => setTweak("catalogShowCount", v)} />
+
+      <BoutiqueEditor brand={t} setTweak={setTweak} />
 
       <TweakSection label="Page: Track Order" />
       <TweakText label="Title" value={t.trackTitle} onChange={(v) => setTweak("trackTitle", v)} />

@@ -33,6 +33,7 @@ import {
 import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
+import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import {
   normalizeCatalogSortStyle,
@@ -257,8 +258,15 @@ export default async function HomePage() {
   // "Two ways to order" home — the operator grant (Super Admin → Features → Group
   // Buy) is the toggle; the owner's config.homeLayout can still opt in or force
   // classic. Resolved server-side so StorefrontApp just branches on brand.homeLayout.
+  // The "boutique" home needs no grant — resolveHomeLayout checks it first, so
+  // an unentitled tenant that picked it still gets it (see two-ways-home.ts).
   const twoWaysHomeEntitled = await hasFeature(tenantId, FEATURES.GB_TWO_WAYS_HOME);
   brand.homeLayout = resolveHomeLayout(twoWaysHomeEntitled, config.homeLayout);
+
+  // Boutique's own config (the owner-typed assurance strip). Normalized at this
+  // trust boundary as well as at render, so a hand-edited branding.config can
+  // never push unbounded copy into the layout.
+  brand.boutique = normalizeBoutiqueConfig(config.boutique);
 
   // On-hand shelf order — "per-vial-first" leads with the single per-vial
   // listings and drops the multi-vial kits underneath (K Glow). Unset keeps

@@ -519,18 +519,31 @@ export function Catalog({
   category,
   onAddToCart,
   brand,
+  query: queryProp,
+  onQueryChange,
 }: {
   products: Product[];
   category: string;
   onAddToCart: (p: Product, qty?: number, variation?: { name: string; price: number }) => void;
   brand: Brand;
+  /** Optional CONTROLLED search term. Omitted (every classic tenant) the
+   *  catalog owns its own search box exactly as before; supplied, the term is
+   *  lifted to the caller so a search field elsewhere on the page — the
+   *  boutique layout's header bar — filters this same grid. */
+  query?: string;
+  onQueryChange?: (q: string) => void;
 }) {
   // The owner shut the whole shop (Admin → Store Status). The catalog still
   // renders in full — that is the point of "closed" rather than "hidden" — but
   // every card's buy control goes inert. store.addToCart and the server's order
   // placement re-check the same rule, so this is presentation, not the gate.
   const storeClosed = isStoreClosed(brand.storeStatus);
-  const [query, setQuery] = useState("");
+  // Uncontrolled by default; the internal state is simply unused (and never
+  // read) once a caller supplies `query`.
+  const [ownQuery, setOwnQuery] = useState("");
+  const controlled = queryProp !== undefined;
+  const query = controlled ? queryProp : ownQuery;
+  const setQuery = controlled ? (onQueryChange ?? (() => {})) : setOwnQuery;
   // "" = no explicit pick yet → the catalog shows the owner's configured order
   // (products blocked by sort category, featured pinned above everything).
   const [sort, setSort] = useState("");

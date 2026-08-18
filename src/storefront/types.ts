@@ -23,6 +23,7 @@ import type {
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import type { GroupBuyContent } from "@/lib/storefront/gb-content";
 import type { CardDesign, CardTemplate } from "./cardDesign";
+import type { HomeLayout, BoutiqueConfig } from "@/lib/storefront/boutique-home";
 
 export type Product = {
   id: string;
@@ -421,13 +422,27 @@ export type Brand = {
   // .sf-root[data-sf-frame="on"] in storefront.css.
   siteBorder?: boolean;
 
-  // Home layout style. "two-ways" renders the "two ways to order" home — the
-  // on-hand product list + live group-buy card split (design "K Glow Store.dc.html")
-  // — driven entirely by the --brand-* vars. Resolved server-side
-  // (resolveHomeLayout): the OPERATOR grant (FEATURES.GB_TWO_WAYS_HOME) is the
-  // only way in; branding.config.homeLayout can only opt back OUT ("classic").
-  // Absent / "classic" = the default hero → categories → catalog home.
-  homeLayout?: "classic" | "two-ways";
+  // Home layout style. Absent / "classic" = the default hero → categories →
+  // catalog home. Resolved server-side by resolveHomeLayout (two-ways-home.ts),
+  // which is the only place that knows which layouts are sold and which are free:
+  //
+  //   • "two-ways" — the on-hand list + live group-buy card split (design
+  //     "K Glow Store.dc.html"). A SOLD module: the OPERATOR grant
+  //     (FEATURES.GB_TWO_WAYS_HOME) is the only way in, and
+  //     branding.config.homeLayout can only opt back OUT ("classic").
+  //   • "boutique" — the imagery-led, category-first home (hero banner → shop-by-
+  //     category tiles → catalog → assurance strip → contact strip). A LAYOUT
+  //     CHOICE, not a module: it re-composes config every tenant already has, so
+  //     the store owner picks it themselves and no grant is involved.
+  //
+  // Every layout is driven entirely by the --brand-* vars.
+  homeLayout?: HomeLayout;
+
+  // The boutique layout's own slice of config — currently just the owner-typed
+  // assurance strip. Absent / empty = the strip is not rendered, which is the
+  // default for every tenant: this template ships no promises of its own.
+  // Normalized through @/lib/storefront/boutique-home at render and on save.
+  boutique?: BoutiqueConfig;
 
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;

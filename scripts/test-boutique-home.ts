@@ -27,6 +27,7 @@ import {
   ASSURANCE_NOTE_MAX,
 } from "../src/lib/storefront/boutique-home";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
+import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import type { Product, Category } from "../src/storefront/types";
 
 const ROOT = join(__dirname, "..");
@@ -313,13 +314,25 @@ check("declares no literal brand colours — tokens only", () => {
 // ── config allow-list — a value missing here is silently dropped on save ─────
 console.log("\nbranding.config — homeLayout allow-list");
 
-check("branding-update accepts 'boutique' as a homeLayout", () => {
-  const src = readFileSync(join(ROOT, "src/lib/tenant/branding-update.ts"), "utf8");
-  const line = src.split("\n").find((l) => l.includes("homeLayout:"));
-  assert.ok(line, "no homeLayout entry in LAYOUT_ENUMS — owner saves would be dropped");
+const patchLayout = (homeLayout: unknown) =>
+  buildTenantBrandingUpdate({ config: {} }, { layout: { homeLayout } });
+
+check("every HOME_LAYOUTS value survives a branding patch", () => {
   for (const layout of HOME_LAYOUTS) {
-    assert.ok(line.includes(`"${layout}"`), `homeLayout allow-list is missing "${layout}"`);
+    const res = patchLayout(layout);
+    assert.deepEqual(res.errors, [], `"${layout}" was rejected: ${res.errors.join("; ")}`);
+    assert.equal(res.config.homeLayout, layout, `"${layout}" was silently dropped on save`);
   }
+});
+
+check("an unknown layout is rejected rather than written through", () => {
+  const res = patchLayout("bespoke");
+  assert.ok(res.errors.length > 0, "an unknown homeLayout must be an error");
+  assert.equal(res.config.homeLayout, undefined);
+});
+
+check("a non-string layout is rejected", () => {
+  assert.ok(patchLayout(42).errors.length > 0);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

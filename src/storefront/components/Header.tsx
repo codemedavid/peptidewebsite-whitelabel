@@ -1,22 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Brand } from "../types";
 import { isLinkHidden, isPageVisible } from "../visibility";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
+import type { CategoryTile } from "@/lib/storefront/boutique-home";
+
+/** Category-first discovery in the header — search plus a panel of the tenant's
+ *  own categories with live counts (the boutique layout supplies it; every other
+ *  layout omits it and the header renders exactly as before). */
+export type HeaderDiscovery = {
+  tiles: CategoryTile[];
+  query: string;
+  onQuery: (q: string) => void;
+  onCategory: (id: string) => void;
+};
 
 export function Header({
   brand,
   cartCount,
   onShopClick,
   onCartClick,
+  discovery,
 }: {
   brand: Brand;
   cartCount: number;
   onShopClick: () => void;
   onCartClick?: () => void;
+  /** Opt-in discovery bar. Absent = the classic header, unchanged. */
+  discovery?: HeaderDiscovery;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [catsOpen, setCatsOpen] = useState(false);
+  const catsRef = useRef<HTMLDivElement | null>(null);
   // Drop nav links that point at a toggled-off page.
   const nav = (brand.nav || []).filter((item) => !isLinkHidden(brand, item.href));
   // Surface the gated reseller page automatically when enabled (and not already
@@ -46,6 +62,22 @@ export function Header({
     if (reviewsIdx >= 0) nav.splice(reviewsIdx, 0, link);
     else nav.push(link);
   }
+
+  // Close the category panel on Escape or a click outside it — a dropdown that
+  // can only be dismissed by re-clicking its trigger is a keyboard trap.
+  useEffect(() => {
+    if (!catsOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCatsOpen(false);
+    const onDown = (e: MouseEvent) => {
+      if (!catsRef.current?.contains(e.target as Node)) setCatsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [catsOpen]);
 
   // Lock background scroll + close on Escape while the drawer is open.
   useEffect(() => {
@@ -123,6 +155,61 @@ export function Header({
         </div>
       </div>
     </header>
+
+    {discovery && (
+      <div className="bq-bar">
+        <div className="container bq-bar__row">
+          <div className="bq-bar__cats" ref={catsRef}>
+            <button
+              type="button"
+              className="bq-bar__cats-btn"
+              aria-expanded={catsOpen}
+              aria-haspopup="true"
+              onClick={() => setCatsOpen((o) => !o)}
+              disabled={discovery.tiles.length === 0}
+            >
+              <span>All categories</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16} aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            {catsOpen && discovery.tiles.length > 0 && (
+              <div className="bq-bar__panel" role="menu">
+                {discovery.tiles.map((tile) => (
+                  <button
+                    key={tile.id}
+                    type="button"
+                    role="menuitem"
+                    className="bq-bar__panel-item"
+                    onClick={() => {
+                      discovery.onCategory(tile.id);
+                      setCatsOpen(false);
+                    }}
+                  >
+                    <span className="bq-bar__panel-label">{tile.label}</span>
+                    <span className="bq-bar__panel-count">{tile.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <label className="bq-bar__search" aria-label="Search products">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="search"
+              value={discovery.query}
+              onChange={(e) => discovery.onQuery(e.target.value)}
+              placeholder="Search products…"
+            />
+          </label>
+        </div>
+      </div>
+    )}
 
     {/* Mobile drawer — rendered outside <header> so its backdrop-filter
         doesn't trap our position:fixed overlay inside the header band. */}

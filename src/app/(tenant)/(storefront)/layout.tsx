@@ -13,6 +13,7 @@ import { evaluateVisitorGate } from "@/lib/auth/gate-enforcement";
 import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import "@/storefront/storefront.css";
+import "@/storefront/boutique.css";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
 export async function generateMetadata(): Promise<Metadata> {

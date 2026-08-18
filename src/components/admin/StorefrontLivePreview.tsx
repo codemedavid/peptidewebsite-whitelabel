@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import "@/storefront/storefront.css";
+import "@/storefront/boutique.css";
 import { StoreProvider } from "@/storefront/store";
 import type { Brand } from "@/storefront/types";
 import { SEED_CATEGORIES, SEED_PRODUCTS } from "@/storefront/data";

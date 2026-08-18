@@ -8,6 +8,7 @@
 // alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
 // an SSR compute and is trivially testable (npm run test:two-ways-home).
 
+import { isBoutiqueLayout, type HomeLayout } from "./boutique-home";
 import {
   isGroupBuyProduct,
   slotProgress,
@@ -107,17 +108,31 @@ export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
 };
 
 /**
- * Resolve the effective home layout. The operator entitlement (Super Admin →
- * Features → Group Buy → "Two ways to order" home) is the ONLY way in — the
- * feature is sold per tenant (catalog.ts: operator-grantable, default OFF), so
- * the owner-writable branding.config.homeLayout must never self-enable it.
- * Config can only opt OUT: an explicit "classic" wins even while the grant is
- * on. Unentitled (whatever the config says) → the classic hero → catalog home.
+ * Resolve the effective home layout.
+ *
+ * Two different kinds of layout meet here, and the difference is the whole
+ * point of the branching:
+ *
+ *   • "two-ways" is a SOLD module. The operator entitlement (Super Admin →
+ *     Features → Group Buy → "Two ways to order" home) is the ONLY way in —
+ *     catalog.ts has it operator-grantable, default OFF — so the owner-writable
+ *     branding.config.homeLayout must never self-enable it. Config can only opt
+ *     OUT: an explicit "classic" wins even while the grant is on, and an
+ *     unentitled tenant gets the classic home whatever its config says.
+ *
+ *   • "boutique" is a LAYOUT CHOICE. It re-composes data every tenant already
+ *     has (hero, categories, catalog, contact channels) and unlocks no module,
+ *     so it is owner-selectable and needs no grant. It is checked FIRST, which
+ *     is what lets an unentitled tenant reach it.
+ *
+ * Anything unrecognised falls through to the pre-boutique answer, so a garbage
+ * config value still fails closed to a layout the tenant is allowed to have.
  */
 export function resolveHomeLayout(
   entitled: boolean,
   configLayout: string | undefined | null,
-): "classic" | "two-ways" {
+): HomeLayout {
+  if (isBoutiqueLayout(configLayout)) return "boutique";
   if (!entitled) return "classic";
   return configLayout === "classic" ? "classic" : "two-ways";
 }

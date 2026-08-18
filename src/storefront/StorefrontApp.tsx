@@ -20,6 +20,7 @@ import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
 import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
+import { buildCategoryTiles, isBoutiqueLayout } from "@/lib/storefront/boutique-home";
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
@@ -55,6 +56,9 @@ const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.
 // Opt-in "two ways to order" home (brand.homeLayout === "two-ways"). Code-split so
 // the classic-home tenants never download it.
 const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) => m.TwoWaysHome), { ssr: false, loading: PageSpinner });
+// Opt-in imagery-led "boutique" home (brand.homeLayout === "boutique"). Same
+// treatment: code-split so the classic-home tenants never download it.
+const BoutiqueHome = dynamic(() => import("./components/BoutiqueHome").then((m) => m.BoutiqueHome), { ssr: false, loading: PageSpinner });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
@@ -72,6 +76,10 @@ function Shell() {
   // "Explore GB #N" scope toggle — default OFF so the normal view is the full
   // catalog; opting in narrows it to the live round's products (presentation only).
   const [gbScope, setGbScope] = useState(false);
+  // Catalog search term. Owned here (rather than inside <Catalog>) only for the
+  // boutique layout, whose header bar searches the same grid; every other layout
+  // leaves <Catalog> uncontrolled and this stays an unused "".
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState("home");
   // "checking" while the server session is being verified, so entering #admin
   // from inside the SPA doesn't flash the login form at an already-signed-in
@@ -86,6 +94,15 @@ function Shell() {
   // A toggled-off sub-page should behave as if it isn't there: treat its hash
   // as "home" so direct visits land on the storefront instead of a blank shell.
   const activePage = page === "admin" || isPageVisible(brand, page) ? page : "home";
+
+  const boutique = isBoutiqueLayout(brand.homeLayout);
+  // Exactly what the catalog grid renders — the boutique tiles are built from
+  // this same list so a tile's count can never disagree with the shelf it opens.
+  const visibleProducts = scopedCatalog(
+    products.filter((p) => p.available !== false),
+    brand.groupBuyBanner ?? null,
+    gbScope,
+  );
 
   // Resolve initial route + auth after mount (avoids SSR hash mismatch).
   useEffect(() => {
@@ -237,6 +254,23 @@ function Shell() {
             if (page !== "home") goHome();
             setTimeout(scrollToCatalog, 50);
           }}
+          discovery={
+            boutique
+              ? {
+                  tiles: buildCategoryTiles(visibleProducts, categories, brand.defaultProductImage),
+                  query,
+                  onQuery: (q) => {
+                    setQuery(q);
+                    if (page !== "home") goHome();
+                  },
+                  onCategory: (id) => {
+                    setCategory(id);
+                    if (page !== "home") goHome();
+                    setTimeout(scrollToCatalog, 50);
+                  },
+                }
+              : undefined
+          }
         />
       )}
 
@@ -270,7 +304,27 @@ function Shell() {
       {/* Opt-in "two ways to order" home — a single scroll (hero + on-hand list +
           live group-buy card), driven by the same brand vars. Replaces the classic
           hero → categories → catalog composition below for tenants that enable it. */}
-      {(activePage === "home" || activePage === "catalog") && brand.homeLayout === "two-ways" && (
+      {/* Opt-in imagery-led "boutique" home — hero banner → shop-by-category tiles
+          → catalog → the owner's assurance strip → contact. Owner-selectable, no
+          operator grant: it only re-composes config the tenant already has. */}
+      {(activePage === "home" || activePage === "catalog") && boutique && (
+        <BoutiqueHome
+          brand={brand}
+          products={visibleProducts}
+          category={category}
+          query={query}
+          onQueryChange={setQuery}
+          onCategoryChange={setCategory}
+          onAddToCart={addToCart}
+          onHeroPrimary={heroCtaHandler(1)}
+          onHeroSecondary={heroCtaHandler(2)}
+          onHeroMedia={heroMediaHandler}
+          gbScope={gbScope}
+          onGbScope={setGbScope}
+        />
+      )}
+
+      {(activePage === "home" || activePage === "catalog") && !boutique && brand.homeLayout === "two-ways" && (
         <TwoWaysHome
           brand={brand}
           onCheckout={() => setCartOpen(true)}
@@ -278,7 +332,7 @@ function Shell() {
         />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && brand.homeLayout !== "two-ways" && (
+      {(activePage === "home" || activePage === "catalog") && !boutique && brand.homeLayout !== "two-ways" && (
         <>
           {brand.showHero !== false && (
             <Hero
@@ -305,11 +359,7 @@ function Shell() {
               // "Explore GB #N" toggle further narrows the view to the live
               // round's products — presentation only; the on-hand gate (in the
               // card + server) still owns what's actually buyable.
-              products={scopedCatalog(
-                products.filter((p) => p.available !== false),
-                brand.groupBuyBanner ?? null,
-                gbScope,
-              )}
+              products={visibleProducts}
               category={category}
               onAddToCart={addToCart}
               brand={brand}
@@ -347,7 +397,16 @@ export function StorefrontApp({
   tenantKey?: string;
 }) {
   return (
-    <div className="sf-root" data-sf-frame={brand?.siteBorder ? "on" : undefined}>
+    <div
+      className="sf-root"
+      data-sf-frame={brand?.siteBorder ? "on" : undefined}
+      // Scopes boutique.css. Every rule in that sheet is written under
+      // .sf-root[data-sf-home="boutique"], which both outranks the base
+      // storefront.css selectors (so source order can't silently undo it — the
+      // hazard that broke the flush image hero) and keeps it entirely off
+      // classic / two-ways tenants.
+      data-sf-home={isBoutiqueLayout(brand?.homeLayout) ? "boutique" : undefined}
+    >
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell />
       </StoreProvider>
