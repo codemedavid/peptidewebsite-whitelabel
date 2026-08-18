@@ -38,6 +38,7 @@
     "test:gb-banner": "tsx scripts/test-gb-banner.ts",
     "test:two-ways": "tsx scripts/test-two-ways.ts",
     "test:two-ways-home": "tsx scripts/test-two-ways-home.ts",
+    "test:boutique-home": "tsx scripts/test-boutique-home.ts",
     "test:two-ways-cart": "tsx scripts/test-two-ways-cart.ts",
     "test:two-ways-mode": "tsx scripts/test-two-ways-mode.ts",
     "test:store-status": "tsx scripts/test-store-status.ts",
