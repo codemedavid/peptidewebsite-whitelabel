@@ -3,6 +3,7 @@
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { resolveReviewDescStyle, reviewProductIds } from "@/lib/storefront/reviews";
 
 export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { reviews, products } = useStore();
@@ -16,9 +17,14 @@ export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => voi
         </div>
         <div className="reviews__grid">
           {reviews.map((r, i) => {
-            const linked = r.productId ? products.find((x) => x.id === r.productId) : null;
+            // A testimonial can name several products — chip each one it is
+            // connected to, so a customer can jump to any of them.
+            const linkedProducts = reviewProductIds(r)
+              .map((pid) => products.find((x) => x.id === pid))
+              .filter((p): p is NonNullable<typeof p> => Boolean(p));
+            const descStyle = resolveReviewDescStyle(r, brand);
             return (
-              <article key={i} className="review-card">
+              <article key={r.id ?? i} className="review-card">
                 <div className="review-card__media">
                   {r.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -34,11 +40,14 @@ export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => voi
                 </div>
                 <div className="review-card__body">
                   <h3 className="review-card__title">{r.title}</h3>
-                  <p className="review-card__sub">{r.subtitle}</p>
+                  <p className="review-card__sub" style={descStyle}>
+                    {r.subtitle}
+                  </p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                     {r.badge && <span className="review-card__badge">{r.badge}</span>}
-                    {linked && (
+                    {linkedProducts.map((linked) => (
                       <a
+                        key={linked.id}
                         href="#catalog"
                         style={{
                           fontSize: 11,
@@ -52,7 +61,7 @@ export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => voi
                       >
                         for {linked.name}
                       </a>
-                    )}
+                    ))}
                   </div>
                 </div>
               </article>

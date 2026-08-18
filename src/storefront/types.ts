@@ -289,12 +289,25 @@ export type Protocol = {
 };
 
 export type Review = {
+  /** Stable id, assigned by normalizeReviews so the editor and the storefront
+   *  agree on identity across saves. */
+  id?: string;
   headline: string;
   title: string;
+  /** The testimonial body. Styled by descStyle over Brand.reviewDescStyle. */
   subtitle: string;
   badge: string;
   image: string;
+  /** Legacy single product link. Kept in sync with productIds[0] by
+   *  normalizeReviews so rows written before multi-connect keep working. */
   productId?: string;
+  /** Every product this testimonial is connected to. A connected product shows
+   *  it under its description in the quick-view detail modal (reviewsForProduct
+   *  in lib/storefront/reviews). */
+  productIds?: string[];
+  /** Per-review description typography, layered over Brand.reviewDescStyle.
+   *  Validated server-side by normalizeReviews — unset attributes inherit. */
+  descStyle?: HeroFieldStyle;
 };
 
 /** Messaging channels the customer can complete an order through. The set of
@@ -477,6 +490,13 @@ export type Brand = {
   // even offers the "Reviews page" toggle. Undefined outside the entitlement-
   // aware storefront render (treated as entitled there).
   reviewsEntitled?: boolean;
+  /** The store's testimonials, server-hydrated from branding.config.reviews.
+   *  DB-backed (saveReviewsAction) — never read from localStorage, or the
+   *  owner's saved reviews would be masked by a stale copy on one device. */
+  reviews?: Review[];
+  /** Tenant-wide default typography for every testimonial description. A
+   *  per-review descStyle layers over this (resolveReviewDescStyle). */
+  reviewDescStyle?: HeroFieldStyle;
   // Reseller / merchant wholesale price list (#merchant). Default OFF — only
   // tenants that sell wholesale enable it from the store admin. Gated behind an
   // access code so the wholesale list isn't shown to regular shoppers.

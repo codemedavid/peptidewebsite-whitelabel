@@ -14,6 +14,7 @@ import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventor
 import { buildProductCta } from "@/lib/storefront/product-cta";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
+import { resolveReviewDescStyle, reviewsForProduct } from "@/lib/storefront/reviews";
 import {
   normalizeSortCategories,
   orderCatalogByCategories,
@@ -318,6 +319,7 @@ function ProductDetailModal({
   defaultImage,
   gbBlocked,
   storeClosed,
+  brand,
 }: {
   product: Product;
   onClose: () => void;
@@ -331,8 +333,15 @@ function ProductDetailModal({
   /** The owner closed the whole shop — see ProductCard's note. Passed through so
    *  the modal and the card it opened from can't disagree. */
   storeClosed?: boolean;
+  /** Source of the testimonials connected to this product (brand.reviews, DB-
+   *  hydrated) and their typography default. A prop, not useStore, because the
+   *  platform admin's live preview renders this catalog outside StoreProvider. */
+  brand: Brand;
 }) {
   const detail = buildProductDetail(product, defaultImage);
+  // Testimonials the owner connected to THIS product. A review may name several
+  // products, so the same testimonial can appear under each of them.
+  const productReviews = reviewsForProduct(brand.reviews ?? [], product.id);
   const [qty, setQty] = useState(1);
   // Nothing picked yet (-1): a product with options shows no price until the
   // customer clicks one, same as the catalog card it opened from.
@@ -421,6 +430,29 @@ function ProductDetailModal({
 
             {detail.description && (
               <p className="sf-detail__desc">{detail.description}</p>
+            )}
+
+            {productReviews.length > 0 && (
+              <section className="sf-detail__reviews" aria-label={`Customer reviews for ${detail.name}`}>
+                <h3 className="sf-detail__reviews-title">What customers say</h3>
+                {productReviews.map((r, i) => (
+                  <figure key={r.id ?? i} className="sf-detail__review">
+                    {r.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="sf-detail__review-img" src={r.image} alt={r.title || "Customer review"} />
+                    )}
+                    <figcaption className="sf-detail__review-body">
+                      {r.title && <strong className="sf-detail__review-name">{r.title}</strong>}
+                      {r.subtitle && (
+                        <p className="sf-detail__review-text" style={resolveReviewDescStyle(r, brand)}>
+                          {r.subtitle}
+                        </p>
+                      )}
+                      {r.badge && <span className="review-card__badge">{r.badge}</span>}
+                    </figcaption>
+                  </figure>
+                ))}
+              </section>
             )}
 
             {detail.showOptions && !detail.priceOnRequest && (
@@ -693,6 +725,7 @@ export function Catalog({
           defaultImage={brand.defaultProductImage}
           gbBlocked={isOnHandBlocked(selected.id, brand.groupBuyGate)}
           storeClosed={storeClosed}
+          brand={brand}
         />
       )}
     </section>

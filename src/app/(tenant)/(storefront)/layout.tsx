@@ -98,10 +98,19 @@ export default async function StorefrontLayout({
     buttonFont?: string;
     priceFont?: string;
     heroFieldStyles?: Record<string, { font?: string }>;
+    reviewDescStyle?: { font?: string };
+    reviews?: { descStyle?: { font?: string } }[];
   };
   // Per-field hero text styling can each pick a distinct font — load them too,
   // or the storefront would render those fields in a fallback face.
   const fieldFonts = Object.values(heroConfig.heroFieldStyles ?? {}).map((s) => s?.font);
+  // Testimonial descriptions carry their own per-review font (plus a tenant-wide
+  // default), so load those families too — a configured face that is never
+  // requested renders as a silent fallback.
+  const reviewFonts = [
+    heroConfig.reviewDescStyle?.font,
+    ...(heroConfig.reviews ?? []).map((r) => r?.descStyle?.font),
+  ];
   const fontsHref = googleFontsUrl(
     fonts.heading ?? "Inter",
     fonts.body ?? "Inter",
@@ -120,6 +129,7 @@ export default async function StorefrontLayout({
     // instead of falling back. Unset tenants inherit the already-loaded body font.
     heroConfig.priceFont,
     ...fieldFonts,
+    ...reviewFonts,
   );
 
   // The home page renders the full white-label storefront app, which brings its

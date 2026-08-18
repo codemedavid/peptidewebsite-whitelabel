@@ -22,6 +22,7 @@ import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import { normalizeBanner } from "@/lib/storefront/banner";
 import { normalizeFaqGroups } from "@/lib/storefront/faq";
 import { normalizeCoaReports } from "@/lib/storefront/coa";
+import { normalizeReviews } from "@/lib/storefront/reviews";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
@@ -1138,6 +1139,39 @@ export async function saveCoaReportsAction(reports: unknown): Promise<ActionResu
   const normalized = normalizeCoaReports(reports);
   const current = await readConfig(tenantId);
   const config = { ...current, coaReports: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the store's customer testimonials.
+ *
+ * Reviews were the last storefront collection with no server save — they lived
+ * only in the editing browser's localStorage, so an owner's real testimonials
+ * never reached another device or a single customer. Same shape as
+ * saveCoaReportsAction: staff-gated, sanitized at the boundary, written to
+ * branding.config.
+ */
+export async function saveReviewsAction(reviews: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("reviews");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeReviews(reviews);
+  const current = await readConfig(tenantId);
+  const config = { ...current, reviews: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

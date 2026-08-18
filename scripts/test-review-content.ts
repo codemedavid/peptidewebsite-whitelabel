@@ -335,9 +335,20 @@ check("saveReviewsAction exists behind the 'reviews' staff permission", () => {
   assert.ok(/normalizeReviews\(/.test(body.slice(0, 900)), "sanitizes at the boundary");
 });
 
-check("the Reviews manager persists through the action", () => {
+check("edits persist to the server, not just local state", () => {
+  // Same contract as COA/protocols: the manager writes through the store setter
+  // and store.tsx owns the save call, so nothing can edit reviews without
+  // persisting them. Asserting the manager calls the action directly would
+  // contradict that shape (AdminLabResults.tsx:322, AdminProtocolsManager.tsx:131).
   const m = src("src/storefront/admin/AdminReviewsManager.tsx");
-  assert.ok(/saveReviewsAction/.test(m), "imports/calls saveReviewsAction");
+  assert.ok(/setReviews\(/.test(m), "manager writes through the store setter");
+  const store = src("src/storefront/store.tsx");
+  assert.ok(/saveReviewsAction/.test(store), "store.tsx imports the save action");
+  const setter = store.slice(store.indexOf("const setReviews = useCallback"));
+  assert.ok(
+    /saveReviewsAction\(value\)/.test(setter.slice(0, 900)),
+    "setReviews persists the new value server-side",
+  );
 });
 
 check("the Reviews manager offers multi-product connection", () => {
@@ -358,9 +369,12 @@ check("ReviewsPage paints the resolved description style", () => {
 check("the product detail modal renders its connected reviews under the description", () => {
   const c = src("src/storefront/components/Catalog.tsx");
   assert.ok(/reviewsForProduct/.test(c), "Catalog.tsx queries the reverse index");
+  // Compare the rendered MARKUP positions — the import line naturally sits above
+  // everything, so matching on the function name alone proves nothing.
   const descAt = c.indexOf('className="sf-detail__desc"');
-  const revAt = c.indexOf("reviewsForProduct");
-  assert.ok(descAt > 0 && revAt > descAt, "the reviews block sits AFTER the description paragraph");
+  const revAt = c.indexOf('className="sf-detail__reviews"');
+  assert.ok(descAt > 0, "the description paragraph is still rendered");
+  assert.ok(revAt > descAt, "the reviews block sits AFTER the description paragraph");
 });
 
 check("the tenant layout loads the review fonts", () => {

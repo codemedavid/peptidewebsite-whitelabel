@@ -19,6 +19,7 @@ import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { normalizeReviews, normalizeReviewDescStyle } from "@/lib/storefront/reviews";
 import { getTrialState } from "@/lib/trial/trial-info";
 import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
 import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription/subscription-info";
@@ -137,6 +138,11 @@ export default async function HomePage() {
   const reviewsEntitled = await hasFeature(tenantId, FEATURES.STORE_REVIEWS);
   brand.reviewsEntitled = reviewsEntitled;
   brand.showPageReviews = resolveShowReviews(reviewsEntitled, config.showPageReviews);
+  // The testimonials themselves are DB-backed (branding.config.reviews, written
+  // by saveReviewsAction). They are sanitized on the way out as well as in, so a
+  // row stored before the normalizer existed can't reach the page unchecked.
+  brand.reviews = normalizeReviews(config.reviews);
+  brand.reviewDescStyle = normalizeReviewDescStyle(config.reviewDescStyle);
 
   // Lab Reports (COA) + Protocols pages: same two-layer gate as Reviews — the
   // platform entitlement (FEATURES.STORE_COA / STORE_PROTOCOLS, both operator-

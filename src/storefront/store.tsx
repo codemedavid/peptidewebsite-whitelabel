@@ -37,6 +37,7 @@ import {
   saveCategoriesAction,
   saveSortCategoriesAction,
   saveCoaReportsAction,
+  saveReviewsAction,
   saveCouriersAction,
   saveFaqAction,
   savePaymentMethodsAction,
@@ -294,7 +295,12 @@ export function StoreProvider({
   const [protocols, setProtocolsState] = useState<Protocol[]>(
     brandSeed.protocols ?? SEED_PROTOCOLS,
   );
-  const [reviews, setReviewsState] = useState<Review[]>(SEED_REVIEWS);
+  // Reviews load from the DB server-side (page → branding.config spread into the
+  // brand prop), same as COA/protocols, so the owner's testimonials are identical
+  // on every device. Seed defaults apply only until the owner saves once.
+  const [reviews, setReviewsState] = useState<Review[]>(
+    brandSeed.reviews ?? SEED_REVIEWS,
+  );
   const [cart, setCart] = useState<Product[]>([]);
   const [toastMsg, setToastMsg] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -343,7 +349,12 @@ export function StoreProvider({
     // come from the DB via the server-provided brand prop (branding.config), so
     // a stale local copy can't override what the owner saved (the cross-device
     // bug). They persist through saveProtocolsAction instead.
-    setReviewsState(load(NS + "reviews", SEED_REVIEWS));
+    // NOTE: reviews are intentionally NOT hydrated from localStorage — they come
+    // from the DB via the server-provided brand prop (branding.config), so a
+    // stale local copy can't override what the owner saved (the cross-device bug
+    // where a store's real testimonials never left the editing browser and every
+    // customer saw the SEED_REVIEWS demo rows). They persist through
+    // saveReviewsAction instead.
   }, [NS]);
 
   useEffect(() => applyBrandStyle(brand), [brand]);
@@ -434,8 +445,6 @@ export function StoreProvider({
   const setOrders = useMemo(() => makeSetter<Order[]>("orders", "ORDERS", setOrdersState), [NS]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setMyOrders = useMemo(() => makeSetter<Order[]>("myorders", "MY_ORDERS", setMyOrdersState), [NS]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const setReviews = useMemo(() => makeSetter<Review[]>("reviews", "REVIEWS", setReviewsState), [NS]);
 
   // Keep window mirrors fresh on every render so any global readers stay in sync.
   useEffect(() => {
@@ -725,6 +734,28 @@ export function StoreProvider({
         });
     },
     [toast, coaReports],
+  );
+
+  // Reviews persist to the DB (branding.config), not localStorage, so every
+  // device/customer sees the owner's testimonials. Mirrors setCoaReports: gated
+  // on the storefront-admin session; local state updates optimistically and we
+  // only surface failures.
+  const setReviews = useCallback(
+    (next: Updater<Review[]>) => {
+      const value =
+        typeof next === "function" ? (next as (p: Review[]) => Review[])(reviews) : next;
+      setReviewsState(value);
+      saveReviewsAction(value)
+        .then((r) => {
+          if (r && "error" in r) {
+            toast(`Couldn't save reviews: ${r.error}`);
+          }
+        })
+        .catch(() => {
+          toast("Couldn't save reviews — please sign in again and retry.");
+        });
+    },
+    [toast, reviews],
   );
 
   // FAQ groups persist to the DB (branding.config), not localStorage, so every

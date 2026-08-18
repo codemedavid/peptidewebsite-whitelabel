@@ -4,6 +4,14 @@ import { useRef, useState } from "react";
 import type { Brand, Review } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
+import { FONT_OPTIONS, FONT_WEIGHTS, type HeroFieldStyle } from "@/lib/theme/tokens";
+import {
+  MAX_REVIEW_PRODUCTS,
+  MIN_REVIEW_FONT_SIZE,
+  MAX_REVIEW_FONT_SIZE,
+  reviewProductIds,
+} from "@/lib/storefront/reviews";
+import { DESIGN_FONTS_HREF } from "../tweaks/designFonts";
 
 // Internal type used only in the admin manager: a Review that carries a
 // stable runtime id (not persisted) and an optional _new flag.
@@ -24,11 +32,40 @@ function ReviewModal({
   const [subtitle, setSubtitle] = useState(review.subtitle || "");
   const [badge, setBadge] = useState(review.badge || "Testimonial");
   const [image, setImage] = useState(review.image || "");
-  const [productId, setPid] = useState(review.productId || "");
+  // Multi-connect: a testimonial can name several products, and each one shows
+  // it under its description in the storefront's product detail modal. Seeded
+  // from the legacy single `productId` so an older review keeps its link.
+  const [productIds, setPids] = useState<string[]>(
+    review.productIds?.length ? review.productIds : review.productId ? [review.productId] : [],
+  );
+  // Description typography. Unset attributes inherit the tenant default
+  // (Brand.reviewDescStyle) and then the stylesheet — that is why every control
+  // has an explicit "Default" option rather than a pre-filled value.
+  const [descStyle, setDescStyle] = useState<HeroFieldStyle>(review.descStyle ?? {});
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const canSave = (title.trim() || subtitle.trim() || image) && !uploading;
+
+  // Merge one attribute into the style, pruning the key when it is cleared so
+  // "Default" really means unset (and never a stored empty string).
+  const patchStyle = (patch: Partial<HeroFieldStyle>) =>
+    setDescStyle((prev) => {
+      const next = { ...prev, ...patch };
+      (Object.keys(patch) as (keyof HeroFieldStyle)[]).forEach((k) => {
+        if (next[k] === undefined || next[k] === "") delete next[k];
+      });
+      return next;
+    });
+
+  const toggleProduct = (pid: string) =>
+    setPids((prev) =>
+      prev.includes(pid)
+        ? prev.filter((x) => x !== pid)
+        : prev.length >= MAX_REVIEW_PRODUCTS
+          ? prev
+          : [...prev, pid],
+    );
 
   // Upload the review image to the tenant's ImageKit folder; store the URL.
   const handleImage = async (file: File | undefined) => {
@@ -160,21 +197,50 @@ function ReviewModal({
         </div>
 
         <div className="admin-modal__row">
-          <label className="admin-field__label">Connect to product</label>
-          <select
-            className="admin-select"
-            value={productId}
-            onChange={(e) => setPid(e.target.value)}
+          <label className="admin-field__label">
+            Connect to products {productIds.length > 0 && `(${productIds.length})`}
+          </label>
+          <div
+            style={{
+              maxHeight: 190,
+              overflowY: "auto",
+              display: "grid",
+              gap: 2,
+              border: "1px solid var(--brand-border, rgba(0,0,0,0.12))",
+              borderRadius: 10,
+              padding: 8,
+            }}
           >
-            <option value="">— No product link —</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            {products.length === 0 && (
+              <div style={{ fontSize: 13, color: "var(--brand-text-muted)", padding: 4 }}>
+                No products yet — add one first.
+              </div>
+            )}
+            {products.map((p) => {
+              const on = productIds.includes(p.id);
+              return (
+                <label
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    padding: "4px 6px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    background: on ? "color-mix(in srgb, var(--brand-accent) 12%, transparent)" : "transparent",
+                  }}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggleProduct(p.id)} />
+                  <span>{p.name}</span>
+                </label>
+              );
+            })}
+          </div>
           <div className="admin-field__hint">
-            Links the review to a product. The card will show "for [product]" on the public page.
+            Pick any number of products (up to {MAX_REVIEW_PRODUCTS}). This review shows under the
+            description of every product you tick, and the reviews page links back to each of them.
           </div>
         </div>
 
@@ -214,10 +280,96 @@ function ReviewModal({
           <textarea
             className="admin-textarea"
             value={subtitle}
-            style={{ minHeight: 80 }}
             placeholder="A short quote or description…"
+            style={{
+              minHeight: 80,
+              fontFamily: descStyle.font ? `'${descStyle.font}', sans-serif` : undefined,
+              fontWeight: descStyle.weight,
+              fontStyle: descStyle.italic ? "italic" : undefined,
+            }}
             onChange={(e) => setSubtitle(e.target.value)}
           />
+          <div className="admin-field__hint">
+            The typography below applies to this description everywhere it appears — the reviews
+            page and every connected product. Leave a control on "Default" to inherit the store's
+            style.
+          </div>
+        </div>
+
+        {/* The picker previews real families, so load them here (same as the
+            brand tweaks panel) rather than shipping them to every shopper. */}
+        <link rel="stylesheet" href={DESIGN_FONTS_HREF} />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="admin-modal__row" style={{ margin: 0 }}>
+            <label className="admin-field__label">Description font</label>
+            <select
+              className="admin-select"
+              value={descStyle.font ?? ""}
+              onChange={(e) => patchStyle({ font: e.target.value || undefined })}
+            >
+              <option value="">Default (store font)</option>
+              {FONT_OPTIONS.map((f) => (
+                <option key={f} value={f} style={{ fontFamily: `'${f}', sans-serif` }}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="admin-modal__row" style={{ margin: 0 }}>
+            <label className="admin-field__label">Weight</label>
+            <select
+              className="admin-select"
+              value={descStyle.weight ?? ""}
+              onChange={(e) =>
+                patchStyle({ weight: e.target.value ? (Number(e.target.value) as (typeof FONT_WEIGHTS)[number]) : undefined })
+              }
+            >
+              <option value="">Default</option>
+              {FONT_WEIGHTS.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+          <div className="admin-modal__row" style={{ margin: 0 }}>
+            <label className="admin-field__label">Size (px)</label>
+            <input
+              className="admin-input"
+              type="number"
+              min={MIN_REVIEW_FONT_SIZE}
+              max={MAX_REVIEW_FONT_SIZE}
+              value={descStyle.size ?? ""}
+              placeholder="Default"
+              onChange={(e) =>
+                patchStyle({ size: e.target.value ? Number(e.target.value) : undefined })
+              }
+            />
+          </div>
+          <div className="admin-modal__row" style={{ margin: 0 }}>
+            <label className="admin-field__label">Color</label>
+            <input
+              className="admin-input"
+              type="color"
+              value={descStyle.color ?? "#333333"}
+              onChange={(e) => patchStyle({ color: e.target.value })}
+            />
+          </div>
+          <div className="admin-modal__row" style={{ margin: 0 }}>
+            <label className="admin-field__label">Style</label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={descStyle.italic === true}
+                onChange={(e) => patchStyle({ italic: e.target.checked || undefined })}
+              />
+              Italic
+            </label>
+          </div>
         </div>
 
         <div className="admin-modal__actions">
@@ -228,7 +380,19 @@ function ReviewModal({
             className="admin-btn"
             disabled={!canSave}
             onClick={() =>
-              onSave({ ...review, headline, title, subtitle, badge, image, productId })
+              onSave({
+                ...review,
+                headline,
+                title,
+                subtitle,
+                badge,
+                image,
+                // Keep the legacy single field pointing at the first connected
+                // product so older readers still resolve one.
+                productId: productIds[0] ?? "",
+                productIds,
+                descStyle: Object.keys(descStyle).length > 0 ? descStyle : undefined,
+              })
             }
           >
             Save
@@ -250,10 +414,9 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
 
   const commit = (next: ReviewEntry[]) => {
     setList(next);
-    // Strip internal id/_new before writing to the store so Review[] type is satisfied
-    setReviews(
-      next.map(({ id: _id, _new: _n, ...rest }) => rest as Review),
-    );
+    // Strip only the internal _new flag — `id` is a real Review field now, and
+    // the storefront + normalizer both key off it, so it must survive the save.
+    setReviews(next.map(({ _new: _n, ...rest }) => rest as Review));
   };
 
   const startAdd = () =>
@@ -265,6 +428,7 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
       badge: "Testimonial",
       image: "",
       productId: "",
+      productIds: [],
       _new: true,
     });
 
@@ -381,23 +545,26 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
                     <path d="m21 15-3.1-3.1a2 2 0 0 0-2.81.01L6 21" />
                   </svg>
                 )}
-                {r.productId && productName(r.productId) && (
-                  <span className="review-admin-card__product-chip">
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    </svg>
-                    {productName(r.productId)}
-                  </span>
-                )}
+                {reviewProductIds(r).map((pid) => {
+                  const name = productName(pid);
+                  return name ? (
+                    <span key={pid} className="review-admin-card__product-chip">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      </svg>
+                      {name}
+                    </span>
+                  ) : null;
+                })}
               </div>
               <div className="review-admin-card__body">
                 <h3 className="review-admin-card__title">{r.title || "Untitled"}</h3>

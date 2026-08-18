@@ -8157,6 +8157,61 @@
   color: color-mix(in srgb, var(--brand-text) 82%, transparent);
   white-space: pre-line;
 }
+/* Testimonials the owner connected to this product, shown directly under the
+   description. A review can name several products, so the same one may appear
+   in more than one product's modal. The description text carries the owner's
+   per-review typography inline (resolveReviewDescStyle), so nothing here pins a
+   font — only the surrounding frame. */
+.sf-root .sf-detail__reviews {
+  margin: 4px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  display: grid;
+  gap: 12px;
+}
+.sf-root .sf-detail__reviews-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.sf-root .sf-detail__review {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.sf-root .sf-detail__review:not(:has(.sf-detail__review-img)) {
+  grid-template-columns: 1fr;
+}
+.sf-root .sf-detail__review-img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+}
+.sf-root .sf-detail__review-body {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.sf-root .sf-detail__review-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-text);
+}
+.sf-root .sf-detail__review-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--brand-text) 82%, transparent);
+  white-space: pre-line;
+}
+
 .sf-root .sf-detail__specs {
   margin: 6px 0 0;
   display: grid;
