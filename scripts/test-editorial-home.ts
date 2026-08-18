@@ -378,6 +378,32 @@ check("declares no literal brand colours — tokens only", () => {
   assert.deepEqual(literals, [], `hardcoded colour literal(s): ${literals.join(", ")}`);
 });
 
+// Banning colour literals is only half the guarantee. A var(--brand-invented)
+// passes that check and still paints NOTHING — which is exactly what shipped
+// first: the rail referenced --brand-primary / --brand-on-accent, neither of
+// which the storefront defines, so the sidebar rendered with no background at
+// all on every tenant. Every token the sheet reads must be one that exists.
+check("references only --brand-* tokens the storefront actually defines", () => {
+  const base = readFileSync(join(ROOT, "src/storefront/storefront.css"), "utf8");
+  const defined = new Set(
+    (base.match(/--brand-[a-z0-9-]+\s*:/gi) ?? []).map((d) => d.replace(/\s*:$/, "")),
+  );
+
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const used = new Set(
+    (css.match(/var\(\s*(--brand-[a-z0-9-]+)/gi) ?? []).map((m) =>
+      m.replace(/^var\(\s*/i, ""),
+    ),
+  );
+
+  const unknown = [...used].filter((t) => !defined.has(t)).sort();
+  assert.deepEqual(
+    unknown,
+    [],
+    `undefined token(s) — these paint nothing: ${unknown.join(", ")}`,
+  );
+});
+
 check("carries no tenant copy — the reference brand's name never appears", () => {
   // Comments are stripped first, as in the two checks above: naming the
   // reference design in a header comment is provenance, not content. What must
