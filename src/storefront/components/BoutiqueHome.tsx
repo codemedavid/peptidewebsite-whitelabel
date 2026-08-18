@@ -22,11 +22,19 @@ import type { Brand, Product } from "../types";
 import { Hero } from "./Hero";
 import { Catalog } from "./Catalog";
 import { CategoryTiles } from "./CategoryTiles";
+import { Categories } from "./Categories";
 import { GroupBuyBanner } from "./GroupBuyBanner";
-import { buildCategoryTiles, normalizeAssurances } from "@/lib/storefront/boutique-home";
+import {
+  boutiqueSections,
+  buildCategoryTiles,
+  normalizeAssurances,
+  type BoutiqueView,
+} from "@/lib/storefront/boutique-home";
 import { activeChannels, channelUrl, CHANNEL_LABELS } from "../checkout";
 
 export function BoutiqueHome({
+  view,
+  onShopAll,
   brand,
   products,
   category,
@@ -40,6 +48,10 @@ export function BoutiqueHome({
   gbScope,
   onGbScope,
 }: {
+  /** "home" = discovery only (no product grid — see boutiqueSections);
+   *  "catalog" = the grid the shopper chose their way into. */
+  view: BoutiqueView;
+  onShopAll: () => void;
   brand: Brand;
   /** Already filtered to what a shopper may see (the caller drops unavailable
    *  products and applies any group-buy scoping), so the tile counts below
@@ -66,16 +78,19 @@ export function BoutiqueHome({
   );
   const channels = useMemo(() => activeChannels(brand), [brand]);
 
-  // Picking a tile filters the grid below and takes the shopper straight to it —
-  // the tiles are a way INTO the catalog, not a separate destination.
+  // A tile is a way INTO the catalog: it picks the shelf, then hands over to the
+  // catalog screen. The home itself lists no products.
   const selectCategory = (id: string) => {
     onCategoryChange(id);
-    document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    onShopAll();
   };
+
+  const sections = boutiqueSections(view);
+  const shows = (section: string) => sections.includes(section as never);
 
   return (
     <div className="bq">
-      {brand.showHero !== false && (
+      {shows("hero") && brand.showHero !== false && (
         <Hero
           brand={brand}
           onPrimary={onHeroPrimary}
@@ -84,20 +99,40 @@ export function BoutiqueHome({
         />
       )}
 
-      {brand.showCategories !== false && (
+      {shows("tiles") && brand.showCategories !== false && (
         <CategoryTiles
           tiles={tiles}
-          eyebrow={brand.catalogEyebrow || "Browse"}
+          eyebrow="Browse"
           title="Shop by category"
           onSelect={selectCategory}
         />
       )}
 
-      {brand.groupBuyBanner && (
+      {/* One way through to the whole grid, for the shopper who does not want to
+          start from a shelf. Uses the owner's own CTA label. */}
+      {shows("shopAll") && brand.showCatalog !== false && (
+        <section className="bq-shopall">
+          <div className="container bq-shopall__inner">
+            <button type="button" className="btn btn-primary bq-shopall__btn" onClick={onShopAll}>
+              {brand.ctaLabel || "Shop all products"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {shows("chips") && brand.showCategories !== false && (
+        <Categories
+          categories={brand.categories ?? []}
+          active={category}
+          onChange={onCategoryChange}
+        />
+      )}
+
+      {shows("catalog") && brand.groupBuyBanner && (
         <GroupBuyBanner banner={brand.groupBuyBanner} scopeOn={gbScope} onToggle={onGbScope} />
       )}
 
-      {brand.showCatalog !== false && (
+      {shows("catalog") && brand.showCatalog !== false && (
         <Catalog
           products={products}
           category={category}
@@ -108,7 +143,7 @@ export function BoutiqueHome({
         />
       )}
 
-      {assurances.length > 0 && (
+      {shows("assurances") && assurances.length > 0 && (
         <section className="bq-assure" aria-label="What we promise">
           <div className="container">
             <ul className="bq-assure__row">
@@ -123,7 +158,7 @@ export function BoutiqueHome({
         </section>
       )}
 
-      {channels.length > 0 && (
+      {shows("contact") && channels.length > 0 && (
         <section className="bq-contact" aria-label="Contact us">
           <div className="container bq-contact__inner">
             <p className="bq-contact__lead font-display">Questions before you order?</p>

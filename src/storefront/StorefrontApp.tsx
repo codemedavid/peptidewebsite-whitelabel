@@ -95,7 +95,6 @@ function Shell() {
   // as "home" so direct visits land on the storefront instead of a blank shell.
   const activePage = page === "admin" || isPageVisible(brand, page) ? page : "home";
 
-  const boutique = isBoutiqueLayout(brand.homeLayout);
   // Exactly what the catalog grid renders — the boutique tiles are built from
   // this same list so a tile's count can never disagree with the shelf it opens.
   const visibleProducts = scopedCatalog(
@@ -154,6 +153,7 @@ function Shell() {
     void signOutStorefrontAdminAction().catch(() => {});
     goHome();
   };
+  const boutique = isBoutiqueLayout(brand.homeLayout);
   const scrollToCatalog = () => {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -162,6 +162,13 @@ function Shell() {
   const goToRoute = (route: string) => {
     if (route === "home") return goHome();
     if (route === "catalog") {
+      // On the boutique layout the catalog is its own SCREEN, not a section of
+      // the home — the home stops at category discovery. Every other layout
+      // keeps the historical behaviour: go home and scroll to the grid.
+      if (boutique) {
+        window.location.hash = "catalog";
+        return;
+      }
       if (page !== "home") goHome();
       setTimeout(scrollToCatalog, 50);
       return;
@@ -250,23 +257,21 @@ function Shell() {
           brand={brand}
           cartCount={cart.length}
           onCartClick={() => setCartOpen(true)}
-          onShopClick={() => {
-            if (page !== "home") goHome();
-            setTimeout(scrollToCatalog, 50);
-          }}
+          onShopClick={() => goToRoute("catalog")}
           discovery={
             boutique
               ? {
                   tiles: buildCategoryTiles(visibleProducts, categories, brand.defaultProductImage),
                   query,
+                  // Searching or picking a category takes the shopper to the
+                  // grid — on this layout that is the catalog SCREEN.
                   onQuery: (q) => {
                     setQuery(q);
-                    if (page !== "home") goHome();
+                    if (activePage !== "catalog") goToRoute("catalog");
                   },
                   onCategory: (id) => {
                     setCategory(id);
-                    if (page !== "home") goHome();
-                    setTimeout(scrollToCatalog, 50);
+                    goToRoute("catalog");
                   },
                 }
               : undefined
@@ -309,6 +314,8 @@ function Shell() {
           operator grant: it only re-composes config the tenant already has. */}
       {(activePage === "home" || activePage === "catalog") && boutique && (
         <BoutiqueHome
+          view={activePage === "catalog" ? "catalog" : "home"}
+          onShopAll={() => goToRoute("catalog")}
           brand={brand}
           products={visibleProducts}
           category={category}

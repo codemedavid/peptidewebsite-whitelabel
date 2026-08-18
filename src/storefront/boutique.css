@@ -167,7 +167,9 @@
 .sf-root[data-sf-home="boutique"] .bq-tiles {
   position: relative;
   z-index: 5;
-  padding-block: var(--bq-section);
+  /* The shop-all CTA follows immediately, so the row closes tight and the two
+     read as one block rather than two stacked sections. */
+  padding-bottom: clamp(26px, 3.2vw, 48px);
   /* Pull the row up over the hero's lower edge. */
   margin-top: calc(var(--bq-lift) * -1);
   padding-top: var(--bq-lift);
@@ -242,13 +244,19 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 30px 18px 16px;
+  /* The scrim has to survive ANY tenant photo — a white studio shot with a
+     bright logo is the hard case, not a dark lifestyle image — so it runs tall
+     and holds most of its density behind the text rather than fading out
+     immediately above it. */
+  padding: 64px 18px 16px;
   text-align: left;
   color: var(--brand-button-text);
   background: linear-gradient(
     to top,
-    color-mix(in oklab, var(--brand-text) 82%, transparent),
-    transparent
+    color-mix(in oklab, var(--brand-text) 90%, transparent) 0%,
+    color-mix(in oklab, var(--brand-text) 72%, transparent) 38%,
+    color-mix(in oklab, var(--brand-text) 30%, transparent) 72%,
+    transparent 100%
   );
   transition: transform 420ms var(--bq-ease);
 }
@@ -269,6 +277,23 @@
   text-transform: uppercase;
   opacity: 0.82;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Shop-all — the one way past the shelves to the whole grid ────────────── */
+
+.sf-root[data-sf-home="boutique"] .bq-shopall {
+  padding-bottom: clamp(40px, 5vw, 84px);
+}
+
+.sf-root[data-sf-home="boutique"] .bq-shopall__inner {
+  display: flex;
+  justify-content: center;
+}
+
+.sf-root[data-sf-home="boutique"] .bq-shopall__btn {
+  padding: 15px 44px;
+  font-size: 15px;
+  letter-spacing: 0.04em;
 }
 
 /* ── Assurance strip — the owner's own promises ───────────────────────────── */
@@ -371,7 +396,10 @@
 /* ── The catalog, re-spaced to the boutique rhythm ────────────────────────── */
 
 .sf-root[data-sf-home="boutique"] .catalog {
-  padding-block: var(--bq-section);
+  /* On this layout the catalog is its own screen, entered from a tile or the
+     chips directly above it — so it opens tight rather than with the full
+     between-sections gap it would need after a hero. */
+  padding-block: clamp(28px, 3.4vw, 52px) var(--bq-section);
 }
 
 /* ── ≥720px: the row breaks its own grid — the lead tile takes two columns ── */

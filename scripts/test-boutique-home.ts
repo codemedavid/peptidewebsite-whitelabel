@@ -25,6 +25,7 @@ import {
   ASSURANCE_MAX,
   ASSURANCE_LABEL_MAX,
   ASSURANCE_NOTE_MAX,
+  boutiqueSections,
 } from "../src/lib/storefront/boutique-home";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
@@ -251,6 +252,53 @@ check("an entry with no note omits it rather than storing an empty string", () =
 check("ignores non-object rows", () => {
   const out = normalizeAssurances(["Authentic", 42, null, { label: "Kept" }]);
   assert.deepEqual(out.map((a) => a.label), ["Kept"]);
+});
+
+// ── boutiqueSections — the home does NOT list products ───────────────────────
+// The reference storefront's home ends at category discovery: you pick a shelf
+// (or search) and the grid is the NEXT screen. Putting the grid back on the
+// home would collapse that two-step flow into the classic layout with nicer
+// tiles, which is the one thing this layout must not be — so the composition is
+// pinned here rather than left to whoever next edits the component.
+console.log("\nboutiqueSections — home vs catalog composition");
+
+check("the home never renders the product grid", () => {
+  assert.ok(!boutiqueSections("home").includes("catalog"));
+});
+
+check("the home is hero → tiles → shop-all → assurances → contact, in order", () => {
+  assert.deepEqual(boutiqueSections("home"), [
+    "hero",
+    "tiles",
+    "shopAll",
+    "assurances",
+    "contact",
+  ]);
+});
+
+check("the catalog view is where products live", () => {
+  assert.ok(boutiqueSections("catalog").includes("catalog"));
+});
+
+check("the catalog view leads with the category chips", () => {
+  // Arriving from a tile means a category is already applied. Without the chips
+  // the shopper sees a filtered grid with no clue which shelf they are on and no
+  // way back to the rest of the catalog — the tiles are gone by then.
+  const catalog = boutiqueSections("catalog");
+  assert.equal(catalog[0], "chips");
+  assert.ok(catalog.indexOf("chips") < catalog.indexOf("catalog"));
+});
+
+check("the catalog view does not repeat the home's discovery furniture", () => {
+  const catalog = boutiqueSections("catalog");
+  for (const section of ["hero", "tiles", "shopAll"] as const) {
+    assert.ok(!catalog.includes(section), `"${section}" should not repeat on the catalog view`);
+  }
+});
+
+check("both views end on the contact strip", () => {
+  assert.equal(boutiqueSections("home").at(-1), "contact");
+  assert.equal(boutiqueSections("catalog").at(-1), "contact");
 });
 
 // ── boutique.css — cannot leak into classic / two-ways tenants ───────────────

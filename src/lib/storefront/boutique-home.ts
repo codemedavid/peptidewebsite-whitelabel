@@ -34,6 +34,46 @@ export function isBoutiqueLayout(value: unknown): boolean {
   return value === "boutique";
 }
 
+// ── Page composition ─────────────────────────────────────────────────────────
+
+/** The two screens the boutique layout owns. */
+export type BoutiqueView = "home" | "catalog";
+
+export type BoutiqueSection =
+  | "hero"
+  | "tiles"
+  | "shopAll"
+  | "assurances"
+  | "contact"
+  | "chips"
+  | "catalog";
+
+/** The home ends at DISCOVERY — hero, the category tiles, one shop-all CTA,
+ *  the owner's assurances, contact. Deliberately no product grid: on this
+ *  layout the shopper picks a shelf (or searches) and the grid is the next
+ *  screen. Putting the grid back here would collapse that two-step flow and
+ *  leave the classic layout wearing nicer tiles. */
+const HOME_SECTIONS: readonly BoutiqueSection[] = [
+  "hero",
+  "tiles",
+  "shopAll",
+  "assurances",
+  "contact",
+];
+
+/** The catalog screen is the grid, and none of the home's discovery furniture —
+ *  arriving here means the shopper has already chosen. It does lead with the
+ *  category CHIPS, because arriving from a tile means a filter is already
+ *  applied: without them the shopper faces a narrowed grid with no sign of which
+ *  shelf they are on and no route back to the rest of the catalog. */
+const CATALOG_SECTIONS: readonly BoutiqueSection[] = ["chips", "catalog", "contact"];
+
+/** Which sections a boutique view renders, in order. Sections still self-hide
+ *  when their data is empty; this only fixes the composition. */
+export function boutiqueSections(view: BoutiqueView): BoutiqueSection[] {
+  return [...(view === "catalog" ? CATALOG_SECTIONS : HOME_SECTIONS)];
+}
+
 // ── Category tiles ───────────────────────────────────────────────────────────
 
 /** One "shop by category" tile: the owner's category, what's actually in it,
