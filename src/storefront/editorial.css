@@ -104,11 +104,20 @@
   color: inherit;
 }
 
+/* The rail is painted in --brand-main, so a logo built in the SAME brand colour
+   vanishes into it — a maroon tile on a maroon column reads as a hole, not a
+   mark. That is not an edge case: a store's logo sharing the store's brand
+   colour is the normal case. The plate is the fix — the logo sits on the
+   tenant's own light surface, exactly as it does in the footer and on cards,
+   so any logo reads here regardless of what it was drawn against.
+   `contain` (not `cover`) because a plated mark must never be cropped. */
 .sf-root[data-sf-home="editorial"] .ed-rail__logo {
   display: block;
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  padding: 5px;
+  background: var(--brand-surface);
 }
 
 .sf-root[data-sf-home="editorial"] .ed-rail__logo--mark {
@@ -119,10 +128,15 @@
   color: var(--brand-button-text);
 }
 
+/* Store names are not all one word. In a 216px column "SKN Aesthetic Supply
+   Co." wraps, and left to itself it strands "Co." alone on the second line —
+   so the size is set to fit a longer name and the wrap is balanced rather than
+   greedy. */
 .sf-root[data-sf-home="editorial"] .ed-rail__name {
-  font-size: 19px;
-  line-height: 1.2;
-  letter-spacing: 0.05em;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-wrap: balance;
   color: var(--brand-button-text);
 }
 
