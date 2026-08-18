@@ -22,17 +22,8 @@
 import type { Category, Product } from "@/storefront/types";
 import { ALL_CATEGORY_ID } from "./categories";
 
-/** Every selectable home layout, in display order. Single source of truth: the
- *  store-admin picker, the branding.config allow-list and resolveHomeLayout
- *  (./two-ways-home) all validate against this list. */
-export const HOME_LAYOUTS = ["classic", "two-ways", "boutique"] as const;
-
-export type HomeLayout = (typeof HOME_LAYOUTS)[number];
-
-/** True only for the exact stored value — the picker writes it verbatim. */
-export function isBoutiqueLayout(value: unknown): boolean {
-  return value === "boutique";
-}
+// The layout enum and its predicates live in ./home-layout — they are shared by
+// four layouts now, so the boutique module is no longer the right owner.
 
 // ── Page composition ─────────────────────────────────────────────────────────
 

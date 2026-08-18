@@ -11,6 +11,7 @@
 import { useMemo } from "react";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
+import "@/storefront/editorial.css";
 import type { Brand, Product } from "@/storefront/types";
 import { ProductCard } from "@/storefront/components/Catalog";
 import { CARD_PRESETS, getCardPreset, type CardDesign } from "@/storefront/cardDesign";

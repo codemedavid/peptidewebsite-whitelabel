@@ -8,7 +8,7 @@
 // alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
 // an SSR compute and is trivially testable (npm run test:two-ways-home).
 
-import { isBoutiqueLayout, type HomeLayout } from "./boutique-home";
+import { isBoutiqueLayout, isEditorialLayout, type HomeLayout } from "./home-layout";
 import {
   isGroupBuyProduct,
   slotProgress,
@@ -120,19 +120,22 @@ export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
  *     OUT: an explicit "classic" wins even while the grant is on, and an
  *     unentitled tenant gets the classic home whatever its config says.
  *
- *   • "boutique" is a LAYOUT CHOICE. It re-composes data every tenant already
- *     has (hero, categories, catalog, contact channels) and unlocks no module,
- *     so it is owner-selectable and needs no grant. It is checked FIRST, which
- *     is what lets an unentitled tenant reach it.
+ *   • "boutique" and "editorial" are LAYOUT CHOICES. Each re-composes data
+ *     every tenant already has (hero, categories, catalog, contact channels)
+ *     and unlocks no module, so both are owner-selectable and need no grant.
+ *     They are checked FIRST, which is what lets an unentitled tenant reach
+ *     them — and equally what stops the entitled-but-unset branch below from
+ *     dragging an owner who chose one back onto the two-ways home.
  *
- * Anything unrecognised falls through to the pre-boutique answer, so a garbage
- * config value still fails closed to a layout the tenant is allowed to have.
+ * Anything unrecognised falls through to the module branch, so a garbage config
+ * value still fails closed to a layout the tenant is allowed to have.
  */
 export function resolveHomeLayout(
   entitled: boolean,
   configLayout: string | undefined | null,
 ): HomeLayout {
   if (isBoutiqueLayout(configLayout)) return "boutique";
+  if (isEditorialLayout(configLayout)) return "editorial";
   if (!entitled) return "classic";
   return configLayout === "classic" ? "classic" : "two-ways";
 }

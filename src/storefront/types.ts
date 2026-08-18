@@ -23,7 +23,8 @@ import type {
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import type { GroupBuyContent } from "@/lib/storefront/gb-content";
 import type { CardDesign, CardTemplate } from "./cardDesign";
-import type { HomeLayout, BoutiqueConfig } from "@/lib/storefront/boutique-home";
+import type { HomeLayout } from "@/lib/storefront/home-layout";
+import type { BoutiqueConfig } from "@/lib/storefront/boutique-home";
 
 export type Product = {
   id: string;

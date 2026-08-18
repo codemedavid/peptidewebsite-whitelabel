@@ -34,7 +34,7 @@
 import { contrastRatio, hexToHslTriple } from "@/lib/theme/color";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { MAX_BORDER_WIDTH } from "@/lib/storefront/brand-border";
-import { HOME_LAYOUTS } from "@/lib/storefront/boutique-home";
+import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
 
 /** #RGB or #RRGGBB — the same hex discipline as brand-border / cardDesign. */
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

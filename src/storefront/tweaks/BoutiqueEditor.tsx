@@ -1,12 +1,16 @@
 "use client";
 
-// Store-admin controls for the BOUTIQUE home layout.
+// Store-admin controls for the owner-selectable home LAYOUTS.
 //
-// Two things live here, and only two, because the layout deliberately owns no
+// Two things live here, and only two, because these layouts deliberately own no
 // other content: which home layout the store uses, and the owner's own
 // assurance lines. The strip ships EMPTY — a default promise ("Guaranteed
 // authentic", "Free shipping") would put words in every tenant's mouth, and a
 // supplement store, a bakery and a boutique do not make the same claims.
+//
+// The assurance lines are shared by the boutique and editorial layouts (the
+// editorial layout sets them as its notices strip), so an owner who typed them
+// once keeps them when they switch between the two.
 
 import type { Brand } from "../types";
 import type { SetTweak } from "./BrandTweaksForm";
@@ -25,6 +29,7 @@ import {
 const OWNER_LAYOUTS: Record<string, Brand["homeLayout"]> = {
   "Classic — hero, category chips, catalog": "classic",
   "Boutique — banner, category tiles, catalog": "boutique",
+  "Editorial — side menu, category index, catalog": "editorial",
 };
 
 /** Shown, but not selectable, for a tenant the operator granted it to — so
@@ -71,9 +76,11 @@ export function BoutiqueEditor({
         }}
       />
 
-      {layout === "boutique" && (
+      {(layout === "boutique" || layout === "editorial") && (
         <>
-          <TweakSection label="Boutique: assurance strip" />
+          <TweakSection
+            label={layout === "editorial" ? "Editorial: notices strip" : "Boutique: assurance strip"}
+          />
           {assurances.length === 0 && (
             <TweakRow label="Assurances">
               <span style={{ fontSize: 12, opacity: 0.7 }}>

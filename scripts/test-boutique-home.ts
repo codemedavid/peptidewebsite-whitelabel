@@ -20,13 +20,12 @@ import { join } from "node:path";
 import {
   buildCategoryTiles,
   normalizeAssurances,
-  isBoutiqueLayout,
-  HOME_LAYOUTS,
   ASSURANCE_MAX,
   ASSURANCE_LABEL_MAX,
   ASSURANCE_NOTE_MAX,
   boutiqueSections,
 } from "../src/lib/storefront/boutique-home";
+import { HOME_LAYOUTS, isBoutiqueLayout } from "../src/lib/storefront/home-layout";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import type { Product, Category } from "../src/storefront/types";
@@ -96,8 +95,12 @@ check("an unknown/garbage value fails closed to the pre-boutique answer", () => 
   assert.equal(resolveHomeLayout(true, "nonsense"), "two-ways");
 });
 
-check("HOME_LAYOUTS is the single source of truth and lists all three", () => {
-  assert.deepEqual([...HOME_LAYOUTS], ["classic", "two-ways", "boutique"]);
+// The full list is pinned by test:editorial-home, which owns the enum's shape.
+// This file asserts only what the BOUTIQUE layout depends on, so adding a fifth
+// layout can't fail a boutique test that has nothing to say about it.
+check("HOME_LAYOUTS offers boutique, and still defaults to classic first", () => {
+  assert.ok(HOME_LAYOUTS.includes("boutique"), "boutique is not selectable");
+  assert.equal(HOME_LAYOUTS[0], "classic");
 });
 
 check("isBoutiqueLayout only recognises the exact value", () => {

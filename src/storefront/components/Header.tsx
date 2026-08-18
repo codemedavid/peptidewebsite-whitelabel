@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Brand } from "../types";
-import { isLinkHidden, isPageVisible } from "../visibility";
+import { buildStorefrontNav } from "@/lib/storefront/nav";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
 import type { CategoryTile } from "@/lib/storefront/boutique-home";
 
@@ -33,35 +33,10 @@ export function Header({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const catsRef = useRef<HTMLDivElement | null>(null);
-  // Drop nav links that point at a toggled-off page.
-  const nav = (brand.nav || []).filter((item) => !isLinkHidden(brand, item.href));
-  // Surface the gated reseller page automatically when enabled (and not already
-  // linked) so resellers can reach the wholesale list from the nav.
-  if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {
-    nav.push({ label: "Resellers", href: "#merchant" });
-  }
-  // Surface the Group Buy page automatically (when not already linked) so
-  // customers can reach it from the nav. Slotted first — while a round is live
-  // it's the timely, high-intent destination.
-  //
-  // Delegates the whole question to isPageVisible so the link and the page can
-  // never disagree: a HIDDEN way gets no link even with a round running (the
-  // banner deliberately stays on the brand — it's what keeps the round's
-  // pre-orders off the ships-now shelf), and between rounds the link survives
-  // for the view-only pricing reference, but only while there is something
-  // tagged to list.
-  if (isPageVisible(brand, "groupbuy") && !nav.some((i) => i.href === "#groupbuy")) {
-    nav.unshift({ label: "Group Buy", href: "#groupbuy" });
-  }
-  // Surface the reconstitution calculator (default-on) for every tenant — even
-  // those whose stored nav predates the feature. Slot it before Reviews when
-  // present, otherwise append.
-  if (brand.showPageCalculator !== false && !nav.some((i) => i.href === "#calculator")) {
-    const reviewsIdx = nav.findIndex((i) => i.href === "#reviews");
-    const link = { label: "Calculator", href: "#calculator" };
-    if (reviewsIdx >= 0) nav.splice(reviewsIdx, 0, link);
-    else nav.push(link);
-  }
+  // The owner's stored nav, minus toggled-off pages, plus the auto-surfaced
+  // Group Buy / Resellers / Calculator links. Shared with the editorial
+  // layout's sidebar rail so the two nav surfaces can never drift.
+  const nav = buildStorefrontNav(brand);
 
   // Close the category panel on Escape or a click outside it — a dropdown that
   // can only be dismissed by re-clicking its trigger is a keyboard trap.

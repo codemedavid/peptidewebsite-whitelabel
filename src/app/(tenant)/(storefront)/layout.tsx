@@ -14,6 +14,7 @@ import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
+import "@/storefront/editorial.css";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
 export async function generateMetadata(): Promise<Metadata> {

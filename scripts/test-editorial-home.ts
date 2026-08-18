@@ -379,7 +379,11 @@ check("declares no literal brand colours — tokens only", () => {
 });
 
 check("carries no tenant copy — the reference brand's name never appears", () => {
-  const css = readFileSync(EDITORIAL_CSS, "utf8");
+  // Comments are stripped first, as in the two checks above: naming the
+  // reference design in a header comment is provenance, not content. What must
+  // never appear is the name in a selector, a value or a content string, where
+  // it would actually reach a tenant's page.
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.ok(!/\bSKN\b/i.test(css), "the reference tenant's name leaked into the sheet");
 });
 

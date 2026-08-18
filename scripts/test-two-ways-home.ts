@@ -544,17 +544,33 @@ check("the storefront page never deletes the banner to hide the group-buy way", 
   assert.match(src, /resolveWays\(/, "the page must resolve the effective per-way states");
 });
 
-check("the header derives the Group Buy nav item from the page's own visibility", () => {
+check("the nav derives the Group Buy item from the page's own visibility", () => {
   // The Header used to re-implement the rule (banner present && way not hidden).
   // It now delegates to isPageVisible, which owns the whole question — the way
   // state, the live round, AND the between-rounds view-only listing — so a link
   // can never point at a page that isn't served, or be missing from one that is.
   // The behaviour itself is pinned in npm run test:two-ways-mode.
-  const src = readFileSync(join(__dirname, "..", "src/storefront/components/Header.tsx"), "utf8");
+  //
+  // The assembly moved out of Header.tsx into buildStorefrontNav when a second
+  // nav surface appeared (the editorial layout's sidebar rail). Both surfaces
+  // now read the one function, so this asserts the rule lives there — and that
+  // the header did not keep a copy behind.
+  const nav = readFileSync(join(__dirname, "..", "src/lib/storefront/nav.ts"), "utf8");
   assert.match(
-    src,
+    nav,
     /isPageVisible\(brand,\s*"groupbuy"\)/,
     "the Group Buy nav item must derive from isPageVisible, not its own copy of the rule",
+  );
+
+  const header = readFileSync(
+    join(__dirname, "..", "src/storefront/components/Header.tsx"),
+    "utf8",
+  );
+  assert.match(header, /buildStorefrontNav\(brand\)/, "the header must use the shared nav");
+  assert.doesNotMatch(
+    header,
+    /href === "#groupbuy"/,
+    "the header re-implemented the Group Buy rule instead of delegating",
   );
 });
 

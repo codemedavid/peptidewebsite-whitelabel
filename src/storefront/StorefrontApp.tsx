@@ -20,7 +20,8 @@ import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
 import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
-import { buildCategoryTiles, isBoutiqueLayout } from "@/lib/storefront/boutique-home";
+import { buildCategoryTiles } from "@/lib/storefront/boutique-home";
+import { isBoutiqueLayout, isEditorialLayout } from "@/lib/storefront/home-layout";
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
@@ -59,6 +60,13 @@ const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) =>
 // Opt-in imagery-led "boutique" home (brand.homeLayout === "boutique"). Same
 // treatment: code-split so the classic-home tenants never download it.
 const BoutiqueHome = dynamic(() => import("./components/BoutiqueHome").then((m) => m.BoutiqueHome), { ssr: false, loading: PageSpinner });
+// Opt-in left-rail "editorial" home (brand.homeLayout === "editorial"). Same
+// treatment again — classic tenants never download it.
+const EditorialHome = dynamic(() => import("./components/EditorialHome").then((m) => m.EditorialHome), { ssr: false, loading: PageSpinner });
+// The rail is this layout's CHROME: it persists across every route, so unlike
+// the home above it is not code-split — a spinner where the nav should be is
+// worse than the few KB it costs the tenants who chose it.
+const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m) => m.EditorialRail), { ssr: false });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
 
@@ -154,6 +162,10 @@ function Shell() {
     goHome();
   };
   const boutique = isBoutiqueLayout(brand.homeLayout);
+  const editorial = isEditorialLayout(brand.homeLayout);
+  // Both owner-selectable layouts end the home at discovery, so "go to the
+  // catalog" is a ROUTE on either of them rather than a scroll down the home.
+  const catalogIsOwnScreen = boutique || editorial;
   const scrollToCatalog = () => {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -165,7 +177,7 @@ function Shell() {
       // On the boutique layout the catalog is its own SCREEN, not a section of
       // the home — the home stops at category discovery. Every other layout
       // keeps the historical behaviour: go home and scroll to the grid.
-      if (boutique) {
+      if (catalogIsOwnScreen) {
         window.location.hash = "catalog";
         return;
       }
@@ -252,7 +264,21 @@ function Shell() {
   return (
     <>
       {navKey > 0 && <div key={navKey} className="sf-nav-progress" />}
-      {brand.showHeader !== false && (
+      {brand.showHeader !== false && editorial && (
+        <EditorialRail
+          brand={brand}
+          cartCount={cart.length}
+          onCartClick={() => setCartOpen(true)}
+          onHome={goHome}
+          query={query}
+          onQuery={(q) => {
+            setQuery(q);
+            if (activePage !== "catalog") goToRoute("catalog");
+          }}
+        />
+      )}
+
+      {brand.showHeader !== false && !editorial && (
         <Header
           brand={brand}
           cartCount={cart.length}
@@ -331,7 +357,26 @@ function Shell() {
         />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && !boutique && brand.homeLayout === "two-ways" && (
+      {(activePage === "home" || activePage === "catalog") && editorial && (
+        <EditorialHome
+          view={activePage === "catalog" ? "catalog" : "home"}
+          onShopAll={() => goToRoute("catalog")}
+          brand={brand}
+          products={visibleProducts}
+          category={category}
+          query={query}
+          onQueryChange={setQuery}
+          onCategoryChange={setCategory}
+          onAddToCart={addToCart}
+          onHeroPrimary={heroCtaHandler(1)}
+          onHeroSecondary={heroCtaHandler(2)}
+          onHeroMedia={heroMediaHandler}
+          gbScope={gbScope}
+          onGbScope={setGbScope}
+        />
+      )}
+
+      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && brand.homeLayout === "two-ways" && (
         <TwoWaysHome
           brand={brand}
           onCheckout={() => setCartOpen(true)}
@@ -339,7 +384,7 @@ function Shell() {
         />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && !boutique && brand.homeLayout !== "two-ways" && (
+      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && brand.homeLayout !== "two-ways" && (
         <>
           {brand.showHero !== false && (
             <Hero
@@ -412,7 +457,13 @@ export function StorefrontApp({
       // storefront.css selectors (so source order can't silently undo it — the
       // hazard that broke the flush image hero) and keeps it entirely off
       // classic / two-ways tenants.
-      data-sf-home={isBoutiqueLayout(brand?.homeLayout) ? "boutique" : undefined}
+      data-sf-home={
+        isBoutiqueLayout(brand?.homeLayout)
+          ? "boutique"
+          : isEditorialLayout(brand?.homeLayout)
+            ? "editorial"
+            : undefined
+      }
     >
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell />
