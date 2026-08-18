@@ -321,6 +321,22 @@ check("store.tsx no longer hydrates reviews from localStorage", () => {
   assert.ok(/reviews are intentionally NOT hydrated/i.test(s), "carries the same NOTE as the other DB-backed collections");
 });
 
+check("a real tenant with no saved reviews shows none — not the demo rows", () => {
+  // page.tsx always sets brand.reviews (normalizeReviews returns [] when the
+  // config is empty), so the SEED_REVIEWS fallback can only fire where there is
+  // no server brand at all — demo mode and the platform admin's live preview.
+  const store = src("src/storefront/store.tsx");
+  assert.ok(
+    /brandSeed\.reviews \?\? SEED_REVIEWS/.test(store),
+    "store seeds from the server prop and only falls back when it is absent",
+  );
+  const page = src("src/app/(tenant)/(storefront)/page.tsx");
+  assert.ok(
+    /brand\.reviews = normalizeReviews\(/.test(page),
+    "page.tsx always assigns brand.reviews, so a real tenant never hits the fallback",
+  );
+});
+
 check("the storefront page feeds branding.config.reviews into the brand prop", () => {
   const p = src("src/app/(tenant)/(storefront)/page.tsx");
   assert.ok(/normalizeReviews\s*\(/.test(p), "page.tsx normalizes the stored reviews");
