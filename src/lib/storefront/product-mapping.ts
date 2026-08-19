@@ -69,6 +69,13 @@ export type ProductMetadata = {
    *  least one price leg is set — see `cleanReseller` so an empty `{}` never
    *  persists. `minQty` is the per-product wholesale threshold. */
   reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
+  /** Wholesale (MOQ) pricing set per product in Product Management. `moq` is the
+   *  minimum COMBINED quantity — every variation of this product counts toward
+   *  the same number — and `price` is the unit price the whole quantity pays once
+   *  it is reached. Only present when BOTH are set; see `cleanWholesale`, which
+   *  refuses to persist an incomplete rule. `enabled: false` is persisted so the
+   *  owner's numbers survive toggling the feature off. */
+  wholesale?: { enabled: boolean; moq: number; price: number };
   /** Product Management module. `productType` is persisted only as "gb" (absent =
    *  on-hand, the historical default); `gbPrice` is the per-unit group-buy price
    *  (only with a "gb" type and > 0); `purchasable` is persisted only as `false`
@@ -205,6 +212,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     variations: cleanVariations(meta.variations, meta.productType === "gb") ?? [],
     productClass: toProductClass(meta.productClass),
     reseller: cleanReseller(meta.reseller),
+    wholesale: cleanWholesale(meta.wholesale),
     productType: meta.productType === "gb" ? "gb" : "onhand",
     gbPrice: typeof meta.gbPrice === "number" && meta.gbPrice > 0 ? meta.gbPrice : 0,
     purchasable: meta.purchasable !== false,
@@ -233,6 +241,28 @@ function cleanReseller(
     // falls back to the global RESELLER_MIN_QTY default.
     ...(minQty > 0 ? { minQty } : {}),
   };
+}
+
+/**
+ * Normalize a wholesale config, or return undefined so `compactMetadata` never
+ * persists a partial one.
+ *
+ * A rule needs BOTH a positive MOQ and a positive unit price; either missing and
+ * there is nothing to enforce, so the key is dropped rather than stored as a
+ * half-rule that some future reader might act on. The MOQ is whole units.
+ *
+ * `enabled: false` IS persisted (with its numbers) so that toggling wholesale
+ * off, saving, and toggling it back on returns the owner's MOQ and price rather
+ * than two blank boxes.
+ */
+function cleanWholesale(
+  w: { enabled?: boolean; moq?: number; price?: number } | undefined,
+): { enabled: boolean; moq: number; price: number } | undefined {
+  if (!w) return undefined;
+  const moq = Math.max(0, Math.round(Number(w.moq) || 0));
+  const price = Number(w.price) || 0;
+  if (moq <= 0 || price <= 0) return undefined;
+  return { enabled: w.enabled === true, moq, price };
 }
 
 /**
@@ -327,6 +357,7 @@ export function productToDbWrite(
       productClass: toProductClass(p.productClass),
       currencySymbol: displaySymbol || undefined,
       reseller: cleanReseller(p.reseller),
+      wholesale: cleanWholesale(p.wholesale),
       productType: p.productType === "gb" ? "gb" : undefined,
       gbPrice:
         p.productType === "gb" && Number(p.gbPrice) > 0 ? Number(p.gbPrice) : undefined,

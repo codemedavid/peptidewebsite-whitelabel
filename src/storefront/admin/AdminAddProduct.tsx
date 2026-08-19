@@ -5,7 +5,7 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
 import { RESELLER_MIN_QTY } from "../checkout";
-import { isResellerPricingVisible } from "../visibility";
+import { isResellerPricingVisible, isWholesalePricingVisible } from "../visibility";
 import {
   VARIATION_PRESETS,
   applyVariationPreset,
@@ -258,6 +258,12 @@ export function AdminAddProduct({
   const [resellerVials, setResellerVials] = useState<number | string>(initial?.reseller?.vialsOnly ?? 0);
   const [resellerSet, setResellerSet]     = useState<number | string>(initial?.reseller?.completeSet ?? 0);
   const [resellerMin, setResellerMin]     = useState<number | string>(initial?.reseller?.minQty ?? RESELLER_MIN_QTY);
+  // Wholesale (MOQ) pricing. Never auto-enabled: a product that carries no
+  // config starts OFF, so granting the feature cannot change what an existing
+  // catalogue charges until the owner opts each product in.
+  const [wholesaleOn, setWholesaleOn]   = useState<boolean>(initial?.wholesale?.enabled === true);
+  const [wholesaleMoq, setWholesaleMoq] = useState<number | string>(initial?.wholesale?.moq ?? "");
+  const [wholesalePrice, setWholesalePrice] = useState<number | string>(initial?.wholesale?.price ?? "");
   const [image, setImage]           = useState<string>(initial?.image || "");
   const [imageDrag, setImageDrag]   = useState<boolean>(false);
   const [uploading, setUploading]   = useState<boolean>(false);
@@ -270,12 +276,33 @@ export function AdminAddProduct({
   // storefront would sell it for nothing — one click of a preset button is
   // enough to create that row, so saving is blocked until every option is priced.
   const unpriced = unpricedVariationNames(variations);
+  // Wholesale validation. An enabled rule needs BOTH a positive MOQ and a
+  // positive price — a half-filled rule is blocked rather than saved silently,
+  // because the mapping layer would drop it and the owner would believe
+  // wholesale was live. Numbers typed while the toggle is OFF are kept and
+  // saved, so switching it back on restores them; only an ENABLED rule blocks.
+  const wholesaleMoqNum = Number(wholesaleMoq) || 0;
+  const wholesalePriceNum = Number(wholesalePrice) || 0;
+  const wholesaleError = !wholesaleOn
+    ? ""
+    : wholesaleMoqNum <= 0
+      ? "Set a minimum order quantity above 0 to turn wholesale pricing on."
+      : wholesalePriceNum <= 0
+        ? "Set a wholesale price above 0 to turn wholesale pricing on."
+        : "";
+  // A wholesale price at or above the retail price is a warning, not a block —
+  // it saves, but it will never apply: bulk can only ever LOWER a unit price.
+  const wholesaleWarning =
+    wholesaleOn && !wholesaleError && wholesalePriceNum >= (Number(price) || 0)
+      ? `This is not below the ${currency}${Number(price) || 0} retail price, so it will never apply.`
+      : "";
   const canSave = !!(
     name.trim() &&
     description.trim() &&
     category &&
     Number(price) >= 0 &&
-    unpriced.length === 0
+    unpriced.length === 0 &&
+    !wholesaleError
   );
 
   // Real categories the owner can assign (the synthetic "all" tab is a filter,
@@ -369,6 +396,13 @@ export function AdminAddProduct({
         vialsOnly: Number(resellerVials) || 0,
         completeSet: Number(resellerSet) || 0,
         minQty: Number(resellerMin) || 0,
+      },
+      // Sent whole so the numbers round-trip even while the toggle is off;
+      // cleanWholesale drops the key when either number is missing.
+      wholesale: {
+        enabled: wholesaleOn,
+        moq: wholesaleMoqNum,
+        price: wholesalePriceNum,
       },
       image: image || null,
     };
@@ -672,6 +706,80 @@ export function AdminAddProduct({
             </div>
           </div>
         </div>
+
+        {/* ---------- Wholesale (MOQ) Pricing ---------- */}
+        {/* Gated on the wholesale-pricing entitlement (storefront.reseller.wholesale,
+            ANDed with its Reseller parent). Independent of the reseller page below:
+            a tenant can price wholesale on the regular storefront without one. */}
+        {isWholesalePricingVisible(brand) && (
+        <div className="admin-form__card">
+          <h2 className="admin-form__section">📦 Wholesale Pricing</h2>
+          <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
+            Sell this product at a lower unit price once the customer orders enough of
+            it. The normal price is the Price field above (and each option&rsquo;s own
+            price) — this replaces it only once the minimum is reached.
+          </div>
+
+          <label className="admin-check" style={{ marginBottom: 14 }}>
+            <input
+              type="checkbox"
+              checked={wholesaleOn}
+              onChange={(e) => setWholesaleOn(e.target.checked)}
+            />
+            <span>Enable wholesale pricing for this product</span>
+          </label>
+
+          <div className="admin-form__row">
+            <div className="admin-field">
+              <label className="admin-field__label">Minimum order quantity (units)</label>
+              <NumberField value={wholesaleMoq} onChange={setWholesaleMoq} min={0} />
+              <div className="admin-field__hint">
+                Minimum combined quantity of this product required to unlock wholesale
+                pricing.
+              </div>
+            </div>
+            <div className="admin-field">
+              <label className="admin-field__label">Wholesale unit price ({currency})</label>
+              <NumberField value={wholesalePrice} onChange={setWholesalePrice} min={0} />
+              <div className="admin-field__hint">
+                This price applies to the entire quantity once the MOQ is reached.
+              </div>
+            </div>
+          </div>
+
+          {variations.length > 0 && (
+            <div className="admin-field__hint" style={{ marginTop: 12 }}>
+              All {variations.length} options of this product count toward the same
+              minimum — {variations.slice(0, 4).map((v) => v.name.trim() || "?").join(" + ")}
+              {variations.length > 4 ? " …" : ""} add up together.
+            </div>
+          )}
+
+          {wholesaleError && (
+            <div
+              className="admin-field__hint"
+              role="alert"
+              style={{ marginTop: 12, color: "var(--danger, #b42318)" }}
+            >
+              {wholesaleError}
+            </div>
+          )}
+          {wholesaleWarning && (
+            <div className="admin-field__hint" style={{ marginTop: 12 }}>
+              ⚠️ {wholesaleWarning}
+            </div>
+          )}
+          {wholesaleOn && !wholesaleError && (
+            <div className="admin-field__hint" style={{ marginTop: 12, lineHeight: 1.7 }}>
+              Under {wholesaleMoqNum.toLocaleString()} units → {currency}
+              {(Number(price) || 0).toLocaleString()} each
+              <br />
+              {wholesaleMoqNum.toLocaleString()} units or more → {currency}
+              {wholesalePriceNum.toLocaleString()} each
+            </div>
+          )}
+        </div>
+        )}
 
         {/* ---------- Reseller Pricing ---------- */}
         {/* Entitlement-gated, same as the Reseller Portal manager view. Saved

@@ -57,6 +57,7 @@
     "test:reseller-gate": "tsx scripts/test-reseller-gate.ts",
     "test:wholesale-pricing": "tsx scripts/test-wholesale-pricing.ts",
     "test:reseller-feature-tree": "tsx scripts/test-reseller-feature-tree.ts",
+    "test:wholesale-admin": "tsx scripts/test-wholesale-admin.ts",
     "test:gb-ratio": "tsx scripts/test-gb-ratio.ts",
     "migrate:bacwater-cap": "tsx scripts/migrate-bacwater-cap.ts",
     "test:product-variations": "tsx scripts/test-product-variations.ts",

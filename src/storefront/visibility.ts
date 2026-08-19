@@ -184,6 +184,19 @@ export function isResellerPricingVisible(brand: Brand): boolean {
   return isAdminViewVisible(brand, "reseller");
 }
 
+/**
+ * Whether the Product Management screen shows the Wholesale (MOQ) section.
+ *
+ * Gated on the wholesale-pricing CHILD, not the reseller page: a tenant granted
+ * MOQ pricing on the regular storefront configures it here whether or not they
+ * run a #merchant page, and a tenant with only the page never sees these fields.
+ * Undefined counts as OFF — the feature is default-off and must fail closed, so
+ * a legacy brand blob rendered before page.tsx projected the flag shows nothing.
+ */
+export function isWholesalePricingVisible(brand: Brand): boolean {
+  return brand.wholesalePricing === true;
+}
+
 // ── Business-exclusive lock (trial system) ───────────────────────────────────
 // Unlike ADMIN_VIEW_TOGGLE (which HIDES a module), these modules stay VISIBLE
 // but render locked — gold BUSINESS badge, "tap to upgrade" — and clicking
