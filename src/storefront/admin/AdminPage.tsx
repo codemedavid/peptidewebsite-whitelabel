@@ -38,6 +38,7 @@ import { AdminGroupBuyRules } from "./AdminGroupBuyRules";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
+import { AdminDataExport } from "./AdminDataExport";
 import { AdminHeroSettings } from "./AdminHeroSettings";
 import { AdminBannerSettings } from "./AdminBannerSettings";
 import { isAdminViewVisible, isAdminModuleLocked } from "../visibility";
@@ -80,6 +81,7 @@ type View =
   | "hero"
   | "banner"
   | "account"
+  | "export"
   | "staff"
   | "staff-form"
   | "notify"
@@ -312,6 +314,7 @@ export function AdminPage({
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings onBack={() => setView("dashboard")} />;
+  if (activeView === "export") return <AdminDataExport onBack={() => setView("dashboard")} />;
   if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
     return (

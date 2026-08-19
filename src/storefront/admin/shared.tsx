@@ -154,6 +154,14 @@ export function AdminIcon({ name }: { name: string }) {
           <circle cx="15.5" cy="8.5" r="1" />
         </svg>
       );
+    case "download":
+      return (
+        <svg {...props}>
+          <path d="M12 3v12" />
+          <path d="m7 11 5 5 5-5" />
+          <path d="M4 19h16" />
+        </svg>
+      );
     default:
       return (
         <svg {...props}>

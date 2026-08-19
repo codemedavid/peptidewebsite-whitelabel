@@ -426,14 +426,14 @@ check("filenames carry the store slug and the export date", () => {
 check("every CSV starts with its header row", () => {
   const header = (part: string) =>
     BUNDLE.files.find((f) => f.filename.includes(part))!.content.split("\n")[0];
-  assert.equal(header("products"), PRODUCT_COLUMNS.join(","));
-  assert.equal(header("orders.csv"), ORDER_COLUMNS.join(","));
-  assert.equal(header("order-items"), ORDER_ITEM_COLUMNS.join(","));
-  assert.equal(header("customers"), CUSTOMER_COLUMNS.join(","));
+  assert.equal(header("-products-"), PRODUCT_COLUMNS.join(","));
+  assert.equal(header("-orders-"), ORDER_COLUMNS.join(","));
+  assert.equal(header("-order-items-"), ORDER_ITEM_COLUMNS.join(","));
+  assert.equal(header("-customers-"), CUSTOMER_COLUMNS.join(","));
 });
 
 check("trashed orders are included in the export, so nothing is left behind", () => {
-  const orders = BUNDLE.files.find((f) => f.filename.includes("orders.csv"))!.content;
+  const orders = BUNDLE.files.find((f) => f.filename.includes("-orders-"))!.content;
   assert.ok(orders.includes("ABC-1002"), "the trashed order is exported");
   assert.equal(BUNDLE.counts.orders, 2);
 });
