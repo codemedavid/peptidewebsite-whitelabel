@@ -86,6 +86,15 @@ export type Product = {
    *  per-product minimum order that unlocks the wholesale price; unset falls back
    *  to the global RESELLER_MIN_QTY default. */
   reseller?: { vialsOnly?: number; completeSet?: number; minQty?: number };
+  /** Wholesale (MOQ) pricing, set per PARENT product in Product Management and
+   *  stored in `metadata.wholesale`. `moq` is the minimum COMBINED quantity of
+   *  this product — every variation counts toward the same number — and `price`
+   *  is the unit price the whole quantity pays once it is reached. Present on a
+   *  variation cart entry too: makeVariationEntry copies the parent's config, so
+   *  the options of one product share one MOQ and one wholesale price. Absent or
+   *  `enabled: false` = the product sells at retail at every quantity. Read
+   *  through resolveWholesale in lib/storefront/wholesale.ts, never directly. */
+  wholesale?: { enabled: boolean; moq: number; price: number };
   /** Order Ratio Control classification the storefront admin set on this product
    *  (peptide / bacWater / other). Absent → the ratio engine falls back to the
    *  name/category/sequence heuristic. Stored in `metadata.productClass`. */

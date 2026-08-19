@@ -9,6 +9,13 @@ import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product 
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 import { isGroupBuyProduct, groupBuyLine, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildProductOptions, hasDoseToken } from "@/lib/storefront/variations";
+import {
+  RESELLER_MIN_QTY,
+  parentProductId,
+  resolveWholesale,
+  wholesaleQty,
+  type WholesaleScope,
+} from "@/lib/storefront/wholesale";
 
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
@@ -52,7 +59,7 @@ export const CHANNEL_LABELS: Record<ContactChannelType, string> = {
  *  variation clone (so shared stock + order deduction key off the true row),
  *  or the entry's own id for an ordinary product. */
 export function baseProductId(p: Product): string {
-  return p.variantOf ?? p.id;
+  return parentProductId(p);
 }
 
 /**
@@ -93,6 +100,14 @@ export function makeVariationEntry(
     discountEnabled: false,
     discountPrice: 0,
     reseller: undefined,
+    // ...but `wholesale` IS carried over, deliberately. The MOQ and wholesale
+    // price belong to the PARENT product and every option shares them, which is
+    // the whole point of the combined-variant rule: 250 Red + 250 Black + 250
+    // Blue + 250 Yellow is 1,000 Vial Caps. Copying the config here is what lets
+    // an option qualify at all; the cart-level WholesaleScope is what pools the
+    // quantities. The legacy `reseller` leg is NOT carried (above) and so is
+    // unaffected — a legacy product's options price exactly as they do today.
+    wholesale: product.wholesale,
     gbPrice: gbPrice > 0 ? gbPrice : undefined,
   };
 }
@@ -156,16 +171,17 @@ export function cartLines(cart: Product[]): CartLine[] {
 // always stay at retail. This is data-driven, so it's a no-op for any tenant
 // whose products carry no reseller pricing.
 
-/** Default bulk threshold when a product doesn't set its own `reseller.minQty`. */
-export const RESELLER_MIN_QTY = 10;
+/** Default bulk threshold for a LEGACY reseller leg with no `minQty` of its own.
+ *  Defined in lib/storefront/wholesale.ts (the pricing engine) and re-exported
+ *  here for the long-standing importers. */
+export { RESELLER_MIN_QTY };
 
 /**
  * The minimum units that unlock the wholesale price for this product — the
  * owner's per-product `reseller.minQty` when set (>0), else the global default.
  */
 export function resellerMinQty(p: Product): number {
-  const m = p.reseller?.minQty;
-  return typeof m === "number" && m > 0 ? m : RESELLER_MIN_QTY;
+  return resolveWholesale(p)?.moq ?? RESELLER_MIN_QTY;
 }
 
 /**
@@ -173,10 +189,7 @@ export function resellerMinQty(p: Product): number {
  * Complete Set price (what the store ships), else Vials Only.
  */
 export function resellerUnitPrice(p: Product): number | null {
-  const r = p.reseller;
-  if (!r) return null;
-  const price = r.completeSet || r.vialsOnly || 0;
-  return price > 0 ? price : null;
+  return resolveWholesale(p)?.price ?? null;
 }
 
 /** The wholesale tier label that applies (for display), or null if none. */
@@ -199,10 +212,15 @@ function basePrice(p: Product): number {
  * the current (retail/discount) price. Drives the "Reseller" badge + struck
  * price, so they only ever appear on a real saving.
  */
-export function isResellerQty(p: Product, qty: number): boolean {
-  if (qty < resellerMinQty(p)) return false;
-  const wholesale = resellerUnitPrice(p);
-  return wholesale != null && wholesale < basePrice(p);
+export function isResellerQty(
+  p: Product,
+  qty: number,
+  wholesale: WholesaleScope | null = null,
+): boolean {
+  const cfg = resolveWholesale(p);
+  if (!cfg) return false;
+  if (wholesaleQty(p, qty, wholesale) < cfg.moq) return false;
+  return cfg.price < basePrice(p);
 }
 
 /**
@@ -215,11 +233,19 @@ export function isResellerQty(p: Product, qty: number): boolean {
 /** The non-group-buy per-unit price: bulk wholesale when it qualifies AND is
  *  cheaper, else the active discount, else retail. This is the price a line pays
  *  when no live group-buy round covers it. */
-function regularUnitPrice(p: Product, qty: number): number {
+function regularUnitPrice(
+  p: Product,
+  qty: number,
+  wholesale: WholesaleScope | null = null,
+): number {
   const base = basePrice(p);
-  if (qty >= resellerMinQty(p)) {
-    const wholesale = resellerUnitPrice(p);
-    if (wholesale != null && wholesale < base) return wholesale;
+  const cfg = resolveWholesale(p);
+  // The MOQ is measured against the PARENT's combined cart quantity when a scope
+  // is present (so four colours of 250 reach one 1,000-piece MOQ together), and
+  // against this line alone when it is not. Once reached, the wholesale price
+  // applies to the whole quantity — the MOQ is a floor, not a cap.
+  if (cfg && wholesaleQty(p, qty, wholesale) >= cfg.moq && cfg.price < base) {
+    return cfg.price;
   }
   return base;
 }
@@ -228,8 +254,9 @@ export function unitPrice(
   p: Product,
   qty = 1,
   scope: GroupBuyPriceScope | null = null,
+  wholesale: WholesaleScope | null = null,
 ): number {
-  const regular = regularUnitPrice(p, qty);
+  const regular = regularUnitPrice(p, qty, wholesale);
   // A group-buy product IN the live round's scope is sold at its gbPrice — the
   // single price the group-buy page advertises. Scope keeps a gb product OUTSIDE
   // the round (or any gb product when no round is live) at its regular price.
@@ -241,8 +268,12 @@ export function unitPrice(
   return regular;
 }
 
-export function cartTotal(lines: CartLine[], scope: GroupBuyPriceScope | null = null): number {
-  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, scope) * l.qty, 0);
+export function cartTotal(
+  lines: CartLine[],
+  scope: GroupBuyPriceScope | null = null,
+  wholesale: WholesaleScope | null = null,
+): number {
+  return lines.reduce((sum, l) => sum + unitPrice(l.product, l.qty, scope, wholesale) * l.qty, 0);
 }
 
 /** A cart with at least one owner-tagged product pays no configured shipping
@@ -317,6 +348,7 @@ export function authoritativeItemPrice(
   item: { productId?: string; name: string; qty: number; variation?: string },
   catalog: Product[],
   scope: GroupBuyPriceScope | null = null,
+  wholesale: WholesaleScope | null = null,
 ): number | null {
   const live = catalog.find((p) => (item.productId ? p.id === item.productId : p.name === item.name));
   if (!live) return null;
@@ -328,9 +360,9 @@ export function authoritativeItemPrice(
     // option's own price (unitPrice returns regular for them).
     const variation = (live.variations ?? []).find((v) => v.name === item.variation);
     if (!variation) return null;
-    return unitPrice(makeVariationEntry(live, variation), item.qty, scope);
+    return unitPrice(makeVariationEntry(live, variation), item.qty, scope, wholesale);
   }
-  return unitPrice(live, item.qty, scope);
+  return unitPrice(live, item.qty, scope, wholesale);
 }
 
 /** The channels that are enabled AND have a destination set. */
