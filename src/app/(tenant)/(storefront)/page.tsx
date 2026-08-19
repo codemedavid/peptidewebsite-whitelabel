@@ -36,6 +36,7 @@ import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
+import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import {
   normalizeCatalogSortStyle,
   buildBestSellerCounts,
@@ -82,13 +83,21 @@ export default async function HomePage() {
   // (entitled AND a code exists). Deriving it here means nav/footer/visibility all
   // gate on the operator's toggle with no dead gate — and it overrides whatever
   // stale `showPageMerchant` may sit in config.
-  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+  const resellerCaps = await resolveResellerCaps(tenantId);
+  const resellerEntitled = resellerCaps.enabled;
   const resellerCode =
     typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
   brand.showPageMerchant = resellerEntitled && resellerCode !== "";
   // The store-admin manager view gates on the entitlement alone — the owner
   // sets the access code from inside it, so it can't require one to appear.
-  brand.showAdminReseller = resellerEntitled;
+  // The Reseller PAGE is its own child entitlement: a tenant can be granted
+  // wholesale pricing on the regular storefront without ever getting the gated
+  // #merchant page, so both surfaces AND its admin manager gate on that child.
+  brand.showPageMerchant = brand.showPageMerchant && resellerCaps.resellerPage;
+  brand.showAdminReseller = resellerCaps.resellerPage;
+  // Wholesale (MOQ) pricing on the regular storefront — cards, product pages,
+  // cart and checkout. Independent of the page above.
+  brand.wholesalePricing = resellerCaps.wholesalePricing;
 
   // The reseller access code is validated server-side (verifyResellerCodeAction);
   // never ship it to the browser, even though the rest of `config` is public.
@@ -382,7 +391,7 @@ export default async function HomePage() {
   // stray product data (test:reseller-gate). orders.ts re-applies this strip at
   // placement so a tampered client can't restore it. DB rows keep their data —
   // re-granting the feature brings the prices back untouched.
-  products = stripResellerPricing(products, resellerEntitled);
+  products = stripResellerPricing(products, resellerEntitled, resellerCaps.wholesalePricing);
 
   // How many group-buy listings exist at all, independent of any round. Between
   // rounds there is no round scope to read, so the productType "gb" tag is the

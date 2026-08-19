@@ -65,6 +65,8 @@ import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
+import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
+import { orderWholesaleScope, type WholesaleScope } from "@/lib/storefront/wholesale";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
@@ -311,9 +313,10 @@ function repriceItems(
   items: OrderItem[],
   catalog: Product[],
   groupBuyScope: GroupBuyPriceScope | null = null,
+  wholesaleScope: WholesaleScope | null = null,
 ): void {
   for (const it of items) {
-    const live = authoritativeItemPrice(it, catalog, groupBuyScope);
+    const live = authoritativeItemPrice(it, catalog, groupBuyScope, wholesaleScope);
     if (live != null) it.price = live;
   }
 }
@@ -910,9 +913,11 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // ANY pricing/rules surface reads the catalog, so an unentitled tenant's
     // re-price can never charge a wholesale tier a tampered client kept
     // (test:reseller-gate) — the same strip page.tsx applies at render.
+    const demoResellerCaps = await resolveResellerCaps(tenantId);
     const demoProducts = stripResellerPricing(
       demoProductsRaw,
-      await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
+      demoResellerCaps.enabled,
+      demoResellerCaps.wholesalePricing,
     );
     // Group-buy attribution FIRST — it decides whether this order is in a live
     // round AND returns that round's pricing scope, which drives whether GB
@@ -923,7 +928,16 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the order belongs to a live round, that round's group-buy products charge
     // their gbPrice (the single price the group-buy page advertised). Runs before
     // the fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, demoProducts, demoGbScope);
+    // Wholesale MOQ is measured across the WHOLE order, per parent product —
+    // four colours of 250 Vial Caps are 1,000 units of one product. Built here,
+    // before the loop, because a per-line view can never see the combined
+    // quantity; built the same way the cart built it, so the two agree.
+    const demoWholesaleScope = orderWholesaleScope(
+      p.items,
+      demoProducts,
+      demoResellerCaps.wholesalePricing,
+    );
+    repriceItems(p.items, demoProducts, demoGbScope, demoWholesaleScope);
     const demoPaused = purchasableViolation(demoProducts, p.items);
     if (demoPaused) return { error: demoPaused };
     const demoViolation = stockViolation(demoProducts, p.items, demoGbScope);
@@ -1025,9 +1039,11 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     );
     // Same reseller entitlement gate as the demo path / storefront render —
     // an unentitled tenant's placement catalog carries no wholesale legs.
+    const resellerCaps = await resolveResellerCaps(tenantId);
     const catalog = stripResellerPricing(
       catalogRaw,
-      await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
+      resellerCaps.enabled,
+      resellerCaps.wholesalePricing,
     );
     // Tenant slug (used for group-buy attribution + the on-hand gate below).
     const slug = (await getTenantSlug()) ?? tenantId;
@@ -1040,7 +1056,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the order belongs to a live round, that round's group-buy products charge
     // their gbPrice (the single price the group-buy page advertised). Runs before
     // the fee/discount stamps below so they charge the current subtotal.
-    repriceItems(p.items, catalog, gbScope);
+    // Same combined-quantity scope as the demo path above (and as the cart).
+    const wholesaleScope = orderWholesaleScope(p.items, catalog, resellerCaps.wholesalePricing);
+    repriceItems(p.items, catalog, gbScope, wholesaleScope);
 
     // Admin fee is operator-revocable per tenant (admin → Features) AND
     // Business-exclusive under the trial system: when the tenant isn't entitled

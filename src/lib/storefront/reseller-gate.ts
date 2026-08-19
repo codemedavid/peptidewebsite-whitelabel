@@ -17,16 +17,35 @@ import type { Product } from "@/storefront/types";
 // re-granting the feature restores wholesale pricing untouched.
 
 /**
- * The catalog a tenant's pricing surfaces may see: unchanged when the Reseller
- * portal feature is granted, otherwise every product with its `reseller` tier
- * removed (immutably — the input products are never mutated).
+ * The catalog a tenant's pricing surfaces may see. Two independent gates, one
+ * per config shape:
+ *
+ *  - `entitled` is the PARENT (storefront.reseller). Without it the legacy
+ *    `reseller` tier is removed — the original fix described above.
+ *  - `wholesaleEntitled` is the CHILD (storefront.reseller.wholesale). Without
+ *    it the `wholesale` MOQ config is removed. A separate flag because a tenant
+ *    can hold the parent — running the #merchant page — without being granted
+ *    MOQ pricing on the regular storefront.
+ *
+ * The wholesale flag defaults to FALSE deliberately: it fails closed, so a call
+ * site that forgets it sells at retail rather than applying wholesale prices the
+ * operator never granted. Immutable — the inputs are never mutated, and the DB
+ * rows keep their data, so re-granting either feature restores it untouched.
  */
-export function stripResellerPricing(products: Product[], entitled: boolean): Product[] {
-  if (entitled) return products;
+export function stripResellerPricing(
+  products: Product[],
+  entitled: boolean,
+  wholesaleEntitled = false,
+): Product[] {
+  if (entitled && wholesaleEntitled) return products;
   return products.map((p) => {
-    if (!p.reseller) return p;
-    const { reseller: _reseller, ...rest } = p;
-    return rest;
+    const dropLegacy = !entitled && p.reseller != null;
+    const dropWholesale = !wholesaleEntitled && p.wholesale != null;
+    if (!dropLegacy && !dropWholesale) return p;
+    const next = { ...p };
+    if (dropLegacy) delete next.reseller;
+    if (dropWholesale) delete next.wholesale;
+    return next;
   });
 }
 
@@ -43,13 +62,26 @@ export function preserveResellerMetadata(
   incoming: Record<string, unknown>,
   existingMetadata: unknown,
   entitled: boolean,
+  wholesaleEntitled = false,
 ): Record<string, unknown> {
-  if (entitled) return incoming;
-  const existing =
+  if (entitled && wholesaleEntitled) return incoming;
+  const existingOf = (key: string): unknown =>
     existingMetadata && typeof existingMetadata === "object"
-      ? (existingMetadata as Record<string, unknown>).reseller
+      ? (existingMetadata as Record<string, unknown>)[key]
       : undefined;
-  const { reseller: _drop, ...rest } = incoming;
-  void _drop;
-  return existing != null ? { ...rest, reseller: existing } : rest;
+
+  const next = { ...incoming };
+  // `wholesale` is preserved on its own flag, for the same reason and with the
+  // same fail-closed default as the strip: an owner who was never granted MOQ
+  // pricing must not be able to blank the DB's dormant config just by saving.
+  for (const [key, allowed] of [
+    ["reseller", entitled],
+    ["wholesale", wholesaleEntitled],
+  ] as const) {
+    if (allowed) continue;
+    const existing = existingOf(key);
+    if (existing != null) next[key] = existing;
+    else delete next[key];
+  }
+  return next;
 }

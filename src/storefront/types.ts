@@ -756,6 +756,12 @@ export type Brand = {
   // persisted in branding.config. Validated SERVER-SIDE (verifyResellerCodeAction)
   // and stripped from the client brand so the code itself never ships to the
   // browser. Blank → the merchant page stays locked even if showPageMerchant is on.
+  /** Wholesale (MOQ) pricing is granted for this tenant (the
+   *  storefront.reseller.wholesale child, ANDed with its Reseller parent). Server
+   *  derived in page.tsx; drives whether cards, product pages and the cart show
+   *  and apply wholesale pricing. Independent of `showPageMerchant` — a tenant
+   *  can have wholesale pricing with no reseller page, and vice versa. */
+  wholesalePricing?: boolean;
   resellerAccessCode?: string;
 
   // Checkout / order contact. Customers complete an order by messaging the

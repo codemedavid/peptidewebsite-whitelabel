@@ -36,6 +36,7 @@ import {
   type DbProductRow,
 } from "@/lib/storefront/product-mapping";
 import { stripResellerPricing, preserveResellerMetadata } from "@/lib/storefront/reseller-gate";
+import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Product } from "@/storefront/types";
@@ -106,11 +107,18 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
   // it, a mid-session refresh would hand the client a catalog with wholesale
   // legs the render removed, and the cart would advertise prices checkout
   // re-prices away.
-  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+  const resellerCaps = await resolveResellerCaps(tenantId);
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    return { ok: true, products: stripResellerPricing(demoEffectiveProducts(slug, "₱"), resellerEntitled) };
+    return {
+      ok: true,
+      products: stripResellerPricing(
+        demoEffectiveProducts(slug, "₱"),
+        resellerCaps.enabled,
+        resellerCaps.wholesalePricing,
+      ),
+    };
   }
 
   try {
@@ -127,7 +135,8 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
       ok: true,
       products: stripResellerPricing(
         rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
-        resellerEntitled,
+        resellerCaps.enabled,
+        resellerCaps.wholesalePricing,
       ),
     };
   } catch (e) {
@@ -197,7 +206,7 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
   // is seeded from the stripped catalog (zeros), so persisting its `reseller`
   // leg would wipe the DB's dormant wholesale prices — the data re-granting the
   // feature is supposed to restore. Preserve the existing leg instead.
-  const resellerEntitled = await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL);
+  const resellerCaps = await resolveResellerCaps(tenantId);
 
   try {
     const saved = await withTenant(tenantId, async (db) => {
@@ -209,7 +218,8 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
         const metadata = preserveResellerMetadata(
           write.metadata as Record<string, unknown>,
           existing.metadata,
-          resellerEntitled,
+          resellerCaps.enabled,
+          resellerCaps.wholesalePricing,
         );
         return db.product.update({
           where: { id: existing.id },
@@ -253,7 +263,8 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
           metadata: preserveResellerMetadata(
             write.metadata as Record<string, unknown>,
             undefined,
-            resellerEntitled,
+            resellerCaps.enabled,
+            resellerCaps.wholesalePricing,
           ) as unknown as Prisma.InputJsonValue,
         },
       });

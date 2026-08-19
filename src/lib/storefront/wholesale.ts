@@ -121,3 +121,29 @@ export function wholesaleQty(p: Product, qty: number, scope: WholesaleScope | nu
   if (!scope) return qty;
   return scope.qtyByParent.get(parentProductId(p)) ?? qty;
 }
+
+/**
+ * The server-side counterpart of `buildWholesaleScope`: the same per-parent
+ * quantities, built from a STORED order's lines instead of the cart's.
+ *
+ * The client stamps `productId` with the parent id already, but a line is
+ * matched here exactly the way `authoritativeItemPrice` matches it — by
+ * productId, else by name — and keyed by the resolved row's own id. Diverging
+ * from that matching is the one way client and server could disagree on whether
+ * an order reached its MOQ, so the two must stay identical. A line matching no
+ * live product contributes nothing, mirroring the re-price's skip rule.
+ */
+export function orderWholesaleScope(
+  items: readonly { productId?: string; name: string; qty: number }[],
+  catalog: readonly Product[],
+  enabled: boolean,
+): WholesaleScope | null {
+  if (!enabled) return null;
+  const qtyByParent = new Map<string, number>();
+  for (const it of items) {
+    const live = catalog.find((p) => (it.productId ? p.id === it.productId : p.name === it.name));
+    if (!live) continue;
+    qtyByParent.set(live.id, (qtyByParent.get(live.id) ?? 0) + it.qty);
+  }
+  return { qtyByParent };
+}

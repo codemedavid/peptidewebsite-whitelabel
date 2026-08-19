@@ -143,8 +143,12 @@ const pageSrc = readFileSync(join(ROOT, "src/app/(tenant)/(storefront)/page.tsx"
 const ordersSrc = readFileSync(join(ROOT, "src/actions/orders.ts"), "utf8");
 const productsSrc = readFileSync(join(ROOT, "src/actions/products.ts"), "utf8");
 
-check("page.tsx gates the rendered catalog on resellerEntitled", () => {
-  assert.match(pageSrc, /stripResellerPricing\(\s*products,\s*resellerEntitled\s*\)/);
+check("page.tsx gates the rendered catalog on BOTH reseller entitlements", () => {
+  assert.match(
+    pageSrc,
+    /stripResellerPricing\(\s*products,\s*resellerEntitled,\s*resellerCaps\.wholesalePricing,?\s*\)/,
+    "the render must pass the parent gate AND the wholesale child gate",
+  );
 });
 
 check("orders.ts gates BOTH placement catalogs (demo + DB) on the entitlement", () => {
@@ -153,7 +157,26 @@ check("orders.ts gates BOTH placement catalogs (demo + DB) on the entitlement", 
     calls.length >= 2,
     `expected stripResellerPricing on both catalog loads, found ${calls.length}`,
   );
-  assert.match(ordersSrc, /STORE_RESELLER_PORTAL/);
+  // The gate is resolved through resolveResellerCaps now (which ANDs each child
+  // with the STORE_RESELLER_PORTAL parent) rather than a bare hasFeature call.
+  assert.match(ordersSrc, /resolveResellerCaps/);
+  const wholesaleFlags = ordersSrc.match(/\.wholesalePricing/g) ?? [];
+  assert.ok(
+    wholesaleFlags.length >= 4,
+    `both placement paths must pass the wholesale flag to the strip AND build the
+     order-wide MOQ scope from it; found ${wholesaleFlags.length} uses`,
+  );
+});
+
+check("orders.ts re-prices against the ORDER-WIDE wholesale scope", () => {
+  // Built once per placement, before the re-price loop: a per-line view cannot
+  // see that four colours of 250 are 1,000 units of one product, so without this
+  // the server would undo the cart's wholesale price on every split order.
+  assert.match(ordersSrc, /orderWholesaleScope\(/);
+  const built = ordersSrc.match(/orderWholesaleScope\(/g) ?? [];
+  assert.strictEqual(built.length, 2, "one scope per placement path (demo + DB)");
+  const priced = ordersSrc.match(/repriceItems\(\s*p\.items,[^)]*Scope\s*\)/g) ?? [];
+  assert.strictEqual(priced.length, 2, "both re-price calls must receive a wholesale scope");
 });
 
 check("products.ts strips the PUBLIC storefront refresh (getStorefrontProductsAction)", () => {
@@ -169,6 +192,57 @@ check("products.ts strips the PUBLIC storefront refresh (getStorefrontProductsAc
 
 check("products.ts preserves existing reseller metadata on unentitled saves", () => {
   assert.match(productsSrc, /preserveResellerMetadata/);
+});
+
+// ── The wholesale (MOQ) config is gated on its OWN child entitlement ──────────
+// `reseller` is gated by the parent (above). `wholesale` — the config the
+// Product Management screen writes — is gated by storefront.reseller.wholesale,
+// a separate child, because a tenant can hold the parent (for the #merchant
+// page) without being granted MOQ pricing on the regular storefront. The strip
+// therefore takes TWO flags, and the wholesale one fails CLOSED: a call site
+// that does not pass it strips the config rather than charging wholesale prices
+// the operator never granted.
+
+check("an unentitled tenant's catalog carries no wholesale config", () => {
+  const p = product({ id: "caps", price: 10, wholesale: { enabled: true, moq: 100, price: 7 } });
+  const [stripped] = stripResellerPricing([p], true, false);
+  assert.strictEqual(stripped.wholesale, undefined, "wholesale config must be removed");
+  assert.strictEqual(unitPrice(stripped, 500), 10, "and the price falls back to retail");
+});
+
+check("wholesale is stripped by DEFAULT — the gate fails closed", () => {
+  const p = product({ id: "caps", price: 10, wholesale: { enabled: true, moq: 100, price: 7 } });
+  const [stripped] = stripResellerPricing([p], true);
+  assert.strictEqual(stripped.wholesale, undefined, "omitting the flag must not grant wholesale");
+});
+
+check("an entitled tenant keeps the wholesale config untouched", () => {
+  const p = product({ id: "caps", price: 10, wholesale: { enabled: true, moq: 100, price: 7 } });
+  const [kept] = stripResellerPricing([p], true, true);
+  assert.deepStrictEqual(kept.wholesale, { enabled: true, moq: 100, price: 7 });
+  assert.strictEqual(unitPrice(kept, 500), 7);
+});
+
+check("the parent gate still strips the legacy leg independently", () => {
+  const p = product({
+    id: "both",
+    price: 10,
+    reseller: { completeSet: 7 },
+    wholesale: { enabled: true, moq: 100, price: 6 },
+  });
+  const [parentOff] = stripResellerPricing([p], false, true);
+  assert.strictEqual(parentOff.reseller, undefined, "legacy leg goes with the parent");
+  assert.deepStrictEqual(parentOff.wholesale, { enabled: true, moq: 100, price: 6 });
+});
+
+check("an unentitled owner's save cannot overwrite dormant wholesale config", () => {
+  const existing = { wholesale: { enabled: true, moq: 100, price: 7 }, other: 1 };
+  const kept = preserveResellerMetadata({ wholesale: { enabled: false, moq: 0, price: 0 } }, existing, false);
+  assert.deepStrictEqual(
+    kept.wholesale,
+    { enabled: true, moq: 100, price: 7 },
+    "the DB's dormant config must survive, so re-granting restores prices",
+  );
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
