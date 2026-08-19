@@ -195,5 +195,18 @@ check("a new product starts with wholesale OFF", () => {
   );
 });
 
+check("the 'will never apply' warning accounts for variation-priced products", () => {
+  // A product priced entirely through variations keeps a base Price of 0, so
+  // comparing the wholesale price against the base warned "not below the P0
+  // retail price" for every valid configuration. The engine compares against
+  // each variation's own price, so the warning must too.
+  const flat = formSrc.replace(/\s+/g, " ");
+  assert.ok(
+    !flat.includes("wholesalePriceNum >= (Number(price) || 0)"),
+    "the warning must not compare against the base price alone",
+  );
+  assert.match(formSrc, /lowestRetail/, "it must compare against the lowest price a unit could pay");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

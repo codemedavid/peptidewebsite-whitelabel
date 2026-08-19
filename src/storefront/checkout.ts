@@ -20,6 +20,9 @@ import {
 /** A cart line: a distinct product plus how many units are in the cart. */
 export type CartLine = { product: Product; qty: number };
 
+/** How a line's wholesale saving is named in customer/seller-facing copy. */
+export type WholesaleTierLabel = "Complete set" | "Vials only" | "Wholesale";
+
 /** What the customer paid with, gathered before the order is handed off. */
 export type CheckoutPayment = { methodName: string; hasProof: boolean };
 
@@ -192,13 +195,17 @@ export function resellerUnitPrice(p: Product): number | null {
   return resolveWholesale(p)?.price ?? null;
 }
 
-/** The wholesale tier label that applies (for display), or null if none. */
-export function resellerTierLabel(p: Product): "Complete set" | "Vials only" | null {
+/** The wholesale tier label that applies (for display), or null if none.
+ *  The current config has no tiers — one MOQ at one price — so it is named
+ *  plainly. Reading `p.reseller` alone returned null for such a product while
+ *  isResellerQty said true, which printed a literal "reseller — undefined" into
+ *  the order summary the seller receives. */
+export function resellerTierLabel(p: Product): WholesaleTierLabel | null {
+  if (resolveWholesale(p) == null) return null;
   const r = p.reseller;
-  if (!r) return null;
-  if (r.completeSet) return "Complete set";
-  if (r.vialsOnly) return "Vials only";
-  return null;
+  if (r?.completeSet) return "Complete set";
+  if (r?.vialsOnly) return "Vials only";
+  return "Wholesale";
 }
 
 /** The non-bulk effective unit price: an active promo discount, else retail. */
@@ -391,20 +398,25 @@ export function buildOrderMessage(
   adminFee?: { label: string; amount: number } | null,
   shipping?: { courier: string; fee: number } | null,
   discount?: { code?: string; label: string; amount: number } | null,
+  // The cart's wholesale scope. This message is what the SELLER receives, so
+  // pricing it per line would quote retail totals for a cart the cart UI, the
+  // stored order and the confirmation table all charge at wholesale — seller and
+  // system disagreeing on what is owed.
+  wholesale: WholesaleScope | null = null,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
     .map((l) => {
       const cur = l.product.currency || currency;
-      const up = unitPrice(l.product, l.qty);
+      const up = unitPrice(l.product, l.qty, null, wholesale);
       const line = up * l.qty;
-      const tag = isResellerQty(l.product, l.qty)
+      const tag = isResellerQty(l.product, l.qty, wholesale)
         ? ` (reseller — ${resellerTierLabel(l.product)?.toLowerCase()} @ ${money(up, cur)}/ea)`
         : "";
       return `• ${cartDisplayName(l.product)} ×${l.qty} — ${money(line, cur)}${tag}`;
     })
     .join("\n");
-  const subtotal = cartTotal(lines);
+  const subtotal = cartTotal(lines, null, wholesale);
   const shippingFee = shipping?.fee ?? 0;
   const discountAmount = discount?.amount ?? 0;
   // The grand total never drops below zero (a discount caps at the subtotal).

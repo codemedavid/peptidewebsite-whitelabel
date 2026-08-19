@@ -522,6 +522,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // The server-stamped discount (re-derived from config), so the messaged
       // total reflects what was actually persisted, not the local selection.
       order.discount ?? null,
+      // The same wholesale scope the cart priced through, so the seller's copy
+      // quotes the wholesale totals the customer actually owes.
+      wholesaleScope,
     );
 
     clearCart();

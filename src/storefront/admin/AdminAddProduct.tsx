@@ -292,9 +292,22 @@ export function AdminAddProduct({
         : "";
   // A wholesale price at or above the retail price is a warning, not a block —
   // it saves, but it will never apply: bulk can only ever LOWER a unit price.
+  //
+  // Compare against the LOWEST price a unit could actually pay, not the base
+  // Price field. A product priced entirely through variations keeps a base price
+  // of 0, so comparing against it warned "not below the ₱0 retail price" for
+  // every valid configuration — and the engine compares per variation anyway.
+  const variationPrices = variations
+    .map((v) => Number(v.price) || 0)
+    .filter((n) => n > 0);
+  const lowestRetail = variationPrices.length
+    ? Math.min(...variationPrices)
+    : Number(price) || 0;
   const wholesaleWarning =
-    wholesaleOn && !wholesaleError && wholesalePriceNum >= (Number(price) || 0)
-      ? `This is not below the ${currency}${Number(price) || 0} retail price, so it will never apply.`
+    wholesaleOn && !wholesaleError && lowestRetail > 0 && wholesalePriceNum >= lowestRetail
+      ? `This is not below the ${currency}${lowestRetail.toLocaleString()} ${
+          variationPrices.length ? "cheapest option" : "retail"
+        } price, so it will never apply${variationPrices.length ? " to that option" : ""}.`
       : "";
   const canSave = !!(
     name.trim() &&

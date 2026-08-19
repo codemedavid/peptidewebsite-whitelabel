@@ -32,6 +32,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  EMPTY_CUSTOMER,
+  buildOrderMessage,
   cartLines,
   cartTotal,
   makeVariationEntry,
@@ -43,7 +45,7 @@ import {
   wholesaleRemaining,
   type WholesaleScope,
 } from "../src/lib/storefront/wholesale";
-import type { Product } from "../src/storefront/types";
+import type { Brand, Product } from "../src/storefront/types";
 
 let passed = 0;
 let failed = 0;
@@ -315,6 +317,105 @@ check("every cart pricing call receives the wholesale scope", () => {
     cartSrc,
     /isResellerQty\(l\.product, l\.qty, wholesaleScope\)/,
     "the wholesale badge must reflect the combined quantity too",
+  );
+});
+
+// ── Review findings, 2026-08-19 ──────────────────────────────────────────────
+
+check("the order message the SELLER receives quotes the wholesale price", () => {
+  // buildOrderMessage writes the text that lands in sessionStorage and is sent
+  // verbatim to the seller. Priced without the scope it quotes RETAIL line
+  // totals while the cart, the stored order and the confirmation table all
+  // charge wholesale — seller and system disagreeing on what is owed.
+  const lines = cart(VIAL_CAPS, { Red: 250, Black: 250, Blue: 250, Yellow: 250 });
+  const ws = scope(lines);
+  const msg = buildOrderMessage(
+    { currency: "₱" } as Brand,
+    lines,
+    EMPTY_CUSTOMER,
+    undefined,
+    undefined,
+    null,
+    null,
+    null,
+    ws,
+  );
+  assert.ok(msg.includes("7,000"), `message must total 1,000 x P7; got:\n${msg}`);
+  assert.ok(!msg.includes("10,000"), `message must not quote the retail total:\n${msg}`);
+});
+
+check("the order message never prints 'reseller — undefined'", () => {
+  // isResellerQty resolves through resolveWholesale, so it is true for a product
+  // configured only with the new block; resellerTierLabel reads p.reseller and
+  // returns null for it, which rendered as the literal string "undefined".
+  const p = product({ id: "solo", price: 10, wholesale: { enabled: true, moq: 100, price: 7 } });
+  const lines: CartLine[] = [{ product: p, qty: 100 }];
+  const msg = buildOrderMessage(
+    { currency: "₱" } as Brand,
+    lines,
+    EMPTY_CUSTOMER,
+    undefined,
+    undefined,
+    null,
+    null,
+    null,
+    scope(lines),
+  );
+  // Assert on the ITEMS block: the message header separately interpolates the
+  // order number, which this fixture does not supply.
+  const itemLine = msg.split("\n").find((l) => l.startsWith("•")) ?? "";
+  assert.ok(!itemLine.includes("undefined"), `no placeholder may leak into a line:\n${itemLine}`);
+  assert.ok(itemLine.toLowerCase().includes("wholesale"), `the saving should be named:\n${itemLine}`);
+});
+
+check("turning the NEW wholesale block off does not kill LEGACY reseller pricing", () => {
+  // cleanWholesale persists {enabled:false, moq, price} so the owner's numbers
+  // survive the toggle. If resolveWholesale short-circuits on the disabled block
+  // it never reaches the legacy leg, so an owner who enables wholesale on a
+  // legacy product, saves, unchecks it and saves again silently destroys that
+  // product's existing wholesale pricing.
+  const p = product({
+    id: "legacy-plus-disabled",
+    price: 100,
+    reseller: { completeSet: 70, minQty: 20 },
+    wholesale: { enabled: false, moq: 1000, price: 7 },
+  });
+  assert.strictEqual(unitPrice(p, 20), 70, "the legacy tier must still apply");
+  assert.strictEqual(unitPrice(p, 19), 100, "at the product's OWN minQty, not the global default");
+});
+
+check("an ENABLED new config still wins over a legacy leg", () => {
+  const p = product({
+    id: "both-live",
+    price: 100,
+    reseller: { completeSet: 70, minQty: 20 },
+    wholesale: { enabled: true, moq: 50, price: 60 },
+  });
+  assert.strictEqual(unitPrice(p, 20), 100, "the new config's MOQ governs, not the legacy one");
+  assert.strictEqual(unitPrice(p, 50), 60);
+});
+
+// ── The reseller page lists products on EITHER config ────────────────────────
+
+const merchantSrc = readFileSync(
+  join(process.cwd(), "src/storefront/pages/MerchantPage.tsx"),
+  "utf8",
+);
+
+check("the reseller page lists wholesale-only products, not just legacy ones", () => {
+  const flat = merchantSrc.replace(/\s+/g, " ");
+  assert.ok(
+    !flat.includes(".filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet))"),
+    "the row filter must not be legacy-only — a wholesale-only product never reaches the card",
+  );
+  assert.match(merchantSrc, /rows[\s\S]{0,400}resolveWholesale/, "rows must filter through the shared resolver");
+});
+
+check("the reseller page shows a wholesale price for the new config", () => {
+  assert.match(
+    merchantSrc,
+    /merchant-card__tier[\s\S]{0,600}wholesale/i,
+    "a product on the new config must render its wholesale price, not two blank legacy tiers",
   );
 });
 

@@ -90,7 +90,11 @@ function MerchantCard({
   // configured with the current `wholesale` MOQ config must list here too. The
   // reseller page is a second SURFACE onto one product config and one pricing
   // engine, never a second wholesale system with rules of its own.
-  const hasReseller = resolveWholesale(product) != null;
+  const wholesale = resolveWholesale(product);
+  const hasReseller = wholesale != null;
+  // Legacy products carry the two priced tiers (vials only / complete set); the
+  // current config carries neither.
+  const hasLegacyTiers = !!(product.reseller?.vialsOnly || product.reseller?.completeSet);
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, brand.defaultProductImage);
 
@@ -122,6 +126,21 @@ function MerchantCard({
             <span className="merchant-card__tier-label">Retail</span>
             <span className="merchant-card__tier-val">{money(product.price)}</span>
           </div>
+          {/* The current config is ONE minimum at ONE price, so it renders as a
+              single row. The two legacy tiers below are shown only for products
+              that actually carry them — a wholesale-only product would render
+              both as "—", advertising nothing on a wholesale price list. */}
+          {wholesale && !hasLegacyTiers && (
+            <div className="merchant-card__tier merchant-card__tier--set">
+              <span className="merchant-card__tier-label">
+                Wholesale
+                <span className="merchant-card__tag is-applied">at {minQty}+ online</span>
+              </span>
+              <span className="merchant-card__tier-val">{money(wholesale.price)}</span>
+            </div>
+          )}
+          {hasLegacyTiers && (
+          <>
           <div className="merchant-card__tier">
             <span className="merchant-card__tier-label">
               Vials only
@@ -142,6 +161,8 @@ function MerchantCard({
             </span>
             <span className="merchant-card__tier-val">{money(product.reseller?.completeSet)}</span>
           </div>
+          </>
+          )}
         </div>
       </div>
 
@@ -247,7 +268,11 @@ export function MerchantPage({
     () =>
       products
         .filter((p) => p.available !== false)
-        .filter((p) => p.reseller && (p.reseller.vialsOnly || p.reseller.completeSet)),
+        // Through the shared resolver, so a product configured with the
+        // current `wholesale` MOQ block lists here too. Filtering on
+        // `p.reseller` alone kept the page legacy-only, which would have made
+        // this whole surface invisible to every new wholesale product.
+        .filter((p) => resolveWholesale(p) != null),
     [products],
   );
 

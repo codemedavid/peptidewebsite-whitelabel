@@ -67,11 +67,15 @@ export function parentProductId(p: Pick<Product, "id" | "variantOf">): string {
  */
 export function resolveWholesale(p: Product): WholesaleConfig | null {
   const w = p.wholesale;
-  if (w) {
-    if (!w.enabled) return null;
-    return w.moq > 0 && w.price > 0 ? w : null;
-  }
+  if (w && w.enabled && w.moq > 0 && w.price > 0) return w;
 
+  // Fall THROUGH when the new block is absent, disabled or incomplete — it must
+  // not mask the legacy leg. `cleanWholesale` deliberately persists a disabled
+  // block with its numbers so the owner's MOQ and price survive the toggle, so a
+  // short-circuit here meant an owner who enabled wholesale on a legacy product,
+  // saved, unchecked it and saved again silently destroyed that product's
+  // existing wholesale pricing. The two config shapes are edited in two separate
+  // sections of the product form, and each governs only its own.
   const r = p.reseller;
   if (!r) return null;
   const price = r.completeSet || r.vialsOnly || 0;
