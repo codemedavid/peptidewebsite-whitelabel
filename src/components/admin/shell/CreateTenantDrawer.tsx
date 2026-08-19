@@ -27,6 +27,7 @@ const GROUP_ICON: Record<FeatureGroup, string> = {
   Site: "Globe",
   Catalog: "ShoppingBag",
   Ecommerce: "Card",
+  Reseller: "Handshake",
   "Sales Analytics": "Chart",
   "Group Buy": "Users",
   Notifications: "Mail",

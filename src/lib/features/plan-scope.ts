@@ -72,6 +72,7 @@ const STATE_RANK: Record<FeatureState, number> = {
  */
 function masterSwitchFor(key: FeatureKey): FeatureKey | null {
   if (key.startsWith("storefront.sales_analytics.")) return FEATURES.STORE_SALES_ANALYTICS;
+  if (key.startsWith("storefront.reseller.")) return FEATURES.STORE_RESELLER_PORTAL;
   if (key.startsWith("groupbuy.") && key !== FEATURES.GB_MODULE && key !== FEATURES.GB_RULES) {
     return FEATURES.GB_MODULE;
   }

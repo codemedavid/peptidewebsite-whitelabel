@@ -43,6 +43,8 @@ export const FEATURES = {
   STORE_ORDER_TRACKING: "storefront.order_tracking",
   STORE_MULTI_CURRENCY: "storefront.multi_currency",
   STORE_RESELLER_PORTAL: "storefront.reseller",
+  STORE_WHOLESALE_PRICING: "storefront.reseller.wholesale",
+  STORE_RESELLER_PAGE: "storefront.reseller.page",
   STORE_CARD_STUDIO: "storefront.card_studio",
   STORE_SALES_ANALYTICS: "storefront.sales_analytics",
   STORE_SMART_CHECKOUT: "storefront.smart_checkout",
@@ -121,6 +123,17 @@ const SALES_ANALYTICS_SCAFFOLDING: FeatureKey[] = [
   FEATURES.SA_EXPORT_EXCEL,
   FEATURES.SA_EXPORT_PDF,
 ];
+// Reseller children. Like the Group Buy scaffolding, these sit in EVERY plan
+// ceiling and are ANDed with the parent (storefront.reseller) by masterSwitchFor,
+// so a plan that does not grant the parent exposes nothing. Keeping the Reseller
+// PAGE here is what preserves the live #merchant portals: tenants that have the
+// parent today keep the page with no migration and no operator action.
+//
+// Wholesale PRICING is deliberately NOT here — it is operator-grantable only
+// (default OFF), because switching it on changes what customers are charged. No
+// existing store's prices move until an operator grants it per tenant.
+const RESELLER_SCAFFOLDING: FeatureKey[] = [FEATURES.STORE_RESELLER_PAGE];
+
 const GROUP_BUY_SCAFFOLDING: FeatureKey[] = [
   FEATURES.GB_CREATE,
   FEATURES.GB_EDIT,
@@ -156,6 +169,7 @@ const STARTER: FeatureKey[] = [
   FEATURES.STORE_ADMIN_FEE,
   ...SALES_ANALYTICS_SCAFFOLDING,
   ...GROUP_BUY_SCAFFOLDING,
+  ...RESELLER_SCAFFOLDING,
 ];
 
 // Business tier — the curated inclusion set (pepstack-davao reference): 15 VISIBLE
@@ -189,6 +203,7 @@ const PRO: FeatureKey[] = [
   FEATURES.STORE_TRACK_NOTE,
   ...SALES_ANALYTICS_SCAFFOLDING,
   ...GROUP_BUY_SCAFFOLDING,
+  ...RESELLER_SCAFFOLDING,
 ];
 
 // Automated tier — the full platform. A superset of Business that RE-ADDS the
@@ -254,6 +269,13 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_PROTOCOLS,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
+  // Wholesale (MOQ) pricing — the Reseller feature's pricing child. Outside every
+  // plan ceiling (default OFF) because granting it changes what customers pay:
+  // products configured with an MOQ start charging the wholesale price once the
+  // combined quantity is reached. Two gates stack, so a grant alone is inert —
+  // the store owner must still enable wholesale on each product, and existing
+  // products are never auto-enabled.
+  FEATURES.STORE_WHOLESALE_PRICING,
   // Private-store access code gate. Same two-layer shape as Reviews: this
   // entitlement is ANDed with the owner's branding accessGate.enabled toggle and
   // a code actually being set (see the storefront layout). It was declared in the
@@ -310,6 +332,7 @@ export const FEATURE_GROUPS = [
   "Site",
   "Catalog",
   "Ecommerce",
+  "Reseller",
   "Sales Analytics",
   "Group Buy",
   "Notifications",
@@ -346,7 +369,9 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_FLOATING_CART]: { label: "Floating cart", description: "Persistent floating cart widget.", group: "Ecommerce" },
   [FEATURES.STORE_ORDER_TRACKING]: { label: "Order tracking", description: "Public order-status / tracking lookup page.", group: "Ecommerce" },
   [FEATURES.STORE_MULTI_CURRENCY]: { label: "Multi-currency", description: "Display and charge in multiple currencies.", group: "Ecommerce" },
-  [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller portal", description: "Gated #merchant wholesale price list for verified resellers. The store owner sets the access code and per-product wholesale prices.", group: "Ecommerce" },
+  [FEATURES.STORE_RESELLER_PORTAL]: { label: "Reseller", description: "Parent switch for everything wholesale. On its own it exposes nothing — it enables the two children below, and revoking it turns both off regardless of their own state.", group: "Reseller" },
+  [FEATURES.STORE_WHOLESALE_PRICING]: { label: "Wholesale pricing", description: "Per-product wholesale pricing on the REGULAR storefront — product cards, product pages, cart and checkout. The store owner sets a minimum order quantity and a wholesale unit price on each product; once the customer's combined quantity for that product reaches the MOQ (all of a product's variations count toward the same number), the whole quantity is charged at the wholesale price. Needs no reseller page. Operator-grantable, default OFF — granting it changes what customers pay. Existing products are never auto-enabled.", group: "Reseller" },
+  [FEATURES.STORE_RESELLER_PAGE]: { label: "Wholesale reseller page", description: "The dedicated, access-code gated #merchant wholesale price list and its Reseller Portal manager in the store admin. Prices through the SAME per-product wholesale config as Wholesale pricing — it is a second surface, not a second pricing system, and it is not required for wholesale pricing to work.", group: "Reseller" },
   [FEATURES.STORE_SALES_ANALYTICS]: { label: "Sales Analytics", description: "Sales Analytics view in the store admin (revenue & insights).", group: "Ecommerce" },
   [FEATURES.STORE_SMART_CHECKOUT]: { label: "Smart Checkout", description: "Smart Cart & Checkout rules view in the store admin — cart restrictions, checkout validations and custom messages. Off hides the editor and stops saved rules from constraining the cart.", group: "Ecommerce" },
   [FEATURES.STORE_ACCESS_CODE]: { label: "Access code gate", description: "Private-store access code: visitors must enter a code to view the storefront. Off hides the Access Code manager in the store admin and stops the gate from being enforced. Operator-grantable, default OFF.", group: "Ecommerce" },

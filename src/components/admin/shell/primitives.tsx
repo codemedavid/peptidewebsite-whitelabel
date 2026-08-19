@@ -52,6 +52,7 @@ import {
   Truck,
   Users,
   Wand2,
+  Handshake,
   X,
   Zap,
   type LucideIcon,
@@ -116,6 +117,7 @@ export const Ic: Record<string, LucideIcon> = withIconFallback(
   Code,
   Box,
   Clock,
+  Handshake,
   },
   AlertCircle,
 );
