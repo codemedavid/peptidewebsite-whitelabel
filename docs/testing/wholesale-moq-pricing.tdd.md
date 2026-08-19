@@ -1,7 +1,7 @@
 # Wholesale (MOQ) pricing — TDD evidence
 
 **Feature:** combined-variant wholesale pricing, as a child of the existing Reseller feature.
-**Branch:** `main` · commits `f619026` → `aa403a1` (6 commits)
+**Branch:** `main` · commits `f619026` → `6650c7e` (8 commits)
 **Date:** 2026-08-19
 
 ## Source plan
@@ -265,6 +265,35 @@ Known gaps and deliberate decisions:
 - Four pre-existing `tsc` errors remain in generated `.next/types` for deleted
   `boutique-preview` pages. Unrelated to this work.
 
+## Code review round (`6650c7e`)
+
+A review of the branch found nine issues; five were in this work and are fixed,
+each with a failing test written first.
+
+| # | Severity | Defect | Fix |
+|---|---|---|---|
+| 1 | HIGH | `buildOrderMessage` priced per line, so the summary sent to the **seller** quoted retail totals while the cart, stored order and confirmation charged wholesale | scope threaded from `CartCheckout` |
+| 2 | MEDIUM | the same message printed `(reseller — undefined @ ₱7/ea)` for the new config | `resellerTierLabel` resolves through `resolveWholesale` and names it "Wholesale" |
+| 3 | MEDIUM/HIGH | a **disabled** wholesale block masked legacy `reseller` pricing entirely, and `resellerMinQty` fell back to the global 10 | `resolveWholesale` falls *through* when the new block is absent, disabled or incomplete |
+| 4 | MEDIUM | the reseller page's `rows` still filtered on `p.reseller`, so a wholesale-only product never listed | filter runs through the resolver; a single "Wholesale" tier renders for the new config |
+| 5 | LOW | "will never apply" warned on every variation-priced product (base price 0) | compares against the cheapest option, matching the engine |
+
+Finding 3 was the most serious: because `cleanWholesale` deliberately persists
+`{enabled:false, moq, price}` so the owner's numbers survive the toggle, an owner
+who enabled wholesale on a legacy product, saved, unchecked it and saved again
+would have silently destroyed that product's existing wholesale pricing.
+
+```
+$ npm run test:wholesale-pricing   20 passed, 5 failed  →  25 passed, 0 failed
+$ npm run test:wholesale-admin     13 passed, 1 failed  →  14 passed, 0 failed
+```
+
+Four review findings concern other work on this branch and were **not** touched:
+the boutique/editorial layouts reading `brand.categories` instead of the store's
+categories; the assurance editor dropping a row mid-edit; the untracked
+`(tenant)/editorial-preview` route shipping outside the access gate; and the CSV
+formula guard prefixing `+63…` phone numbers.
+
 ## Merge evidence
 
 If these six commits are squashed, this file is the retained proof. The
@@ -277,3 +306,5 @@ RED → GREEN transitions are:
 | Gate + server | `npm run test:reseller-gate` | 16 passed, 3 failed | 20 passed, 0 failed | `350ab88` |
 | Admin UI | `npm run test:wholesale-admin` | 1 passed, 12 failed | 13 passed, 0 failed | `a883b49` |
 | Storefront | `npm run test:wholesale-pricing` | 14 passed, 5 failed | 19 passed, 0 failed | `aa403a1` |
+| Review fixes | `npm run test:wholesale-pricing` | 20 passed, 5 failed | 25 passed, 0 failed | `6650c7e` |
+| Review fixes | `npm run test:wholesale-admin` | 13 passed, 1 failed | 14 passed, 0 failed | `6650c7e` |
