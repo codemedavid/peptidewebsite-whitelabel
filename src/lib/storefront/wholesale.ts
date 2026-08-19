@@ -147,3 +147,25 @@ export function orderWholesaleScope(
   }
   return { qtyByParent };
 }
+
+/**
+ * How many MORE units of this product's parent unlock the wholesale price, or 0
+ * when there is nothing useful to say — no rule, already qualified, or a rule
+ * that could never apply because its price is not below what the line pays now.
+ *
+ * This is the cart's "buy N more" nudge, and it counts the COMBINED quantity for
+ * the same reason the price does. With 250 Red + 250 Black + 250 Blue against a
+ * 1,000 MOQ the customer needs 250 more, not 750 — a per-line answer would tell
+ * them to buy three times what they actually need.
+ */
+export function wholesaleRemaining(
+  p: Product,
+  qty: number,
+  scope: WholesaleScope | null,
+): number {
+  const cfg = resolveWholesale(p);
+  if (!cfg) return 0;
+  const base = p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
+  if (cfg.price >= base) return 0;
+  return Math.max(0, cfg.moq - wholesaleQty(p, qty, scope));
+}

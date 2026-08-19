@@ -17,6 +17,7 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
+import { resolveWholesale } from "@/lib/storefront/wholesale";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { verifyResellerCodeAction } from "@/actions/storefront-admin";
 
@@ -85,7 +86,11 @@ function MerchantCard({
   const { brand } = useStore();
   const applied = resellerTierLabel(product);
   const minQty = resellerMinQty(product);
-  const hasReseller = !!(product.reseller && (product.reseller.vialsOnly || product.reseller.completeSet));
+  // Read through the shared resolver, not `product.reseller` directly: a product
+  // configured with the current `wholesale` MOQ config must list here too. The
+  // reseller page is a second SURFACE onto one product config and one pricing
+  // engine, never a second wholesale system with rules of its own.
+  const hasReseller = resolveWholesale(product) != null;
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, brand.defaultProductImage);
 

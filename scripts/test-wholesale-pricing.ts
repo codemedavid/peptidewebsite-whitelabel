@@ -28,6 +28,8 @@
  */
 
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   cartLines,
@@ -36,7 +38,11 @@ import {
   unitPrice,
   type CartLine,
 } from "../src/storefront/checkout";
-import { buildWholesaleScope, type WholesaleScope } from "../src/lib/storefront/wholesale";
+import {
+  buildWholesaleScope,
+  wholesaleRemaining,
+  type WholesaleScope,
+} from "../src/lib/storefront/wholesale";
 import type { Product } from "../src/storefront/types";
 
 let passed = 0;
@@ -254,6 +260,61 @@ check("legacy reseller leg never reaches a variation, scope or no scope", () => 
     cartTotal(lines, null, scope(lines)),
     40 * 100 + 40 * 150,
     "a legacy product's options price at their own price, exactly as today",
+  );
+});
+
+// ── The cart's "buy N more" nudge counts the COMBINED quantity ───────────────
+
+check("the nudge counts every option toward the same MOQ", () => {
+  const lines = cart(VIAL_CAPS, { Red: 250, Black: 250, Blue: 250 });
+  const ws = scope(lines);
+  // 750 of 1,000 — every line reports the same 250 remaining, because they all
+  // count toward one number. Reporting per line (1,000 - 250 = 750) would tell
+  // the customer to buy three times what they actually need.
+  for (const l of lines) {
+    assert.strictEqual(wholesaleRemaining(l.product, l.qty, ws), 250, l.product.name);
+  }
+});
+
+check("the nudge is zero once the MOQ is reached, and for products with no rule", () => {
+  const lines = cart(VIAL_CAPS, { Red: 500, Black: 500 });
+  assert.strictEqual(wholesaleRemaining(lines[0].product, lines[0].qty, scope(lines)), 0);
+  const plain = product({ id: "plain", price: 10 });
+  assert.strictEqual(wholesaleRemaining(plain, 5, null), 0, "no rule, nothing to nudge");
+});
+
+check("the nudge never appears when wholesale would not actually be cheaper", () => {
+  // A product whose wholesale price is not below its retail price can never
+  // apply, so telling the customer to buy more would be a lie.
+  const p = product({ id: "no-saving", price: 5, wholesale: { enabled: true, moq: 100, price: 9 } });
+  assert.strictEqual(wholesaleRemaining(p, 10, null), 0);
+});
+
+// ── The cart component prices through the same scope ─────────────────────────
+
+const cartSrc = readFileSync(
+  join(process.cwd(), "src/storefront/components/CartCheckout.tsx"),
+  "utf8",
+);
+
+check("CartCheckout builds one wholesale scope from the whole cart", () => {
+  assert.match(cartSrc, /buildWholesaleScope\(\s*lines,/, "the scope must be built from the cart lines");
+  assert.match(
+    cartSrc,
+    /brand\.wholesalePricing/,
+    "and gated on the tenant's wholesale entitlement",
+  );
+});
+
+check("every cart pricing call receives the wholesale scope", () => {
+  const totals = cartSrc.match(/cartTotal\([^;]*?wholesaleScope/g) ?? [];
+  assert.strictEqual(totals.length, 2, "both the live and snapshot totals");
+  const units = cartSrc.match(/unitPrice\([^;]*?wholesaleScope/g) ?? [];
+  assert.strictEqual(units.length, 2, "the stored order price AND the displayed price");
+  assert.match(
+    cartSrc,
+    /isResellerQty\(l\.product, l\.qty, wholesaleScope\)/,
+    "the wholesale badge must reflect the combined quantity too",
   );
 });
 

@@ -20,6 +20,7 @@ import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { buildWholesaleScope, wholesaleRemaining } from "@/lib/storefront/wholesale";
 import {
   activeChannels,
   activePaymentMethods,
@@ -114,8 +115,26 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     return b ? { coversAll: b.coversAll, productIds: b.productIds } : null;
   }, [brand.groupBuyBanner]);
   const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
-  const subtotal = useMemo(() => cartTotal(lines, groupBuyScope), [lines, groupBuyScope]);
-  const snapshotSubtotal = useMemo(() => cartTotal(cartLines(cart), groupBuyScope), [cart, groupBuyScope]);
+  // Wholesale (MOQ) pricing is measured across the WHOLE cart, per parent
+  // product: 250 Red + 250 Black + 250 Blue + 250 Yellow is 1,000 Vial Caps, not
+  // four lines of 250. One scope is built here and passed to every price, badge
+  // and nudge below, so the cart agrees with itself — and with the server, which
+  // rebuilds the same scope from the order at placement (orders.ts).
+  const wholesaleScope = useMemo(
+    () => buildWholesaleScope(lines, brand.wholesalePricing === true),
+    [lines, brand.wholesalePricing],
+  );
+  const subtotal = useMemo(
+    () => cartTotal(lines, groupBuyScope, wholesaleScope),
+    [lines, groupBuyScope, wholesaleScope],
+  );
+  // The snapshot prices the cart AS ADDED, to detect a price move. It reuses the
+  // live scope deliberately: comparing a wholesale total against a retail one
+  // would flag "prices updated" on every qualifying cart.
+  const snapshotSubtotal = useMemo(
+    () => cartTotal(cartLines(cart), groupBuyScope, wholesaleScope),
+    [cart, groupBuyScope, wholesaleScope],
+  );
   const pricesUpdated = cart.length > 0 && snapshotSubtotal !== subtotal;
   const channels = useMemo(() => activeChannels(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
@@ -423,7 +442,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         // lookup (authoritativeItemPrice).
         name: cartDisplayName(l.product),
         qty: l.qty,
-        price: unitPrice(l.product, l.qty, groupBuyScope),
+        price: unitPrice(l.product, l.qty, groupBuyScope, wholesaleScope),
         ...(l.product.variantName ? { variation: l.product.variantName } : {}),
       })),
       // Echo the fee this checkout DISPLAYED (zero when none was shown). The
@@ -575,13 +594,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             <ul className="sf-cart__lines">
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
-                const reseller = isResellerQty(l.product, l.qty);
-                const up = unitPrice(l.product, l.qty, groupBuyScope);
-                // How many more units of THIS product unlock the wholesale price.
-                const toReseller =
-                  !reseller && resellerUnitPrice(l.product) != null
-                    ? resellerMinQty(l.product) - l.qty
-                    : 0;
+                const reseller = isResellerQty(l.product, l.qty, wholesaleScope);
+                const up = unitPrice(l.product, l.qty, groupBuyScope, wholesaleScope);
+                // How many more units unlock the wholesale price — counted across
+                // every option of this product, the same way the price is.
+                const toReseller = reseller
+                  ? 0
+                  : wholesaleRemaining(l.product, l.qty, wholesaleScope);
                 // The dose lives in the variations, so a product added without
                 // picking one (the group-buy page has no picker) is named here.
                 const shownName = cartDisplayName(l.product);
