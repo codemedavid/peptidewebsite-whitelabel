@@ -11,10 +11,15 @@ import { Gate } from "@/components/Gate";
 import { FEATURES } from "@/lib/features/catalog";
 import { evaluateVisitorGate } from "@/lib/auth/gate-enforcement";
 import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
+import { BrandSplash } from "@/storefront/components/BrandSplash";
+import { normalizeBrandSplash } from "@/lib/storefront/brand-splash";
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
 import "@/storefront/editorial.css";
+// Imported last so the splash rules never land in storefront.css's cascade
+// (see brand-splash.css header: that file has a recorded override hazard).
+import "@/storefront/brand-splash.css";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
 export async function generateMetadata(): Promise<Metadata> {
@@ -87,6 +92,17 @@ export default async function StorefrontLayout({
   }
   const gateHeartbeat = gateDecision.status === "unlocked" ? <GateHeartbeat /> : null;
 
+  // ── Branded loading screen ─────────────────────────────────────────────────
+  // Default ON for every tenant: normalizeBrandSplash fails on, so a store
+  // nobody has configured still boots through its own mark and colors instead
+  // of a generic skeleton. Operator-only — configured on the platform's
+  // per-tenant Branding page, invisible to the store owner. Rendered below the
+  // access wall on purpose: a blocked visitor gets the gate, not a loading
+  // screen for a store they cannot see yet.
+  const splash = normalizeBrandSplash(
+    (branding?.config as { brandSplash?: unknown } | null)?.brandSplash,
+  );
+
   const fonts = (branding?.fonts ?? {}) as { heading?: string; body?: string };
   // Hero typography lives on the storefront Brand config; load its distinct
   // title/body fonts (if any) alongside the theme fonts.
@@ -141,6 +157,9 @@ export default async function StorefrontLayout({
   return (
     <div style={cssVars} className="min-h-screen bg-background text-foreground">
       {gateHeartbeat}
+      {splash.enabled ? (
+        <BrandSplash splash={splash} storeName={name} brandingLogoUrl={branding?.logoUrl} />
+      ) : null}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       {/* Preload the font CSS so the network request starts before HTML parsing

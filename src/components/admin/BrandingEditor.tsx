@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, ChevronDown, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink } from "lucide-react";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
 import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
@@ -38,17 +38,16 @@ import { CardDesignPicker, cardDesignLabel } from "@/components/admin/CardDesign
 import { CARD_PRESETS } from "@/storefront/cardDesign";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
 import { saveBrandingAction } from "@/actions/onboarding";
+import { uploadStorefrontImageAsAdminAction } from "@/actions/branding";
+import { applyBrandingAsset, type BrandingAssetKind } from "@/lib/upload/branding-assets";
 import {
-  uploadBrandingAssetAction,
-  uploadStorefrontImageAsAdminAction,
-  removeBrandingAssetAction,
-} from "@/actions/branding";
-import {
-  applyDefaultProductImage,
-  brandingAssetRules,
-  type BrandingAssetKind,
-} from "@/lib/upload/branding-assets";
-import { settleUpload } from "@/lib/upload/settle";
+  AssetUpload,
+  CollapsibleSection,
+  HeaderColorField,
+  Segmented,
+} from "@/components/admin/branding-fields";
+import { BrandSplashEditor, splashSummary } from "@/components/admin/BrandSplashEditor";
+import { SPLASH_DESIGNS, type BrandSplash } from "@/lib/storefront/brand-splash";
 
 // Tenant storefronts live at `<slug>.<ROOT>`. ROOT carries its own dev port
 // (e.g. "lvh.me:3100"), and `*.lvh.me` resolves in every browser incl. Safari —
@@ -143,9 +142,12 @@ export function BrandingEditor({
    * `cfg`: Save branding writes that object back wholesale, so a `cfg` still
    * holding the config as it was loaded would silently undo the upload.
    */
+  const mirrorAssetIntoCfg = (kind: BrandingAssetKind, url: string | null) =>
+    setCfg((c) => applyBrandingAsset(c as Record<string, unknown>, kind, url) as Partial<Brand>);
+
   const onDefaultProductImageChange = (url: string | null) => {
     setDefaultProductImage(url);
-    setCfg((c) => applyDefaultProductImage(c as Record<string, unknown>, url) as Partial<Brand>);
+    mirrorAssetIntoCfg("defaultProductImage", url);
   };
 
   // Map the storefront's hex palette onto the shadcn tokens the live preview
@@ -365,6 +367,33 @@ export function BrandingEditor({
                 onChange={(d) => setTweak("cardDesign", d)}
               />
             </div>
+          </CollapsibleSection>
+
+          {/* Loading screen — the branded splash every storefront boots through.
+              Operator-only: there is no store-admin counterpart, so this panel
+              is the ONLY place it can be changed. Like every other tweak here it
+              rides the shared Save branding; only its logo upload persists on
+              its own, which is why the URL is mirrored back into cfg. */}
+          <CollapsibleSection
+            title="Loading screen"
+            summary={splashSummary(storefrontBrand.brandSplash)}
+            badge={`${SPLASH_DESIGNS.length} designs`}
+          >
+            <BrandSplashEditor
+              slug={slug}
+              storeName={storefrontBrand.name}
+              value={storefrontBrand.brandSplash}
+              brandingLogoUrl={logoUrl}
+              surfaceColor={storefrontBrand.surface}
+              mainColor={storefrontBrand.main}
+              textColor={storefrontBrand.text}
+              onChange={(next: BrandSplash) => setTweak("brandSplash", next)}
+              onLogoUploaded={(url) => {
+                // The upload already wrote branding.config server-side; mirror
+                // it so the next Save branding can't write a stale cfg over it.
+                mirrorAssetIntoCfg("splashLogo", url);
+              }}
+            />
           </CollapsibleSection>
 
           {tab === "brand" ? (
@@ -1199,217 +1228,6 @@ function StorefrontPreview({
  * (themes, card designs) out of the way until the operator opens them. The
  * header always shows the current selection so closed ≠ hidden information.
  */
-function CollapsibleSection({
-  title,
-  summary,
-  badge,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  summary: string;
-  badge?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="rounded-[var(--radius)] border border-border">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">{title}</span>
-          <span className="block truncate text-xs text-muted-foreground">{summary}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          {badge && <span className="text-xs text-muted-foreground">{badge}</span>}
-          <ChevronDown
-            className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-            aria-hidden
-          />
-        </span>
-      </button>
-      {open && <div className="border-t border-border p-3">{children}</div>}
-    </section>
-  );
-}
-
-function Segmented<T extends string | number>({
-  options,
-  value,
-  onChange,
-  render,
-}: {
-  options: readonly T[];
-  value: T;
-  onChange: (v: T) => void;
-  render: (v: T) => string;
-}) {
-  return (
-    <div className="mt-1 flex gap-1">
-      {options.map((opt) => (
-        <button
-          key={String(opt)}
-          type="button"
-          onClick={() => onChange(opt)}
-          aria-pressed={value === opt}
-          className={`flex-1 rounded-[var(--radius)] border px-2 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-            value === opt ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-          }`}
-        >
-          {render(opt)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function AssetUpload({
-  slug,
-  kind,
-  label,
-  help,
-  value,
-  onChange,
-}: {
-  slug: string;
-  kind: BrandingAssetKind;
-  label: string;
-  help: string;
-  value: string | null;
-  onChange: (url: string | null) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Offer the picker exactly what the server will take for THIS kind — a
-  // product photo can't be an .ico, a favicon can. The extension is spelled out
-  // alongside the MIME because some browsers won't match image/x-icon by type.
-  const allowedTypes = brandingAssetRules(kind).allowedTypes;
-  const accept = [...allowedTypes, ...(allowedTypes.has("image/x-icon") ? [".ico"] : [])].join(",");
-
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    const fd = new FormData();
-    fd.set("file", file);
-    // settleUpload guarantees a resolved result even if the action throws (e.g.
-    // Next rejecting an oversized body), so busy never sticks on "Uploading…".
-    const res = await settleUpload(() => uploadBrandingAssetAction(slug, kind, fd));
-    setBusy(false);
-    if (inputRef.current) inputRef.current.value = "";
-    if ("error" in res) setError(res.error);
-    else onChange(res.url);
-  }
-
-  async function onRemove() {
-    setBusy(true);
-    setError(null);
-    const res = await settleUpload(() => removeBrandingAssetAction(slug, kind));
-    setBusy(false);
-    if ("error" in res) setError(res.error);
-    else onChange(null);
-  }
-
-  return (
-    <div className="rounded-[var(--radius)] border border-border p-3">
-      <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">
-          {value ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt={label} className="max-h-12 max-w-12 object-contain" />
-          ) : (
-            <span className="text-[10px] text-muted-foreground">none</span>
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium">{label}</span>
-            {value && (
-              <button
-                type="button"
-                onClick={onRemove}
-                disabled={busy}
-                className="text-xs text-muted-foreground underline disabled:opacity-50"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{help}</p>
-        </div>
-      </div>
-      <div className="mt-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept={accept}
-          onChange={onFile}
-          disabled={busy}
-          className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-[var(--radius)] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground disabled:opacity-50"
-        />
-        {busy && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
-        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-/**
- * An optional header color control. When `value` is unset it shows the inherited
- * `fallback` color in the swatch and a hint that it's inheriting; picking a color
- * sets the override, and the reset link clears it back to the brand default.
- */
-function HeaderColorField({
-  label,
-  help,
-  value,
-  fallback,
-  onChange,
-  onReset,
-  resetLabel,
-}: {
-  label: string;
-  help: string;
-  value?: string;
-  fallback: string;
-  onChange: (hex: string) => void;
-  onReset: () => void;
-  resetLabel: string;
-}) {
-  return (
-    <div>
-      <label className="flex items-center gap-3">
-        <input
-          type="color"
-          value={value ?? fallback}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-8 w-10 shrink-0 cursor-pointer rounded border border-border bg-transparent"
-        />
-        <span className="flex-1">
-          <span className="block text-sm font-medium">{label}</span>
-          <span className="block text-xs text-muted-foreground">{help}</span>
-        </span>
-      </label>
-      <div className="ml-[52px] mt-1">
-        {value ? (
-          <button type="button" onClick={onReset} className="text-xs text-primary underline">
-            {resetLabel}
-          </button>
-        ) : (
-          <span className="text-xs text-muted-foreground">Inheriting brand default</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ContrastHint({ label, ratio }: { label: string; ratio: number }) {
   const ok = ratio >= 4.5;
   return (

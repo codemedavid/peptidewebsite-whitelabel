@@ -269,11 +269,18 @@ check("the editor mirrors the uploaded URL into cfg (Save branding can't clobber
   // The upload writes branding.config server-side; `cfg` is written back
   // wholesale by Save branding, so a stale `cfg` would silently undo the upload.
   const src = read("src/components/admin/BrandingEditor.tsx");
+  // The editor mirrors EVERY config-backed asset through one generic helper
+  // (mirrorAssetIntoCfg → applyBrandingAsset), so the default product image and
+  // the loading-screen mark cannot drift apart in how they survive a save.
   assert.ok(
-    src.includes("applyDefaultProductImage"),
-    "BrandingEditor must merge the uploaded URL into cfg via applyDefaultProductImage",
+    src.includes("applyBrandingAsset"),
+    "BrandingEditor must merge the uploaded URL into cfg via applyBrandingAsset",
   );
-  assert.ok(/setCfg\([\s\S]{0,200}applyDefaultProductImage/.test(src), "the merge must go through setCfg");
+  assert.ok(/setCfg\([\s\S]{0,200}applyBrandingAsset/.test(src), "the merge must go through setCfg");
+  assert.ok(
+    /mirrorAssetIntoCfg\("defaultProductImage"/.test(src),
+    "the default product image must still be mirrored after an upload",
+  );
 });
 
 // ──────────────────────────── summary ────────────────────────────────────────

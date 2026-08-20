@@ -1,3 +1,5 @@
+import type { BrandSplash } from "@/lib/storefront/brand-splash";
+
 // Domain types for the white-label storefront + its admin.
 // Ported from the Claude Design handoff bundle (window.PRODUCTS, CATEGORIES, …).
 
@@ -342,6 +344,10 @@ export type NavItem = { label: string; href: string };
 export type Brand = {
   name: string;
   logoUrl: string;
+  // Branded loading screen (branding.config.brandSplash). Operator-only: set on
+  // the platform's per-tenant Branding page, with no store-admin counterpart.
+  // Default ON — see lib/storefront/brand-splash.
+  brandSplash?: BrandSplash;
   // Corner rounding for the logo everywhere it renders (header, hero logo
   // card, footer), as a border-radius percentage 0–50. Unset/0 = square (the
   // pre-feature look). Edited via the branding editor's "Logo curve" presets;

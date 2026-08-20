@@ -130,9 +130,11 @@ check("an uploaded mark is mirrored into cfg so Save branding can't undo it", ()
 check("the config rides the existing Save branding, with no second save action", () => {
   // saveBrandingAction writes the editor's cfg wholesale, so a separate
   // per-splash action would simply be clobbered by the next save.
+  // The panel is presentational (value + onChange); the editor owns the config
+  // state, so the key is written there — the same split as every other tweak.
   assert.ok(
-    read(PANEL).includes("brandSplash"),
-    "the panel must write brandSplash into the shared config state",
+    /setTweak\("brandSplash"/.test(read(EDITOR)),
+    "the editor must write brandSplash through setTweak, not a save action of its own",
   );
   assert.ok(
     !/saveBrandSplashAction/.test(read("src/actions/branding.ts")),

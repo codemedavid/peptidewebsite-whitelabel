@@ -1,0 +1,274 @@
+/* ============================================================================
+   BRAND SPLASH — the per-tenant branded loading screen.
+
+   Deliberately its own stylesheet rather than an append to storefront.css:
+   that file has a recorded cascade hazard where later small-screen blocks have
+   silently overridden earlier same-specificity rules. These rules govern a
+   full-viewport overlay, so losing one quietly is not survivable.
+
+   THE DISMISSAL BELOW IS A SAFETY MECHANISM, NOT A TRANSITION. Every rule that
+   ends the splash is pure CSS, so the overlay lifts even when JavaScript never
+   runs at all — a failed hydration, a 404'd chunk, or JS switched off. The
+   React effect in BrandSplash.tsx only makes it happen sooner.
+
+   Colors resolve through var(--splash-*, <theme fallback>): the operator's
+   overrides are emitted as inline vars ONLY when set (splashVarsCss), so an
+   unconfigured tenant inherits its own storefront theme.
+   ========================================================================== */
+
+.sf-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: var(--splash-bg, var(--brand-surface, #ffffff));
+  color: var(--splash-text, var(--brand-text, #111111));
+
+  /* The no-JS backstop. --splash-hold is the operator's maxDurationMs, capped
+     at 5s by normalizeBrandSplash. `forwards` is what makes it stick — without
+     it the overlay would spring back to fully opaque when the animation ends. */
+  animation: sf-splash-lift var(--splash-hold, 900ms) linear forwards;
+}
+
+/* The fast path: React adds this class at minDurationMs.
+   It uses a DIFFERENT keyframes name on purpose. Re-declaring the same
+   animation with a shorter duration does not restart it — the browser keeps the
+   original start time and rescales, so at 250ms into a 900ms hold the element
+   is already past the end of a 220ms timeline and cuts to hidden with no fade.
+   A distinct name is a new animation, so it always plays its full 220ms. */
+.sf-splash.is-dismissed {
+  animation: sf-splash-dismiss 220ms linear forwards;
+}
+
+@keyframes sf-splash-dismiss {
+  from {
+    opacity: 1;
+    visibility: visible;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@keyframes sf-splash-lift {
+  0%,
+  70% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    /* Both are required. Opacity alone leaves an invisible sheet over the whole
+       store that still swallows every click. */
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+.sf-splash__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+}
+
+.sf-splash__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sf-splash__logo {
+  display: block;
+  width: auto;
+  max-width: min(220px, 60vw);
+  max-height: 96px;
+  object-fit: contain;
+}
+
+/* The monogram is sized for a 32px header slot; the splash wants it big. */
+.sf-splash__monogram {
+  width: 72px;
+  height: 72px;
+  font-size: 28px;
+}
+
+.sf-splash__tagline {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+}
+
+/* ── the moving parts ──────────────────────────────────────────────────────
+   All designs ship in the markup; each design shows only its own. Motion stays
+   on transform/opacity so it runs on the compositor. */
+
+.sf-splash__ring,
+.sf-splash__bar {
+  display: none;
+}
+
+.sf-splash__ring {
+  width: 28px;
+  height: 28px;
+  border: 2px solid color-mix(in srgb, var(--splash-accent, var(--brand-main, #6c63ff)) 22%, transparent);
+  border-top-color: var(--splash-accent, var(--brand-main, #6c63ff));
+  border-radius: 50%;
+}
+
+.sf-splash__bar {
+  width: min(160px, 40vw);
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--splash-accent, var(--brand-main, #6c63ff)) 18%, transparent);
+}
+
+.sf-splash__bar-fill {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--splash-accent, var(--brand-main, #6c63ff));
+  transform: translateX(-100%);
+  animation: sf-splash-slide 1.1s ease-in-out infinite;
+}
+
+/* logo-pulse — the default. The mark breathes; nothing else shows. */
+.sf-splash--logo-pulse .sf-splash__mark {
+  animation: sf-splash-pulse 1.4s ease-in-out infinite;
+}
+
+/* ring — a spinner under the mark. */
+.sf-splash--ring .sf-splash__ring {
+  display: block;
+  animation: sf-splash-spin 0.7s linear infinite;
+}
+
+/* bar — an indeterminate progress bar under the mark. */
+.sf-splash--bar .sf-splash__bar {
+  display: block;
+}
+
+/* wordmark — the store's name carries the moment; the mark is set larger and
+   the tagline is the only supporting element. */
+.sf-splash--wordmark .sf-splash__logo {
+  max-width: min(320px, 78vw);
+  max-height: 140px;
+}
+.sf-splash--wordmark .sf-splash__monogram {
+  width: 96px;
+  height: 96px;
+  font-size: 38px;
+}
+
+/* fade — no motion beyond the lift itself. The quietest option, and what
+   reduced-motion collapses every other design into. */
+
+@keyframes sf-splash-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.94); opacity: 0.68; }
+}
+
+@keyframes sf-splash-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sf-splash-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* ── reduced motion ────────────────────────────────────────────────────────
+   Every decorative animation stops. The LIFT deliberately does not: it is the
+   mechanism that reveals the store, not decoration, and removing it would
+   strand these visitors behind a permanent overlay. It is reduced to a plain
+   opacity change with no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .sf-splash__mark,
+  .sf-splash__bar-fill,
+  .sf-splash--ring .sf-splash__ring {
+    animation: none;
+  }
+  .sf-splash__ring {
+    /* A static ring reads as a broken spinner; show the brand mark alone. */
+    display: none;
+  }
+}
+
+/* ── operator preview tile ──────────────────────────────────────────────────
+   The design picker in the platform's Branding editor renders the real overlay
+   markup at tile size. It deliberately shares every class above so the tile and
+   the shipped splash can never drift; only the frame and the scale differ.
+   The picker paints --splash-* explicitly (there is no storefront theme in
+   scope out in the admin), so the fallbacks above are unused here. */
+.sf-splash-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 88px;
+  overflow: hidden;
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--splash-bg);
+  color: var(--splash-text);
+}
+
+.sf-splash-preview .sf-splash__inner {
+  gap: 8px;
+  padding: 8px;
+}
+
+.sf-splash-preview .sf-splash__logo {
+  max-width: 96px;
+  max-height: 30px;
+}
+
+.sf-splash-preview .sf-splash__tagline {
+  font-size: 8px;
+  max-width: 22ch;
+}
+
+.sf-splash-preview .sf-splash__ring {
+  width: 14px;
+  height: 14px;
+}
+
+.sf-splash-preview .sf-splash__bar {
+  width: 72px;
+  height: 2px;
+}
+
+/* Stand-in for the Monogram component, which is not rendered inside the tile. */
+.sf-splash__initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--splash-accent);
+  color: var(--splash-bg);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sf-splash-preview.sf-splash--wordmark .sf-splash__logo {
+  max-width: 130px;
+  max-height: 44px;
+}
+.sf-splash-preview.sf-splash--wordmark .sf-splash__initials {
+  width: 46px;
+  height: 46px;
+  font-size: 17px;
+}
