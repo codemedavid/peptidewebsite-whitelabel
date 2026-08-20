@@ -145,7 +145,8 @@
     "test:storefront-css-vars": "tsx scripts/test-storefront-css-vars.ts",
     "test:calendar": "tsx scripts/test-calendar.ts",
     "test:calendar-paid": "tsx scripts/test-calendar-settlement.ts",
-    "test:hero-flush": "tsx scripts/test-hero-media-flush.ts"
+    "test:hero-flush": "tsx scripts/test-hero-media-flush.ts",
+    "test:brand-splash": "tsx scripts/test-brand-splash.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
