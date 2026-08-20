@@ -252,10 +252,12 @@ check("the branding action validates uploads per kind", () => {
   );
 });
 check("the branding action persists the image into branding.config", () => {
-  assert.ok(
-    read("src/actions/branding.ts").includes("applyDefaultProductImage"),
-    "actions/branding.ts must merge through applyDefaultProductImage",
-  );
+  // The action dispatches on assetTarget() and merges through the generalized
+  // applyBrandingAsset (of which applyDefaultProductImage is the named wrapper),
+  // so config-blob kinds can never fall through to the Branding-column branch.
+  const src = read("src/actions/branding.ts");
+  assert.ok(src.includes("applyBrandingAsset"), "actions/branding.ts must merge, not overwrite");
+  assert.ok(src.includes("assetTarget"), "actions/branding.ts must dispatch on the asset's store");
 });
 check("the Branding editor offers the upload control to the super admin", () => {
   assert.ok(

@@ -13,7 +13,8 @@ import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 import {
-  applyDefaultProductImage,
+  applyBrandingAsset,
+  assetTarget,
   isBrandingAssetKind,
   validateBrandingAssetFile,
   type BrandingAssetKind,
@@ -37,6 +38,50 @@ export type UploadAssetResult = { url: string | null } | { error: string };
  * refused by `normalizeDefaultProductImage`, so a demo default product image
  * shows in this editor but not on the storefront — demo has nowhere to host it.
  */
+/**
+ * Persist one branding asset URL (or clear it) for a tenant, to whichever store
+ * its kind declares — a `Branding` column, or a path inside the shared config
+ * blob. Dispatching on `assetTarget` is what keeps a config-blob kind such as
+ * `splashLogo` out of the column branch, where it would land on `faviconUrl`.
+ *
+ * Config writes upsert because a tenant may have no Branding row yet, and merge
+ * read-modify-write so they never clobber the rest of the storefront config.
+ */
+async function writeBrandingAsset(
+  tenant: { id: string; branding: { config: Prisma.JsonValue } | null },
+  kind: BrandingAssetKind,
+  url: string | null,
+): Promise<void> {
+  const target = assetTarget(kind);
+
+  if (target.store === "column") {
+    await prisma.branding.update({
+      where: { tenantId: tenant.id },
+      data: { [target.column]: url },
+    });
+    return;
+  }
+
+  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const config = applyBrandingAsset(current, kind, url) as Prisma.InputJsonValue;
+  await prisma.branding.upsert({
+    where: { tenantId: tenant.id },
+    update: { config },
+    create: { tenantId: tenant.id, config },
+  });
+}
+
+/** The demo-mode equivalent of writeBrandingAsset (no DB, file-backed fixtures). */
+function saveDemoBrandingAsset(slug: string, kind: BrandingAssetKind, url: string | null): void {
+  const target = assetTarget(kind);
+  if (target.store === "column") {
+    saveDemoBranding(slug, { [target.column]: url });
+    return;
+  }
+  const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+  saveDemoBranding(slug, { config: applyBrandingAsset(current, kind, url) });
+}
+
 export async function uploadBrandingAssetAction(
   slug: string,
   kind: BrandingAssetKind,
@@ -57,12 +102,7 @@ export async function uploadBrandingAssetAction(
   // ── Demo mode: no DB / no ImageKit — store a data URL so it renders locally.
   if (isDemoMode()) {
     const dataUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
-    if (kind === "defaultProductImage") {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(slug, { config: applyDefaultProductImage(current, dataUrl) });
-    } else {
-      saveDemoBranding(slug, kind === "logo" ? { logoUrl: dataUrl } : { faviconUrl: dataUrl });
-    }
+    saveDemoBrandingAsset(slug, kind, dataUrl);
     revalidatePath("/admin");
     revalidateTenant(slug, slug); // storefronts re-read branding (demo: id = slug)
     return { url: dataUrl };
@@ -100,20 +140,7 @@ export async function uploadBrandingAssetAction(
     // tenantId, so these single-row writes are already tenant-scoped. The
     // default product image is a key in the config blob rather than a column,
     // so it merges instead of overwriting (upsert: a tenant may have no row).
-    if (kind === "defaultProductImage") {
-      const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-      const config = applyDefaultProductImage(current, uploaded.url) as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId: tenant.id },
-        update: { config },
-        create: { tenantId: tenant.id, config },
-      });
-    } else {
-      await prisma.branding.update({
-        where: { tenantId: tenant.id },
-        data: kind === "logo" ? { logoUrl: uploaded.url } : { faviconUrl: uploaded.url },
-      });
-    }
+    await writeBrandingAsset(tenant, kind, uploaded.url);
 
     revalidatePath("/admin");
     revalidateTenant(tenant.id, slug);
@@ -206,12 +233,7 @@ export async function removeBrandingAssetAction(
   if (!isBrandingAssetKind(kind)) return { error: "Invalid asset kind." };
 
   if (isDemoMode()) {
-    if (kind === "defaultProductImage") {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(slug, { config: applyDefaultProductImage(current, null) });
-    } else {
-      saveDemoBranding(slug, kind === "logo" ? { logoUrl: null } : { faviconUrl: null });
-    }
+    saveDemoBrandingAsset(slug, kind, null);
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { url: null };
@@ -226,20 +248,7 @@ export async function removeBrandingAssetAction(
   });
   if (!tenant) return { error: "Tenant not found." };
 
-  if (kind === "defaultProductImage") {
-    const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-    const config = applyDefaultProductImage(current, null) as Prisma.InputJsonValue;
-    await prisma.branding.upsert({
-      where: { tenantId: tenant.id },
-      update: { config },
-      create: { tenantId: tenant.id, config },
-    });
-  } else {
-    await prisma.branding.update({
-      where: { tenantId: tenant.id },
-      data: kind === "logo" ? { logoUrl: null } : { faviconUrl: null },
-    });
-  }
+  await writeBrandingAsset(tenant, kind, null);
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
   return { url: null };
