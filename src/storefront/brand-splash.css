@@ -126,10 +126,12 @@
   display: none;
 }
 
+/* Scales with the mark it sits under. A fixed 28px ring read as an afterthought
+   beneath a 160px logo on desktop. */
 .sf-splash__ring {
-  width: 28px;
-  height: 28px;
-  border: 2px solid color-mix(in srgb, var(--splash-accent, var(--brand-main, #6c63ff)) 22%, transparent);
+  width: clamp(26px, 2.6vw, 40px);
+  height: clamp(26px, 2.6vw, 40px);
+  border: 2.5px solid color-mix(in srgb, var(--splash-accent, var(--brand-main, #6c63ff)) 20%, transparent);
   border-top-color: var(--splash-accent, var(--brand-main, #6c63ff));
   border-radius: 50%;
 }
@@ -157,10 +159,14 @@
   animation: sf-splash-pulse 1.4s ease-in-out infinite;
 }
 
-/* ring — a spinner under the mark. */
+/* ring — the default. A spinner under the mark, with the mark breathing gently
+   alongside it so the two read as one loading state. */
 .sf-splash--ring .sf-splash__ring {
   display: block;
-  animation: sf-splash-spin 0.7s linear infinite;
+  animation: sf-splash-spin 0.75s linear infinite;
+}
+.sf-splash--ring .sf-splash__mark {
+  animation: sf-splash-pulse 2s ease-in-out infinite;
 }
 
 /* bar — an indeterminate progress bar under the mark. */

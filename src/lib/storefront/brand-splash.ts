@@ -37,6 +37,15 @@ export const SPLASH_DESIGNS = ["logo-pulse", "ring", "bar", "wordmark", "fade"] 
 
 export type SplashDesign = (typeof SPLASH_DESIGNS)[number];
 
+/**
+ * The designs that render a moving loading indicator (a spinner or a bar) as
+ * well as the mark. A loading screen has to LOOK like one: on a slow connection
+ * the mark alone reads as a page that has finished and is simply empty, which
+ * is the opposite of what the splash is for. The default must be one of these —
+ * asserted by npm run test:brand-splash.
+ */
+export const DESIGNS_WITH_INDICATOR: readonly SplashDesign[] = ["ring", "bar"];
+
 /** The splash config, persisted at branding.config.brandSplash. */
 export type BrandSplash = {
   /** false = no splash. Absent or junk normalizes to true — never blank by typo. */
@@ -75,10 +84,14 @@ export const SPLASH_MIN_DURATION_CEILING = 3000;
 export const SPLASH_MAX_DURATION_FLOOR = 300;
 export const SPLASH_MAX_DURATION_CEILING = 5000;
 
-/** A tenant nobody has configured: on, quiet, and fully theme-colored. */
+/**
+ * A tenant nobody has configured: on, theme-colored, and visibly loading. The
+ * spinner is the default rather than the quieter logo-pulse because the mark
+ * breathing on its own does not read as progress — see DESIGNS_WITH_INDICATOR.
+ */
 export const BRAND_SPLASH_DEFAULT: BrandSplash = {
   enabled: true,
-  design: "logo-pulse",
+  design: "ring",
   logoUrl: "",
   tagline: "",
   showTagline: false,

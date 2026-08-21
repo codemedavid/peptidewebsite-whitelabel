@@ -28,6 +28,7 @@ import assert from "node:assert";
 
 import {
   BRAND_SPLASH_DEFAULT,
+  DESIGNS_WITH_INDICATOR,
   MAX_SPLASH_TAGLINE,
   SPLASH_DESIGNS,
   isBrandSplashEnabled,
@@ -107,6 +108,16 @@ check("an unknown design falls back to the default", () => {
 });
 check("the default design is one of the offered designs", () => {
   assert.ok(SPLASH_DESIGNS.includes(BRAND_SPLASH_DEFAULT.design));
+});
+check("the default design shows a moving loading indicator", () => {
+  // A loading screen has to LOOK like one. The first default (logo-pulse) only
+  // breathed the mark — a shopper on a slow connection saw a still logo and no
+  // sign that anything was happening. The out-of-the-box design must carry a
+  // spinner or bar, not just an animated mark.
+  assert.ok(
+    DESIGNS_WITH_INDICATOR.includes(BRAND_SPLASH_DEFAULT.design),
+    `default "${BRAND_SPLASH_DEFAULT.design}" has no visible loading indicator`,
+  );
 });
 
 // ──────────────────────────── colors (free hex, inline style) ───────────────
