@@ -15,3 +15,6 @@ next-env.d.ts
 # Postgres dumps of migrated stores — customer PII and auth hashes. Kept local
 # only; the legacy order import reads one from the repo root.
 *.backup
+
+# Stale build output kept aside during a broken-build recovery. Never commit.
+.next-stale-backup/
