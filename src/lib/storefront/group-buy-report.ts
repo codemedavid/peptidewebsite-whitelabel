@@ -22,6 +22,7 @@ import {
   buildSupplierReport,
   effectiveGroupBuyStatus,
   orderCountsAsDemand,
+  productLineKey,
   type GroupBuy,
   type SupplierReport,
 } from "./group-buy";
@@ -41,7 +42,7 @@ import {
 export type ReportRound = ReportRoundWindow;
 
 export type ReportCustomer = { name?: string; email?: string; phone?: string };
-export type ReportItem = { name: string; qty: number; price: number; productId?: string };
+export type ReportItem = { name: string; qty: number; price: number; productId?: string; variation?: string };
 /** Orders reach the workbook in the same shape the report page renders, so the
  *  export and the screen can never disagree about a customer, status or total. */
 export type ReportInputOrder = LinkableOrder;
@@ -50,6 +51,7 @@ export type ReportTotal = { label: string; value: string | number };
 export type ReportSummaryRow = {
   product: string;
   productId: string | null;
+  variation: string | null;
   demandQty: number;
   committedQty: number;
   orders: number;
@@ -169,8 +171,8 @@ export function prepareReport(
   for (const o of demand) {
     const seen = new Set<string>();
     for (const it of o.items) {
-      const key = it.productId ?? `name:${it.name}`;
-      if (seen.has(key)) continue; // count each product once per order
+      const key = productLineKey(it);
+      if (seen.has(key)) continue; // count each SKU once per order
       seen.add(key);
       orderCountByKey.set(key, (orderCountByKey.get(key) ?? 0) + 1);
     }
@@ -178,9 +180,10 @@ export function prepareReport(
   const summary: ReportSummaryRow[] = report.lines.map((l) => ({
     product: l.name,
     productId: l.productId,
+    variation: l.variation,
     demandQty: l.qty,
     committedQty: l.committedQty,
-    orders: orderCountByKey.get(l.productId ?? `name:${l.name}`) ?? 0,
+    orders: orderCountByKey.get(productLineKey({ name: l.name, productId: l.productId ?? undefined, variation: l.variation ?? undefined })) ?? 0,
   }));
 
   // Orders sheet — every order, every line, cancelled included, Counted flag.

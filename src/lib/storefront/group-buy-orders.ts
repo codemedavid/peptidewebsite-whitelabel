@@ -21,7 +21,7 @@
 // `unlinked` and surfaced in the UI — silently dropping it is how the original
 // bug hid for so long.
 
-import { orderCountsAsDemand } from "./group-buy";
+import { orderCountsAsDemand, productLineKey } from "./group-buy";
 
 /** The round fields the linking rule needs — a slice of GroupBuy, so callers can
  *  pass a GroupBuy straight through. */
@@ -240,6 +240,9 @@ export function summarizeRoundOrders(orders: LinkableOrder[]): RoundSummary {
 export type ProductToOrder = {
   product: string;
   productId: string | null;
+  /** The variation this row is for — null when the product has none. Two rows
+   *  can share a productId and differ only here; they are separate SKUs. */
+  variation: string | null;
   /** Vials to buy from the supplier — cancelled orders excluded entirely. */
   vials: number;
   /** How many valid orders included this product. */
@@ -258,10 +261,11 @@ export function buildProductsToOrder(orders: LinkableOrder[]): ProductToOrder[] 
     if (!orderCountsAsDemand(o.status)) continue;
     const seen = new Set<string>();
     for (const it of o.items ?? []) {
-      const key = it.productId ?? `name:${it.name}`;
+      const key = productLineKey(it);
       const row = byKey.get(key) ?? {
         product: it.name,
         productId: it.productId ?? null,
+        variation: it.variation ?? null,
         vials: 0,
         orders: 0,
       };

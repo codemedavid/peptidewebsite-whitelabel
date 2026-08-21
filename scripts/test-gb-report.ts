@@ -178,7 +178,7 @@ check("prepareReport uses the injected report instead of re-aggregating (no drif
     committedTotalQty: 5,
     committedTotalRevenue: 55,
     lines: [
-      { productId: "pX", name: "INJECTED", qty: 777, revenue: 8888, committedQty: 5, committedRevenue: 55 },
+      { productId: "pX", variation: null, name: "INJECTED", qty: 777, revenue: 8888, committedQty: 5, committedRevenue: 55 },
     ],
   };
   const p = prepareReport(round, reportOrders, sentinel);

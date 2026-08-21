@@ -418,6 +418,9 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
 
 export type SupplierReportLine = {
   productId: string | null; // null = legacy/name-only line
+  /** Which variation of that product — null when the product has none. Part of
+   *  the line's identity: two variations share a productId but are separate SKUs. */
+  variation: string | null;
   name: string;
   qty: number; // DEMAND qty
   revenue: number; // DEMAND revenue (qty × price)
@@ -441,7 +444,7 @@ export type SupplierReport = {
 type ReportOrder = {
   status: string;
   paymentStatus?: string;
-  items: Array<{ name: string; qty: number; price: number; productId?: string }>;
+  items: Array<{ name: string; qty: number; price: number; productId?: string; variation?: string }>;
 };
 
 // Excluded from demand entirely. Both English spellings + refunds. Exported as
@@ -466,6 +469,30 @@ function isCommitted(o: ReportOrder): boolean {
   return o.paymentStatus?.toLowerCase() === "paid" || COMMITTED_STATUSES.has(o.status.toLowerCase());
 }
 
+/**
+ * The identity of one orderable SKU, shared by every report surface.
+ *
+ * A product's variations (5ml / 10ml / 3ml…) all carry the SAME productId — they
+ * are Product clones stamped with a `variation` label at checkout. Keying on
+ * productId alone therefore merges genuinely different things the supplier has
+ * to be told apart: k-glow's batch 2 read "14 x Bacteriostatic Water - 5ml" when
+ * it actually needed 4x5ml, 4x10ml, 3x3ml and 3x3ml-5-vials. Ordering against
+ * that row buys fourteen of the wrong size.
+ *
+ * The variation is therefore PART of the key. The productId still leads, so a
+ * product renamed mid-round does not split into two supplier lines; items with
+ * no productId at all (legacy orders that predate the column) still fall back to
+ * the name.
+ */
+export function productLineKey(it: {
+  name: string;
+  productId?: string;
+  variation?: string;
+}): string {
+  const base = it.productId ?? `name:${it.name}`;
+  return `${base}::${it.variation ?? ""}`;
+}
+
 export function buildSupplierReport(groupBuyId: string, orders: ReportOrder[]): SupplierReport {
   const counted = orders.filter(isDemand);
   const byKey = new Map<string, SupplierReportLine>();
@@ -474,9 +501,10 @@ export function buildSupplierReport(groupBuyId: string, orders: ReportOrder[]): 
     const committed = isCommitted(o); // subset of demand: `counted` already excludes cancels
     if (committed) committedOrderCount++;
     for (const it of o.items) {
-      const key = it.productId ?? `name:${it.name}`;
+      const key = productLineKey(it);
       const line = byKey.get(key) ?? {
         productId: it.productId ?? null,
+        variation: it.variation ?? null,
         name: it.name,
         qty: 0,
         revenue: 0,
