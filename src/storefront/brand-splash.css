@@ -86,19 +86,27 @@
   justify-content: center;
 }
 
+/* Sized against the VIEWPORT, not a fixed cap. The splash fills the screen, so
+   a single pixel height cannot serve both ends: 96px looked right on a 390px
+   phone and left the mark marooned in the middle of a 1440px desktop. The
+   clamp floor keeps small screens from shrinking it away; the ceiling stops a
+   tall logo from crowding the tagline. */
 .sf-splash__logo {
   display: block;
   width: auto;
-  max-width: min(220px, 60vw);
-  max-height: 96px;
+  max-width: min(320px, 64vw);
+  max-height: clamp(80px, 11vw, 168px);
   object-fit: contain;
 }
 
-/* The monogram is sized for a 32px header slot; the splash wants it big. */
+/* The monogram stands in for the logo, so it tracks the same curve — otherwise
+   a logo-less tenant gets a conspicuously smaller splash than its neighbours. */
 .sf-splash__monogram {
-  width: 72px;
-  height: 72px;
-  font-size: 28px;
+  width: clamp(64px, 8vw, 116px);
+  height: clamp(64px, 8vw, 116px);
+  font-size: clamp(24px, 3vw, 44px);
+  /* The header monogram is a fixed 32px tile; these must beat that specificity. */
+  border-radius: calc(var(--radius) + 2px);
 }
 
 .sf-splash__tagline {
@@ -163,13 +171,13 @@
 /* wordmark — the store's name carries the moment; the mark is set larger and
    the tagline is the only supporting element. */
 .sf-splash--wordmark .sf-splash__logo {
-  max-width: min(320px, 78vw);
-  max-height: 140px;
+  max-width: min(460px, 82vw);
+  max-height: clamp(110px, 16vw, 240px);
 }
 .sf-splash--wordmark .sf-splash__monogram {
-  width: 96px;
-  height: 96px;
-  font-size: 38px;
+  width: clamp(88px, 11vw, 160px);
+  height: clamp(88px, 11vw, 160px);
+  font-size: clamp(32px, 4.2vw, 60px);
 }
 
 /* fade — no motion beyond the lift itself. The quietest option, and what

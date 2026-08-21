@@ -106,6 +106,26 @@ check("the splash stylesheet is its own file, not appended to storefront.css", (
   );
 });
 
+// ──────────────────────────── 3b. the mark scales with the viewport ─────────
+// Found by running the real storefront: a fixed 96px cap left the brand mark
+// marooned in the middle of a 1440px desktop viewport while looking correct on
+// a 390px phone. The splash is a full-viewport moment, so the mark has to be
+// sized relative to the viewport, not pinned to one number.
+console.log("\nmark sizing");
+check("the splash mark scales with the viewport instead of a fixed cap", () => {
+  const css = read(CSS);
+  const rule = css.slice(css.indexOf(".sf-splash__logo"), css.indexOf(".sf-splash__logo") + 320);
+  assert.ok(
+    /clamp\(/.test(rule),
+    "the logo cap must be viewport-relative (clamp), or it is undersized on desktop and oversized on phones",
+  );
+});
+check("the monogram fallback scales the same way", () => {
+  const css = read(CSS);
+  const rule = css.slice(css.indexOf(".sf-splash__monogram"), css.indexOf(".sf-splash__monogram") + 320);
+  assert.ok(/clamp\(/.test(rule), "the drawn fallback must scale with the mark it replaces");
+});
+
 // ──────────────────────────── 4. the operator surface ───────────────────────
 console.log("\noperator controls (per-tenant Branding page)");
 const EDITOR = "src/components/admin/BrandingEditor.tsx";
