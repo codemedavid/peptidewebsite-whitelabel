@@ -39,9 +39,17 @@
 //  7. Operator calls with nothing to change → rejected, not a false success.
 //  8. Operator sends a bad layout enum / out-of-range number → rejected.
 //  9. Operator retitles the catalog / rewrites the meta description.
+// 12. Operator restyles the brand splash → nested merge, bounded durations.
 
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import { THEME_PRESETS } from "../src/lib/theme/presets";
+import {
+  MAX_SPLASH_TAGLINE,
+  SPLASH_MAX_DURATION_CEILING,
+  SPLASH_MAX_DURATION_FLOOR,
+  SPLASH_MIN_DURATION_CEILING,
+  normalizeBrandSplash,
+} from "../src/lib/storefront/brand-splash";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -276,6 +284,123 @@ console.log("Journey 11 — a tenant with no branding config yet");
   // No stored themeId → any known preset is a genuine change, not a no-op.
   const themed = buildTenantBrandingUpdate({ config: {} }, { themeId: "clinical-white" });
   check("theme set on a themeless row", themed.themeId === "clinical-white" && themed.errors.length === 0, themed);
+}
+
+console.log("Journey 12 — brand splash");
+{
+  // The splash is the one brand surface that is a NESTED object, not a flat
+  // config key. Every other section writes brandSplash's siblings; this one
+  // writes INTO it, so the merge has to recurse or an operator changing the
+  // backdrop silently wipes the tagline they set last week.
+  const SPLASHED = {
+    ...CURRENT,
+    config: {
+      ...LIVE_CONFIG,
+      brandSplash: {
+        enabled: true,
+        design: "ring",
+        logoUrl: "https://ik.imagekit.io/x/splash.png",
+        bgColor: "#0B0B0B",
+        tagline: "Research-grade peptides",
+        showTagline: true,
+        minDurationMs: 250,
+        maxDurationMs: 900,
+      },
+    },
+  };
+
+  const tinted = buildTenantBrandingUpdate(SPLASHED, { splash: { bgColor: "#111111" } });
+  const next = tinted.config.brandSplash as Record<string, unknown>;
+  check("no errors on a splash tint", tinted.errors.length === 0, tinted.errors);
+  check("bgColor applied", next?.bgColor === "#111111", next);
+  check("tagline survives a color-only splash patch", next?.tagline === "Research-grade peptides", next);
+  check("design survives", next?.design === "ring", next);
+  check("logoUrl survives", next?.logoUrl === "https://ik.imagekit.io/x/splash.png", next);
+  check("durations survive", next?.minDurationMs === 250 && next?.maxDurationMs === 900, next);
+  check("splash patch reports a scoped path", tinted.changed.includes("splash.bgColor"), tinted.changed);
+  check("sibling commerce config survives a splash patch", Array.isArray(tinted.config.paymentMethods), tinted.config.paymentMethods);
+
+  // Fail loud, exactly like every other section.
+  check("unknown splash key rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { colour: "#fff" } }).errors.length > 0);
+  check("non-hex splash color rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { bgColor: "black" } }).errors.length > 0);
+  check("bad design enum rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { design: "spinner" } }).errors.length > 0);
+  check("non-boolean enabled rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { enabled: "yes" } }).errors.length > 0);
+  check("non-boolean showTagline rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { showTagline: 1 } }).errors.length > 0);
+  check("splash must be an object", buildTenantBrandingUpdate(SPLASHED, { splash: "ring" }).errors.length > 0);
+
+  // These land in an inline style attribute and an <img src>. Same trust
+  // boundary as colors — the renderer drops junk, but a WRITE must refuse it.
+  check(
+    "javascript: splash logo rejected",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { logoUrl: "javascript:alert(1)" } }).errors.length > 0,
+  );
+  check(
+    "css-smuggling bgColor rejected",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { bgColor: "#fff;background-image:url(x)" } }).errors.length > 0,
+  );
+
+  // Duration bounds are the reason an operator can't hide a live storefront
+  // behind a loading screen by typing an extra zero.
+  check(
+    "over-ceiling maxDurationMs rejected",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { maxDurationMs: SPLASH_MAX_DURATION_CEILING + 1 } }).errors.length > 0,
+  );
+  check(
+    "below-floor maxDurationMs rejected",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { maxDurationMs: SPLASH_MAX_DURATION_FLOOR - 1 } }).errors.length > 0,
+  );
+  check(
+    "over-ceiling minDurationMs rejected",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { minDurationMs: SPLASH_MIN_DURATION_CEILING + 1 } }).errors.length > 0,
+  );
+  check("non-number duration rejected", buildTenantBrandingUpdate(SPLASHED, { splash: { minDurationMs: "250" } }).errors.length > 0);
+
+  // The renderer silently yields the floor to the ceiling. A remote caller
+  // cannot see that happen, so the write path says so instead of quietly
+  // storing a pair that won't be honoured.
+  const incoherent = buildTenantBrandingUpdate(SPLASHED, { splash: { minDurationMs: 2000 } });
+  check("min above the stored max rejected", incoherent.errors.length > 0, incoherent.errors);
+  check(
+    "min above max is fine when both move together",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { minDurationMs: 2000, maxDurationMs: 2500 } }).errors.length === 0,
+  );
+
+  const long = buildTenantBrandingUpdate(SPLASHED, { splash: { tagline: "x".repeat(MAX_SPLASH_TAGLINE + 1) } });
+  check("over-length tagline rejected", long.errors.length > 0, long.errors);
+
+  // Clearing, the same way fonts clear: "" is a deliberate reset to the theme.
+  const cleared = buildTenantBrandingUpdate(SPLASHED, { splash: { bgColor: "", logoUrl: "" } });
+  const clearedSplash = cleared.config.brandSplash as Record<string, unknown>;
+  check("empty splash color clears to the theme", cleared.errors.length === 0 && clearedSplash?.bgColor === "", cleared.errors);
+  check("empty splash logo clears the upload", clearedSplash?.logoUrl === "", clearedSplash);
+
+  // Turning it off is a one-key patch and must not disturb the styling behind it.
+  const off = buildTenantBrandingUpdate(SPLASHED, { splash: { enabled: false } });
+  const offSplash = off.config.brandSplash as Record<string, unknown>;
+  check("splash can be switched off", off.errors.length === 0 && offSplash?.enabled === false, off.errors);
+  check("styling survives being switched off", offSplash?.bgColor === "#0B0B0B", offSplash);
+
+  // A tenant that has never opened the splash editor has no brandSplash at all.
+  const fresh = buildTenantBrandingUpdate({ config: {} }, { splash: { design: "bar", accentColor: "#22C55E" } });
+  const freshSplash = fresh.config.brandSplash as Record<string, unknown>;
+  check("splash patch applies to a tenant with no brandSplash", fresh.errors.length === 0, fresh.errors);
+  check("design written on a fresh tenant", freshSplash?.design === "bar", freshSplash);
+  check("accentColor written on a fresh tenant", freshSplash?.accentColor === "#22C55E", freshSplash);
+
+  // A no-op splash patch is a false success, same as every other section.
+  check(
+    "unchanged splash patch rejected as a no-op",
+    buildTenantBrandingUpdate(SPLASHED, { splash: { design: "ring" } }).errors.length > 0,
+  );
+
+  // The normalizer must accept everything this writes, or the two halves have
+  // drifted and the storefront would silently ignore an accepted patch.
+  const round = buildTenantBrandingUpdate(SPLASHED, {
+    splash: { design: "bar", accentColor: "#22C55E", tagline: "Peptides, properly", showTagline: true },
+  });
+  const normalized = normalizeBrandSplash(round.config.brandSplash);
+  check("what the patch writes, the renderer reads back", normalized.design === "bar" && normalized.accentColor === "#22C55E", normalized);
+  check("tagline round-trips through the normalizer", normalized.tagline === "Peptides, properly" && normalized.showTagline === true, normalized);
 }
 
 if (failures > 0) {
