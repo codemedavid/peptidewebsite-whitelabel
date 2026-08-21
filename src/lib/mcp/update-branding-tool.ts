@@ -23,6 +23,8 @@ import { buildTenantBrandingUpdate } from "@/lib/tenant/branding-update";
 import { applyDefaultProductImage } from "@/lib/upload/branding-assets";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import { THEME_PRESETS } from "@/lib/theme/presets";
+import { SPLASH_DESIGNS } from "@/lib/storefront/brand-splash";
+import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
 
 const HEX_HINT = "Hex color, e.g. #1C1917.";
@@ -77,6 +79,11 @@ const LAYOUT_SCHEMA = {
     heroBodySize: { type: "string", enum: ["sm", "md", "lg"] },
     heroTitleWeight: { type: "number", description: "400 to 800." },
     heroLogoSize: { type: "number", description: "Hero logo card size in px, 24 to 480." },
+    homeLayout: {
+      type: "string",
+      enum: [...HOME_LAYOUTS],
+      description: "Homepage shape. \"two-ways\" additionally needs an operator grant to render.",
+    },
     footerStyle: { type: "string", enum: ["columns", "compact"] },
     catalogSortStyle: { type: "string", enum: ["classic", "simple"] },
     logoCurve: { type: "number", description: "Logo corner rounding, 0 (square) to 50 (circle)." },
@@ -105,11 +112,37 @@ const LAYOUT_SCHEMA = {
   },
 };
 
+const SPLASH_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  description:
+    "Branded loading screen shown while the storefront hydrates. Only the keys you send change; the rest of the tenant's splash is left alone. Send an empty string on a color to fall back to the theme.",
+  properties: {
+    enabled: { type: "boolean", description: "false hides the splash entirely." },
+    design: {
+      type: "string",
+      enum: [...SPLASH_DESIGNS],
+      description: "Loading animation. \"ring\" and \"bar\" show visible progress; the others only animate the mark.",
+    },
+    bgColor: { type: "string", description: `Splash backdrop. ${HEX_HINT}` },
+    accentColor: { type: "string", description: `Spinner/bar color. ${HEX_HINT}` },
+    textColor: { type: "string", description: `Tagline color. ${HEX_HINT}` },
+    tagline: { type: "string", description: "Optional line under the mark." },
+    showTagline: { type: "boolean", description: "Whether the tagline renders." },
+    minDurationMs: { type: "number", description: "Floor before the splash may lift, 0 to 3000." },
+    maxDurationMs: { type: "number", description: "Ceiling after which it lifts regardless, 300 to 5000." },
+    logoUrl: {
+      type: "string",
+      description: 'Already-hosted http(s) splash mark, or "" to fall back to the header logo. To UPLOAD one, use splashLogo instead.',
+    },
+  },
+};
+
 export const UPDATE_BRANDING_TOOL = {
   name: "update_whitelabel_branding",
   title: "Update Tenant Branding / Storefront",
   description:
-    "Use this when a platform operator asks ChatGPT to restyle or redesign an EXISTING Pepweb whitelabel tenant — its theme preset, colors, fonts, storefront layout, hero copy, hero image, logo, favicon, or default product image. This is a partial update: only the fields you send change, and the tenant's products, orders, payment methods, FAQ, promo codes and other storefront data are never touched. Prefer this over create_whitelabel_tenant for any store that already exists — never re-create a tenant to change how it looks.",
+    "Use this when a platform operator asks ChatGPT to restyle or redesign an EXISTING Pepweb whitelabel tenant — its theme preset, colors, fonts, storefront layout, hero copy, hero image, logo, favicon, default product image, or its branded loading splash. This is a partial update: only the fields you send change, and the tenant's products, orders, payment methods, FAQ, promo codes and other storefront data are never touched. Prefer this over create_whitelabel_tenant for any store that already exists — never re-create a tenant to change how it looks.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -151,6 +184,7 @@ export const UPDATE_BRANDING_TOOL = {
           footerBlurb: { type: "string" },
         },
       },
+      splash: SPLASH_SCHEMA,
       catalog: {
         type: "object",
         additionalProperties: false,
@@ -172,6 +206,11 @@ export const UPDATE_BRANDING_TOOL = {
       heroImageFocus: { type: "string", enum: ["center", "top", "bottom", "left", "right"] },
       heroImageOverlay: { type: "boolean", description: "Show hero text over the image." },
       heroImageScrim: { type: "number", description: "Dark scrim strength, 0 to 70." },
+      splashLogo: {
+        ...MCP_ASSET_SCHEMA,
+        description:
+          "Splash-screen mark to upload from a public URL, data URL, or raw base64 bytes. Overrides splash.logoUrl.",
+      },
     },
     required: ["tenantSlug"],
   },
@@ -183,7 +222,7 @@ export const UPDATE_BRANDING_TOOL = {
 };
 
 /** Style sections forwarded to the pure merge; everything else here is I/O. */
-const PATCH_SECTIONS = ["themeId", "colors", "fonts", "layout", "hero", "identity", "catalog"] as const;
+const PATCH_SECTIONS = ["themeId", "colors", "fonts", "layout", "hero", "identity", "catalog", "splash"] as const;
 
 type ToolResult = {
   content: { type: "text"; text: string }[];
@@ -229,6 +268,7 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
   if (!tenant) return fail(`Tenant "${tenantSlug}" was not found.`);
 
   const heroImage = plainObject(args.heroImage);
+  const splashLogo = plainObject(args.splashLogo);
   const assetKinds = [
     { key: "logo", kind: "logo" as const },
     { key: "favicon", kind: "favicon" as const },
@@ -238,9 +278,9 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
 
   // A call that names a tenant and changes nothing is a mistake, not a success.
   const hasStylePatch = PATCH_SECTIONS.some((key) => args[key] !== undefined);
-  if (!hasStylePatch && !heroImage && !suppliedAssets.length) {
+  if (!hasStylePatch && !heroImage && !splashLogo && !suppliedAssets.length) {
     return fail(
-      `Nothing to update. Send at least one of: ${PATCH_SECTIONS.join(", ")}, logo, favicon, defaultProductImage, heroImage.`,
+      `Nothing to update. Send at least one of: ${PATCH_SECTIONS.join(", ")}, logo, favicon, defaultProductImage, heroImage, splashLogo.`,
     );
   }
 
@@ -268,7 +308,7 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
   }
 
   try {
-    const [uploads, hero] = await Promise.all([
+    const [uploads, hero, splashMark] = await Promise.all([
       Promise.all(
         suppliedAssets.map(async ({ key, kind }) => ({
           kind,
@@ -276,6 +316,7 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
         })),
       ),
       heroImage ? resolveMcpImage(tenant.id, heroImage, "hero") : Promise.resolve(null),
+      splashLogo ? resolveMcpImage(tenant.id, splashLogo, "splash") : Promise.resolve(null),
     ]);
 
     let config = merged.config;
@@ -291,6 +332,17 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
     if (defaultProductImageUrl) {
       config = applyDefaultProductImage(config, defaultProductImageUrl);
       changed.push("defaultProductImage");
+    }
+
+    if (splashMark) {
+      // Merge, never replace: buildTenantBrandingUpdate may have just written
+      // colors and a tagline into this same object, and the operator's stored
+      // durations live here too.
+      config = {
+        ...config,
+        brandSplash: { ...(plainObject(config.brandSplash) ?? {}), logoUrl: splashMark.url },
+      };
+      changed.push("splashLogo");
     }
 
     if (hero) {
@@ -351,6 +403,7 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
         faviconUrl: faviconUrl ?? null,
         defaultProductImageUrl: defaultProductImageUrl ?? null,
         heroImageUrl: hero?.url ?? null,
+        splashLogoUrl: splashMark?.url ?? null,
       },
     });
   } catch (e) {

@@ -35,6 +35,14 @@ import { contrastRatio, hexToHslTriple } from "@/lib/theme/color";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { MAX_BORDER_WIDTH } from "@/lib/storefront/brand-border";
 import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
+import {
+  MAX_SPLASH_TAGLINE,
+  SPLASH_DESIGNS,
+  SPLASH_MAX_DURATION_CEILING,
+  SPLASH_MAX_DURATION_FLOOR,
+  SPLASH_MIN_DURATION_CEILING,
+  normalizeBrandSplash,
+} from "@/lib/storefront/brand-splash";
 
 /** #RGB or #RRGGBB — the same hex discipline as brand-border / cardDesign. */
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -70,6 +78,7 @@ export const BRANDING_PATCH_SECTIONS = [
   "hero",
   "identity",
   "catalog",
+  "splash",
 ] as const;
 
 /** patch key → the flat branding.config key it writes. */
@@ -254,6 +263,136 @@ function applyStrings(
   }
 }
 
+/**
+ * Brand splash — the one section that writes into a NESTED object.
+ *
+ * Every other section sets a flat branding.config key, so setField's identity
+ * check is enough. brandSplash is a sub-object, which makes a naive assignment
+ * destructive: an operator retinting the backdrop would drop the tagline and
+ * duration someone set in the admin UI, and nothing in the request would show
+ * it. So this reads the stored splash, merges key-by-key onto a copy, and
+ * writes the whole object back.
+ *
+ * The value bounds are brand-splash.ts's, imported rather than restated — the
+ * renderer clamps junk silently, and a write path that disagreed with it would
+ * accept patches the storefront then ignores.
+ */
+const SPLASH_COLORS = ["bgColor", "accentColor", "textColor"] as const;
+const SPLASH_BOOLEANS = ["enabled", "showTagline"] as const;
+
+/** Duration key → [min, max]. Bounds come from the renderer's own ceilings. */
+const SPLASH_DURATIONS: Record<string, [number, number]> = {
+  minDurationMs: [0, SPLASH_MIN_DURATION_CEILING],
+  maxDurationMs: [SPLASH_MAX_DURATION_FLOOR, SPLASH_MAX_DURATION_CEILING],
+};
+
+function applySplash(pass: Pass, raw: Record<string, unknown>): void {
+  rejectUnknownKeys(pass, "splash", raw, [
+    ...SPLASH_COLORS,
+    ...SPLASH_BOOLEANS,
+    ...Object.keys(SPLASH_DURATIONS),
+    "design",
+    "logoUrl",
+    "tagline",
+  ]);
+
+  const stored = plainObject(pass.next.brandSplash) ?? {};
+  const next: Record<string, unknown> = { ...stored };
+  const changed: string[] = [];
+
+  const set = (key: string, value: unknown): void => {
+    if (next[key] === value) return;
+    next[key] = value;
+    changed.push(`splash.${key}`);
+  };
+
+  for (const key of SPLASH_BOOLEANS) {
+    if (!(key in raw)) continue;
+    const value = raw[key];
+    if (typeof value !== "boolean") {
+      pass.errors.push(`splash.${key} must be true or false (got ${JSON.stringify(value)}).`);
+      continue;
+    }
+    set(key, value);
+  }
+
+  for (const key of SPLASH_COLORS) {
+    if (!(key in raw)) continue;
+    const value = raw[key];
+    // "" is a deliberate reset to the theme color, the same clear the fonts
+    // section uses. Omit the key to leave a color alone.
+    if (value === "") {
+      set(key, "");
+      continue;
+    }
+    if (typeof value !== "string" || !HEX_RE.test(value)) {
+      pass.errors.push(`splash.${key} must be a hex color like #0B0B0B or #111, or "" to use the theme (got ${JSON.stringify(value)}).`);
+      continue;
+    }
+    set(key, value);
+  }
+
+  if ("design" in raw) {
+    const value = raw.design;
+    if (typeof value !== "string" || !(SPLASH_DESIGNS as readonly string[]).includes(value)) {
+      pass.errors.push(`splash.design must be one of: ${SPLASH_DESIGNS.join(", ")} (got ${JSON.stringify(value)}).`);
+    } else {
+      set("design", value);
+    }
+  }
+
+  if ("logoUrl" in raw) {
+    const value = raw.logoUrl;
+    // Lands in an <img src>. http(s) only — the same rule the renderer applies,
+    // and what keeps javascript:/data: off a full-viewport overlay.
+    if (value === "") {
+      set("logoUrl", "");
+    } else if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) {
+      pass.errors.push(`splash.logoUrl must be an http(s) image URL, or "" to fall back to the header logo (got ${JSON.stringify(value)}).`);
+    } else {
+      set("logoUrl", value.trim());
+    }
+  }
+
+  if ("tagline" in raw) {
+    const value = raw.tagline;
+    if (typeof value !== "string") {
+      pass.errors.push(`splash.tagline must be a string (got ${JSON.stringify(value)}).`);
+    } else if (value.trim().length > MAX_SPLASH_TAGLINE) {
+      pass.errors.push(`splash.tagline is ${value.trim().length} characters; the limit is ${MAX_SPLASH_TAGLINE}.`);
+    } else {
+      set("tagline", value.trim());
+    }
+  }
+
+  for (const [key, [min, max]] of Object.entries(SPLASH_DURATIONS)) {
+    if (!(key in raw)) continue;
+    const value = raw[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+      pass.errors.push(`splash.${key} must be a number between ${min} and ${max} (got ${JSON.stringify(value)}).`);
+      continue;
+    }
+    set(key, Math.round(value));
+  }
+
+  // The renderer resolves an inverted pair by yielding the floor to the
+  // ceiling. That is right on render and wrong here: a remote caller can't see
+  // the clamp, so it would read a stored 2000ms minimum that never happens.
+  const resolved = normalizeBrandSplash(next);
+  const min = typeof next.minDurationMs === "number" ? next.minDurationMs : resolved.minDurationMs;
+  const max = typeof next.maxDurationMs === "number" ? next.maxDurationMs : resolved.maxDurationMs;
+  if (min > max) {
+    pass.errors.push(
+      `splash.minDurationMs (${min}) is above splash.maxDurationMs (${max}); the splash would lift before its own floor. Send both together.`,
+    );
+    return;
+  }
+
+  if (!changed.length) return;
+  pass.next.brandSplash = next;
+  pass.changed.push(...changed);
+}
+
 function applyLayout(pass: Pass, raw: Record<string, unknown>): void {
   rejectUnknownKeys(pass, "layout", raw, [
     ...LAYOUT_BOOLEANS,
@@ -380,6 +519,7 @@ export function buildTenantBrandingUpdate(
     { key: "hero", run: (raw) => applyStrings(pass, "hero", raw, HERO_FIELDS, MAX_LONG) },
     { key: "identity", run: (raw) => applyStrings(pass, "identity", raw, IDENTITY_FIELDS, MAX_LONG) },
     { key: "catalog", run: (raw) => applyStrings(pass, "catalog", raw, CATALOG_FIELDS, MAX_SHORT) },
+    { key: "splash", run: (raw) => applySplash(pass, raw) },
   ];
 
   for (const { key, run } of sectionHandlers) {

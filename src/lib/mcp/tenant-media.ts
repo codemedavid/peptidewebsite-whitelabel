@@ -15,7 +15,7 @@ import {
   type McpImageAsset,
 } from "@/lib/mcp/image-assets";
 
-export type McpMediaKind = "hero" | "product";
+export type McpMediaKind = "hero" | "product" | "splash";
 export type McpMediaUpload = { url: string; fileId?: string };
 
 /**
@@ -44,6 +44,17 @@ export const MCP_ASSET_SCHEMA = {
 };
 
 /**
+ * Per-kind upload metadata: the human label errors quote, the MediaAsset row
+ * type, and the ImageKit tags the media library filters on. A table rather
+ * than branches so adding a kind is one entry, not three ternaries to find.
+ */
+const MEDIA_KINDS: Record<McpMediaKind, { label: string; mediaType: string; tags: readonly string[] }> = {
+  hero: { label: "hero image", mediaType: "branding:hero", tags: ["branding:hero", "hero"] },
+  product: { label: "product image", mediaType: "product", tags: ["product"] },
+  splash: { label: "splash logo", mediaType: "branding:splash", tags: ["branding:splash", "splash"] },
+};
+
+/**
  * Resolve an MCP asset to a URL the storefront can render. Uploads by default;
  * `upload: false` keeps an already-hosted URL, which is still validated as a
  * public http(s) target. Raw base64 always uploads — there is nothing to link.
@@ -53,7 +64,7 @@ export async function resolveMcpImage(
   asset: McpImageAsset,
   kind: McpMediaKind,
 ): Promise<McpMediaUpload> {
-  const label = kind === "hero" ? "hero image" : "product image";
+  const { label, mediaType, tags } = MEDIA_KINDS[kind];
   const needsUpload =
     asset.upload !== false || Boolean(String(asset.dataUrl ?? "").trim() || String(asset.dataBase64 ?? "").trim());
   if (!needsUpload) {
@@ -61,13 +72,12 @@ export async function resolveMcpImage(
   }
 
   const file = await fetchMcpImageAsset(asset, label);
-  const mediaType = kind === "hero" ? "branding:hero" : "product";
 
   const uploaded = await uploadTenantMedia({
     tenantId,
     file: file.bytes,
     fileName: `${kind}-${file.fileName}`,
-    tags: kind === "hero" ? ["branding:hero", "hero"] : ["product"],
+    tags: [...tags],
   });
 
   // The image is already safely hosted if this audit row fails, so match the

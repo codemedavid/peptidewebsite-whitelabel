@@ -40,9 +40,11 @@
 //  8. Operator sends a bad layout enum / out-of-range number → rejected.
 //  9. Operator retitles the catalog / rewrites the meta description.
 // 12. Operator restyles the brand splash → nested merge, bounded durations.
+// 13. The tool's JSON schema and this core agree on every field.
 
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import { THEME_PRESETS } from "../src/lib/theme/presets";
+import { UPDATE_BRANDING_TOOL } from "../src/lib/mcp/update-branding-tool";
 import {
   MAX_SPLASH_TAGLINE,
   SPLASH_MAX_DURATION_CEILING,
@@ -401,6 +403,86 @@ console.log("Journey 12 — brand splash");
   const normalized = normalizeBrandSplash(round.config.brandSplash);
   check("what the patch writes, the renderer reads back", normalized.design === "bar" && normalized.accentColor === "#22C55E", normalized);
   check("tagline round-trips through the normalizer", normalized.tagline === "Peptides, properly" && normalized.showTagline === true, normalized);
+}
+
+console.log("Journey 13 — the schema and the core cannot drift");
+{
+  // These two halves are edited in different files and fail in opposite
+  // directions, which is how they drift unnoticed:
+  //
+  //   in the SCHEMA but not the CORE → the connector advertises a field, the
+  //   model sends it, and the core rejects the WHOLE patch as an unknown key.
+  //   in the CORE but not the SCHEMA → the field is unreachable. ChatGPT never
+  //   learns it exists, so the capability silently isn't there. That is exactly
+  //   what happened to layout.homeLayout, which this check now pins.
+  //
+  // Probing the core with a real patch per key is what makes this a behavior
+  // test rather than two lists copied into a third place.
+  const schema = UPDATE_BRANDING_TOOL.inputSchema.properties as Record<string, { properties?: Record<string, unknown>; enum?: string[]; type?: string }>;
+  const BASE = { config: {} };
+
+  // Every section the schema advertises must be a section the core accepts.
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+    check(`schema advertises the ${section} section`, Boolean(schema[section]?.properties), Object.keys(schema));
+    const rejected = buildTenantBrandingUpdate(BASE, { [section]: {} }).errors.some((e) =>
+      e.includes(`Unknown branding section "${section}"`),
+    );
+    check(`core accepts the ${section} section`, !rejected);
+  }
+
+  // A value the core will accept for each JSON type, so the probe tests the
+  // KEY's existence rather than accidentally testing its validation.
+  const probeFor = (spec: { type?: string; enum?: string[] }): unknown => {
+    if (spec.enum?.length) return spec.enum[0];
+    if (spec.type === "boolean") return true;
+    if (spec.type === "number") return undefined; // ranges differ per key; see below
+    return "";
+  };
+
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+    const props = (schema[section]?.properties ?? {}) as Record<string, { type?: string; enum?: string[] }>;
+    for (const [key, spec] of Object.entries(props)) {
+      const probe = probeFor(spec);
+      // Numbers carry per-key ranges the schema states only in prose; an
+      // unknown-key error is still distinguishable from a range error.
+      const patch = { [section]: { [key]: probe === undefined ? 0 : probe } };
+      const errors = buildTenantBrandingUpdate(BASE, patch).errors;
+      const unknown = errors.some((e) => e.includes(`Unknown ${section} field "${key}"`));
+      check(`${section}.${key} is known to the core`, !unknown, errors);
+    }
+  }
+
+  // The other direction, and the one that actually bit: a field the core
+  // accepts but the schema never advertises is UNREACHABLE — ChatGPT is never
+  // told it exists. The core already publishes its own allow-list in the
+  // unknown-key error, so probe it with a key nothing could legitimately use
+  // rather than duplicating the field tables into this test.
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+    const [error] = buildTenantBrandingUpdate(BASE, { [section]: { __drift_probe__: 1 } }).errors;
+    const allowed = (error?.match(/Allowed: (.+)\.$/)?.[1] ?? "").split(", ").filter(Boolean);
+    check(`${section} publishes its allow-list`, allowed.length > 0, error);
+
+    const advertised = new Set(Object.keys(schema[section]?.properties ?? {}));
+    const unreachable = allowed.filter((key) => !advertised.has(key));
+    check(`every ${section} field the core accepts is advertised`, unreachable.length === 0, unreachable);
+  }
+
+  // And the enums: every value the schema pins must match the core's, or the
+  // connector offers a value the core refuses.
+  const layoutProps = (schema.layout?.properties ?? {}) as Record<string, { enum?: string[] }>;
+  for (const [key, spec] of Object.entries(layoutProps)) {
+    if (!spec.enum) continue;
+    for (const value of spec.enum) {
+      const errors = buildTenantBrandingUpdate(BASE, { layout: { [key]: value } }).errors;
+      check(`layout.${key}="${value}" is accepted by the core`, !errors.some((e) => e.startsWith(`layout.${key}`)), errors);
+    }
+  }
+
+  const splashProps = (schema.splash?.properties ?? {}) as Record<string, { enum?: string[] }>;
+  for (const value of splashProps.design?.enum ?? []) {
+    const errors = buildTenantBrandingUpdate(BASE, { splash: { design: value } }).errors;
+    check(`splash.design="${value}" is accepted by the core`, !errors.some((e) => e.startsWith("splash.design")), errors);
+  }
 }
 
 if (failures > 0) {
