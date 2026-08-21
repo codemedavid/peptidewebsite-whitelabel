@@ -160,3 +160,107 @@ npx tsc --noEmit       clean
 | GREEN | `4c919a8` feat(storefront): split the group-buy report into supplier and customer workbooks |
 | GREEN | `1786b37` feat(storefront): flag every finished group buy until its reports are pulled |
 | REFACTOR | `8679301` refactor(storefront): retitle the group-buy report modal |
+
+---
+
+# Follow-up (same day) — live verification on k-glow
+
+Running the finished reports against k-glow's real database surfaced two further
+problems. Both are recorded here because they were found *by* this work and fixed
+under the same RED/GREEN discipline.
+
+## Finding 1 — a round was renamed and reused, not replaced
+
+k-glow's "Group buy batch 3" held **7** orders. Five of them were `shipped` and
+carried checkout snapshots reading `Group buy batch 2` / `Group buy 08/02 batch 2`;
+the round's window (08-19 → 08-25) opened five days *after* the last of them was
+placed (08-14 13:02). The owner had edited a live round's name and window instead
+of closing it and creating a new one, so a fulfilled run's orders stayed attached.
+
+The batch-3 supplier order therefore read **43 vials** when only **8** were actually
+outstanding — 35 had already been bought and shipped.
+
+**Fix:** `scripts/split-reused-gb-round.ts` — dry-run by default, `--apply` to write.
+It detects strays by the one piece of evidence that survives a rename (the order's
+own `groupBuyName` snapshot, stamped at checkout and never rewritten), reconstructs
+a **closed** round spanning them, and re-points only those orders. Snapshots are
+never edited. Blank snapshots are left alone — they prove nothing.
+
+Applied to k-glow on 2026-08-21:
+
+```
+"Group buy batch 2"  (closed, new: cmt2l1bd10001molfdolcxhas)  5 orders · 35 vials · PHP 84,330
+"Group buy batch 3"  (active)                                  2 orders ·  8 vials · PHP 19,181.40
+DOUBLE-COUNT CHECK: 7 distinct orders across all 5 rounds → PASS
+```
+
+## Finding 2 — product variations collapsed into one supplier line (CRITICAL)
+
+Verifying the split exposed a far worse, long-standing bug. A product's variations
+(5ml / 10ml / 3ml…) are Product clones that all carry the **same `productId`**,
+distinguished only by a `variation` label. Every report surface keyed on `productId`
+alone, so different SKUs merged into one row labelled by whichever arrived first.
+
+Live k-glow batch 2 read:
+
+```
+14 × Bacteriostatic Water — 5ml
+```
+
+when the round actually needed:
+
+```
+ 4 × Bacteriostatic Water — 5ml             @510
+ 4 × Bacteriostatic Water — 10ml            @732
+ 3 × Bacteriostatic Water — 3ml             @488
+ 3 × Bacteriostatic Water — 3ml bac 5 vials @245
+```
+
+Sending that orders fourteen of the wrong size and none of the other three. It hit
+**5 of that round's 11 rows** — also Tirzepatide (3 SKUs → 1), Retatrutide (3 → 1),
+GHK-CU (2 → 1) and HHB (2 → 1). The vial *total* was always right, which is why it
+went unnoticed: only the split was wrong.
+
+**Fix:** `productLineKey()` in `src/lib/storefront/group-buy.ts` is now the single SKU
+identity, shared by `buildSupplierReport`, `buildProductsToOrder` and `prepareReport`'s
+per-SKU order counts. The `productId` still leads, so a mid-round rename does not split
+a line; items with no `productId` still fall back to the name.
+
+- **RED:** `npm run test:gb-report` → `32 passed, 4 failed` —
+  `expected 4 SKUs, got Bacteriostatic Water — 5ml`
+- **GREEN:** `npm run test:gb-report` → `36 passed, 0 failed`
+
+### Added guarantees
+
+| # | What is guaranteed | Test | Result |
+|---|---|---|---|
+| 19 | Each variation gets its own supplier line | `buildSupplierReport keeps each variation on its own line` | PASS |
+| 20 | The four bac-water SKUs read 4/4/3/3, not 14 | `buildProductsToOrder gives the supplier one row per variation` | PASS |
+| 21 | Variation rows still sum to the headline vial count | `the variation rows still sum to the headline vial count` | PASS |
+| 22 | Product Summary carries every variation too | `Product Summary carries every variation too, none swallowed` | PASS |
+| 23 | Per-variation order counts aren't copied from the base | `per-variation order counts are right…` | PASS |
+| 24 | **A mid-round rename still does NOT split a line** | `a product with NO variations still groups by productId (no regression)` | PASS |
+| 25 | Same variation label on different products never merges | `two variations of DIFFERENT products never merge` | PASS |
+| 26 | Legacy items with no productId still fall back to name | `legacy items with no productId still fall back to the name` | PASS |
+
+### Live re-verification after the fix
+
+```
+Group buy batch 2 — 20 rows, 35 vials   (was 11 collapsed rows)   RECONCILE PASS
+Group buy batch 3 —  7 rows,  8 vials                             RECONCILE PASS
+```
+
+## Follow-up commits
+
+| Stage | Commit |
+|---|---|
+| RED | `e6e1018` test(storefront): reproducer for variations collapsing into one supplier line |
+| GREEN | `519c181` fix(storefront): never collapse product variations into one supplier line |
+
+## Still open
+
+- **Other tenants are affected too.** `dragon-peptides` (88 GB products, many with
+  variations) and `hpglow` have never been checked against the corrected grouping.
+  Any supplier order placed from a past report may have been mis-split the same way.
+- The three empty k-glow rounds (`june gb`, `july 28`, `check out now`) remain
+  unarchived, so they still show "Reports ready". Archiving them clears it.
