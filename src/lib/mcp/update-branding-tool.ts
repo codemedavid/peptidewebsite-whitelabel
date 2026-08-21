@@ -150,7 +150,7 @@ export const UPDATE_BRANDING_TOOL = {
       adminToken: {
         type: "string",
         description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
       tenantSlug: { type: "string", description: "Existing tenant slug, e.g. skn-aesthetic-supply-co." },
       themeId: {
