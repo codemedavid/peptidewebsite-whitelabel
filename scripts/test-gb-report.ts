@@ -39,7 +39,8 @@ type O = {
   paymentStatus?: string;
   items: Array<{ name: string; qty: number; price: number; productId?: string }>;
 };
-const line = (name: string, qty: number, price: number, productId?: string) => ({ name, qty, price, productId });
+const line = (name: string, qty: number, price: number, productId?: string, variation?: string) =>
+  ({ name, qty, price, productId, variation });
 
 console.log("\nSupplier report — demand vs committed\n");
 
@@ -317,6 +318,93 @@ check("a scheduled round that lapsed only closes when scheduling is on", () => {
   const list = [gb("sched", "scheduled", PAST)];
   assert.deepEqual(roundsAwaitingReport(list, false), [], "without the flag it never went live");
   assert.deepEqual(roundsAwaitingReport(list, true).map((r) => r.id), ["sched"]);
+});
+
+// ── Variations are separate SKUs ─────────────────────────────────────────────
+// k-glow, 2026-08-21: the supplier sheet read "14 × Bacteriostatic Water — 5ml"
+// when the round actually needed 4×5ml, 4×10ml, 3×3ml and 3×3ml-5-vials. Every
+// variation of a product shares ONE productId, and the grouping key was the
+// productId alone, so four SKUs collapsed into one row labelled by whichever
+// arrived first. Ordering against that row buys 14 of the wrong size.
+console.log("\nVariations must never collapse into one supplier line\n");
+
+const BAC = "p-bac";
+const bacOrders = [
+  { orderNumber: "V1", date: D, status: "shipped", paymentStatus: "paid",
+    customer: { name: "Ann", email: "ann@x.io" },
+    items: [
+      line("Bacteriostatic Water — 5ml", 4, 510, BAC, "5ml"),
+      line("Bacteriostatic Water — 10ml", 4, 732, BAC, "10ml"),
+    ] },
+  { orderNumber: "V2", date: D, status: "shipped", paymentStatus: "paid",
+    customer: { name: "Bo", email: "bo@x.io" },
+    items: [
+      line("Bacteriostatic Water — 3ml", 3, 488, BAC, "3ml"),
+      line("Bacteriostatic Water — 3ml bac 5 vials", 3, 245, BAC, "3ml bac 5 vials"),
+    ] },
+];
+
+check("buildSupplierReport keeps each variation on its own line", () => {
+  const r = buildSupplierReport("gb", bacOrders);
+  assert.equal(r.lines.length, 4, `expected 4 SKUs, got ${r.lines.map((l) => l.name).join(" | ")}`);
+  assert.equal(r.totalQty, 14, "the vial total is unchanged — only the split differs");
+});
+
+check("buildProductsToOrder gives the supplier one row per variation", () => {
+  const p = prepareReport(round, bacOrders);
+  const byName = new Map(p.productsToOrder.map((x) => [x.product, x.vials]));
+  assert.equal(byName.get("Bacteriostatic Water — 5ml"), 4);
+  assert.equal(byName.get("Bacteriostatic Water — 10ml"), 4);
+  assert.equal(byName.get("Bacteriostatic Water — 3ml"), 3);
+  assert.equal(byName.get("Bacteriostatic Water — 3ml bac 5 vials"), 3);
+});
+
+check("the variation rows still sum to the headline vial count", () => {
+  const p = prepareReport(round, bacOrders);
+  assert.equal(p.productsToOrder.reduce((s, x) => s + x.vials, 0), p.counts.totalVials);
+  assert.equal(p.counts.totalVials, 14);
+});
+
+check("Product Summary carries every variation too, none swallowed", () => {
+  const p = prepareReport(round, bacOrders);
+  assert.equal(p.summary.length, 4);
+  assert.equal(p.summary.reduce((s, x) => s + x.demandQty, 0), 14);
+});
+
+check("per-variation order counts are right, not copied from the base product", () => {
+  const p = prepareReport(round, bacOrders);
+  for (const row of p.summary) assert.equal(row.orders, 1, `${row.product} was ordered by one order`);
+});
+
+check("a product with NO variations still groups by productId (no regression)", () => {
+  const plain = [
+    { orderNumber: "P1", date: D, status: "pending", customer: { name: "Ann" },
+      items: [line("BPC-157", 2, 100, "p1")] },
+    { orderNumber: "P2", date: D, status: "pending", customer: { name: "Bo" },
+      items: [line("BPC-157 RENAMED", 3, 100, "p1")] },
+  ];
+  const p = prepareReport(round, plain);
+  assert.equal(p.productsToOrder.length, 1, "one productId, no variation → still one line");
+  assert.equal(p.productsToOrder[0].vials, 5, "a rename must not split the supplier order");
+});
+
+check("two variations of DIFFERENT products never merge", () => {
+  const mixed = [
+    { orderNumber: "M1", date: D, status: "pending", customer: { name: "Ann" },
+      items: [line("A — 5ml", 2, 100, "pA", "5ml"), line("B — 5ml", 3, 100, "pB", "5ml")] },
+  ];
+  const p = prepareReport(round, mixed);
+  assert.equal(p.productsToOrder.length, 2, "same variation label, different product");
+});
+
+check("legacy items with no productId still fall back to the name", () => {
+  const legacy = [
+    { orderNumber: "L1", date: D, status: "pending", customer: { name: "Ann" },
+      items: [line("Legacy Peptide", 2, 100), line("Legacy Peptide", 3, 100)] },
+  ];
+  const p = prepareReport(round, legacy);
+  assert.equal(p.productsToOrder.length, 1);
+  assert.equal(p.productsToOrder[0].vials, 5);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
