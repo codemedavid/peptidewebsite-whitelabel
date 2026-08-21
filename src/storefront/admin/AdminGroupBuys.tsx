@@ -650,7 +650,7 @@ function ReportModal({
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "86vh", overflowY: "auto" }}
       >
-        <h2 className="admin-modal__title">Supplier Report — {groupBuy.name}</h2>
+        <h2 className="admin-modal__title">Round Report — {groupBuy.name}</h2>
 
         {error && (
           <div className="admin-modal__row" role="alert" style={{ color: "#d33", fontSize: 13 }}>
