@@ -15,7 +15,7 @@
 import assert from "node:assert";
 
 import { buildSupplierReport } from "../src/lib/storefront/group-buy";
-import { prepareReport } from "../src/lib/storefront/group-buy-report";
+import { buildCustomerLines, prepareReport } from "../src/lib/storefront/group-buy-report";
 
 let passed = 0;
 let failed = 0;
@@ -118,9 +118,10 @@ const reportOrders = [
   { orderNumber: "A3", date: D, status: "cancelled", paymentStatus: "unpaid", customer: { name: "Cy", email: "cy@x.io" }, items: [line("TB-500", 9, 50, "p2")] },
 ];
 
-check("filename is GB-{slug(name)}-report.xlsx", () => {
+check("the two reports are named apart so neither overwrites the other", () => {
   const p = prepareReport(round, reportOrders);
-  assert.equal(p.filename, "GB-holiday-round-report.xlsx");
+  assert.equal(p.supplierFilename, "GB-holiday-round-supplier.xlsx");
+  assert.equal(p.customerFilename, "GB-holiday-round-customers.xlsx");
 });
 
 check("Product Summary: one row per product, demand desc, with committed subset", () => {
@@ -187,6 +188,76 @@ check("prepareReport uses the injected report instead of re-aggregating (no drif
   assert.equal(get("Total Vials Ordered"), 7, "owner summary comes from the orders, not the injected report");
   assert.equal(p.orderLines.length, 4, "order lines still come from the raw orders");
   assert.equal(p.productsToOrder.reduce((s, r) => s + r.vials, 0), 7, "products to order also come from the raw orders");
+});
+
+// ── Customer lines (the customer report's own sheet) ────────────────────────
+console.log("\nbuildCustomerLines — who ordered what\n");
+
+/** Richer fixture: one customer orders TWICE, one cancels, one has no email. */
+const custOrders = [
+  { orderNumber: "C1", date: D, status: "pending", paymentStatus: "unpaid",
+    customer: { name: "Ann", email: "ann@x.io", phone: "0917" },
+    shipping: { address: "1 Mabini St", city: "Davao", province: "Davao del Sur", postalCode: "8000" },
+    items: [line("BPC-157", 2, 100, "p1")] },
+  { orderNumber: "C2", date: D, status: "confirmed", paymentStatus: "paid",
+    customer: { name: "Ann", email: "ANN@x.io", phone: "0917" },
+    items: [line("TB-500", 3, 50, "p2")] },
+  { orderNumber: "C3", date: D, status: "cancelled", paymentStatus: "unpaid",
+    customer: { name: "Cy", email: "cy@x.io" },
+    items: [line("TB-500", 9, 50, "p2")] },
+  { orderNumber: "C4", date: D, status: "pending", paymentStatus: "unpaid",
+    customer: { name: "Dee", phone: "0999" },
+    items: [line("BPC-157", 1, 100, "p1")] },
+];
+
+check("one row per customer — the same buyer's two orders merge", () => {
+  const lines = buildCustomerLines(custOrders);
+  const ann = lines.find((c) => c.name === "Ann");
+  assert.ok(ann, "Ann must appear");
+  assert.equal(ann.orders, 2, "both of Ann's orders roll into one row");
+  assert.equal(ann.qty, 5, "2 + 3 vials");
+  assert.equal(ann.total, 2 * 100 + 3 * 50);
+});
+
+check("the merge key is case-insensitive on email", () => {
+  const lines = buildCustomerLines(custOrders);
+  assert.equal(lines.filter((c) => c.name === "Ann").length, 1, "ANN@x.io is the same person as ann@x.io");
+});
+
+check("a cancelled-only customer never reaches the report", () => {
+  const lines = buildCustomerLines(custOrders);
+  assert.ok(!lines.some((c) => c.name === "Cy"), "cancelled orders are not demand");
+});
+
+check("a customer with no email still gets a row, keyed on phone", () => {
+  const lines = buildCustomerLines(custOrders);
+  const dee = lines.find((c) => c.name === "Dee");
+  assert.ok(dee, "an emailless buyer must not be dropped");
+  assert.equal(dee.email, "");
+  assert.equal(dee.contact, "0999");
+});
+
+check("contact and shipping address ride along for fulfilment", () => {
+  const lines = buildCustomerLines(custOrders);
+  const ann = lines.find((c) => c.name === "Ann");
+  assert.equal(ann.contact, "0917");
+  assert.ok(ann.address.includes("Mabini"), `address was "${ann.address}"`);
+});
+
+check("rows are sorted biggest spender first", () => {
+  const lines = buildCustomerLines(custOrders);
+  assert.deepEqual(lines.map((c) => c.name), ["Ann", "Dee"]);
+});
+
+check("no orders means an empty list, not a crash", () => {
+  assert.deepEqual(buildCustomerLines([]), []);
+});
+
+check("prepareReport carries the customer lines for the workbook", () => {
+  const p = prepareReport(round, reportOrders);
+  assert.ok(Array.isArray(p.customerLines), "prep must expose customerLines");
+  // Ann + Bo are demand; Cy cancelled.
+  assert.deepEqual(p.customerLines.map((c) => c.name).sort(), ["Ann", "Bo"]);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

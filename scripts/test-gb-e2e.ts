@@ -55,7 +55,10 @@ import {
   filterOrderRows,
 } from "../src/lib/storefront/group-buy-analytics";
 import { prepareReport } from "../src/lib/storefront/group-buy-report";
-import { buildSupplierWorkbook } from "../src/storefront/admin/supplier-workbook";
+import {
+  buildCustomerWorkbook,
+  buildSupplierWorkbook,
+} from "../src/storefront/admin/supplier-workbook";
 
 let passed = 0;
 let failed = 0;
@@ -543,17 +546,22 @@ async function main() {
   console.log("7. The exported Excel file matches the screen");
 
   const prep = prepareReport(ROUND_B, resolvedB.orders);
-  const wb = await buildSupplierWorkbook(prep);
-  const bytes = await wb.xlsx.writeBuffer();
 
-  // Read the REAL bytes back through a fresh workbook — not the object we built.
+  // TWO workbooks now: the supplier gets product quantities only, the owner
+  // keeps the customer detail. Both are serialized and read back from REAL bytes.
   const ExcelJS = (await import("exceljs")).default;
-  const reloaded = new ExcelJS.Workbook();
-  await reloaded.xlsx.load(bytes as ArrayBuffer);
+  const reload = async (wb: Awaited<ReturnType<typeof buildSupplierWorkbook>>) => {
+    const bytes = await wb.xlsx.writeBuffer();
+    const fresh = new ExcelJS.Workbook();
+    await fresh.xlsx.load(bytes as ArrayBuffer);
+    return fresh;
+  };
+  const reloaded = await reload(await buildSupplierWorkbook(prep));
+  const customerBook = await reload(await buildCustomerWorkbook(prep));
 
-  /** Find a row on a sheet by its first-column label. */
-  const labelled = (sheetName: string, label: string): unknown[] => {
-    const ws = reloaded.getWorksheet(sheetName);
+  /** Find a row on a sheet by its first-column label, in a given workbook. */
+  const labelledIn = (book: typeof reloaded, sheetName: string, label: string): unknown[] => {
+    const ws = book.getWorksheet(sheetName);
     assert.ok(ws, `missing sheet: ${sheetName}`);
     let found: unknown[] | null = null;
     ws.eachRow((row) => {
@@ -565,23 +573,60 @@ async function main() {
     assert.ok(found, `no row labelled "${label}" on ${sheetName}`);
     return found;
   };
+  const labelled = (sheetName: string, label: string) => labelledIn(reloaded, sheetName, label);
+  const custLabelled = (sheetName: string, label: string) =>
+    labelledIn(customerBook, sheetName, label);
 
-  await check("the file is named after this round only", () => {
-    assert.equal(prep.filename, "GB-tr30-batch-2-report.xlsx");
+  await check("both files are named after this round, and apart from each other", () => {
+    assert.equal(prep.supplierFilename, "GB-tr30-batch-2-supplier.xlsx");
+    assert.equal(prep.customerFilename, "GB-tr30-batch-2-customers.xlsx");
   });
 
-  await check("the workbook really opens and has the expected sheets", () => {
+  await check("the SUPPLIER workbook opens and holds only product sheets", () => {
     const names = reloaded.worksheets.map((w) => w.name);
-    assert.ok(names.includes("Totals"));
-    assert.ok(names.includes("Products to Order"));
-    assert.ok(names.includes("Orders"));
+    assert.deepEqual(names, ["Products to Order", "Product Summary"]);
   });
 
-  await check("Totals sheet: vials and sales match the dashboard", () => {
-    assert.equal(labelled("Totals", "Total Vials Ordered")[1], EXPECT.totalVials);
-    assert.equal(labelled("Totals", "Total Sales")[1], EXPECT.totalSales);
-    assert.equal(labelled("Totals", "Total Orders")[1], EXPECT.totalOrders);
-    assert.equal(labelled("Totals", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
+  await check("the CUSTOMER workbook opens with summary, customers and orders", () => {
+    const names = customerBook.worksheets.map((w) => w.name);
+    assert.deepEqual(names, ["Summary", "Customers", "Orders"]);
+  });
+
+  await check("PRIVACY: the supplier file leaks no customer name, phone or address", () => {
+    const leaked: string[] = [];
+    for (const ws of reloaded.worksheets) {
+      ws.eachRow((row) => {
+        for (const cell of row.values as unknown[]) {
+          if (typeof cell !== "string") continue;
+          if (/Erika|Santos|0917|Mabini|imagekit/i.test(cell)) leaked.push(cell);
+        }
+      });
+    }
+    assert.deepEqual(leaked, [], `supplier file exposed: ${leaked.join(" | ")}`);
+  });
+
+  await check("PRIVACY: the supplier file carries no revenue figure", () => {
+    const sheet = reloaded.getWorksheet("Products to Order");
+    assert.ok(sheet);
+    let money = false;
+    sheet.eachRow((row) => {
+      const first = row.getCell(1).value;
+      if (typeof first === "string" && /income|sales|revenue/i.test(first)) money = true;
+    });
+    assert.equal(money, false, "what the store earns is not the supplier's business");
+  });
+
+  await check("Summary sheet: vials and sales match the dashboard", () => {
+    assert.equal(custLabelled("Summary", "Total Vials Ordered")[1], EXPECT.totalVials);
+    assert.equal(custLabelled("Summary", "Total Sales")[1], EXPECT.totalSales);
+    assert.equal(custLabelled("Summary", "Total Orders")[1], EXPECT.totalOrders);
+    assert.equal(custLabelled("Summary", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
+  });
+
+  await check("Customers sheet: one row per buyer, with contact and address", () => {
+    const erika = custLabelled("Customers", "Erika Santos");
+    assert.equal(erika[3], 1, "orders");
+    assert.equal(erika[4], 20, "vials");
   });
 
   await check("Products to Order sheet: 37 / 22 / 15 in the actual cells", () => {
@@ -594,25 +639,22 @@ async function main() {
     assert.equal(labelled("Products to Order", "TOTAL VIALS TO ORDER")[1], EXPECT.totalVials);
   });
 
-  await check("the summary block carries gross income and the order mix", () => {
-    assert.equal(labelled("Products to Order", "Gross Income")[1], EXPECT.totalSales);
-    assert.equal(
-      labelled("Products to Order", "Total Confirmed Orders")[1],
-      EXPECT.confirmedOrders,
-    );
-    assert.equal(labelled("Products to Order", "Total Pending Orders")[1], EXPECT.pendingOrders);
-    assert.equal(labelled("Products to Order", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
+  await check("the owner's summary carries gross income and the order mix", () => {
+    assert.equal(custLabelled("Summary", "Total Sales")[1], EXPECT.totalSales);
+    assert.equal(custLabelled("Summary", "Total Confirmed Orders")[1], EXPECT.confirmedOrders);
+    assert.equal(custLabelled("Summary", "Total Pending Orders")[1], EXPECT.pendingOrders);
+    assert.equal(custLabelled("Summary", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
   });
 
   await check("Orders sheet: one row per order line, cancelled included", () => {
-    const ws = reloaded.getWorksheet("Orders");
+    const ws = customerBook.getWorksheet("Orders");
     assert.ok(ws);
     assert.equal(ws.rowCount - 1, rows.length, "header + one row per line");
     assert.equal(rows.length, 5);
   });
 
   await check("Orders sheet: full customer detail lands in the right columns", () => {
-    const line = labelled("Orders", "KG-2001");
+    const line = custLabelled("Orders", "KG-2001");
     assert.equal(line[2], "Erika Santos"); // Customer
     assert.equal(line[3], "09171234567"); // Contact Number
     assert.equal(line[4], "12 Mabini St, Poblacion, Davao City, Davao del Sur, 8000, PH");
@@ -624,13 +666,13 @@ async function main() {
   });
 
   await check("Orders sheet: the cancelled line is present and marked not counted", () => {
-    const line = labelled("Orders", "KG-2003");
+    const line = custLabelled("Orders", "KG-2003");
     assert.equal(line[10], "Cancelled");
     assert.equal(line[12], "No");
   });
 
   await check("Orders sheet: the proof is a clickable link, not a download", () => {
-    const line = labelled("Orders", "KG-2002");
+    const line = custLabelled("Orders", "KG-2002");
     const proof = line[13] as { hyperlink?: string } | string | null;
     assert.ok(
       typeof proof === "object" && proof !== null && "hyperlink" in proof,
@@ -643,7 +685,7 @@ async function main() {
   });
 
   await check("the export contains NO order from another round", () => {
-    const ws = reloaded.getWorksheet("Orders");
+    const ws = customerBook.getWorksheet("Orders");
     assert.ok(ws);
     const numbers: string[] = [];
     ws.eachRow((row, i) => {
