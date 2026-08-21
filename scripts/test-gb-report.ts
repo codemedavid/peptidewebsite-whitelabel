@@ -240,6 +240,7 @@ check("a customer with no email still gets a row, keyed on phone", () => {
 check("contact and shipping address ride along for fulfilment", () => {
   const lines = buildCustomerLines(custOrders);
   const ann = lines.find((c) => c.name === "Ann");
+  assert.ok(ann, "Ann must appear");
   assert.equal(ann.contact, "0917");
   assert.ok(ann.address.includes("Mabini"), `address was "${ann.address}"`);
 });

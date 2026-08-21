@@ -1,37 +1,41 @@
-// Browser-side serializer for the supplier workbook. exceljs is LAZY-imported
-// (await import) so the ~1MB library only loads when the store owner clicks
-// "Excel" in the report modal — it never enters the storefront bundle. The data
-// shaping lives in the pure lib/storefront/group-buy-report.ts (unit-tested);
-// this file only turns that structured prep into an .xlsx Blob and downloads it.
+// Browser-side serializers for the two end-of-round workbooks. exceljs is LAZY-
+// imported (await import) so the ~1MB library only loads when the store owner
+// clicks a download in the report modal — it never enters the storefront bundle.
+// The data shaping lives in the pure lib/storefront/group-buy-report.ts
+// (unit-tested); this file only turns that structured prep into .xlsx Blobs.
+//
+// TWO files, because they go to two audiences:
+//   buildSupplierWorkbook — what to buy. Forwarded to an outside party, so it
+//                           carries no customer detail and no revenue figure.
+//   buildCustomerWorkbook — the owner's own record: who ordered, what they owe,
+//                           where it ships, and the money.
 
 import type { Workbook } from "exceljs";
 
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
+/** The `import type` above is erased at compile time, so exceljs stays lazy and
+ *  out of the storefront bundle. */
+async function newWorkbook(): Promise<Workbook> {
+  const ExcelJS = (await import("exceljs")).default;
+  return new ExcelJS.Workbook();
+}
+
 /**
- * Build the workbook WITHOUT touching the DOM. Split out from the download so a
- * test can serialize it and read the real cells back — while the two lived in
- * one browser-only function, nothing could verify what actually lands in the
- * .xlsx the owner sends the supplier. See scripts/test-gb-e2e.ts.
+ * The supplier's copy: how many vials of each product to order, and nothing
+ * else. Split out from the customer workbook so the owner can forward this file
+ * untouched — while the two lived in one workbook, sending the supplier the
+ * order meant sending every buyer's address, payment proof and the store's
+ * gross income along with it.
  *
- * The `import type` above is erased at compile time, so exceljs stays lazy and
- * out of the storefront bundle.
+ * Built WITHOUT touching the DOM so a test can serialize it and read the real
+ * cells back. See scripts/test-gb-e2e.ts.
  */
 export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook> {
-  const ExcelJS = (await import("exceljs")).default;
-  const wb = new ExcelJS.Workbook();
+  const wb = await newWorkbook();
 
-  // Totals — label/value pairs; the note row explains demand vs committed.
-  const totals = wb.addWorksheet("Totals");
-  totals.columns = [
-    { header: "", width: 22 },
-    { header: "", width: 70 },
-  ];
-  for (const t of prep.totals) totals.addRow([t.label, t.value]);
-
-  // Products to Order — THE sheet the supplier order is placed from: how many
-  // vials of each product to buy. Cancelled orders are excluded completely, so
-  // these numbers can be sent to the supplier as-is.
+  // Products to Order — THE sheet the supplier order is placed from. Cancelled
+  // orders are excluded completely, so these numbers can be sent as-is.
   const toOrder = wb.addWorksheet("Products to Order");
   toOrder.columns = [
     { header: "Product", width: 42 },
@@ -44,25 +48,67 @@ export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook>
   toOrder.addRow(["TOTAL VIALS TO ORDER", prep.counts.totalVials, prep.counts.activeOrders]).font = {
     bold: true,
   };
-
-  // Summary block, on the same sheet the supplier order is read from, so the
-  // owner sees the money and the order mix without hunting through tabs.
   toOrder.addRow([]);
-  toOrder.addRow(["SUMMARY"]).font = { bold: true };
-  toOrder.addRow(["Gross Income", prep.counts.totalSales]);
-  toOrder.addRow(["Total Confirmed Orders", prep.counts.confirmedOrders]);
-  toOrder.addRow(["Total Pending Orders", prep.counts.pendingOrders]);
-  toOrder.addRow(["Total Cancelled Orders", prep.counts.cancelledOrders]);
   toOrder.addRow([
     "Note",
-    "Vials to order and Gross Income exclude cancelled orders entirely.",
+    "Vials to order exclude cancelled orders entirely.",
   ]);
 
-  // Product Summary — demand vs the committed (paid/fulfilled) subset.
+  // Product Summary — demand vs the committed (paid/fulfilled) subset, so the
+  // supplier can see how much of the order is already money in hand.
   const summary = wb.addWorksheet("Product Summary");
-  summary.addRow(["Product", "Total Qty Needed (demand)", "Committed Qty", "Orders"]);
+  summary.columns = [
+    { header: "Product", width: 42 },
+    { header: "Total Qty Needed (demand)", width: 24 },
+    { header: "Committed Qty", width: 15 },
+    { header: "Orders", width: 10 },
+  ];
   summary.getRow(1).font = { bold: true };
   for (const s of prep.summary) summary.addRow([s.product, s.demandQty, s.committedQty, s.orders]);
+
+  return wb;
+}
+
+/**
+ * The owner's copy: the round's totals, every buyer, and every order line.
+ * Never sent to the supplier — it holds contact numbers, shipping addresses and
+ * links to payment proofs.
+ */
+export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook> {
+  const wb = await newWorkbook();
+
+  // Summary — label/value pairs; the note row explains demand vs committed.
+  const totals = wb.addWorksheet("Summary");
+  totals.columns = [
+    { header: "", width: 22 },
+    { header: "", width: 70 },
+  ];
+  for (const t of prep.totals) totals.addRow([t.label, t.value]);
+
+  // Customers — one row per buyer. Repeat orders are already merged upstream.
+  const customers = wb.addWorksheet("Customers");
+  customers.columns = [
+    { header: "Customer", width: 26 },
+    { header: "Email", width: 28 },
+    { header: "Contact Number", width: 16 },
+    { header: "Orders", width: 9 },
+    { header: "Vials", width: 8 },
+    { header: "Total", width: 12 },
+    { header: "Shipping Address", width: 46 },
+  ];
+  customers.getRow(1).font = { bold: true };
+  for (const c of prep.customerLines) {
+    customers.addRow([c.name, c.email, c.contact, c.orders, c.qty, c.total, c.address]);
+  }
+  customers.addRow([]);
+  customers.addRow([
+    "TOTAL",
+    "",
+    "",
+    prep.counts.activeOrders,
+    prep.counts.totalVials,
+    prep.counts.totalSales,
+  ]).font = { bold: true };
 
   // Orders — one row per line, every order incl cancelled, with a Counted flag
   // and the full customer detail the owner reconciles payments against.
@@ -113,9 +159,8 @@ export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook>
   return wb;
 }
 
-/** Serialize the workbook and hand it to the browser as a download. */
-export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> {
-  const wb = await buildSupplierWorkbook(prep);
+/** Serialize a workbook and hand it to the browser as a download. */
+async function download(wb: Workbook, filename: string): Promise<void> {
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -123,7 +168,15 @@ export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = prep.filename;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadSupplierWorkbook(prep: ReportPrep): Promise<void> {
+  await download(await buildSupplierWorkbook(prep), prep.supplierFilename);
+}
+
+export async function downloadCustomerWorkbook(prep: ReportPrep): Promise<void> {
+  await download(await buildCustomerWorkbook(prep), prep.customerFilename);
 }

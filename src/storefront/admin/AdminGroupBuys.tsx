@@ -67,7 +67,10 @@ import {
   type GroupBuyContent,
 } from "@/lib/storefront/gb-content";
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
-import { downloadSupplierWorkbook } from "@/storefront/admin/supplier-workbook";
+import {
+  downloadCustomerWorkbook,
+  downloadSupplierWorkbook,
+} from "@/storefront/admin/supplier-workbook";
 import { ProofLightbox, PaymentBadge } from "./gb-proof-lightbox";
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 
@@ -536,12 +539,19 @@ function ReportModal({
       ${customerTable}`;
   };
 
-  const downloadExcel = async () => {
+  // Two .xlsx downloads, not one. The supplier file is product quantities only
+  // so the owner can forward it untouched; the customer file keeps the buyers,
+  // their addresses, the payment proofs and the money. exceljs is lazy-loaded
+  // inside each download so it never enters the storefront bundle; the data
+  // shaping is the unit-tested prepareReport (server-side).
+  const downloadSupplierExcel = async () => {
     if (!prep) return;
-    // Real 3-sheet .xlsx (Totals / Product Summary / Orders). exceljs is lazy-
-    // loaded inside downloadSupplierWorkbook so it never enters the storefront
-    // bundle. Data shaping is the unit-tested prepareReport (server-side).
     await downloadSupplierWorkbook(prep);
+  };
+
+  const downloadCustomerExcel = async () => {
+    if (!prep) return;
+    await downloadCustomerWorkbook(prep);
   };
 
   const downloadPdf = () => {
@@ -833,8 +843,21 @@ function ReportModal({
             </button>
           )}
           {productsToOrder.length > 0 && caps.reports.excel && (
-            <button className="admin-btn admin-btn--ghost" onClick={downloadExcel}>
-              Excel
+            <button
+              className="admin-btn admin-btn--ghost"
+              onClick={downloadSupplierExcel}
+              title="Product quantities only — safe to send to the supplier"
+            >
+              Supplier .xlsx
+            </button>
+          )}
+          {productsToOrder.length > 0 && caps.reports.excel && caps.reports.customerBreakdown && (
+            <button
+              className="admin-btn admin-btn--ghost"
+              onClick={downloadCustomerExcel}
+              title="Customers, orders and totals — your copy, do not send to the supplier"
+            >
+              Customers .xlsx
             </button>
           )}
           {productsToOrder.length > 0 && caps.reports.pdf && (

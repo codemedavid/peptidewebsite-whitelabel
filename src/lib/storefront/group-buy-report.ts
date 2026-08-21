@@ -1,13 +1,22 @@
-// Pure prep for the 3-sheet supplier workbook (spec §6). NO exceljs import — the
-// download handler lazy-loads the serializer and feeds it this structured data,
-// so the heavy library never enters the storefront bundle and the data shaping
-// (where the demand-vs-committed rule is easy to break) stays unit-testable.
+// Pure prep for the TWO end-of-round workbooks (spec §6). NO exceljs import —
+// the download handler lazy-loads the serializer and feeds it this structured
+// data, so the heavy library never enters the storefront bundle and the data
+// shaping (where the demand-vs-committed rule is easy to break) stays
+// unit-testable.
 //
-//   Totals          — round metadata + demand headline + committed alongside.
-//   Product Summary — one row per product||variation, demand desc. The sheet the
-//                     supplier order is built from.
-//   Orders          — one row per order LINE, EVERY order incl cancelled, with a
-//                     Counted (Yes/No) column showing which fed demand.
+// One prep, two files, because they go to two different audiences:
+//
+//   SUPPLIER  (GB-<round>-supplier.xlsx) — what to buy, and nothing else.
+//     Products to Order — vials per product, cancelled orders excluded.
+//     Product Summary   — demand vs the committed (paid/fulfilled) subset.
+//     Carries no customer name, contact, address, proof or revenue: this file
+//     is forwarded to an outside party, so PII and margin must not be in it.
+//
+//   CUSTOMER  (GB-<round>-customers.xlsx) — the owner's own record.
+//     Summary   — round metadata, the headline counts, committed alongside.
+//     Customers — one row per buyer: orders, vials, spend, contact, address.
+//     Orders    — one row per order LINE, EVERY order incl cancelled, with a
+//                 Counted (Yes/No) column showing which fed demand.
 
 import {
   buildSupplierReport,
@@ -17,6 +26,7 @@ import {
 import {
   buildProductsToOrder,
   buildRoundOrderRows,
+  formatShippingAddress,
   summarizeRoundOrders,
   type LinkableOrder,
   type ProductToOrder,
@@ -46,8 +56,25 @@ export type ReportSummaryRow = {
  *  order table renders, so the export can never show different values. */
 export type ReportOrderLine = RoundOrderRow;
 
+/** One row per buyer on the customer report. `total` is items only — fees and
+ *  shipping are excluded, exactly like the supplier lines, so the customer sheet
+ *  and the product sheets add up to the same money. */
+export type ReportCustomerLine = {
+  name: string;
+  email: string;
+  /** Phone if given, else email, else "—" — whatever the owner would call. */
+  contact: string;
+  address: string;
+  orders: number;
+  qty: number;
+  total: number;
+};
+
 export type ReportPrep = {
-  filename: string;
+  /** Product quantities only — safe to forward to the supplier as-is. */
+  supplierFilename: string;
+  /** Customer detail — the owner's copy, never sent outside the store. */
+  customerFilename: string;
   totals: ReportTotal[];
   /** Headline counts, shared with the on-screen summary tiles. */
   counts: RoundSummary;
@@ -55,6 +82,8 @@ export type ReportPrep = {
   productsToOrder: ProductToOrder[];
   summary: ReportSummaryRow[];
   orderLines: ReportOrderLine[];
+  /** Per-buyer rollup for the customer workbook's Customers sheet. */
+  customerLines: ReportCustomerLine[];
 };
 
 /** URL/file-safe slug of a round name: lowercase, non-alphanumerics → single
@@ -76,6 +105,46 @@ function isCommitted(o: ReportInputOrder): boolean {
 function customerKey(c: ReportCustomer | undefined): string {
   const raw = c?.email || c?.phone || c?.name || "unknown";
   return raw.toLowerCase();
+}
+
+/**
+ * One row per BUYER, from the same orders the rest of the report is built from.
+ *
+ * Two orders from the same person merge into one row — the owner asks "who
+ * ordered, and what do I owe them", not "how many checkouts happened". Identity
+ * is email || phone || name, lowercased, so the same buyer checking out twice
+ * with a differently-cased email is still one customer.
+ *
+ * Cancelled orders never appear: a cancelled buyer is not owed anything, and
+ * including them would make the customer sheet disagree with Products to Order.
+ * Sorted biggest-spender first.
+ */
+export function buildCustomerLines(orders: ReportInputOrder[]): ReportCustomerLine[] {
+  const byKey = new Map<string, ReportCustomerLine>();
+  for (const o of orders) {
+    if (!orderCountsAsDemand(o.status)) continue;
+    const c = o.customer ?? {};
+    const key = customerKey(c);
+    const row = byKey.get(key) ?? {
+      name: c.name?.trim() || c.email?.trim() || "Unknown",
+      email: c.email?.trim() || "",
+      contact: c.phone?.trim() || c.email?.trim() || "—",
+      address: formatShippingAddress(o.shipping),
+      orders: 0,
+      qty: 0,
+      total: 0,
+    };
+    row.orders += 1;
+    for (const it of o.items ?? []) {
+      row.qty += it.qty;
+      row.total += it.qty * it.price;
+    }
+    // A later order may carry the address an earlier one lacked — take the first
+    // real one rather than letting "—" from order #1 win for the whole customer.
+    if (row.address === "—") row.address = formatShippingAddress(o.shipping);
+    byKey.set(key, row);
+  }
+  return [...byKey.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
 /**
@@ -154,12 +223,15 @@ export function prepareReport(
     },
   ];
 
+  const stem = `GB-${slug(round.name)}`;
   return {
-    filename: `GB-${slug(round.name)}-report.xlsx`,
+    supplierFilename: `${stem}-supplier.xlsx`,
+    customerFilename: `${stem}-customers.xlsx`,
     totals,
     counts,
     productsToOrder,
     summary,
     orderLines,
+    customerLines: buildCustomerLines(orders),
   };
 }

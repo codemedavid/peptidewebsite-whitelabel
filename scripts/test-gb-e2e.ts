@@ -623,10 +623,31 @@ async function main() {
     assert.equal(custLabelled("Summary", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
   });
 
-  await check("Customers sheet: one row per buyer, with contact and address", () => {
+  await check("Customers sheet: one row per buyer — Erika's TWO orders merge", () => {
     const erika = custLabelled("Customers", "Erika Santos");
-    assert.equal(erika[3], 1, "orders");
-    assert.equal(erika[4], 20, "vials");
+    assert.equal(erika[1], "erika@example.com", "email");
+    assert.equal(erika[2], "09171234567", "contact");
+    assert.equal(erika[3], 2, "KG-2001 + KG-2004 roll into one row");
+    assert.equal(erika[4], 20 + 17, "vials across both orders");
+    assert.equal(erika[5], (20 + 17) * 1200, "spend across both orders");
+    assert.ok(String(erika[6]).includes("Mabini"), "shipping address");
+  });
+
+  await check("Customers sheet: the cancelled buyer is not owed anything", () => {
+    const ws = customerBook.getWorksheet("Customers");
+    assert.ok(ws);
+    const names: string[] = [];
+    ws.eachRow((row, i) => {
+      if (i === 1) return;
+      const v = row.getCell(1).value;
+      if (typeof v === "string" && v && v !== "TOTAL") names.push(v);
+    });
+    assert.deepEqual(names, ["Erika Santos", "Marco Reyes"], "biggest spender first, Dana excluded");
+  });
+
+  await check("Customers sheet: the TOTAL row reconciles with the dashboard", () => {
+    assert.equal(custLabelled("Customers", "TOTAL")[4], EXPECT.totalVials);
+    assert.equal(custLabelled("Customers", "TOTAL")[5], EXPECT.totalSales);
   });
 
   await check("Products to Order sheet: 37 / 22 / 15 in the actual cells", () => {

@@ -78,7 +78,12 @@ import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeTwoWaysMode, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
-import { prepareReport, type ReportPrep } from "@/lib/storefront/group-buy-report";
+import {
+  buildCustomerLines,
+  prepareReport,
+  type ReportCustomerLine,
+  type ReportPrep,
+} from "@/lib/storefront/group-buy-report";
 import {
   resolveRoundOrders,
   summarizeRoundOrders,
@@ -134,13 +139,10 @@ export type SaveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: str
 export type ArchiveGroupBuyResult = { ok: true; groupBuy: GroupBuy } | { error: string };
 
 /** Per-customer report section (groupbuy.reports.customer_breakdown). */
-export type GroupBuyCustomerLine = {
-  name: string;
-  email: string;
-  orders: number;
-  qty: number;
-  total: number; // items only — fees/shipping excluded, same as the supplier lines
-};
+/** The per-buyer row the report page renders. Aliased to the workbook's own
+ *  shape so the screen and the download can never disagree about a customer.
+ *  `total` is items only — fees/shipping excluded, same as the supplier lines. */
+export type GroupBuyCustomerLine = ReportCustomerLine;
 export type SupplierReportResult =
   | {
       ok: true;
@@ -831,29 +833,11 @@ export async function getGroupBuySupplierReportAction(
       resolved.orders.map((o) => ({ status: o.status, paymentStatus: o.paymentStatus, items: o.items ?? [] })),
     );
 
-    let customers: GroupBuyCustomerLine[] | null = null;
-    if (caps.reports.customerBreakdown) {
-      const byKey = new Map<string, GroupBuyCustomerLine>();
-      for (const o of orders) {
-        if (!orderCountsAsDemand(o.status)) continue; // same demand rule as the supplier lines
-        const c = (o.customer ?? {}) as { name?: string; email?: string };
-        const key = (c.email || c.name || "unknown").toLowerCase();
-        const line = byKey.get(key) ?? {
-          name: c.name || "Unknown",
-          email: c.email || "",
-          orders: 0,
-          qty: 0,
-          total: 0,
-        };
-        line.orders += 1;
-        for (const it of o.items ?? []) {
-          line.qty += it.qty;
-          line.total += it.qty * it.price;
-        }
-        byKey.set(key, line);
-      }
-      customers = [...byKey.values()].sort((a, b) => b.total - a.total);
-    }
+    // Built by the SAME helper the customer workbook uses, so the per-customer
+    // section on screen and the Customers sheet in the download can never drift.
+    const customers: GroupBuyCustomerLine[] | null = caps.reports.customerBreakdown
+      ? buildCustomerLines(resolved.orders)
+      : null;
 
     // Structured workbook prep for the client's lazy exceljs serializer. It is
     // fed the SAME resolved orders and the SAME aggregation the screen renders,
