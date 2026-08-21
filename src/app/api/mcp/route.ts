@@ -9,6 +9,7 @@ import { FEATURES } from "@/lib/features/catalog";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { validatePublicMcpImageUrl } from "@/lib/mcp/image-assets";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
+import { checkMcpAuth } from "@/lib/mcp/auth";
 import { UPDATE_BRANDING_TOOL, callUpdateBranding } from "@/lib/mcp/update-branding-tool";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
@@ -52,7 +53,7 @@ const CREATE_TENANT_TOOL = {
       adminToken: {
         type: "string",
         description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
       name: { type: "string", description: "Business/store name, e.g. Nordic Peptides." },
       slug: {
@@ -250,7 +251,7 @@ const BULK_ADD_PRODUCTS_TOOL = {
       adminToken: {
         type: "string",
         description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
       tenantSlug: {
         type: "string",
@@ -299,7 +300,7 @@ const UPDATE_PRODUCTS_TOOL = {
       adminToken: {
         type: "string",
         description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
       tenantSlug: {
         type: "string",
@@ -355,7 +356,7 @@ const UPLOAD_HERO_IMAGE_TOOL = {
       adminToken: {
         type: "string",
         description:
-          "Optional fallback token for testing when ChatGPT is configured with No Authentication. Prefer Authorization: Bearer via the connector settings.",
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
       tenantSlug: {
         type: "string",
@@ -421,19 +422,13 @@ function paramsObject(params: unknown): Record<string, unknown> {
   return params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
 }
 
-function bearerToken(req: NextRequest): string {
-  const auth = req.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
-  return match?.[1]?.trim() ?? "";
-}
-
 function requireMcpAuth(req: NextRequest, args: Record<string, unknown>): string | null {
-  const expected = process.env.MCP_ADMIN_TOKEN?.trim();
-  if (!expected) return "MCP_ADMIN_TOKEN is not configured on the server.";
-
-  const supplied = bearerToken(req) || String(args.adminToken ?? "").trim();
-  if (!supplied || supplied !== expected) return "Invalid or missing MCP admin token.";
-  return null;
+  const result = checkMcpAuth(
+    { authorization: req.headers.get("authorization"), url: req.url },
+    args,
+    process.env.MCP_ADMIN_TOKEN,
+  );
+  return result.ok ? null : result.message;
 }
 
 function fallbackOwner() {

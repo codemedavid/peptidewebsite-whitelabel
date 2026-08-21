@@ -78,7 +78,19 @@ automatically). Platform admin: **http://admin.localhost:3000**.
 ## ChatGPT MCP administration
 
 After deployment, connect ChatGPT to `https://<your-app-host>/api/mcp` and
-configure the same bearer value as `MCP_ADMIN_TOKEN`. The platform connector can
+authenticate with the same value as `MCP_ADMIN_TOKEN`. The server accepts that
+token three ways, in this order:
+
+1. `Authorization: Bearer <token>` — preferred, when the connector supports a
+   static header.
+2. `?token=<token>` appended to the connector URL — use this when the connector
+   only offers **No authentication**, since it then sends no header at all.
+3. An `adminToken` argument on the tool call — manual testing only.
+
+Paste the raw value; do not include the quotes from the `.env` line. A rejected
+call names which of the three places it looked and prints a SHA-256 fingerprint
+of what arrived versus what the server holds, so a stale or wrong token is
+visible without revealing either secret. The platform connector can
 create tenants, add or edit tenant products, and upload tenant hero images
 without a tenant-admin login. Product deletion is intentionally unavailable.
 
