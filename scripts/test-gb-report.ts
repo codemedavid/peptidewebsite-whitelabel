@@ -15,7 +15,11 @@
 import assert from "node:assert";
 
 import { buildSupplierReport } from "../src/lib/storefront/group-buy";
-import { buildCustomerLines, prepareReport } from "../src/lib/storefront/group-buy-report";
+import {
+  buildCustomerLines,
+  prepareReport,
+  roundsAwaitingReport,
+} from "../src/lib/storefront/group-buy-report";
 
 let passed = 0;
 let failed = 0;
@@ -259,6 +263,60 @@ check("prepareReport carries the customer lines for the workbook", () => {
   assert.ok(Array.isArray(p.customerLines), "prep must expose customerLines");
   // Ann + Bo are demand; Cy cancelled.
   assert.deepEqual(p.customerLines.map((c) => c.name).sort(), ["Ann", "Bo"]);
+});
+
+// ── "Every finished round has a report" ──────────────────────────────────────
+console.log("\nroundsAwaitingReport — which finished rounds still need pulling\n");
+
+const PAST = "2020-01-01T00:00:00.000Z";
+const FUTURE = "2099-01-01T00:00:00.000Z";
+const gb = (
+  id: string,
+  status: "draft" | "scheduled" | "active" | "closed" | "cancelled" | "archived",
+  endsAt: string | null = null,
+) => ({
+  id,
+  name: id,
+  status,
+  startsAt: PAST,
+  endsAt,
+});
+
+check("a round whose window has lapsed is awaiting its report", () => {
+  const list = [gb("lapsed", "active", PAST)];
+  assert.deepEqual(roundsAwaitingReport(list, false).map((r) => r.id), ["lapsed"]);
+});
+
+check("an explicitly closed round is awaiting its report", () => {
+  assert.deepEqual(roundsAwaitingReport([gb("done", "closed")], false).map((r) => r.id), ["done"]);
+});
+
+check("a still-running round is NOT awaiting anything", () => {
+  assert.deepEqual(roundsAwaitingReport([gb("live", "active", FUTURE)], false), []);
+});
+
+check("draft and scheduled rounds never appear", () => {
+  const list = [gb("d", "draft"), gb("s", "scheduled", FUTURE)];
+  assert.deepEqual(roundsAwaitingReport(list, true), []);
+});
+
+check("an ARCHIVED round is done being chased — the owner filed it away", () => {
+  assert.deepEqual(roundsAwaitingReport([gb("old", "archived")], false), []);
+});
+
+check("a CANCELLED round is not a finished round — nothing was ordered against it", () => {
+  assert.deepEqual(roundsAwaitingReport([gb("nope", "cancelled")], false), []);
+});
+
+check("every finished round is flagged, not just the first one", () => {
+  const list = [gb("a", "closed"), gb("b", "active", PAST), gb("c", "active", FUTURE)];
+  assert.deepEqual(roundsAwaitingReport(list, false).map((r) => r.id), ["a", "b"]);
+});
+
+check("a scheduled round that lapsed only closes when scheduling is on", () => {
+  const list = [gb("sched", "scheduled", PAST)];
+  assert.deepEqual(roundsAwaitingReport(list, false), [], "without the flag it never went live");
+  assert.deepEqual(roundsAwaitingReport(list, true).map((r) => r.id), ["sched"]);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

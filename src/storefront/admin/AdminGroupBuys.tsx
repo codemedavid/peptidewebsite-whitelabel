@@ -72,7 +72,10 @@ import {
   downloadSupplierWorkbook,
 } from "@/storefront/admin/supplier-workbook";
 import { ProofLightbox, PaymentBadge } from "./gb-proof-lightbox";
-import type { ReportPrep } from "@/lib/storefront/group-buy-report";
+import {
+  roundsAwaitingReport,
+  type ReportPrep,
+} from "@/lib/storefront/group-buy-report";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1075,27 +1078,18 @@ export function AdminGroupBuys({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reporting, setReporting] = useState<GroupBuy | null>(null);
 
-  // Auto report on close (groupbuy.reports.auto_on_close): when the manager
-  // opens, surface the supplier report for any run that has effectively just
-  // closed. There's no server cron, so "on close" is detected here on the first
-  // load after the window lapsed; localStorage dedups so each run pops once.
+  // Auto report on close (groupbuy.reports.auto_on_close): pop the report open
+  // for a run that has effectively just closed. There's no server cron, so "on
+  // close" is detected here on the first load after the window lapsed.
+  //
+  // This is the paid extra and it fires at most once per page load. The badge
+  // below is the part every store gets: it stays on the row until the round is
+  // archived, so a manager on another device — or a staff account that never
+  // saw the popup — still cannot miss that a finished round needs its reports.
   const maybeAutoReport = (list: GroupBuy[]) => {
     if (!caps.reports.autoOnClose || !caps.supplierReports) return;
-    if (typeof window === "undefined") return;
-    const closed = list.find(
-      (gb) =>
-        gb.status !== "archived" &&
-        effectiveGroupBuyStatus(gb, caps.scheduled) === "closed",
-    );
-    if (!closed) return;
-    const seenKey = `gb-autoreport:${closed.id}:${closed.updatedAt}`;
-    try {
-      if (localStorage.getItem(seenKey)) return;
-      localStorage.setItem(seenKey, "1");
-    } catch {
-      // private mode / storage disabled — fall through and just show it
-    }
-    setReporting(closed);
+    const [closed] = roundsAwaitingReport(list, caps.scheduled);
+    if (closed) setReporting(closed);
   };
 
   useEffect(() => {
@@ -1120,6 +1114,13 @@ export function AdminGroupBuys({
 
   const visible = groupBuys.filter((gb) =>
     showArchived ? gb.status === "archived" : gb.status !== "archived",
+  );
+  // Finished-but-unarchived rounds. Derived on every render (a round can lapse
+  // while the panel is open) and shared by the banner and the per-row badge.
+  const awaitingReport = new Set(
+    caps.supplierReports
+      ? roundsAwaitingReport(groupBuys, caps.scheduled).map((gb) => gb.id)
+      : [],
   );
   const archivedCount = groupBuys.length - groupBuys.filter((g) => g.status !== "archived").length;
 
@@ -1546,12 +1547,21 @@ export function AdminGroupBuys({
                   </button>
                   <div className="admin-ship-row__actions" style={{ display: "inline-flex", gap: 6 }}>
                     {caps.supplierReports && (
+                      // A finished round promotes its own Report button rather
+                      // than relying on a one-shot popup: the prompt stays put
+                      // until the owner archives the round, so it survives a
+                      // different device, a staff login and a cleared browser.
                       <button
-                        className="admin-btn admin-btn--ghost"
+                        className={`admin-btn ${awaitingReport.has(gb.id) ? "" : "admin-btn--ghost"}`}
                         style={{ padding: "4px 10px", fontSize: 12 }}
                         onClick={() => setReporting(gb)}
+                        title={
+                          awaitingReport.has(gb.id)
+                            ? "This round has finished — download the supplier and customer reports"
+                            : "Supplier and customer reports for this round"
+                        }
                       >
-                        Report
+                        {awaitingReport.has(gb.id) ? "Reports ready" : "Report"}
                       </button>
                     )}
                     {caps.canDuplicate && (

@@ -20,7 +20,9 @@
 
 import {
   buildSupplierReport,
+  effectiveGroupBuyStatus,
   orderCountsAsDemand,
+  type GroupBuy,
   type SupplierReport,
 } from "./group-buy";
 import {
@@ -234,4 +236,38 @@ export function prepareReport(
     orderLines,
     customerLines: buildCustomerLines(orders),
   };
+}
+
+// ── "Every finished round has a report" ──────────────────────────────────────
+
+/** The minimum a round must expose to be judged finished. */
+export type ReportableRound = Pick<GroupBuy, "status" | "startsAt" | "endsAt">;
+
+/**
+ * The rounds that have finished and whose report the owner has not filed away.
+ *
+ * There is no cron: a round's window lapses silently and its status only flips
+ * to "closed" the next time someone reads it. So "finished" is DERIVED here the
+ * same way the storefront derives it — via effectiveGroupBuyStatus — rather
+ * than trusted from the stored status.
+ *
+ * This drives a persistent badge on the rounds list, not a one-time popup. The
+ * previous behaviour popped the report open once and deduped in localStorage,
+ * which meant a manager on a second device, a staff account, or anyone who
+ * cleared their browser never saw it at all. A badge that stays until the round
+ * is archived cannot be missed that way, and needs no stored state.
+ *
+ * Archived rounds are excluded — archiving IS the owner saying they are done
+ * with it. Cancelled rounds are excluded too: a called-off round has nothing to
+ * order and nobody to bill.
+ */
+export function roundsAwaitingReport<T extends ReportableRound>(
+  rounds: T[],
+  scheduledEnabled: boolean,
+  now: Date = new Date(),
+): T[] {
+  return rounds.filter((gb) => {
+    if (gb.status === "archived" || gb.status === "cancelled") return false;
+    return effectiveGroupBuyStatus(gb, scheduledEnabled, now) === "closed";
+  });
 }
