@@ -13,6 +13,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
 import type { Order, PromoCode } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
+import { classifyProofFile } from "@/lib/upload/image-file";
+import { settleUpload } from "@/lib/upload/settle";
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
@@ -345,26 +347,29 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // in ImageKit. The order is persisted on hand-off in placeOrder().
   const handleProof = async (file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast("Please pick an image file.");
+    // Shared with the server action, so the browser and the server can never
+    // disagree about what counts as an uploadable receipt. Crucially this
+    // accepts a real screenshot whose `type` the picker left blank — the case
+    // that used to dead-end customers on "Please pick an image file."
+    const verdict = classifyProofFile(file.name || "", file.type || "");
+    if (!verdict.ok) {
+      toast(verdict.reason);
       return;
     }
     setUploadingProof(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await uploadPaymentProofAction(fd);
-      if ("url" in res) {
-        setProof(res.url);
-        setProofName(file.name || "proof");
-      } else {
-        toast(res.error);
-      }
-    } catch {
-      toast("Image upload failed — please try again.");
-    } finally {
-      setUploadingProof(false);
+    // settleUpload turns a thrown action into the same { error } shape, so a
+    // body-limit rejection reads as "File too large" instead of a generic
+    // retry prompt that tells the customer nothing.
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await settleUpload(() => uploadPaymentProofAction(fd));
+    if ("url" in res) {
+      setProof(res.url);
+      setProofName(file.name || "proof");
+    } else {
+      toast(res.error);
     }
+    setUploadingProof(false);
   };
 
   async function placeOrder(channelType: string) {
@@ -891,10 +896,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       <span className="sf-cart__proof-sub">or drag and drop a screenshot</span>
                     </>
                   )}
+                  {/* Extensions alongside the wildcard: some Android pickers match on
+                      extension and grey out a real .heic/.jpg when only "image/*"
+                      is offered — the file can't even be selected. */}
                   <input
                     ref={proofRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic,.heif,.avif"
                     style={{ display: "none" }}
                     onChange={(e) => { void handleProof(e.target.files?.[0]); }}
                   />

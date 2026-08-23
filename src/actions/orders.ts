@@ -34,6 +34,7 @@ import {
   type TrashScope,
 } from "@/lib/orders/trash";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
+import { classifyProofFile } from "@/lib/upload/image-file";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   isDemoMode,
@@ -817,8 +818,21 @@ export async function uploadPaymentProofAction(formData: FormData): Promise<Uplo
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };
   if (file.size > MAX_PROOF_BYTES) return { error: "Image too large (max 10 MB)." };
-  if (!file.type.startsWith("image/")) {
-    return { error: `Unsupported type: ${file.type || "unknown"}.` };
+
+  // `file.type` is a browser hint, not a fact — several Android pickers and
+  // in-app webviews report "" or application/octet-stream for a real JPEG.
+  // classifyProofFile falls back to the extension so those receipts get
+  // through, and refuses the rest with copy the customer can act on.
+  const verdict = classifyProofFile(file.name || "", file.type || "");
+  if (!verdict.ok) {
+    // A refusal here is invisible to the operator otherwise: the bytes never
+    // reach ImageKit, so nothing shows up in the media library or the logs and
+    // "the store won't let me upload" arrives with no way to diagnose it.
+    console.warn(
+      `[payment-proof] refused for tenant ${tenantId}: ` +
+        `name=${file.name || "(none)"} type=${file.type || "(none)"} size=${file.size}`,
+    );
+    return { error: verdict.reason };
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
