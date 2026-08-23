@@ -148,7 +148,8 @@
     "test:hero-flush": "tsx scripts/test-hero-media-flush.ts",
     "test:brand-splash": "tsx scripts/test-brand-splash.ts",
     "test:brand-splash-admin": "tsx scripts/test-brand-splash-admin.ts",
-    "test:mcp-auth": "tsx scripts/test-mcp-auth.ts"
+    "test:mcp-auth": "tsx scripts/test-mcp-auth.ts",
+    "test:proof-upload": "tsx scripts/test-proof-upload.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
