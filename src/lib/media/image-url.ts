@@ -61,10 +61,12 @@ export function isImageKitUrl(src: string | null | undefined): boolean {
 export function imageUrl(src: string, t: ImageTransform = {}): string {
   if (!src || !isImageKitUrl(src)) return src;
 
-  const url = new URL(src);
-  // Idempotent: an explicit transform already on the URL wins. Re-wrapping in a
-  // parent component must never stack `tr=` params or fight a deliberate one.
-  if (url.searchParams.has(TR)) return src;
+  // Parsed for INSPECTION only. The returned string is built by appending to the
+  // original `src`, never by re-serializing the parsed URL: URL.toString()
+  // re-encodes the whole query (`%20` becomes `+`), and any attempt to tidy the
+  // comma-delimited transform list afterwards would also decode `%2C` in the
+  // object path. Either one silently points the <img> at a different object.
+  if (hasTransform(src)) return src;
 
   const parts: string[] = [];
   if (t.width) parts.push(`w-${Math.round(t.width)}`);
@@ -73,12 +75,26 @@ export function imageUrl(src: string, t: ImageTransform = {}): string {
   // Let the edge negotiate AVIF/WebP from the browser's Accept header.
   parts.push("f-auto");
 
-  // Set through searchParams so any existing query (cache-busting `?v=`) is
-  // preserved and we can't emit a second '?'.
-  url.searchParams.set(TR, parts.join(","));
-  // ImageKit's transform list is comma-delimited by design; keep it readable
-  // rather than percent-encoding every separator.
-  return url.toString().replace(/%2C/g, ",");
+  // Split off the fragment so `tr=` lands in the query, not after the '#'.
+  const hashAt = src.indexOf("#");
+  const hash = hashAt === -1 ? "" : src.slice(hashAt);
+  const bare = hashAt === -1 ? src : src.slice(0, hashAt);
+
+  // A '?' only when there isn't one already, so an existing query (a
+  // cache-busting `?v=`, a signed `?ik-s=`) is carried through byte-for-byte.
+  const sep = bare.includes("?") ? "&" : "?";
+  // ImageKit's transform list is comma-delimited by design, so the commas are
+  // written literally rather than percent-encoded.
+  return `${bare}${sep}${TR}=${parts.join(",")}${hash}`;
+}
+
+/** Whether a URL already carries an explicit `tr=` transform. */
+function hasTransform(src: string): boolean {
+  try {
+    return new URL(src).searchParams.has(TR);
+  } catch {
+    return false;
+  }
 }
 
 function clampQuality(q: number | undefined): number {
@@ -93,6 +109,11 @@ function clampQuality(q: number | undefined): number {
  */
 export function imageSrcSet(src: string, widths: number[], t: ImageTransform = {}): string {
   if (!isImageKitUrl(src)) return "";
+  // `imageUrl` is idempotent, so mapping it over the ladder here would emit the
+  // SAME url under every width descriptor — telling the browser a 100px image is
+  // a 720w candidate, which it would then paint blurry into a large slot. An
+  // empty srcSet is ignored and `src` alone renders, which is the honest answer.
+  if (hasTransform(src)) return "";
   return widths
     .map((w) => `${imageUrl(src, { ...t, width: w })} ${w}w`)
     .join(", ");
