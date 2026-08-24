@@ -64,7 +64,8 @@ check("reads through unstable_cache", /unstable_cache/.test(reg));
 check("carries a bustable tag", /FEATURE_REGISTRY_TAG|"platform:feature-registry"/.test(reg));
 check("sets a revalidate window", hasRevalidate(reg));
 check("still dedupes within a render", /\bcache\(/.test(reg));
-check("write path busts the tag", /revalidateTag\(/.test(reg));
+check("write path busts the tag", /revalidateTag\(/.test(code(reg)));
+check("persistFeatureRegistry is the thing that busts it", /persistFeatureRegistry[\s\S]*?revalidateTag\(/.test(code(reg)));
 check("demo mode still bypasses the cache", /isDemoMode\(\)/.test(reg));
 check("read still cannot throw", /catch/.test(reg));
 
@@ -88,5 +89,19 @@ check("home page no longer inlines the order scan", !/db\.storefrontOrder\.findM
 console.log("the stock read stays live on purpose");
 check("products are still read directly (fresh stock)", /db\.product\.findMany/.test(page));
 
-console.log(failures === 0 ? "\nPASS" : `\n${failures} FAILURE(S)`);
-process.exit(failures === 0 ? 0 : 1);
+// Behavioural: DEMO_MODE bypasses both unstable_cache and the DB, so the
+// exported loader can actually be called here rather than only grepped.
+(async () => {
+  console.log("getBestSellerCounts — behaviour (demo mode, no DB)");
+  process.env.DEMO_MODE = "true";
+  const { getBestSellerCounts } = await import("../src/lib/storefront/best-sellers");
+
+  const counts = await getBestSellerCounts("no-such-tenant", "no-such-tenant");
+  check("returns a plain count map", counts !== null && typeof counts === "object" && !Array.isArray(counts), counts);
+  check("an unknown tenant tallies nothing rather than throwing", Object.keys(counts).length === 0, counts);
+  check("every value is a unit count", Object.values(counts).every((v) => typeof v === "number" && v >= 0));
+  check("no order ever leaves the module", !JSON.stringify(counts).includes("status"), counts);
+
+  console.log(failures === 0 ? "\nPASS" : `\n${failures} FAILURE(S)`);
+  process.exit(failures === 0 ? 0 : 1);
+})();

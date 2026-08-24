@@ -12,9 +12,8 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { withTenant } from "@/lib/db/tenant-client";
-import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
+import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
 import { isDemoMode, getDemoStoreOrders } from "@/lib/demo/fixtures";
-import { activeOrders } from "@/lib/orders/trash";
 import {
   buildBestSellerCounts,
   type BestSellerCounts,

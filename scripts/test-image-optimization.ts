@@ -32,6 +32,9 @@ import {
   imageSrcSet,
   CARD_SIZES,
   CARD_WIDTHS,
+  HERO_SIZES,
+  HERO_WIDTHS,
+  LOGO_WIDTH,
 } from "../src/lib/media/image-url";
 
 let failures = 0;
@@ -92,6 +95,12 @@ check("each candidate is transformed", (set.match(/tr=/g) ?? []).length === 2, s
 check("foreign host yields no srcset", imageSrcSet("https://cdn.example.com/a.png", [320, 640]) === "");
 check("CARD_WIDTHS is an ascending ladder", CARD_WIDTHS.every((w, i) => i === 0 || w > CARD_WIDTHS[i - 1]), CARD_WIDTHS);
 check("CARD_SIZES is a sizes attribute", typeof CARD_SIZES === "string" && CARD_SIZES.includes("vw"), CARD_SIZES);
+check("HERO_WIDTHS is an ascending ladder", HERO_WIDTHS.every((w, i) => i === 0 || w > HERO_WIDTHS[i - 1]), HERO_WIDTHS);
+check("HERO_WIDTHS tops out at a real display width", Math.max(...HERO_WIDTHS) >= 1920 && Math.max(...HERO_WIDTHS) <= 2560, HERO_WIDTHS);
+check("HERO_SIZES spans the viewport", HERO_SIZES === "100vw", HERO_SIZES);
+check("card ladder stays smaller than the hero ladder", Math.max(...CARD_WIDTHS) < Math.max(...HERO_WIDTHS));
+check("LOGO_WIDTH is a small fixed width", LOGO_WIDTH > 0 && LOGO_WIDTH <= 480, LOGO_WIDTH);
+check("hero srcSet uses the hero ladder", imageSrcSet(IK, [...HERO_WIDTHS]).split(", ").length === HERO_WIDTHS.length);
 
 console.log("wiring — the storefront actually renders through the layer");
 const catalog = read("src/storefront/components/Catalog.tsx");
