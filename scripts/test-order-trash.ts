@@ -242,11 +242,28 @@ check(
   `${gbAudit.filtered}/${gbAudit.total} filtered`,
 );
 
+// The home's two order reads: the group-buy fill count still renders inline,
+// while the best-seller tally moved behind a cached loader (lib/storefront/
+// best-sellers.ts) to stop rescanning every active order per render. Both files
+// are audited so moving a read can never move it out from under this rule.
 const homeAudit = audit("src/app/(tenant)/(storefront)/page.tsx");
 check(
-  "the storefront home — the group-buy fill count and best sellers both filter",
-  homeAudit.total >= 2 && homeAudit.filtered === homeAudit.total,
+  "the storefront home — the group-buy fill count filters",
+  homeAudit.total >= 1 && homeAudit.filtered === homeAudit.total,
   `${homeAudit.filtered}/${homeAudit.total} filtered — a trashed order would still sell the product`,
+);
+
+const bestSellerAudit = audit("src/lib/storefront/best-sellers.ts");
+check(
+  "the cached best-seller tally filters",
+  bestSellerAudit.total >= 1 && bestSellerAudit.filtered === bestSellerAudit.total,
+  `${bestSellerAudit.filtered}/${bestSellerAudit.total} filtered — a trashed order would still rank as a sale`,
+);
+
+check(
+  "the two home order reads together still cover fill count + best sellers",
+  homeAudit.total + bestSellerAudit.total >= 2,
+  `${homeAudit.total + bestSellerAudit.total} read(s)`,
 );
 
 const platformAudit = audit("src/lib/admin/data.ts");
@@ -361,6 +378,10 @@ check(
 check(
   "the storefront home filters its demo lists too",
   /activeOrders\(/.test(src("src/app/(tenant)/(storefront)/page.tsx")),
+);
+check(
+  "the cached best-seller tally filters its demo list too",
+  /activeOrders\(/.test(src("src/lib/storefront/best-sellers.ts")),
 );
 
 // ── the row and the type carry the field ─────────────────────────────────────

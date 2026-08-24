@@ -37,11 +37,8 @@ import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
-import {
-  normalizeCatalogSortStyle,
-  buildBestSellerCounts,
-  type BestSellerOrderInput,
-} from "@/lib/storefront/catalog-sort";
+import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
+import { getBestSellerCounts } from "@/lib/storefront/best-sellers";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import type { Brand, Product } from "@/storefront/types";
 
@@ -417,28 +414,13 @@ export default async function HomePage() {
   // boundary regardless. Absent/junk → open, so no live tenant moves.
   brand.storeStatus = normalizeStoreStatus(config.storeStatus);
   if (brand.catalogSortStyle === "simple") {
-    try {
-      let orderRows: BestSellerOrderInput[];
-      // Best sellers count real demand, so a trashed order sells nothing.
-      if (isDemoMode()) {
-        const slug = (await getTenantSlug()) ?? tenantId;
-        orderRows = activeOrders(getDemoStoreOrders(slug));
-      } else {
-        const rows = await withTenant(tenantId, (db) =>
-          db.storefrontOrder.findMany({
-            where: ACTIVE_ORDERS_WHERE,
-            select: { status: true, items: true },
-          }),
-        );
-        orderRows = rows.map((r) => ({
-          status: r.status,
-          items: Array.isArray(r.items) ? (r.items as BestSellerOrderInput["items"]) : [],
-        }));
-      }
-      brand.bestSellerCounts = buildBestSellerCounts(orderRows);
-    } catch {
-      brand.bestSellerCounts = {};
-    }
+    // Cached + tag-busted in best-sellers.ts: this is a full scan of the
+    // tenant's active orders reduced to a per-product tally, and it only ranks a
+    // sort dropdown. It used to cost ~720ms on every render.
+    brand.bestSellerCounts = await getBestSellerCounts(
+      tenantId,
+      isDemoMode() ? ((await getTenantSlug()) ?? tenantId) : undefined,
+    );
   }
 
   // "New functionality" tags: the operator's kept flags (persisted registry

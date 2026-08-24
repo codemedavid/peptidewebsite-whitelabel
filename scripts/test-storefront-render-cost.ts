@@ -50,11 +50,19 @@ function check(name: string, cond: boolean, detail?: unknown) {
 }
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 
+/** Source with comments stripped — assertions about what the CODE does must not
+ *  be satisfied (or tripped) by what a comment happens to say. */
+function code(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
+/** `revalidate:` set to either a literal or a named constant. */
+const hasRevalidate = (src: string) => /revalidate:\s*[A-Za-z_$][\w$]*|revalidate:\s*\d+/.test(code(src));
+
 console.log("getFeatureRegistry — a platform-global row is not worth a round trip per render");
 const reg = read("src/lib/platform/feature-registry-server.ts");
 check("reads through unstable_cache", /unstable_cache/.test(reg));
 check("carries a bustable tag", /FEATURE_REGISTRY_TAG|"platform:feature-registry"/.test(reg));
-check("sets a revalidate window", /revalidate:\s*\d+/.test(reg));
+check("sets a revalidate window", hasRevalidate(reg));
 check("still dedupes within a render", /\bcache\(/.test(reg));
 check("write path busts the tag", /revalidateTag\(/.test(reg));
 check("demo mode still bypasses the cache", /isDemoMode\(\)/.test(reg));
@@ -66,10 +74,10 @@ check("best-seller loader exists", bs.length > 0);
 check("reads through unstable_cache", /unstable_cache/.test(bs));
 check("keyed per tenant", /tenantId/.test(bs));
 check("tagged so tenant mutations bust it", /tenant:\$\{tenantId\}/.test(bs));
-check("sets a revalidate window", /revalidate:\s*\d+/.test(bs));
+check("sets a revalidate window", hasRevalidate(bs));
 check("excludes trashed orders", /ACTIVE_ORDERS_WHERE/.test(bs));
 check("reduces to counts, never returns raw orders", /buildBestSellerCounts/.test(bs));
-check("selects only status+items (no PII)", /status:\s*true/.test(bs) && /items:\s*true/.test(bs) && !/customer|email|phone|address/i.test(bs));
+check("selects only status+items (no PII)", /status:\s*true/.test(code(bs)) && /items:\s*true/.test(code(bs)) && !/(customer|email|phone|address)\w*:\s*true/i.test(code(bs)));
 check("failure degrades to empty counts, not a broken page", /catch/.test(bs));
 
 console.log("wiring — the home page uses the cached loaders");
