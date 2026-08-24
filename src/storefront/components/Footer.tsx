@@ -1,4 +1,5 @@
 import type { Brand } from "../types";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
 import {
   normalizeFooterStyle,
@@ -118,7 +119,14 @@ export function Footer({ brand }: { brand: Brand }) {
           <div className="site-footer__brand-row">
             {brand.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={brand.logoUrl} alt={brand.name} className="site-footer__logo" style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
+              <img
+                src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+                alt={brand.name}
+                className="site-footer__logo"
+                loading="lazy"
+                decoding="async"
+                style={{ borderRadius: logoCurveCss(brand.logoCurve) }}
+              />
             ) : (
               <div className="site-footer__logo site-footer__logo--fallback">
                 {brand.name?.[0]?.toUpperCase() || "B"}
@@ -167,7 +175,14 @@ export function Footer({ brand }: { brand: Brand }) {
               <div className="site-footer__brand-row">
                 {brand.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brand.logoUrl} alt={brand.name} className="site-footer__logo" style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
+                  <img
+                    src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+                    alt={brand.name}
+                    className="site-footer__logo"
+                    loading="lazy"
+                    decoding="async"
+                    style={{ borderRadius: logoCurveCss(brand.logoCurve) }}
+                  />
                 ) : (
                   <div className="site-footer__logo site-footer__logo--fallback">
                     {brand.name?.[0]?.toUpperCase() || "B"}

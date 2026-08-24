@@ -20,6 +20,7 @@
 // same store name and logo this wall already shows.
 
 import { useEffect, useState } from "react";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 import { useRouter } from "next/navigation";
 import { verifyAccessCodeAction } from "@/actions/storefront-gate";
 import { resolveGateSurface, type GateSurface } from "@/lib/auth/gate-surface";
@@ -181,7 +182,8 @@ export function AccessCodeGate({
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={logoUrl}
+            src={imageUrl(logoUrl, { width: LOGO_WIDTH })}
+            decoding="async"
             alt={storeName}
             style={{ height: 48, width: "auto", margin: "0 auto 20px", objectFit: "contain" }}
           />

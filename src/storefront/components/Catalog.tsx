@@ -6,6 +6,12 @@ import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import {
+  imageUrl,
+  imageSrcSet,
+  CARD_WIDTHS,
+  CARD_SIZES,
+} from "@/lib/media/image-url";
+import {
   buildProductOptions,
   resolveSelectedPrice,
   shouldShowOptionPicker,
@@ -132,7 +138,14 @@ export function ProductCard({
         >
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt={product.name} />
+            <img
+              src={imageUrl(image, { width: 480 })}
+              srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
+              sizes={CARD_SIZES}
+              alt={product.name}
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
@@ -148,7 +161,14 @@ export function ProductCard({
         <div className="product-card__media">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt={product.name} />
+            <img
+              src={imageUrl(image, { width: 480 })}
+              srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
+              sizes={CARD_SIZES}
+              alt={product.name}
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
@@ -399,7 +419,13 @@ function ProductDetailModal({
           <div className="sf-detail__media">
             {detail.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={detail.image} alt={detail.name} />
+              <img
+                src={imageUrl(detail.image, { width: 720 })}
+                srcSet={imageSrcSet(detail.image, [360, 720, 1080])}
+                sizes="(max-width: 640px) 90vw, 520px"
+                alt={detail.name}
+                decoding="async"
+              />
             ) : (
               <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />
@@ -439,7 +465,13 @@ function ProductDetailModal({
                   <figure key={r.id ?? i} className="sf-detail__review">
                     {r.image && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img className="sf-detail__review-img" src={r.image} alt={r.title || "Customer review"} />
+                      <img
+                        className="sf-detail__review-img"
+                        src={imageUrl(r.image, { width: 240 })}
+                        alt={r.title || "Customer review"}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     )}
                     <figcaption className="sf-detail__review-body">
                       {r.title && <strong className="sf-detail__review-name">{r.title}</strong>}

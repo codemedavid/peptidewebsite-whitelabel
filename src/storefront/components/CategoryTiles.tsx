@@ -7,6 +7,7 @@
 // nothing to show. Colours and type come from --brand-* only.
 
 import type { CategoryTile } from "@/lib/storefront/boutique-home";
+import { imageUrl } from "@/lib/media/image-url";
 
 export function CategoryTiles({
   tiles,
@@ -46,7 +47,7 @@ export function CategoryTiles({
                   {tile.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={tile.image}
+                      src={imageUrl(tile.image, { width: 640 })}
                       alt=""
                       width={640}
                       height={640}

@@ -11,6 +11,7 @@
 // is given a selection this template chose. Colour and type come from --brand-*.
 
 import type { Brand, Product } from "../types";
+import { imageUrl } from "@/lib/media/image-url";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 
 export function EditorialEdit({
@@ -56,7 +57,7 @@ export function EditorialEdit({
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={image}
+                        src={imageUrl(image, { width: 640 })}
                         alt=""
                         width={640}
                         height={800}

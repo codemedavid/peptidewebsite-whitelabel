@@ -13,6 +13,7 @@
 // <Header>, so the two surfaces cannot drift.
 
 import { useEffect, useState } from "react";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 import type { Brand } from "../types";
 import { buildStorefrontNav } from "@/lib/storefront/nav";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
@@ -56,7 +57,8 @@ export function EditorialRail({
     (brand.logoUrl ? (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={brand.logoUrl}
+        src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+        decoding="async"
         alt=""
         className="ed-rail__logo"
         style={{ borderRadius: logoCurveCss(brand.logoCurve) }}

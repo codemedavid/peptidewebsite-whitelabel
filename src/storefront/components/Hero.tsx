@@ -1,4 +1,11 @@
 import type { CSSProperties } from "react";
+import {
+  imageUrl,
+  imageSrcSet,
+  HERO_WIDTHS,
+  HERO_SIZES,
+  LOGO_WIDTH,
+} from "@/lib/media/image-url";
 import { STOREFRONT_HERO_TITLE_CLAMP, STOREFRONT_HERO_BODY_CLAMP, heroFieldCss } from "@/lib/theme/tokens";
 import type { Brand } from "../types";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
@@ -78,7 +85,12 @@ export function Hero({
     <div className="hero__logo-card" style={logoCardStyle}>
       {brand.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurve }} />
+        <img
+          src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+          alt={brand.name}
+          decoding="async"
+          style={{ borderRadius: logoCurve }}
+        />
       ) : (
         <div className="hero__logo-fallback">
           <span>{brand.name?.[0]?.toUpperCase() || "B"}</span>
@@ -253,7 +265,9 @@ export function Hero({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="hero__media-img"
-            src={media.url}
+            src={imageUrl(media.url, { width: 1280 })}
+            srcSet={imageSrcSet(media.url, [...HERO_WIDTHS])}
+            sizes={HERO_SIZES}
             alt={media.alt}
             loading="eager"
             fetchPriority="high"

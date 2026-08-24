@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 import type { Brand } from "../types";
 import { buildStorefrontNav } from "@/lib/storefront/nav";
 import { logoCurveCss } from "@/lib/storefront/logo-curve";
@@ -76,7 +77,12 @@ export function Header({
           {brand.headerShowLogo !== false &&
             (brand.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={brand.logoUrl} alt={brand.name} style={{ borderRadius: logoCurveCss(brand.logoCurve) }} />
+              <img
+                src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+                alt={brand.name}
+                decoding="async"
+                style={{ borderRadius: logoCurveCss(brand.logoCurve) }}
+              />
             ) : (
               <div className="site-header__logo-mark">
                 {brand.name?.[0]?.toUpperCase() || "B"}

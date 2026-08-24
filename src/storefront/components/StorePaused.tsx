@@ -1,6 +1,7 @@
 "use client";
 
 import type { Brand } from "../types";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 
 /**
  * The branded "We're currently on pause" card customers see in place of the
@@ -15,7 +16,12 @@ export function StorePaused({ brand }: { brand: Brand }) {
       <div className="sf-paused__card">
         {brand.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="sf-paused__logo" src={brand.logoUrl} alt={brand.name} />
+          <img
+            className="sf-paused__logo"
+            src={imageUrl(brand.logoUrl, { width: LOGO_WIDTH })}
+            alt={brand.name}
+            decoding="async"
+          />
         ) : (
           <div className="sf-paused__mark">{brand.name?.[0]?.toUpperCase() || "S"}</div>
         )}

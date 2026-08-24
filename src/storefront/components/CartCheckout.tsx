@@ -10,6 +10,7 @@
 // payment methods are configured by the store / super admin.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { imageUrl } from "@/lib/media/image-url";
 import { useStore } from "../store";
 import type { Order, PromoCode } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
@@ -852,7 +853,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   </div>
                   {selectedMethod.qrImage && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img className="sf-cart__pay-qr" src={selectedMethod.qrImage} alt={`${selectedMethod.name} QR code`} />
+                    <img
+                      className="sf-cart__pay-qr"
+                      src={imageUrl(selectedMethod.qrImage, { width: 480 })}
+                      alt={`${selectedMethod.name} QR code`}
+                      loading="lazy"
+                      decoding="async"
+                    />
                   )}
                 </div>
               )}

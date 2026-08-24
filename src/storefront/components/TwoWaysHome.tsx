@@ -12,6 +12,7 @@
 // Header/Footer/cart drawer are owned by the storefront Shell around this.
 
 import { useState } from "react";
+import { imageUrl } from "@/lib/media/image-url";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { baseProductId } from "../checkout";
@@ -310,7 +311,12 @@ function OnHandRow({
       <span className="sf-twh__avatar font-display" aria-hidden>
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" />
+          <img
+            src={imageUrl(image, { width: 120 })}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           line.initial
         )}

@@ -45,6 +45,12 @@ function check(name: string, cond: boolean, detail?: unknown) {
 }
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 
+/** The comma-delimited ImageKit transform list on a built URL, e.g. ["w-600","q-75","f-auto"]. */
+function trParts(url: string): string[] {
+  const tr = new URL(url).searchParams.get("tr");
+  return tr ? tr.split(",") : [];
+}
+
 const IK = "https://ik.imagekit.io/x/tenant/acme/vial.png";
 
 console.log("isImageKitUrl — only ImageKit-hosted URLs are transformable");
@@ -58,7 +64,7 @@ check("empty string is not", isImageKitUrl("") === false);
 console.log("imageUrl — resizes ImageKit sources to the slot they render into");
 const carded = imageUrl(IK, { width: 600 });
 check("appends a tr= transformation", carded.includes("tr="), carded);
-check("carries the requested width", /(^|[?&,])w-600(,|$|&)/.test(carded), carded);
+check("carries the requested width", trParts(carded).includes("w-600"), carded);
 check("negotiates a modern format (f-auto)", carded.includes("f-auto"), carded);
 check("caps quality rather than shipping source quality", /q-\d+/.test(carded), carded);
 check("keeps the original path", carded.startsWith(IK), carded);
@@ -80,7 +86,7 @@ check("re-wrapping does not stack transforms", (twice.match(/tr=/g) ?? []).lengt
 
 console.log("imageSrcSet — responsive candidates for the browser to choose from");
 const set = imageSrcSet(IK, [320, 640]);
-check("emits one candidate per width", set.split(",").length === 2, set);
+check("emits one candidate per width", set.split(", ").length === 2, set);
 check("candidate carries its width descriptor", set.includes(" 320w") && set.includes(" 640w"), set);
 check("each candidate is transformed", (set.match(/tr=/g) ?? []).length === 2, set);
 check("foreign host yields no srcset", imageSrcSet("https://cdn.example.com/a.png", [320, 640]) === "");

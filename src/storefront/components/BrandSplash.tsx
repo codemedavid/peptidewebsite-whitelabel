@@ -25,6 +25,7 @@
 // live preview and the server all render from one contract.
 
 import { useEffect, useState } from "react";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 import { Monogram } from "@/components/Monogram";
 import {
   splashLogoUrl,
@@ -71,7 +72,12 @@ export function BrandSplash({
         <span className="sf-splash__mark">
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="" className="sf-splash__logo" />
+            <img
+              src={imageUrl(logo, { width: LOGO_WIDTH })}
+              alt=""
+              className="sf-splash__logo"
+              decoding="async"
+            />
           ) : (
             <Monogram name={storeName} className="sf-splash__monogram" />
           )}
