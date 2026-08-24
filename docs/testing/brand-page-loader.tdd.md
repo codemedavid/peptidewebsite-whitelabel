@@ -2,7 +2,7 @@
 
 **Task:** "The load when going to another page or part of the website is not using the branded loading."
 **Branch:** `main` · **Date:** 2026-08-24
-**Suite:** `npm run test:brand-page-loader` (`scripts/test-brand-page-loader.ts`)
+**Suite:** `npm run test:brand-page-loader` (22 checks) (`scripts/test-brand-page-loader.ts`)
 
 No `*.plan.md` was supplied. The journeys below were derived during this TDD run
 from the reported symptom.
@@ -93,7 +93,38 @@ the pseudo-element:
 19 passed, 0 failed
 ```
 
-### 4.3 Refactor
+### 4.3 A splash-disabled tenant got a blank box (found in code review)
+
+Turning the splash off emits no vars and no `data-splash-design` — correct, that
+is what keeps those tenants unbranded. But *every* visible part of the loader was
+gated on that attribute (`.sf-splash__ring, .sf-splash__bar { display: none }` is
+the global default), and the generic `PageSpinner` those tenants fell back to was
+deleted in the same change. Result: an empty 60vh area on all 14 code-split routes
+and both `loading.tsx` walls.
+
+The suite did not catch it because §5 #19 asserted each design was *mentioned* in
+the CSS. The ring was mentioned — and hidden.
+
+**RED:**
+
+```
+$ npm run test:brand-page-loader
+✗ a splash-disabled tenant still gets a VISIBLE loader, not a blank box
+✗ the bar design swaps the ring out rather than relying on it being hidden
+✗ reduced motion never blanks a splash-disabled tenant's loader
+19 passed, 3 failed
+```
+
+**GREEN** after making the ring the un-gated default for `.sf-splash-page` (the
+bar design now expresses only its *difference* from it), hiding the mark unless
+the splash is enabled, and letting reduced motion drop the ring only while a mark
+is left standing:
+
+```
+22 passed, 0 failed
+```
+
+### 4.4 Refactor
 
 Dropped the `PageSpinner = BrandPageLoader` alias; the 14 code-split routes and
 the admin auth check now name `BrandPageLoader` directly. The old name promised a
@@ -122,13 +153,18 @@ still 19/19, `tsc --noEmit` clean.
 | 16 | Both `loading.tsx` walls render it, not a grey skeleton | both files' source | wiring | PASS |
 | 17 | The loader takes no props, so a server `loading.tsx` can render it | `BrandPageLoader.tsx` source | wiring | PASS |
 | 18 | The loader reuses the splash's class names, so the two cannot drift | `BrandPageLoader.tsx` source | wiring | PASS |
-| 19 | The stylesheet drives the loader off `data-splash-design`, and the monogram falls back to `none` | `brand-splash.css` source | wiring | PASS |
+| 19 | Each indicator actually resolves to `display: block`, and the monogram falls back to `none` | `brand-splash.css` source | wiring | PASS |
+| 20 | A splash-disabled tenant still gets a visible loader, not a blank box | `brand-splash.css` source | wiring (regression) | PASS |
+| 21 | The `bar` design swaps the ring out rather than relying on it being hidden | `brand-splash.css` source | wiring | PASS |
+| 22 | Reduced motion never blanks a splash-disabled tenant's loader | `brand-splash.css` source | wiring | PASS |
 
 ## 6. Browser verification
 
 Dev server on `hpglow.lvh.me:3100`, loader markup rendered inside the real layout root:
 
 - Root HTML carries `data-splash-design="ring"` and `--splash-logo:url("https://ik.imagekit.io/…")` on both `hpglow` and `k-glow`.
+- **Splash disabled** (no attribute, no vars): mark `display: none`, ring `display: block` + `sf-splash-spin` — a centered plain spinner, exactly what these tenants had before.
+- **Bar design:** ring `display: none`, bar `display: block`.
 - **Logo branch:** HP Glow's real ImageKit mark paints; ring `display: block`, `animation: sf-splash-spin`, `border-top-color: rgb(200,163,76)` — the tenant's gold. Bar stays `display: none` (design is `ring`).
 - **Monogram branch** (`--splash-logo` removed, `--splash-initials: "KG"`): tile paints `rgb(200,163,76)` with white initials, no logo box.
 
@@ -147,10 +183,12 @@ All green after the change: `brand-splash` (39), `brand-splash-admin` (21),
   self-contained `tsx` scripts, not jest/vitest — so the 80% line-coverage target
   is not measurable here. Coverage of the *change* is per-behavior instead: every
   exported function in `brand-loader.ts` and every wiring point has a check above.
-- **Not covered by an automated test:** that the loader *looks* right. The
-  `content: ""` bug in §4.2 passed every source-level assertion and was only
-  caught in a browser. §6 is the standing evidence; there is no visual-regression
-  harness in this repo to pin it.
+- **Not covered by an automated test:** that the loader *looks* right. Both real
+  defects here — the `content: ""` overlay (§4.2) and the blank disabled-tenant
+  box (§4.3) — passed every source-level assertion at the time. One was caught in
+  a browser, one in code review; neither by the suite. §6 is the standing
+  evidence, and there is no visual-regression harness in this repo to pin it.
+  Source-text CSS checks can prove a rule *exists*; they cannot prove it *wins*.
 - **Out of scope:** the platform admin's own `loading.tsx` files under
   `src/app/(platform)/admin/**` keep their skeletons. They are the operator
   console, not a white-labeled storefront, and have no tenant to brand for.
@@ -173,5 +211,6 @@ Checkpoints on `main`, in order:
 | `d7f6a2c` | `fix(storefront): use the branded loading screen on route changes too` — GREEN |
 | `ccbef0a` | `fix(storefront): stop the monogram tile painting over the tenant's logo` — RED → GREEN |
 | `167eac1` | `refactor(storefront): drop the PageSpinner alias` — green throughout |
+| `b85e86f` | `fix(storefront): stop a splash-disabled tenant getting a blank loading box` — RED → GREEN |
 
 If these are squashed, this file is the surviving record.
