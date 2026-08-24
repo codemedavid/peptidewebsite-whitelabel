@@ -127,8 +127,11 @@ check("a logo URL that could break out of url() is dropped, not emitted", () => 
 });
 
 check("a store name is escaped into a CSS string", () => {
+  // Initials are the first letter of each of the first two words, so this name
+  // yields a literal double quote followed by S — the character that would
+  // otherwise close the CSS string early.
   const vars = brandLoaderVars(splashOf(), '"Quote\\ Store', null);
-  assert.strictEqual(vars["--splash-initials"], '"\\"Q"');
+  assert.strictEqual(vars["--splash-initials"], '"\\"S"');
 });
 
 check("unset colors emit no var, so the loader inherits the tenant's theme", () => {
@@ -227,8 +230,10 @@ check("the loader takes no props, so a server loading.tsx can render it", () => 
     /export function BrandPageLoader\(\s*\)/.test(loader),
     "BrandPageLoader must be props-less — its config arrives as inherited CSS vars",
   );
+  // Match the DIRECTIVE, not the phrase — the file's header explains why it has
+  // no "use client", and a bare substring check flagged its own documentation.
   assert.ok(
-    !loader.includes('"use client"'),
+    !/^\s*["']use client["']/m.test(loader),
     "BrandPageLoader must stay server-renderable so loading.tsx can use it",
   );
 });

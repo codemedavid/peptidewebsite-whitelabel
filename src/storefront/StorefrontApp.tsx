@@ -14,6 +14,7 @@ import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { NoticeModal } from "./components/NoticeModal";
 import { StorePaused } from "./components/StorePaused";
 import { StoreClosedNotice } from "./components/StoreClosedNotice";
+import { BrandPageLoader } from "./components/BrandPageLoader";
 import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
@@ -32,14 +33,11 @@ import {
   signOutStorefrontAdminAction,
 } from "@/actions/storefront-admin";
 
-// Spinner shown while any lazy page chunk is downloading for the first time.
-function PageSpinner() {
-  return (
-    <div className="sf-page-spinner">
-      <div className="sf-page-spinner__ring" />
-    </div>
-  );
-}
+// Shown while any lazy page chunk is downloading for the first time. This is
+// the store's OWN loading screen, not a generic ring: BrandPageLoader renders
+// the tenant's mark and colors from CSS vars the storefront layout painted on
+// its root, so a hash navigation looks like the boot splash it follows.
+const PageSpinner = BrandPageLoader;
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire

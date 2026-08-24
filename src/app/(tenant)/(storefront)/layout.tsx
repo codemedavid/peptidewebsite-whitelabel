@@ -13,6 +13,7 @@ import { evaluateVisitorGate } from "@/lib/auth/gate-enforcement";
 import { AccessCodeGate } from "@/storefront/components/AccessCodeGate";
 import { BrandSplash } from "@/storefront/components/BrandSplash";
 import { normalizeBrandSplash } from "@/lib/storefront/brand-splash";
+import { brandLoaderDesign, brandLoaderVars } from "@/lib/storefront/brand-loader";
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
@@ -102,6 +103,13 @@ export default async function StorefrontLayout({
   const splash = normalizeBrandSplash(
     (branding?.config as { brandSplash?: unknown } | null)?.brandSplash,
   );
+  // The splash used to end at that first render, and every navigation after it
+  // fell back to unbranded chrome. These two carry the same config down to the
+  // route-change loader as inherited CSS — the surfaces that render it (a
+  // `loading.tsx` wall, a next/dynamic fallback) are handed no props of their
+  // own, so the root is the only place the tenant's mark can reach them from.
+  const loaderVars = brandLoaderVars(splash, name, branding?.logoUrl);
+  const loaderDesign = brandLoaderDesign(splash);
 
   const fonts = (branding?.fonts ?? {}) as { heading?: string; body?: string };
   // Hero typography lives on the storefront Brand config; load its distinct
@@ -155,7 +163,11 @@ export default async function StorefrontLayout({
   const isStorefrontHome = pathname === "/";
 
   return (
-    <div style={cssVars} className="min-h-screen bg-background text-foreground">
+    <div
+      style={{ ...cssVars, ...loaderVars }}
+      data-splash-design={loaderDesign}
+      className="min-h-screen bg-background text-foreground"
+    >
       {gateHeartbeat}
       {splash.enabled ? (
         <BrandSplash splash={splash} storeName={name} brandingLogoUrl={branding?.logoUrl} />

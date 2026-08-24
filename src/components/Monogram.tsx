@@ -1,14 +1,16 @@
+import { monogramInitials } from "@/lib/storefront/brand-loader";
+
 /**
  * Logo fallback when a tenant hasn't uploaded one: initials on a brand-colored
  * tile. Reads --brand / --primary-foreground so it re-skins with the theme.
+ *
+ * The initials rule lives in lib/storefront/brand-loader because the branded
+ * page loader draws the same monogram in pure CSS, where this component cannot
+ * reach. Sharing one function is what stops a store's header mark and its
+ * loading mark from disagreeing.
  */
 export function Monogram({ name, className = "" }: { name: string; className?: string }) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
+  const initials = monogramInitials(name);
 
   return (
     <span
@@ -19,7 +21,7 @@ export function Monogram({ name, className = "" }: { name: string; className?: s
         color: "hsl(var(--primary-foreground))",
       }}
     >
-      {initials || "?"}
+      {initials}
     </span>
   );
 }

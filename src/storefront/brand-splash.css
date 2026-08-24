@@ -286,3 +286,76 @@
   height: 46px;
   font-size: 17px;
 }
+
+/* ── page loader (route changes) ────────────────────────────────────────────
+   The mid-visit half of the splash: same classes, different frame. Rendered by
+   BrandPageLoader from a `loading.tsx` wall or a next/dynamic fallback, both of
+   which get no props — so everything below resolves from vars the storefront
+   layout painted on its root (lib/storefront/brand-loader).
+
+   Inline rather than fixed. A full-viewport takeover on every tap would be a
+   heavier interruption than the navigation it covers, and unlike the boot splash
+   there is nothing here to dismiss: React unmounts it when the page arrives.
+   That also means NO animation-fill-mode backstop is needed or wanted. */
+
+.sf-splash-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  background: var(--splash-bg, transparent);
+  color: var(--splash-text, var(--brand-text, #111111));
+}
+
+/* The mark, drawn from a custom property so the component itself needs no props.
+   Exactly one of --splash-logo / --splash-initials is ever set (see
+   brandLoaderVars), so these two rules can never both paint. */
+.sf-splash-page .sf-splash__mark {
+  width: clamp(56px, 7vw, 104px);
+  height: clamp(56px, 7vw, 104px);
+  background-image: var(--splash-logo, none);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  animation: sf-splash-pulse 2s ease-in-out infinite;
+}
+
+/* The monogram fallback for a tenant with no mark. `content` with an unset var
+   resolves to "" and renders nothing, which is the branch. */
+.sf-splash-page .sf-splash__mark::after {
+  content: var(--splash-initials, "");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--splash-accent, var(--brand-main, #6c63ff));
+  color: var(--splash-bg, var(--brand-surface, #ffffff));
+  font-size: clamp(20px, 2.6vw, 38px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* Which indicator moves. The operator's choice arrives as an attribute on the
+   storefront root because the loader takes no props; a design with no indicator
+   of its own is mapped to "ring" before it is emitted (brandLoaderDesign), so
+   only these two selectors are ever needed. */
+[data-splash-design="ring"] .sf-splash-page .sf-splash__ring {
+  display: block;
+  animation: sf-splash-spin 0.75s linear infinite;
+}
+
+[data-splash-design="bar"] .sf-splash-page .sf-splash__bar {
+  display: block;
+}
+
+/* Same discipline as the boot splash: a static ring reads as a broken spinner,
+   so reduced motion drops it and lets the brand mark stand alone. */
+@media (prefers-reduced-motion: reduce) {
+  .sf-splash-page .sf-splash__mark {
+    animation: none;
+  }
+  [data-splash-design="ring"] .sf-splash-page .sf-splash__ring {
+    display: none;
+  }
+}
