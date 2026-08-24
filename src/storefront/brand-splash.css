@@ -320,10 +320,15 @@
   animation: sf-splash-pulse 2s ease-in-out infinite;
 }
 
-/* The monogram fallback for a tenant with no mark. `content` with an unset var
-   resolves to "" and renders nothing, which is the branch. */
+/* The monogram fallback for a tenant with no mark.
+
+   THE FALLBACK MUST BE `none`, NOT `""`. An empty string is still a generated
+   box, so with `""` this tile painted over every uploaded logo — the mark came
+   out as a plain accent-colored square on every tenant that had one. `none` is
+   the only value that suppresses the pseudo-element outright, and that is what
+   makes this rule a branch rather than an overlay. */
 .sf-splash-page .sf-splash__mark::after {
-  content: var(--splash-initials, "");
+  content: var(--splash-initials, none);
   display: inline-flex;
   align-items: center;
   justify-content: center;

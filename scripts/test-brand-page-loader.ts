@@ -258,6 +258,13 @@ check("the stylesheet drives the loader off the root's data-splash-design", () =
     css.includes("--splash-initials"),
     "the monogram fallback must render from var(--splash-initials)",
   );
+  // The branch itself. `content: var(--splash-initials, "")` still GENERATES the
+  // pseudo-element — an empty string is a box — so the monogram tile painted
+  // over every tenant's uploaded logo. Only `none` suppresses it.
+  assert.ok(
+    /content:\s*var\(--splash-initials,\s*none\)/.test(css),
+    'the monogram pseudo-element must fall back to `none`, not "" — an empty string still paints its tile over the logo',
+  );
   assert.ok(
     css.includes("--splash-logo"),
     "the mark must render from var(--splash-logo)",
