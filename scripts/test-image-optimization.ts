@@ -87,6 +87,29 @@ check("does not emit a second '?'", (withQuery.match(/\?/g) ?? []).length === 1,
 const twice = imageUrl(imageUrl(IK, { width: 600 }), { width: 600 });
 check("re-wrapping does not stack transforms", (twice.match(/tr=/g) ?? []).length === 1, twice);
 
+// The transform is appended to the URL, so everything already in that URL has to
+// survive byte-for-byte. Round-tripping through URL.searchParams re-encodes the
+// whole query, and a global %2C->"," replace rewrites the PATH too — either one
+// silently points the <img> at a different object.
+console.log("imageUrl — leaves the path and foreign query values untouched");
+const encPath = "https://ik.imagekit.io/abc/tenants/t1/my%2Cphoto.jpg";
+check("a %2C in the path is not decoded (it would 404)", imageUrl(encPath, { width: 480 }).includes("my%2Cphoto.jpg"), imageUrl(encPath, { width: 480 }));
+const signed = "https://ik.imagekit.io/abc/photo.jpg?ik-t=1&ik-s=aa%2Cbb";
+check("a signature's %2C is not decoded", imageUrl(signed, { width: 480 }).includes("ik-s=aa%2Cbb"), imageUrl(signed, { width: 480 }));
+const spaced = "https://ik.imagekit.io/abc/a%20b.jpg?x=a%20b";
+check("a %20 query value is not re-encoded to '+'", imageUrl(spaced, { width: 480 }).includes("x=a%20b"), imageUrl(spaced, { width: 480 }));
+check("a %20 in the path survives", imageUrl(spaced, { width: 480 }).includes("a%20b.jpg"), imageUrl(spaced, { width: 480 }));
+const hashed = "https://ik.imagekit.io/abc/p.jpg#frag";
+check("a fragment stays at the end", imageUrl(hashed, { width: 480 }).endsWith("#frag"), imageUrl(hashed, { width: 480 }));
+
+// imageUrl is idempotent, so mapping it over a width ladder yields N IDENTICAL
+// urls carrying N different width descriptors — the browser then treats a 100px
+// image as a 720w candidate and paints it blurry into a large slot. Worse than
+// emitting no srcSet at all.
+console.log("imageSrcSet — refuses to lie about a pre-transformed source");
+check("no srcset when the source already carries a transform", imageSrcSet("https://ik.imagekit.io/abc/p.jpg?tr=w-100", [240, 480, 720]) === "", imageSrcSet("https://ik.imagekit.io/abc/p.jpg?tr=w-100", [240, 480, 720]));
+check("candidates are otherwise all distinct", new Set(imageSrcSet(IK, [240, 480, 720]).split(", ")).size === 3);
+
 console.log("imageSrcSet — responsive candidates for the browser to choose from");
 const set = imageSrcSet(IK, [320, 640]);
 check("emits one candidate per width", set.split(", ").length === 2, set);
