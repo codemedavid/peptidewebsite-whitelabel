@@ -150,7 +150,8 @@
     "test:brand-splash-admin": "tsx scripts/test-brand-splash-admin.ts",
     "test:mcp-auth": "tsx scripts/test-mcp-auth.ts",
     "test:proof-upload": "tsx scripts/test-proof-upload.ts",
-    "test:brand-page-loader": "tsx scripts/test-brand-page-loader.ts"
+    "test:brand-page-loader": "tsx scripts/test-brand-page-loader.ts",
+    "test:image-optimization": "tsx scripts/test-image-optimization.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
