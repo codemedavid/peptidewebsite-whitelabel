@@ -14,6 +14,10 @@ import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { NoticeModal } from "./components/NoticeModal";
 import { StorePaused } from "./components/StorePaused";
 import { StoreClosedNotice } from "./components/StoreClosedNotice";
+// The fallback every code-split route below renders while its chunk downloads.
+// The store's OWN loading screen, not a generic ring: it draws the tenant's mark
+// and colors from CSS vars the storefront layout paints on its root, so a hash
+// navigation looks like the boot splash it follows.
 import { BrandPageLoader } from "./components/BrandPageLoader";
 import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
@@ -33,40 +37,34 @@ import {
   signOutStorefrontAdminAction,
 } from "@/actions/storefront-admin";
 
-// Shown while any lazy page chunk is downloading for the first time. This is
-// the store's OWN loading screen, not a generic ring: BrandPageLoader renders
-// the tenant's mark and colors from CSS vars the storefront layout painted on
-// its root, so a hash navigation looks like the boot splash it follows.
-const PageSpinner = BrandPageLoader;
-
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
 // password-gated admin tree are code-split: they download on demand the first
 // time their hash route is hit, keeping the public first-load JS small.
-const TrackOrderPage = dynamic(() => import("./pages/TrackOrderPage").then((m) => m.TrackOrderPage), { ssr: false, loading: PageSpinner });
-const OrderConfirmedPage = dynamic(() => import("./pages/OrderConfirmedPage").then((m) => m.OrderConfirmedPage), { ssr: false, loading: PageSpinner });
-const FAQPage = dynamic(() => import("./pages/FAQPage").then((m) => m.FAQPage), { ssr: false, loading: PageSpinner });
-const COAPage = dynamic(() => import("./pages/COAPage").then((m) => m.COAPage), { ssr: false, loading: PageSpinner });
-const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => m.ProtocolsPage), { ssr: false, loading: PageSpinner });
-const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").then((m) => m.ReconstitutionPage), { ssr: false, loading: PageSpinner });
-const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: PageSpinner });
-const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: PageSpinner });
-const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: PageSpinner });
+const TrackOrderPage = dynamic(() => import("./pages/TrackOrderPage").then((m) => m.TrackOrderPage), { ssr: false, loading: BrandPageLoader });
+const OrderConfirmedPage = dynamic(() => import("./pages/OrderConfirmedPage").then((m) => m.OrderConfirmedPage), { ssr: false, loading: BrandPageLoader });
+const FAQPage = dynamic(() => import("./pages/FAQPage").then((m) => m.FAQPage), { ssr: false, loading: BrandPageLoader });
+const COAPage = dynamic(() => import("./pages/COAPage").then((m) => m.COAPage), { ssr: false, loading: BrandPageLoader });
+const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => m.ProtocolsPage), { ssr: false, loading: BrandPageLoader });
+const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").then((m) => m.ReconstitutionPage), { ssr: false, loading: BrandPageLoader });
+const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: BrandPageLoader });
+const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: BrandPageLoader });
+const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: BrandPageLoader });
 // Opt-in "two ways to order" home (brand.homeLayout === "two-ways"). Code-split so
 // the classic-home tenants never download it.
-const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) => m.TwoWaysHome), { ssr: false, loading: PageSpinner });
+const TwoWaysHome = dynamic(() => import("./components/TwoWaysHome").then((m) => m.TwoWaysHome), { ssr: false, loading: BrandPageLoader });
 // Opt-in imagery-led "boutique" home (brand.homeLayout === "boutique"). Same
 // treatment: code-split so the classic-home tenants never download it.
-const BoutiqueHome = dynamic(() => import("./components/BoutiqueHome").then((m) => m.BoutiqueHome), { ssr: false, loading: PageSpinner });
+const BoutiqueHome = dynamic(() => import("./components/BoutiqueHome").then((m) => m.BoutiqueHome), { ssr: false, loading: BrandPageLoader });
 // Opt-in left-rail "editorial" home (brand.homeLayout === "editorial"). Same
 // treatment again — classic tenants never download it.
-const EditorialHome = dynamic(() => import("./components/EditorialHome").then((m) => m.EditorialHome), { ssr: false, loading: PageSpinner });
+const EditorialHome = dynamic(() => import("./components/EditorialHome").then((m) => m.EditorialHome), { ssr: false, loading: BrandPageLoader });
 // The rail is this layout's CHROME: it persists across every route, so unlike
 // the home above it is not code-split — a spinner where the nav should be is
 // worse than the few KB it costs the tenants who chose it.
 const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m) => m.EditorialRail), { ssr: false });
-const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: PageSpinner });
-const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: PageSpinner });
+const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: BrandPageLoader });
+const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: BrandPageLoader });
 
 const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed"];
 
@@ -241,7 +239,7 @@ function Shell() {
       <>
         {navKey > 0 && <div key={navKey} className="sf-nav-progress" />}
         {adminAuth === "checking" ? (
-          <PageSpinner />
+          <BrandPageLoader />
         ) : adminAuth === "in" ? (
           <AdminPage brand={brand} onLogout={logoutAdmin} onExitToSite={goHome} />
         ) : (
