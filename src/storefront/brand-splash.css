@@ -309,8 +309,17 @@
 
 /* The mark, drawn from a custom property so the component itself needs no props.
    Exactly one of --splash-logo / --splash-initials is ever set (see
-   brandLoaderVars), so these two rules can never both paint. */
+   brandLoaderVars), so these two rules can never both paint.
+
+   Hidden by default and shown only under [data-splash-design], which the layout
+   emits exactly when the splash is enabled. A splash-disabled tenant has no mark
+   to draw, and a sized-but-empty box would just shove the spinner off-centre. */
 .sf-splash-page .sf-splash__mark {
+  display: none;
+}
+
+[data-splash-design] .sf-splash-page .sf-splash__mark {
+  display: inline-flex;
   width: clamp(56px, 7vw, 104px);
   height: clamp(56px, 7vw, 104px);
   background-image: var(--splash-logo, none);
@@ -327,7 +336,7 @@
    out as a plain accent-colored square on every tenant that had one. `none` is
    the only value that suppresses the pseudo-element outright, and that is what
    makes this rule a branch rather than an overlay. */
-.sf-splash-page .sf-splash__mark::after {
+[data-splash-design] .sf-splash-page .sf-splash__mark::after {
   content: var(--splash-initials, none);
   display: inline-flex;
   align-items: center;
@@ -341,13 +350,26 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-/* Which indicator moves. The operator's choice arrives as an attribute on the
-   storefront root because the loader takes no props; a design with no indicator
-   of its own is mapped to "ring" before it is emitted (brandLoaderDesign), so
-   only these two selectors are ever needed. */
-[data-splash-design="ring"] .sf-splash-page .sf-splash__ring {
+/* Which indicator moves.
+
+   THE RING IS THE UN-GATED DEFAULT, ON PURPOSE. Everything else here keys off
+   data-splash-design, which the layout omits when the operator turned the splash
+   off — and the generic spinner those tenants used to fall back to no longer
+   exists. Gating the ring too left them with an empty 60vh box on every
+   code-split route. A rule that needs no attribute cannot fail that way, and it
+   also covers a layout that forgets to emit one. Same fail-visible discipline as
+   normalizeBrandSplash failing ON.
+
+   The operator's choice then only has to express the DIFFERENCE from that
+   default; a design with no indicator of its own is already mapped to "ring"
+   before it is emitted (brandLoaderDesign). */
+.sf-splash-page .sf-splash__ring {
   display: block;
   animation: sf-splash-spin 0.75s linear infinite;
+}
+
+[data-splash-design="bar"] .sf-splash-page .sf-splash__ring {
+  display: none;
 }
 
 [data-splash-design="bar"] .sf-splash-page .sf-splash__bar {
@@ -360,7 +382,11 @@
   .sf-splash-page .sf-splash__mark {
     animation: none;
   }
-  [data-splash-design="ring"] .sf-splash-page .sf-splash__ring {
+  /* Gated on the attribute, not on the ring alone: dropping the spinner is only
+     safe while a brand mark is left standing in its place. With the splash off
+     there is no mark, and a still ring beats an empty screen. */
+  [data-splash-design] .sf-splash-page .sf-splash__ring {
     display: none;
+    animation: none;
   }
 }

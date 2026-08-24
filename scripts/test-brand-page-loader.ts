@@ -245,13 +245,69 @@ check("the loader reuses the splash's own class names, so the two cannot drift",
   }
 });
 
+check("a splash-disabled tenant still gets a VISIBLE loader, not a blank box", () => {
+  // The regression this guards. Turning the splash off emits no vars and no
+  // data-splash-design — correct, that is what keeps those tenants unbranded.
+  // But every visible part of the loader was gated on that attribute, and the
+  // generic PageSpinner these tenants used to fall back to was deleted in the
+  // same change. The result was an empty 60vh box on every code-split route.
+  const css = read("src/storefront/brand-splash.css");
+
+  // The ring must be turned on by a rule that needs NO attribute — otherwise it
+  // stays hidden by the global `.sf-splash__ring { display: none }` default.
+  const base = css.match(/^\.sf-splash-page \.sf-splash__ring \{[^}]*\}/m);
+  assert.ok(
+    base,
+    "expected an un-gated `.sf-splash-page .sf-splash__ring` rule — the ring must not depend on data-splash-design",
+  );
+  assert.ok(
+    /display:\s*block/.test(base![0]),
+    `the un-gated ring rule must show the ring, got: ${base![0]}`,
+  );
+
+  // ...and the empty mark box must not reserve space when there is no mark to
+  // draw. data-splash-design is present exactly when the splash is enabled.
+  assert.ok(
+    /\[data-splash-design\] \.sf-splash-page \.sf-splash__mark/.test(css),
+    "the mark must only occupy space when the splash is enabled",
+  );
+});
+
+check("the bar design swaps the ring out rather than relying on it being hidden", () => {
+  const css = read("src/storefront/brand-splash.css");
+  assert.ok(
+    /\[data-splash-design="bar"\] \.sf-splash-page \.sf-splash__ring \{[^}]*display:\s*none/.test(css),
+    "now that the ring is on by default, the bar design must explicitly hide it",
+  );
+});
+
+check("reduced motion never blanks a splash-disabled tenant's loader", () => {
+  // The reduced-motion rule drops the ring because a static spinner reads as
+  // broken — fine while a brand mark is left standing. With the splash off
+  // there is no mark, so dropping the ring leaves nothing at all; a still ring
+  // beats an empty screen.
+  const css = read("src/storefront/brand-splash.css");
+  const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)", css.indexOf(".sf-splash-page")));
+  assert.ok(
+    /\[data-splash-design\][^{]*\.sf-splash__ring \{[^}]*display:\s*none/.test(reduced),
+    "reduced motion may only hide the ring when a mark is there to replace it",
+  );
+});
+
 check("the stylesheet drives the loader off the root's data-splash-design", () => {
   const css = read("src/storefront/brand-splash.css");
   assert.ok(css.includes(".sf-splash-page"), "brand-splash.css must style the page loader");
+  // Every design brandLoaderDesign can emit must actually end up VISIBLE — the
+  // ring through the un-gated default above, the rest through their own
+  // attribute rule. Asserting each design is merely "mentioned" was what let the
+  // splash-disabled blank box through: the ring was mentioned, and hidden.
   for (const design of DESIGNS_WITH_INDICATOR) {
+    const shown = new RegExp(
+      `(\\[data-splash-design="${design}"\\] )?\\.sf-splash-page \\.sf-splash__${design} \\{[^}]*display:\\s*block`,
+    );
     assert.ok(
-      css.includes(`[data-splash-design="${design}"]`),
-      `brand-splash.css must honour data-splash-design="${design}"`,
+      shown.test(css),
+      `brand-splash.css must actually display the "${design}" indicator`,
     );
   }
   assert.ok(
