@@ -70,7 +70,7 @@ const STATE_RANK: Record<FeatureState, number> = {
  * active as soon as the tenant is on the plan. Mirrors resolveGroupBuyCaps /
  * the Sales Analytics module gating documented in catalog.ts.
  */
-function masterSwitchFor(key: FeatureKey): FeatureKey | null {
+export function masterSwitchFor(key: FeatureKey): FeatureKey | null {
   if (key.startsWith("storefront.sales_analytics.")) return FEATURES.STORE_SALES_ANALYTICS;
   if (key.startsWith("storefront.reseller.")) return FEATURES.STORE_RESELLER_PORTAL;
   if (key.startsWith("groupbuy.") && key !== FEATURES.GB_MODULE && key !== FEATURES.GB_RULES) {

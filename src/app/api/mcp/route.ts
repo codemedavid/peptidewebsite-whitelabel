@@ -11,6 +11,12 @@ import { validatePublicMcpImageUrl } from "@/lib/mcp/image-assets";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
 import { checkMcpAuth } from "@/lib/mcp/auth";
 import { UPDATE_BRANDING_TOOL, callUpdateBranding } from "@/lib/mcp/update-branding-tool";
+import {
+  LIST_FEATURES_TOOL,
+  SET_FEATURES_TOOL,
+  callListFeatures,
+  callSetFeatures,
+} from "@/lib/mcp/feature-tool";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import {
@@ -30,7 +36,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = {
   name: "pepweb-whitelabel-admin",
   title: "Pepweb Whitelabel Admin",
-  version: "1.2.0",
+  version: "1.3.0",
 };
 
 type JsonRpcId = string | number | null;
@@ -1132,7 +1138,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1147,6 +1153,8 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
         BULK_ADD_PRODUCTS_TOOL,
         UPDATE_PRODUCTS_TOOL,
         UPLOAD_HERO_IMAGE_TOOL,
+        LIST_FEATURES_TOOL,
+        SET_FEATURES_TOOL,
       ],
     });
   }
@@ -1173,6 +1181,14 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     }
     if (name === UPLOAD_HERO_IMAGE_TOOL.name) {
       return jsonRpcResult(message.id, await callUploadHeroImage(req, args));
+    }
+    if (name === LIST_FEATURES_TOOL.name || name === SET_FEATURES_TOOL.name) {
+      const authError = requireMcpAuth(req, args);
+      if (authError) {
+        return jsonRpcResult(message.id, { content: [{ type: "text", text: authError }], isError: true });
+      }
+      const call = name === LIST_FEATURES_TOOL.name ? callListFeatures : callSetFeatures;
+      return jsonRpcResult(message.id, await call(args));
     }
     return jsonRpcError(message.id, -32602, `Unknown tool: ${name}`);
   }

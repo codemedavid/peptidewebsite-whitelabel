@@ -282,9 +282,12 @@ section("9. An empty call is an error, never a success");
 // ---------------------------------------------------------------------------
 section("10. Inert combinations are warned about, never silently applied");
 {
-  // A Sales Analytics slice is inert until the module itself is on.
+  // A Sales Analytics slice sits in every plan ceiling but is inert until the
+  // module itself is granted. Start from a tenant whose operator revoked it.
   const slice = FEATURES.SA_EXPORT_PDF;
-  const inert = buildFeatureTogglePlan({ ...starterTenant, enable: [slice] });
+  const withoutSlice = new Set<string>(STARTER);
+  withoutSlice.delete(slice);
+  const inert = buildFeatureTogglePlan({ planKey: "starter", current: withoutSlice, enable: [slice] });
   check("the slice still applies", inert.errors.length === 0 && inert.changes.length === 1, inert);
   check(
     "…but warns it stays inert until the module is on",
@@ -294,7 +297,8 @@ section("10. Inert combinations are warned about, never silently applied");
 
   // Enabling the master in the SAME call clears the warning.
   const together = buildFeatureTogglePlan({
-    ...starterTenant,
+    planKey: "starter",
+    current: withoutSlice,
     enable: [FEATURES.STORE_SALES_ANALYTICS, slice],
   });
   check(
@@ -359,7 +363,11 @@ section("12. Schemas, core and route agree");
 
   for (const tool of [LIST_FEATURES_TOOL, SET_FEATURES_TOOL]) {
     const schema = tool.inputSchema as Record<string, any>;
-    check(`${tool.name} takes a tenant`, !!(schema.properties?.slug || schema.properties?.tenant), schema.properties);
+    check(
+      `${tool.name} takes a tenant slug (same argument name as the other tools)`,
+      !!schema.properties?.tenantSlug && schema.required?.includes("tenantSlug"),
+      schema.properties,
+    );
     check(`${tool.name} requires the tenant`, Array.isArray(schema.required) && schema.required.length > 0, schema.required);
     check(`${tool.name} rejects stray arguments`, schema.additionalProperties === false, schema);
     check(
