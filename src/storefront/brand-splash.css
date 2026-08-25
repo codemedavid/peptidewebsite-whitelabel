@@ -302,9 +302,31 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
+
+  /* IT FILLS THE SCREEN BECAUSE ON MOST SURFACES IT *IS* THE SCREEN. The two
+     that render it most — the storefront home's loading.tsx and every SPA
+     code-split fallback — are returned with no header and no footer around
+     them, so a 60vh band painted the tenant's colors over the top two-thirds
+     and left the site background under it, with the mark centred in the band
+     rather than on the page.
+
+     svh, not vh: on mobile `100vh` is the viewport at its TALLEST (URL bar
+     retracted), so a 100vh loader is taller than the screen while the bar is
+     showing — the page scrolls for nothing and the mark sits low. The plain vh
+     line is the fallback for engines without svh and must stay FIRST. */
+  min-height: 100vh;
+  min-height: 100svh;
+
   background: var(--splash-bg, transparent);
   color: var(--splash-text, var(--brand-text, #111111));
+}
+
+/* The one surface where the loader is NOT the whole page: the non-home
+   storefront routes, where the layout wraps children in header / <main> /
+   footer. products/[slug]/loading.tsx lands here — filling the viewport would
+   push the footer off-screen, so it only has to fill the content area. */
+main .sf-splash-page {
+  min-height: 60svh;
 }
 
 /* The mark, drawn from a custom property so the component itself needs no props.
@@ -320,8 +342,16 @@
 
 [data-splash-design] .sf-splash-page .sf-splash__mark {
   display: inline-flex;
-  width: clamp(56px, 7vw, 104px);
-  height: clamp(56px, 7vw, 104px);
+
+  /* A RECTANGLE, NOT A TILE. `background-size: contain` fits a mark inside the
+     box on its tightest axis, so a square frame sized a wide wordmark by its
+     WIDTH: the logo painted at a fraction of the box's height, read as a
+     thumbnail, and left empty air that the flex gap then compounded. Width and
+     height are set independently so wide and square marks both use the height
+     they are given, and both track the viewport rather than a fixed cap — the
+     same reasoning as the boot splash's .sf-splash__logo. */
+  width: min(320px, 64vw);
+  height: clamp(96px, 13vw, 180px);
   background-image: var(--splash-logo, none);
   background-repeat: no-repeat;
   background-position: center;
@@ -341,12 +371,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  /* The mark box above is a rectangle now so a wordmark can use it. A monogram
+     is a tile, so it takes the height it is offered and holds 1:1; a full-width
+     tile would smear the accent color into a 320px band. */
   height: 100%;
+  aspect-ratio: 1;
   border-radius: calc(var(--radius) + 2px);
   background: var(--splash-accent, var(--brand-main, #6c63ff));
   color: var(--splash-bg, var(--brand-surface, #ffffff));
-  font-size: clamp(20px, 2.6vw, 38px);
+  font-size: clamp(28px, 3.4vw, 60px);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
