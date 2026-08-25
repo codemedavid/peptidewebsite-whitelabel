@@ -152,7 +152,8 @@
     "test:proof-upload": "tsx scripts/test-proof-upload.ts",
     "test:brand-page-loader": "tsx scripts/test-brand-page-loader.ts",
     "test:image-optimization": "tsx scripts/test-image-optimization.ts",
-    "test:storefront-render-cost": "tsx scripts/test-storefront-render-cost.ts"
+    "test:storefront-render-cost": "tsx scripts/test-storefront-render-cost.ts",
+    "test:mcp-features": "tsx scripts/test-mcp-features.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
