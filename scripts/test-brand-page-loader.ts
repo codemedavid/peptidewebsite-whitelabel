@@ -327,5 +327,95 @@ check("the stylesheet drives the loader off the root's data-splash-design", () =
   );
 });
 
+// ─────────────────────────── the frame it fills ─────────────────────────────
+console.log("\nBRAND PAGE LOADER — the frame it fills\n");
+
+const pageCss = () => read("src/storefront/brand-splash.css");
+const ruleFor = (css: string, selector: string) =>
+  css.match(new RegExp(`^${selector.replace(/[.[\]*+?^${}()|\\]/g, "\\$&")} \\{[^}]*\\}`, "m"))?.[0] ?? "";
+
+check("the loader fills the screen on every surface where it IS the page", () => {
+  // The regression. `min-height: 60vh` was written for a loader sitting inside
+  // page chrome, but the two surfaces that actually render it most — the
+  // storefront home's loading.tsx and every SPA code-split fallback — are
+  // returned with NO header and NO footer around them. So the tenant's colors
+  // painted the top 60% of the screen and the site background painted the rest,
+  // with the mark centred in the band instead of on the page.
+  const rule = ruleFor(pageCss(), ".sf-splash-page");
+  assert.ok(rule, "expected a base .sf-splash-page rule");
+  assert.ok(
+    /min-height:\s*100svh/.test(rule),
+    `the loader must fill the viewport, got: ${rule}`,
+  );
+  assert.ok(
+    !/min-height:\s*60/.test(rule),
+    "the base rule must not pin the loader to a partial-height band",
+  );
+});
+
+check("the fill is expressed in svh, with a vh fallback under it", () => {
+  // svh, not vh: on mobile `100vh` is the viewport at its TALLEST (URL bar
+  // retracted), so a 100vh loader is taller than the screen while the bar is
+  // showing — the mark sits low and the page scrolls for nothing. The plain vh
+  // line stays as the fallback for engines without svh, and must come FIRST or
+  // it overrides the unit we want.
+  const rule = ruleFor(pageCss(), ".sf-splash-page");
+  assert.ok(
+    /min-height:\s*100vh;[\s\S]*min-height:\s*100svh/.test(rule),
+    `expected a 100vh fallback declared before the 100svh fill, got: ${rule}`,
+  );
+});
+
+check("a route that already carries chrome keeps the loader in the content area", () => {
+  // products/[slug]/loading.tsx renders inside the layout's <main>, under a
+  // header and above a footer. Filling the viewport there would shove the
+  // footer off-screen, so that one surface keeps a content-area band.
+  const scoped = ruleFor(pageCss(), "main .sf-splash-page");
+  assert.ok(
+    scoped,
+    "expected a `main .sf-splash-page` rule — the chrome'd routes must not inherit the full-viewport fill",
+  );
+  assert.ok(
+    /min-height:\s*60svh/.test(scoped),
+    `the chrome'd loader must stay a content-area band, got: ${scoped}`,
+  );
+});
+
+check("the mark is sized for a screen-filling loader, not as a thumbnail tile", () => {
+  const rule = ruleFor(pageCss(), "[data-splash-design] .sf-splash-page .sf-splash__mark");
+  assert.ok(rule, "expected a mark rule gated on data-splash-design");
+
+  const floor = rule.match(/height:\s*clamp\((\d+)px/);
+  assert.ok(
+    floor && Number(floor[1]) >= 88,
+    `the mark's height floor must be at least 88px (was ${floor?.[1] ?? "unset"}) — a 56px mark reads as a thumbnail on a full screen`,
+  );
+
+  // A SQUARE frame is the wrong shape for a wordmark: `background-size: contain`
+  // fits a wide logo by its WIDTH, so it paints at a fraction of the box height
+  // and the rest of the square is empty air the flex gap then compounds.
+  const width = rule.match(/\bwidth:\s*([^;]+);/)?.[1].trim();
+  const height = rule.match(/\bheight:\s*([^;]+);/)?.[1].trim();
+  assert.ok(width && height, `expected explicit width and height on the mark, got: ${rule}`);
+  assert.notStrictEqual(
+    width,
+    height,
+    "a square mark box fits a wide wordmark by its width and paints it small",
+  );
+});
+
+check("the monogram tile stays square inside the widened mark box", () => {
+  const rule = ruleFor(pageCss(), "[data-splash-design] .sf-splash-page .sf-splash__mark::after");
+  assert.ok(rule, "expected the monogram pseudo-element rule");
+  assert.ok(
+    /aspect-ratio:\s*1/.test(rule),
+    "the monogram must hold a 1:1 tile now that its parent is a rectangle, or it stretches into a band",
+  );
+  assert.ok(
+    !/\bwidth:\s*100%/.test(rule),
+    "width:100% stretches the tile across the whole widened mark box",
+  );
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);
