@@ -9,6 +9,11 @@ export function Categories({
   active: string;
   onChange: (id: string) => void;
 }) {
+  // A tenant who never configured categories has nothing to filter by, and the
+  // bar is sticky: rendering it anyway lays an empty band across the catalog
+  // that scrolls with the shopper. Nothing to pick = nothing to draw.
+  if (categories.length === 0) return null;
+
   return (
     <section className="categories" aria-label="Product categories">
       <div className="container">

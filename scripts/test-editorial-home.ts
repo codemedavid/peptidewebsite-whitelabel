@@ -30,7 +30,16 @@ import {
 import { buildStorefrontNav } from "../src/lib/storefront/nav";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
+import * as ReactRuntime from "react";
+import { Categories } from "../src/storefront/components/Categories";
 import type { Brand, Category, Product } from "../src/storefront/types";
+
+// The app's tsconfig sets jsx: "preserve" (Next compiles the JSX itself), so
+// under tsx the component files come out using the CLASSIC runtime and reach for
+// a `React` they never import. Handing them the real one on globalThis lets a
+// presentational component be CALLED here — no DOM, no renderer, just the
+// element tree (or null) it returns.
+(globalThis as unknown as { React: unknown }).React = ReactRuntime;
 
 const ROOT = join(__dirname, "..");
 const EDITORIAL_CSS = join(ROOT, "src/storefront/editorial.css");
@@ -411,6 +420,68 @@ check("carries no tenant copy — the reference brand's name never appears", () 
   // it would actually reach a tenant's page.
   const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.ok(!/\bSKN\b/i.test(css), "the reference tenant's name leaked into the sheet");
+});
+
+// ── The sticky category bar ──────────────────────────────────────────────────
+// The bar is shared with the classic layout, where it sticks BELOW the top
+// header (top: 76px, the header row's height). This layout has no top header —
+// its chrome is the fixed left rail — so the inherited offset parks the bar
+// 76px down the viewport, where it floats over the product grid as a band with
+// nothing in it. Both halves of that failure are pinned here.
+console.log("\neditorial — the sticky category bar");
+
+check("the base sheet still pins the bar to the classic header's height", () => {
+  const base = readFileSync(join(ROOT, "src/storefront/storefront.css"), "utf8");
+  const rule = base.match(/\.sf-root \.categories \{[^}]*\}/);
+  assert.ok(rule, ".sf-root .categories rule is missing from storefront.css");
+  assert.ok(
+    /top:\s*76px/.test(rule![0]),
+    "the shared bar no longer offsets by 76px — re-check what editorial must override",
+  );
+});
+
+check("editorial re-pins the bar so it cannot float over the grid", () => {
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = css.match(/\.sf-root\[data-sf-home="editorial"\][^{]*\.categories[^{]*\{[^}]*\}/g) ?? [];
+  const pins = rules.filter((r) => /(^|[;{\s])top:/.test(r));
+  assert.ok(
+    pins.length > 0,
+    "editorial.css never overrides the bar's top offset — it inherits the 76px header gap",
+  );
+});
+
+check("the drawer breakpoint clears the compact bar instead of the missing header", () => {
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  // Below the rail's breakpoint the chrome IS a top bar, so the offset there is
+  // its height — stated once as a token so the two can never drift apart.
+  assert.ok(
+    /--ed-topbar-h:\s*\d+px/.test(css),
+    "the compact bar's height is not a token, so the sticky offset must repeat the number",
+  );
+  const topbar = css.match(/\.ed-topbar\s*\{[^}]*\}/g) ?? [];
+  assert.ok(
+    topbar.some((r) => /height:\s*var\(--ed-topbar-h\)/.test(r)),
+    ".ed-topbar does not take its height from --ed-topbar-h",
+  );
+});
+
+check("an empty category list renders no bar at all", () => {
+  // glowform-lab: editorial, showCategories on, categories never configured.
+  // The bar rendered anyway — an empty sticky band across the catalog.
+  assert.equal(
+    Categories({ categories: [], active: "all", onChange: () => {} }),
+    null,
+    "Categories still renders a band when the tenant has no categories",
+  );
+});
+
+check("a real category list still renders the bar", () => {
+  const out = Categories({
+    categories: [{ id: "all", label: "All Products" }],
+    active: "all",
+    onChange: () => {},
+  });
+  assert.ok(out, "the bar disappeared for a tenant that DOES have categories");
 });
 
 // ── The config allow-list ────────────────────────────────────────────────────

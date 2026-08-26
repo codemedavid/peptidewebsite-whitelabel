@@ -30,6 +30,9 @@
 
 .sf-root[data-sf-home="editorial"] {
   --ed-rail-w: 268px;
+  /* The compact bar's height, stated once: it is also the offset the sticky
+     category bar has to clear below the rail's breakpoint. */
+  --ed-topbar-h: 62px;
   --ed-section: clamp(56px, 8vw, 120px);
   --ed-gutter: clamp(20px, 6vw, 88px);
   --ed-hair: color-mix(in oklab, var(--brand-text) 14%, transparent);
@@ -255,7 +258,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 62px;
+    height: var(--ed-topbar-h);
     padding: 0 16px;
     background: var(--brand-main);
     color: var(--brand-button-text);
@@ -570,6 +573,22 @@
 .sf-root[data-sf-home="editorial"] .ed .categories {
   padding-top: clamp(28px, 4vw, 48px);
   background: var(--brand-background);
+}
+
+/* The bar is sticky, and the shared sheet offsets it by 76px — the height of
+   the classic top header it has to clear. THIS layout has no top header: the
+   chrome is the fixed rail beside the page. Inheriting that offset parked the
+   bar 76px down the viewport, floating across the middle of the product grid.
+   Here it pins to the top, and below the rail's breakpoint it clears the
+   compact bar that stands in for the rail. */
+.sf-root[data-sf-home="editorial"] .categories {
+  top: 0;
+}
+
+@media (max-width: 999px) {
+  .sf-root[data-sf-home="editorial"] .categories {
+    top: var(--ed-topbar-h);
+  }
 }
 
 .sf-root[data-sf-home="editorial"] .ed .catalog {
