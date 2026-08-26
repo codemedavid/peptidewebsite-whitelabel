@@ -26,12 +26,22 @@ import {
   buildCategoryIndex,
   buildEditRow,
   EDIT_MAX,
+  EDIT_COLUMNS,
+  EDIT_COLUMNS_DEFAULT,
+  EDIT_COLUMNS_OPTIONS,
+  normalizeEditColumns,
+  normalizeEditorialConfig,
+  editColumnsOption,
+  setEditColumns,
+  offersEditColumns,
 } from "../src/lib/storefront/editorial-home";
 import { buildStorefrontNav } from "../src/lib/storefront/nav";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import * as ReactRuntime from "react";
 import { Categories } from "../src/storefront/components/Categories";
+import { EditorialEdit } from "../src/storefront/components/EditorialEdit";
+
 import type { Brand, Category, Product } from "../src/storefront/types";
 
 // The app's tsconfig sets jsx: "preserve" (Next compiles the JSX itself), so
@@ -40,6 +50,38 @@ import type { Brand, Category, Product } from "../src/storefront/types";
 // presentational component be CALLED here — no DOM, no renderer, just the
 // element tree (or null) it returns.
 (globalThis as unknown as { React: unknown }).React = ReactRuntime;
+
+// ── Element-tree helpers ─────────────────────────────────────────────────────
+// A presentational component CALLED (not rendered) returns a plain element
+// tree. These walk it so a test can assert on what a component hands its
+// children — the props a real browser would act on — with no DOM involved.
+
+type El = { props: Record<string, any>; type: unknown };
+
+function walk(node: unknown, visit: (el: El) => boolean): El | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = walk(child, visit);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (!node || typeof node !== "object") return null;
+  const el = node as El;
+  if (!el.props) return null;
+  if (visit(el)) return el;
+  return walk(el.props.children, visit);
+}
+
+/** The first element carrying `cls` in its className. */
+function findByClass(tree: unknown, cls: string): El | null {
+  return walk(tree, (el) => typeof el.props.className === "string" && el.props.className.split(/\s+/).includes(cls));
+}
+
+/** The first control whose `label` prop matches — how the tweak controls are addressed. */
+function findByLabel(tree: unknown, label: string): El | null {
+  return walk(tree, (el) => el.props.label === label);
+}
 
 const ROOT = join(__dirname, "..");
 const EDITORIAL_CSS = join(ROOT, "src/storefront/editorial.css");
@@ -482,6 +524,126 @@ check("a real category list still renders the bar", () => {
     onChange: () => {},
   });
   assert.ok(out, "the bar disappeared for a tenant that DOES have categories");
+});
+
+// ── The featured band's columns ──────────────────────────────────────────────
+// The band lays out on a fixed column count the operator picks — 2 or 3 — not
+// on whatever the card width happens to allow. Two products per row reads as an
+// editorial pairing (big photography, few SKUs); three reads as a shelf. Only
+// the operator knows which the store is, so the template must not decide.
+console.log("\neditorial — the featured band's columns");
+
+check("an unset column count is three — every existing store is unchanged", () => {
+  assert.equal(normalizeEditColumns(undefined), 3);
+  assert.equal(normalizeEditColumns(null), 3);
+  assert.equal(EDIT_COLUMNS_DEFAULT, 3);
+});
+
+check("both offered counts survive", () => {
+  assert.equal(normalizeEditColumns(2), 2);
+  assert.equal(normalizeEditColumns(3), 3);
+  assert.deepEqual([...EDIT_COLUMNS], [2, 3]);
+});
+
+check("config drift falls back to the default instead of an unrenderable grid", () => {
+  // A column count is written into CSS, so a junk value is not a cosmetic
+  // problem — `repeat(0, …)` or `repeat(NaN, …)` drops the whole band.
+  for (const junk of [0, 1, 4, 12, -3, 2.5, "3", "two", true, {}, [], NaN, Infinity]) {
+    assert.equal(normalizeEditColumns(junk), 3, `${JSON.stringify(junk)} was not rejected`);
+  }
+});
+
+check("the editorial config slice normalizes and never mutates its input", () => {
+  const raw = { editColumns: 2, bogus: "x" } as Record<string, unknown>;
+  const before = JSON.stringify(raw);
+  assert.deepEqual(normalizeEditorialConfig(raw), { editColumns: 2 });
+  assert.equal(JSON.stringify(raw), before, "the stored config object was mutated");
+});
+
+check("a missing or malformed editorial slice still yields a complete config", () => {
+  for (const junk of [undefined, null, "editorial", 3, []]) {
+    assert.deepEqual(normalizeEditorialConfig(junk), { editColumns: 3 });
+  }
+});
+
+check("the band renders the chosen count onto the grid", () => {
+  const featured = [product({ id: "a", featured: true }), product({ id: "b", featured: true })];
+  for (const columns of [2, 3] as const) {
+    const tree = EditorialEdit({
+      products: featured,
+      brand: brand({}),
+      eyebrow: "Featured",
+      onShopAll: () => {},
+      onOpen: () => {},
+      columns,
+    });
+    const grid = findByClass(tree, "ed-edit__grid");
+    assert.ok(grid, "the band has no .ed-edit__grid");
+    assert.equal(
+      (grid!.props.style ?? {})["--ed-edit-cols"],
+      columns,
+      "the grid does not carry the chosen column count",
+    );
+  }
+});
+
+check("the stylesheet takes the count from the variable and falls back to three", () => {
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = css.match(/\.sf-root\[data-sf-home="editorial"\] \.ed-edit__grid \{[^}]*\}/);
+  assert.ok(rule, ".ed-edit__grid rule is missing from editorial.css");
+  assert.ok(
+    /grid-template-columns:\s*repeat\(var\(--ed-edit-cols,\s*3\)/.test(rule![0]),
+    "the grid does not read --ed-edit-cols with a 3 fallback",
+  );
+});
+
+check("the count collapses on small screens rather than crushing the cards", () => {
+  // Three 230px-minimum cards do not fit a phone. The chosen count is a
+  // WIDE-SCREEN choice; below the rail's breakpoint the band must override it.
+  const css = readFileSync(EDITORIAL_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const blocks = css.match(/@media\s*\(max-width:[^)]*\)\s*\{[\s\S]*?\n\}/g) ?? [];
+  assert.ok(
+    blocks.some((b) => /\.ed-edit__grid\s*\{[^}]*grid-template-columns:/.test(b)),
+    "no max-width block re-lays the featured grid",
+  );
+});
+
+check("the control is offered on the editorial layout only", () => {
+  // On a classic or boutique home there is no featured band to lay out, so the
+  // control would be a setting that silently does nothing.
+  assert.equal(offersEditColumns("editorial"), true);
+  for (const layout of ["classic", "boutique", "two-ways", undefined] as const) {
+    assert.equal(offersEditColumns(layout), false, `${layout} was offered the control`);
+  }
+});
+
+check("the picker's options round-trip to a stored count", () => {
+  assert.equal(EDIT_COLUMNS_OPTIONS.length, EDIT_COLUMNS.length);
+  for (const columns of EDIT_COLUMNS) {
+    const label = editColumnsOption(columns);
+    assert.ok(EDIT_COLUMNS_OPTIONS.includes(label), `"${label}" is not an offered option`);
+    assert.deepEqual(setEditColumns({}, label), { editColumns: columns });
+  }
+});
+
+check("an unrecognised pick leaves the stored count alone", () => {
+  // The select can only emit its own options, but this config is written by the
+  // MCP connector and by hand too — an unknown string must not blank the band.
+  assert.deepEqual(setEditColumns({ editColumns: 2 }, "seventeen per row"), { editColumns: 2 });
+});
+
+check("picking a count never mutates the config it was handed", () => {
+  const stored = { editColumns: 3 } as const;
+  const next = setEditColumns(stored, editColumnsOption(2));
+  assert.deepEqual(stored, { editColumns: 3 }, "the stored config was mutated");
+  assert.deepEqual(next, { editColumns: 2 });
+});
+
+check("the tweak panel drives the shared helpers rather than its own labels", () => {
+  const panel = readFileSync(join(ROOT, "src/storefront/tweaks/BoutiqueEditor.tsx"), "utf8");
+  for (const symbol of ["EDIT_COLUMNS_OPTIONS", "editColumnsOption", "setEditColumns", "offersEditColumns"]) {
+    assert.ok(panel.includes(symbol), `the panel does not use ${symbol} — the picker can drift from the store`);
+  }
 });
 
 // ── The config allow-list ────────────────────────────────────────────────────
