@@ -431,9 +431,14 @@
   border-color: var(--brand-button-text);
 }
 
+/* The column count is the operator's (branding.config.editorial.editColumns),
+   handed down as --ed-edit-cols on the element. The `3` fallback is what the
+   old auto-fit rule produced at a typical desktop width, so a tenant who never
+   opens the control sees no change. minmax(0, 1fr) rather than a px minimum:
+   the count is now a decision, and a min-width would silently overrule it. */
 .sf-root[data-sf-home="editorial"] .ed-edit__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(var(--ed-edit-cols, 3), minmax(0, 1fr));
   gap: clamp(22px, 3vw, 48px);
   margin: 0;
   padding: 0;
@@ -588,6 +593,21 @@
 @media (max-width: 999px) {
   .sf-root[data-sf-home="editorial"] .categories {
     top: var(--ed-topbar-h);
+  }
+
+  /* The operator's count is a WIDE-SCREEN choice. Below the rail's breakpoint
+     the page is a single narrow column, where three 4:5 cards side by side are
+     thumbnails — so the band caps at two here and drops to one on a phone.
+     Overriding rather than clamping in JS keeps the choice in one place: the
+     stored value always means "at full width". */
+  .sf-root[data-sf-home="editorial"] .ed-edit__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 599px) {
+  .sf-root[data-sf-home="editorial"] .ed-edit__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

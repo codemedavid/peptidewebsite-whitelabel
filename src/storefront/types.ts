@@ -27,6 +27,7 @@ import type { GroupBuyContent } from "@/lib/storefront/gb-content";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type { HomeLayout } from "@/lib/storefront/home-layout";
 import type { BoutiqueConfig } from "@/lib/storefront/boutique-home";
+import type { EditorialConfig } from "@/lib/storefront/editorial-home";
 
 export type Product = {
   id: string;
@@ -472,6 +473,12 @@ export type Brand = {
   // default for every tenant: this template ships no promises of its own.
   // Normalized through @/lib/storefront/boutique-home at render and on save.
   boutique?: BoutiqueConfig;
+
+  // The editorial layout's own slice of config — currently just how many
+  // featured cards sit on a row (2 or 3), set by the operator. Absent = the
+  // default 3, so every tenant that predates the control is unchanged.
+  // Normalized through @/lib/storefront/editorial-home at render and on save.
+  editorial?: EditorialConfig;
 
   // Section + page visibility (driven by the branding editor)
   showHeader: boolean;

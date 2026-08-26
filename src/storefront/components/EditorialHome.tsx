@@ -35,6 +35,7 @@ import {
   buildCategoryIndex,
   buildEditRow,
   editorialSections,
+  normalizeEditColumns,
   type EditorialView,
 } from "@/lib/storefront/editorial-home";
 import { normalizeAssurances } from "@/lib/storefront/boutique-home";
@@ -117,6 +118,7 @@ export function EditorialHome({
           products={edit}
           brand={brand}
           eyebrow="Featured"
+          columns={normalizeEditColumns(brand.editorial?.editColumns)}
           onShopAll={onShopAll}
           // A featured card opens the shelf it belongs to rather than a product
           // page: this layout's product detail IS the catalog's quick view, so

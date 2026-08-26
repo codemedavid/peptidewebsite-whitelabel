@@ -2,9 +2,10 @@
 
 // Store-admin controls for the owner-selectable home LAYOUTS.
 //
-// Two things live here, and only two, because these layouts deliberately own no
-// other content: which home layout the store uses, and the owner's own
-// assurance lines. The strip ships EMPTY — a default promise ("Guaranteed
+// Which home layout the store uses, the owner's own assurance lines, and the
+// one composition choice the editorial layout exposes — how many featured cards
+// sit on a row. Nothing else: these layouts deliberately own no content of
+// their own. The assurance strip ships EMPTY — a default promise ("Guaranteed
 // authentic", "Free shipping") would put words in every tenant's mouth, and a
 // supplement store, a bakery and a boutique do not make the same claims.
 //
@@ -15,6 +16,14 @@
 import type { Brand } from "../types";
 import type { SetTweak } from "./BrandTweaksForm";
 import { TweakSection, TweakRow, TweakSelect, TweakText, TweakButton } from "./controls";
+import {
+  EDIT_COLUMNS_LABEL,
+  EDIT_COLUMNS_OPTIONS,
+  editColumnsOption,
+  normalizeEditColumns,
+  offersEditColumns,
+  setEditColumns,
+} from "@/lib/storefront/editorial-home";
 import {
   ASSURANCE_MAX,
   ASSURANCE_LABEL_MAX,
@@ -75,6 +84,18 @@ export function BoutiqueEditor({
           if (next) setTweak("homeLayout", next);
         }}
       />
+
+      {offersEditColumns(layout) && (
+        <>
+          <TweakSection label="Editorial: featured band" />
+          <TweakSelect
+            label={EDIT_COLUMNS_LABEL}
+            value={editColumnsOption(normalizeEditColumns(t.editorial?.editColumns))}
+            options={EDIT_COLUMNS_OPTIONS}
+            onChange={(v) => setTweak("editorial", setEditColumns(t.editorial, v))}
+          />
+        </>
+      )}
 
       {(layout === "boutique" || layout === "editorial") && (
         <>

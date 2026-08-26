@@ -146,3 +146,87 @@ export function buildEditRow(
   const limit = Number.isFinite(max) && max > 0 ? Math.floor(max) : EDIT_MAX;
   return (products ?? []).filter((p) => p?.featured === true).slice(0, limit);
 }
+
+// ── The edit's column count ──────────────────────────────────────────────────
+// How many featured cards sit on a row. The band used to fit as many as the
+// viewport allowed (auto-fit), which meant the same store looked like a
+// two-product editorial pairing on one screen and a four-across shelf on
+// another. Two-up suits big photography and few SKUs; three-up reads as a
+// shelf. Only the operator knows which the store is, so the count is theirs to
+// set and the template no longer guesses.
+//
+// Deliberately just those two: one card fills the band's full width at any
+// sensible page measure, and four crushes the 4:5 photography this band exists
+// to show. Below the rail's breakpoint the sheet overrides the choice anyway —
+// the count is a wide-screen decision.
+
+/** The counts an operator may choose. */
+export const EDIT_COLUMNS = [2, 3] as const;
+
+export type EditColumns = (typeof EDIT_COLUMNS)[number];
+
+/** What every store that has never opened the control renders — the count the
+ *  band already produced at a typical desktop width, so nothing shifts. */
+export const EDIT_COLUMNS_DEFAULT: EditColumns = 3;
+
+/** The editorial layout's own slice of branding.config. */
+export type EditorialConfig = {
+  editColumns?: EditColumns;
+};
+
+/**
+ * Untrusted config → a count that is safe to write into CSS.
+ *
+ * This value lands in `repeat(N, …)`, so a junk one does not degrade — it drops
+ * the entire band. Anything that is not exactly an offered count falls back to
+ * the default rather than being clamped: a stored 12 is config drift, and
+ * silently rendering 3 is honest where silently rendering 2 would be a guess.
+ */
+export function normalizeEditColumns(value: unknown): EditColumns {
+  return (EDIT_COLUMNS as readonly number[]).includes(value as number)
+    ? (value as EditColumns)
+    : EDIT_COLUMNS_DEFAULT;
+}
+
+/** Untrusted config → a COMPLETE editorial slice, so every render path can read
+ *  `.editColumns` without repeating the fallback. Never mutates the input. */
+export function normalizeEditorialConfig(value: unknown): EditorialConfig {
+  const raw =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return { editColumns: normalizeEditColumns(raw.editColumns) };
+}
+
+// ── The operator's picker ────────────────────────────────────────────────────
+// The option LABELS live here rather than in the tweak panel so the strings the
+// operator picks and the values the storefront stores can never drift apart.
+
+/** The picker's own row label. */
+export const EDIT_COLUMNS_LABEL = "Featured per row";
+
+/** One option label per offered count, in offered order. */
+export function editColumnsOption(columns: EditColumns): string {
+  return `${columns} per row`;
+}
+
+export const EDIT_COLUMNS_OPTIONS: string[] = EDIT_COLUMNS.map(editColumnsOption);
+
+/**
+ * A picked option → the next editorial config. Returns a NEW object; an option
+ * string it does not recognise leaves the stored count alone, because this
+ * config is also written by the MCP connector and by hand, and a typo there
+ * must not blank a band the operator deliberately set.
+ */
+export function setEditColumns(config: EditorialConfig | null | undefined, option: string): EditorialConfig {
+  const picked = EDIT_COLUMNS.find((c) => editColumnsOption(c) === option);
+  return picked === undefined
+    ? { ...(config ?? {}) }
+    : { ...(config ?? {}), editColumns: picked };
+}
+
+/** Which layouts have a featured band to lay out. Only the editorial home draws
+ *  one, so offering the control anywhere else is a setting that does nothing. */
+export function offersEditColumns(layout: string | null | undefined): boolean {
+  return layout === "editorial";
+}

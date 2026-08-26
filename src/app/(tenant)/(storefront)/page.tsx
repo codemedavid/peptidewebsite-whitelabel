@@ -35,6 +35,7 @@ import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
+import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
@@ -279,6 +280,7 @@ export default async function HomePage() {
   // trust boundary as well as at render, so a hand-edited branding.config can
   // never push unbounded copy into the layout.
   brand.boutique = normalizeBoutiqueConfig(config.boutique);
+  brand.editorial = normalizeEditorialConfig(config.editorial);
 
   // On-hand shelf order — "per-vial-first" leads with the single per-vial
   // listings and drops the multi-vial kits underneath (K Glow). Unset keeps

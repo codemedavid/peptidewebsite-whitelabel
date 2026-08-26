@@ -11,6 +11,7 @@
 // is given a selection this template chose. Colour and type come from --brand-*.
 
 import type { Brand, Product } from "../types";
+import { EDIT_COLUMNS_DEFAULT, type EditColumns } from "@/lib/storefront/editorial-home";
 import { imageUrl } from "@/lib/media/image-url";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 
@@ -20,6 +21,7 @@ export function EditorialEdit({
   eyebrow,
   onShopAll,
   onOpen,
+  columns = EDIT_COLUMNS_DEFAULT,
 }: {
   /** Already capped by buildEditRow — this component only draws. */
   products: Product[];
@@ -28,6 +30,10 @@ export function EditorialEdit({
   onShopAll: () => void;
   /** Open the catalog filtered to the clicked product's category. */
   onOpen: (product: Product) => void;
+  /** How many cards sit on a row — the operator's choice, already normalized.
+   *  Passed to CSS as a variable rather than a class so the sheet keeps the one
+   *  grid rule, and so the small-screen override stays a plain media query. */
+  columns?: EditColumns;
 }) {
   if (products.length === 0) return null;
 
@@ -43,7 +49,10 @@ export function EditorialEdit({
           </button>
         </header>
 
-        <ul className="ed-edit__grid">
+        <ul
+          className="ed-edit__grid"
+          style={{ "--ed-edit-cols": columns } as React.CSSProperties}
+        >
           {products.map((product) => {
             const image = resolveProductImage(product.image, brand.defaultProductImage);
             return (
