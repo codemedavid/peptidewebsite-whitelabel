@@ -11,6 +11,8 @@ import {
   MAX_REVIEW_FONT_SIZE,
   reviewProductIds,
 } from "@/lib/storefront/reviews";
+import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
+import { ReviewViewer } from "../components/ReviewViewer";
 import { DESIGN_FONTS_HREF } from "../tweaks/designFonts";
 
 // Internal type used only in the admin manager: a Review that carries a
@@ -409,8 +411,10 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
     reviews.map((r, i) => ({ ...r, id: (r as ReviewEntry).id || `rv_seed_${i}` })),
   );
   const [editing, setEditing] = useState<ReviewEntry | null>(null);
-
-  void brand;
+  // The owner asked for this first: the manager thumb crops their screenshot,
+  // so they couldn't check what a shopper would actually see. Same viewer the
+  // storefront uses, so what they proof here is what ships.
+  const [viewing, setViewing] = useState<ReviewEntry | null>(null);
 
   const commit = (next: ReviewEntry[]) => {
     setList(next);
@@ -529,8 +533,16 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
             <div key={r.id} className="review-admin-card">
               <div className="review-admin-card__thumb">
                 {r.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.image} alt={r.title} />
+                  <button
+                    type="button"
+                    className="review-admin-card__zoom"
+                    onClick={() => setViewing(r)}
+                    disabled={!canOpenReviewViewer(r)}
+                    aria-label={`View ${r.title || "this review"} full size`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={r.image} alt={r.title} />
+                  </button>
                 ) : (
                   <svg
                     viewBox="0 0 24 24"
@@ -621,6 +633,10 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
 
         {editing && (
           <ReviewModal review={editing} onCancel={() => setEditing(null)} onSave={save} />
+        )}
+
+        {viewing && (
+          <ReviewViewer review={viewing} brand={brand} onClose={() => setViewing(null)} />
         )}
       </main>
     </div>

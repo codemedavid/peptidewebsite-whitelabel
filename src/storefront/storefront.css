@@ -9221,3 +9221,208 @@
   .sf-root .sf-confirm__copy,
   .sf-root .sf-confirm__reveal { transition: none; }
 }
+
+/* =========================================================
+   CUSTOMER REVIEW VIEWER — click a testimonial to enlarge it
+   =========================================================
+   Owners upload SCREENSHOTS of customer chats, so the content is the text
+   inside the picture. Every review surface used to crop that into a small
+   fixed box (a 4/5 cover tile on the reviews page, 56px in the product
+   quick-view, a cover thumb in the store admin) and none of them were
+   clickable — the pepstack-davao owner reported it as "the review can't be
+   zoomed in". These three controls open the shared .sf-review-viewer dialog.
+
+   The viewer is the third lightbox in this file and deliberately the LAST:
+   .protocols__viewer and .od-proof-viewer stay as they are, but every new
+   review surface reuses this one. What it adds over both is a real zoom —
+   [data-zoom="actual"] drops the fit-to-screen constraint so the image
+   renders at the size it was fetched at and the stage scrolls to pan it,
+   which is the only way a tall chat screenshot becomes legible on a phone. */
+
+/* ---- Triggers ---- */
+/* The reviews-page media tile. Also a grid/flex reset: it is a <button> now,
+   so the browser's own button chrome would otherwise fight .review-card__media
+   (which supplies the 4/5 box and centring). */
+.sf-root .review-card__zoom {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: zoom-in;
+  transition: opacity 150ms ease;
+}
+.sf-root .review-card__zoom:hover { opacity: 0.92; }
+.sf-root .review-card__zoom:focus-visible {
+  outline: 2px solid var(--brand-main);
+  outline-offset: -2px;
+}
+
+/* The product quick-view's 56px thumb. Sized to the grid column the figure
+   already defines, so the caption beside it does not move. */
+.sf-root .sf-detail__review-zoom {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: zoom-in;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.sf-root .sf-detail__review-zoom:hover { transform: scale(1.04); }
+.sf-root .sf-detail__review-zoom:focus-visible {
+  outline: 2px solid var(--brand-main);
+  outline-offset: 2px;
+}
+.sf-root .sf-detail__review-zoom:disabled { cursor: default; transform: none; }
+
+/* The store-admin manager thumb — fills the .review-admin-card__thumb box. */
+.sf-root .review-admin-card__zoom {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  transition: opacity 150ms ease;
+}
+.sf-root .review-admin-card__zoom:hover { opacity: 0.9; }
+.sf-root .review-admin-card__zoom:focus-visible {
+  outline: 2px solid var(--brand-main);
+  outline-offset: -2px;
+}
+.sf-root .review-admin-card__zoom:disabled { cursor: default; }
+.sf-root .review-admin-card__zoom img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---- The dialog ---- */
+/* z-index beats .sf-detail-overlay (1200): the viewer is opened from INSIDE
+   the product quick-view, so it has to paint over the modal it came from. */
+.sf-root .sf-review-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: clamp(16px, 4vw, 48px);
+  background: rgba(10, 12, 16, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: zoom-out;
+  animation: sf-viewer-in 160ms ease;
+}
+.sf-root .sf-review-viewer__bar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  cursor: default;
+}
+.sf-root .sf-review-viewer__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.sf-root .sf-review-viewer__btn:hover { background: rgba(255, 255, 255, 0.22); }
+.sf-root .sf-review-viewer__btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* The image stage. "fit" letterboxes the whole screenshot; "actual" lets it
+   render at the width it was fetched at and scrolls, so it can be panned. */
+.sf-root .sf-review-viewer__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  cursor: default;
+  border-radius: 10px;
+}
+.sf-root .sf-review-viewer__img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  cursor: zoom-in;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.sf-root .sf-review-viewer[data-zoom="actual"] .sf-review-viewer__stage {
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+}
+.sf-root .sf-review-viewer[data-zoom="actual"] .sf-review-viewer__img {
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  cursor: zoom-out;
+}
+
+/* The testimonial itself, under the picture. Keeps the owner's per-review
+   typography (inline, from resolveReviewDescStyle) — only the frame is here. */
+.sf-root .sf-review-viewer__caption {
+  flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  max-width: min(680px, 100%);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: default;
+}
+.sf-root .sf-review-viewer__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+.sf-root .sf-review-viewer__title {
+  font-family: var(--brand-heading-font);
+  font-size: 18px;
+  color: #fff;
+}
+.sf-root .sf-review-viewer__text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-line;
+}
+.sf-root .sf-review-viewer__badge {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@media (max-width: 640px) {
+  /* On a phone the picture is the point — cap the caption so it can never push
+     the screenshot off screen. */
+  .sf-root .sf-review-viewer__caption { max-height: 30vh; overflow-y: auto; }
+}

@@ -1,12 +1,24 @@
 "use client";
 
-import type { Brand } from "../types";
+import { useState } from "react";
+
+import type { Brand, Review } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { ReviewViewer } from "../components/ReviewViewer";
+import { imageUrl, imageSrcSet } from "@/lib/media/image-url";
+import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
 import { resolveReviewDescStyle, reviewProductIds } from "@/lib/storefront/reviews";
+
+/** Rendered width of one grid tile at the widest column. The full-size original
+ *  belongs in the viewer, not in a 260px card. */
+const CARD_IMAGE_WIDTH = 560;
 
 export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { reviews, products } = useStore();
+  // The testimonial being shown large. Owners upload chat screenshots, so the
+  // cropped 4/5 tile is never readable on its own — see ReviewViewer.
+  const [viewing, setViewing] = useState<Review | null>(null);
 
   return (
     <section className="page" id="reviews">
@@ -23,21 +35,46 @@ export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => voi
               .map((pid) => products.find((x) => x.id === pid))
               .filter((p): p is NonNullable<typeof p> => Boolean(p));
             const descStyle = resolveReviewDescStyle(r, brand);
+            const zoomable = canOpenReviewViewer(r);
+            const media = (
+              <>
+                {r.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imageUrl(r.image, { width: CARD_IMAGE_WIDTH })}
+                    srcSet={imageSrcSet(r.image, [280, CARD_IMAGE_WIDTH, 840])}
+                    sizes="(max-width: 640px) 90vw, 300px"
+                    alt={r.title || "Customer review"}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <svg className="review-card__media-placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.1-3.1a2 2 0 0 0-2.81.01L6 21" />
+                  </svg>
+                )}
+                <div className="review-card__title-overlay">{r.headline}</div>
+              </>
+            );
             return (
               <article key={r.id ?? i} className="review-card">
-                <div className="review-card__media">
-                  {r.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.image} alt={r.title} />
-                  ) : (
-                    <svg className="review-card__media-placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <circle cx="9" cy="9" r="2" />
-                      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.81.01L6 21" />
-                    </svg>
-                  )}
-                  <div className="review-card__title-overlay">{r.headline}</div>
-                </div>
+                {zoomable ? (
+                  // A real <button>, not a div with onClick: the protocols
+                  // gallery opens its lightbox the same way, and a div is
+                  // invisible to the keyboard.
+                  <button
+                    type="button"
+                    className="review-card__media review-card__zoom"
+                    onClick={() => setViewing(r)}
+                    aria-label={`View ${r.title || r.headline || "this review"} full size`}
+                  >
+                    {media}
+                  </button>
+                ) : (
+                  <div className="review-card__media">{media}</div>
+                )}
                 <div className="review-card__body">
                   <h3 className="review-card__title">{r.title}</h3>
                   <p className="review-card__sub" style={descStyle}>
@@ -74,6 +111,9 @@ export function ReviewsPage({ brand, onBack }: { brand: Brand; onBack: () => voi
           )}
         </div>
       </div>
+      {viewing && (
+        <ReviewViewer review={viewing} brand={brand} onClose={() => setViewing(null)} />
+      )}
     </section>
   );
 }

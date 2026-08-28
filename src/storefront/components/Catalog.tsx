@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Brand, Product } from "../types";
+import type { Brand, Product, Review } from "../types";
 import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveProductImage } from "@/lib/storefront/product-image";
@@ -13,14 +13,16 @@ import {
 } from "@/lib/media/image-url";
 import {
   buildProductOptions,
-  resolveSelectedPrice,
   shouldShowOptionPicker,
 } from "@/lib/storefront/variations";
 import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { buildProductCta } from "@/lib/storefront/product-cta";
+import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
 import { resolveReviewDescStyle, reviewsForProduct } from "@/lib/storefront/reviews";
+import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
+import { ReviewViewer } from "./ReviewViewer";
 import {
   normalizeSortCategories,
   orderCatalogByCategories,
@@ -92,7 +94,11 @@ export function ProductCard({
   const showSelector = shouldShowOptionPicker(product);
   // null = the product has options but none is picked yet → no price, and buying
   // is blocked until the customer chooses. A single-price product is never null.
-  const displayPrice = resolveSelectedPrice(product, optIdx);
+  // The SALE rides along: `sale.price` is the marked-down figure the cart will
+  // actually charge and `sale.compareAt` the list price to strike through, so a
+  // discount is visible in the GRID instead of being discovered at checkout.
+  const sale = resolveSaleView(product, optIdx);
+  const displayPrice = sale.price;
   const cd = design ? cardDesignAttrs(design) : null;
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, defaultImage);
@@ -119,6 +125,12 @@ export function ProductCard({
         <span className="product-card__badge badge badge-soft">On hand</span>
       ) : gbBlocked ? (
         <span className="product-card__badge badge badge-soft">On hand</span>
+      ) : sale.badgeLabel ? (
+        // Above "Featured": a markdown is time-bound and is the reason this card
+        // is worth a second look right now, where Featured is a standing pin.
+        <span className="product-card__badge product-card__badge--sale badge badge-solid">
+          {sale.badgeLabel}
+        </span>
       ) : (
         product.featured && (
           <span className="product-card__badge badge badge-solid">Featured</span>
@@ -262,6 +274,13 @@ export function ProductCard({
             <>
               {product.currency}
               {displayPrice?.toLocaleString()}
+              {sale.compareAt !== null && (
+                <s className="product-card__compare">
+                  <span className="sf-sr-only">Was </span>
+                  {product.currency}
+                  {sale.compareAt.toLocaleString()}
+                </s>
+              )}
             </>
           )}
         </div>
@@ -363,6 +382,9 @@ function ProductDetailModal({
   // products, so the same testimonial can appear under each of them.
   const productReviews = reviewsForProduct(brand.reviews ?? [], product.id);
   const [qty, setQty] = useState(1);
+  // A testimonial the customer asked to see large. The thumb below is 56px —
+  // unreadable for the chat screenshots owners actually upload.
+  const [reviewViewer, setReviewViewer] = useState<Review | null>(null);
   // Nothing picked yet (-1): a product with options shows no price until the
   // customer clicks one, same as the catalog card it opened from.
   const [optIdx, setOptIdx] = useState(-1);
@@ -372,8 +394,10 @@ function ProductDetailModal({
     optIdx >= 0 && optIdx < detail.options.length ? optIdx : -1;
   const selectedOpt = selectedIdx >= 0 ? detail.options[selectedIdx] : null;
   // null = has options but none picked → show a prompt, not a price, and block
-  // buying until a pick. resolveSelectedPrice reuses the card's option list.
-  const displayPrice = resolveSelectedPrice(product, optIdx);
+  // buying until a pick. resolveSaleView reuses the card's option list, so the
+  // modal quotes the same sale price and struck list price the card did.
+  const sale = resolveSaleView(product, optIdx);
+  const displayPrice = sale.price;
   // Same shared rule the card runs, so the modal it opened from can't disagree
   // about the label, the disabled state, or the stepper's cap.
   const cta = buildProductCta(product, optIdx, { gbBlocked, storeClosed });
@@ -384,6 +408,9 @@ function ProductDetailModal({
   // contract as NoticeModal so keyboard + screen-reader users are covered.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The review viewer sits on top and runs its own Escape handler. Stand
+      // down while it is open, or one keypress dismisses both modals.
+      if (reviewViewer) return;
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -394,7 +421,7 @@ function ProductDetailModal({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, [onClose, reviewViewer]);
 
   return (
     <div className="sf-detail-overlay" role="presentation" onClick={onClose}>
@@ -450,6 +477,13 @@ function ProductDetailModal({
                 <>
                   {detail.currency}
                   {displayPrice?.toLocaleString()}
+                  {sale.compareAt !== null && (
+                    <s className="sf-detail__compare">
+                      <span className="sf-sr-only">Was </span>
+                      {detail.currency}
+                      {sale.compareAt.toLocaleString()}
+                    </s>
+                  )}
                 </>
               )}
             </div>
@@ -464,14 +498,24 @@ function ProductDetailModal({
                 {productReviews.map((r, i) => (
                   <figure key={r.id ?? i} className="sf-detail__review">
                     {r.image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        className="sf-detail__review-img"
-                        src={imageUrl(r.image, { width: 240 })}
-                        alt={r.title || "Customer review"}
-                        loading="lazy"
-                        decoding="async"
-                      />
+                      // The thumb is 56px — a chat screenshot is unreadable at
+                      // that size, so it is a control that opens the full view.
+                      <button
+                        type="button"
+                        className="sf-detail__review-zoom"
+                        onClick={() => setReviewViewer(r)}
+                        disabled={!canOpenReviewViewer(r)}
+                        aria-label={`View ${r.title || "this review"} full size`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          className="sf-detail__review-img"
+                          src={imageUrl(r.image, { width: 240 })}
+                          alt={r.title || "Customer review"}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </button>
                     )}
                     <figcaption className="sf-detail__review-body">
                       {r.title && <strong className="sf-detail__review-name">{r.title}</strong>}
@@ -573,6 +617,17 @@ function ProductDetailModal({
             </div>
           </div>
         </div>
+
+        {/* Rendered INSIDE .sf-detail, whose onClick stops propagation, so a
+            click on the viewer's backdrop can never reach the product overlay
+            and close it too. CSS stacks it above (z-index 1400 vs 1200). */}
+        {reviewViewer && (
+          <ReviewViewer
+            review={reviewViewer}
+            brand={brand}
+            onClose={() => setReviewViewer(null)}
+          />
+        )}
       </div>
     </div>
   );
