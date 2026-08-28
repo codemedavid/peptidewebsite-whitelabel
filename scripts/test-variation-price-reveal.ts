@@ -89,10 +89,14 @@ const catalog = readFileSync(
   "utf8",
 );
 
-check("the card + modal consume resolveSelectedPrice", () => {
+check("the card + modal consume the reveal-on-click price rule", () => {
+  // Either directly, or through resolveSaleView — which wraps resolveSelectedPrice
+  // so the same surfaces can also show a markdown (npm run test:sale-price). The
+  // reveal rule is unchanged: a variation product still resolves to `null` until
+  // a pill is clicked; only the name of the function the card calls moved.
   assert.ok(
-    catalog.includes("resolveSelectedPrice"),
-    "Catalog.tsx never calls resolveSelectedPrice — the reveal-on-click rule is not wired",
+    catalog.includes("resolveSelectedPrice") || catalog.includes("resolveSaleView"),
+    "Catalog.tsx calls neither resolveSelectedPrice nor resolveSaleView — the reveal-on-click rule is not wired",
   );
 });
 

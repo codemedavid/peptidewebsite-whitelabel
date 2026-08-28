@@ -19,6 +19,7 @@ import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-pag
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
 import { availableUnits, productOutOfStock } from "./inventory";
+import { effectiveBasePrice, isDiscountActive } from "./sale";
 import {
   TWO_WAYS_MODE_DEFAULT,
   normalizeTwoWaysMode,
@@ -47,6 +48,11 @@ export type OnHandLine<T extends TwhProduct = TwhProduct> = {
   initial: string;
   price: number;
   priceLabel: string;
+  /** The list price this line was marked down FROM, formatted for a struck-through
+   *  figure beside `priceLabel`. Empty when no sale is running — the shelf used to
+   *  print the pre-sale price as if it were the price, so the saving only ever
+   *  surfaced in the cart. */
+  compareAtLabel: string;
   /** True when stock is unknown, or when at least one option can still be
    *  bought — mirrors the catalog's "in stock" treatment (absent stock is not a
    *  sold-out signal, and one stocked dose keeps the product buyable). */
@@ -156,7 +162,11 @@ function onHandLine<T extends TwhProduct>(
   currency: string,
   wayOpen: boolean,
 ): OnHandLine<T> {
-  const price = Math.max(0, product.price || 0);
+  // The ADVERTISED price is the price the cart charges: an active markdown, else
+  // the list price. Reading product.price alone is what hid every sale until
+  // checkout.
+  const list = Math.max(0, product.price || 0);
+  const price = Math.max(0, effectiveBasePrice(product));
   // Availability comes from the shared inventory rules, not the base column
   // alone: a product whose doses track their own stock has as many pools as it
   // has options, and reading `product.stock` HID products whose doses were
@@ -173,6 +183,7 @@ function onHandLine<T extends TwhProduct>(
     initial: productInitial(product.name),
     price,
     priceLabel: formatGbMoney(currency, price),
+    compareAtLabel: isDiscountActive(product) ? formatGbMoney(currency, list) : "",
     inStock,
     stockLabel: known ? `${availableUnits(product)} in stock` : "",
     buyable: inStock && wayOpen,

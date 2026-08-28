@@ -9,6 +9,7 @@ import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product 
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 import { isGroupBuyProduct, groupBuyLine, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildProductOptions, hasDoseToken } from "@/lib/storefront/variations";
+import { effectiveBasePrice } from "@/lib/storefront/sale";
 import {
   RESELLER_MIN_QTY,
   parentProductId,
@@ -208,9 +209,13 @@ export function resellerTierLabel(p: Product): WholesaleTierLabel | null {
   return "Wholesale";
 }
 
-/** The non-bulk effective unit price: an active promo discount, else retail. */
+/** The non-bulk effective unit price: an active promo discount, else retail.
+ *  Delegates to the shared sale rule so the price a card ADVERTISES and the
+ *  price this line CHARGES are one number — they used to be two (the catalog
+ *  printed the list price while this returned the markdown), which is how a
+ *  shopper only found out an item was on sale once it was in the cart. */
 function basePrice(p: Product): number {
-  return p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
+  return effectiveBasePrice(p);
 }
 
 /**

@@ -17,6 +17,7 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { baseProductId } from "../checkout";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
+import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import {
   buildTwoWaysHomeView,
@@ -304,8 +305,20 @@ function OnHandRow({
   const [optIdx, setOptIdx] = useState(0);
   const selectedOpt = options.length ? options[Math.min(optIdx, options.length - 1)] : null;
   const canBuy = p.purchasable !== false && !p.priceOnRequest;
+  // A picker changes which price is on offer, so the row re-derives the sale for
+  // the chosen option; with no picker the shelf line already carries it. Either
+  // way the figure shown is the one the cart charges.
+  const sale = resolveSaleView(p, selectedOpt ? Math.min(optIdx, options.length - 1) : -1);
   const displayPrice =
-    showSelector && selectedOpt ? formatGbMoney(currency, selectedOpt.price) : line.priceLabel;
+    showSelector && selectedOpt
+      ? formatGbMoney(currency, sale.price ?? selectedOpt.price)
+      : line.priceLabel;
+  const compareAtLabel =
+    showSelector && selectedOpt
+      ? sale.compareAt !== null
+        ? formatGbMoney(currency, sale.compareAt)
+        : ""
+      : line.compareAtLabel;
   return (
     <li className="sf-twh__row">
       <span className="sf-twh__avatar font-display" aria-hidden>
@@ -347,7 +360,21 @@ function OnHandRow({
         )}
       </div>
       <div className="sf-twh__row-buy">
-        <div className="sf-twh__row-price">{p.priceOnRequest ? "Ask" : displayPrice}</div>
+        <div className="sf-twh__row-price">
+          {p.priceOnRequest ? (
+            "Ask"
+          ) : (
+            <>
+              {displayPrice}
+              {compareAtLabel && (
+                <s className="sf-twh__row-compare">
+                  <span className="sf-sr-only">Was </span>
+                  {compareAtLabel}
+                </s>
+              )}
+            </>
+          )}
+        </div>
         {storeClosed ? (
           <button type="button" className="sf-twh__add" disabled>
             {CTA_COPY.closed}
@@ -458,6 +485,15 @@ const twhCss = `
 .sf-root .sf-twh__incart { display: block; margin-top: 4px; font-size: 10px; font-weight: 700; color: var(--brand-text-muted); }
 .sf-root .sf-twh__row-buy { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .sf-root .sf-twh__row-price { font-weight: 700; font-size: 16px; color: var(--brand-text); }
+.sf-root .sf-twh__row-compare {
+  margin-left: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand-text) 45%, transparent);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1.5px;
+  white-space: nowrap;
+}
 .sf-root .sf-twh__add {
   border: 0; cursor: pointer; font-weight: 700; font-size: 12px; border-radius: 99px; padding: 5px 14px;
   color: var(--brand-main); background: color-mix(in oklab, var(--brand-main) 12%, var(--brand-surface));

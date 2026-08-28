@@ -16,6 +16,7 @@
 //   Syringes (of 500) is not 1,100 units of anything, and unlocks neither.
 
 import type { Product } from "@/storefront/types";
+import { effectiveBasePrice } from "./sale";
 
 /** The product-level wholesale config: one MOQ, one wholesale unit price. */
 export type WholesaleConfig = NonNullable<Product["wholesale"]>;
@@ -169,7 +170,7 @@ export function wholesaleRemaining(
 ): number {
   const cfg = resolveWholesale(p);
   if (!cfg) return 0;
-  const base = p.discountEnabled && typeof p.discountPrice === "number" ? p.discountPrice : p.price;
+  const base = effectiveBasePrice(p);
   if (cfg.price >= base) return 0;
   return Math.max(0, cfg.moq - wholesaleQty(p, qty, scope));
 }

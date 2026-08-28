@@ -15,6 +15,10 @@ export type TwoWaysInput = {
   price: number;
   gbPrice?: number;
   productType?: "gb" | "onhand";
+  /** An owner-set markdown on the base price. Read by the ships-now shelf so it
+   *  advertises the price the cart charges — see ./sale. */
+  discountEnabled?: boolean;
+  discountPrice?: number | null;
 };
 
 /** A resolved group-buy catalog line: the product plus its regular vs GB price. */
