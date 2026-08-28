@@ -83,6 +83,7 @@
     "test:faq": "tsx scripts/test-faq.ts",
     "test:reviews": "tsx scripts/test-reviews-feature.ts",
     "test:review-content": "tsx scripts/test-review-content.ts",
+    "test:review-viewer": "tsx scripts/test-review-viewer.ts",
     "test:data-export": "tsx scripts/test-data-export.ts",
     "test:coa": "tsx scripts/test-coa.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
