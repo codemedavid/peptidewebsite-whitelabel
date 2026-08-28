@@ -9,6 +9,7 @@
 // a DB or a session (see scripts/test-product-add-gates.ts).
 
 import { toProductClass } from "@/lib/storefront/product-class";
+import { normalizeHostedImageUrl } from "@/lib/storefront/product-image";
 import type { Product } from "@/storefront/types";
 
 /** Coerce to a string and cap its length. */
@@ -50,10 +51,19 @@ export function normalizeProductInput(input: unknown): Product {
       // instead of inheriting the product's gbPrice (which would undercharge
       // every larger size — see makeVariationEntry).
       const gb = Math.max(0, num(x.gbPrice));
+      // The option's own photo. It has to round-trip HERE, not just in
+      // cleanVariations: this is the only coercion between an untrusted payload
+      // and productToDbWrite, so a rebuilt object that omits the key throws the
+      // photo away before the mapping layer ever sees it — which is exactly what
+      // happened to every per-variation image, on the admin editor's save path
+      // and the MCP connector's alike. Normalized through the shared http(s)
+      // rule so a data:/javascript: value is dropped rather than stored.
+      const image = normalizeHostedImageUrl(x.image);
       return {
         ...base,
         ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
         ...(gb > 0 ? { gbPrice: gb } : {}),
+        ...(image ? { image } : {}),
       };
     })
     .filter((v) => v.name);

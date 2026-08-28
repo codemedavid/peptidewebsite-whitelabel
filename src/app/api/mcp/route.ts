@@ -18,6 +18,7 @@ import {
   callSetFeatures,
 } from "@/lib/mcp/feature-tool";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
+import { buildVariationPlan, MAX_VARIATIONS } from "@/lib/storefront/variation-plan";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import {
   currencySymbolToIso,
@@ -344,6 +345,101 @@ const UPDATE_PRODUCTS_TOOL = {
           },
         },
       },
+    },
+    required: ["tenantSlug"],
+  },
+  annotations: {
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+};
+
+const VARIATION_EDIT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: {
+      type: "string",
+      description:
+        "The option's name as the customer sees it, e.g. \"10mg\" or \"Roseberry\". Matched against existing options case-insensitively: a name the product already has is EDITED in place, a new one is added.",
+    },
+    price: {
+      type: "number",
+      description:
+        "Price in major units, e.g. 1800 for \u20b11,800. Required for a new option; omit it to leave an existing option's price alone. Must be above 0.",
+    },
+    stock: {
+      type: "number",
+      description:
+        "Units of THIS option. Omit to leave it as-is; send null to untrack it so it falls back to the product's own stock.",
+    },
+    gbPrice: {
+      type: "number",
+      description:
+        "This option's own group-buy price. Only used on group-buy products. 0 or null means the option has no group price and sells at its own price.",
+    },
+    image: {
+      type: "string",
+      description:
+        "Public http(s) photo of THIS option, shown in the card's swipe gallery. Send null to remove it. Use imageAsset instead to upload one.",
+    },
+    imageAsset: {
+      ...MCP_ASSET_SCHEMA,
+      description:
+        "Photo of this option to upload from a public URL, data URL, or raw base64 bytes. JPG, PNG, or WebP; max 10 MB. Do not combine this with image.",
+    },
+  },
+  required: ["name"],
+};
+
+const MANAGE_PRODUCT_VARIATIONS_TOOL = {
+  name: "manage_product_variations",
+  title: "Add or Edit Product Variations",
+  description:
+    "Use this when a platform operator asks ChatGPT to add, edit, or remove the size/dose/colorway OPTIONS on one existing product of a Pepweb whitelabel tenant \u2014 \"add a 10mg at \u20b11,800\", \"set Roseberry to \u20b1675\", \"give that colorway a photo\", \"drop the 2mg\". Prefer this over update_products for anything to do with options: it changes only the options you name and leaves every other option's price, stock, photo and position untouched, whereas an update_products patch replaces the whole list. Use mode=replace ONLY when the operator explicitly asks to rebuild the entire option list from scratch, because it deletes options you did not mention. One bad row refuses the whole call, so nothing is ever half-applied.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      adminToken: {
+        type: "string",
+        description:
+          "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
+      },
+      tenantSlug: {
+        type: "string",
+        description: "Existing tenant slug, e.g. pepglow-by-elle.",
+      },
+      match: {
+        ...PRODUCT_IDENTIFIER_SCHEMA,
+        description: "Which product to edit. Give one of id, slug, sku, or an exact name.",
+      },
+      id: { type: "string", description: "Product id, if you are not using match." },
+      slug: { type: "string", description: "Product slug, if you are not using match." },
+      sku: { type: "string", description: "Product SKU, if you are not using match." },
+      name: { type: "string", description: "Exact product name, if you are not using match." },
+      mode: {
+        type: "string",
+        enum: ["add", "replace", "remove"],
+        description:
+          "add (the default) adds the options you name and edits the ones that already exist, leaving the rest alone. replace installs exactly the list you send and DELETES every option you omit \u2014 only on an explicit request. remove takes the named options off the product.",
+      },
+      variations: {
+        type: "array",
+        minItems: 1,
+        maxItems: MAX_VARIATIONS,
+        items: VARIATION_EDIT_SCHEMA,
+        description: "The options to add or edit. Used by mode add and replace.",
+      },
+      remove: {
+        type: "array",
+        minItems: 1,
+        items: { type: "string" },
+        description:
+          "Option names to take off the product, used with mode=remove. A name the product does not have refuses the whole call rather than being ignored.",
+      },
+      currency: { type: "string", description: "Display currency symbol or ISO code. Defaults to the tenant's." },
     },
     required: ["tenantSlug"],
   },
@@ -1034,6 +1130,150 @@ async function callUpdateProducts(req: NextRequest, args: Record<string, unknown
   }
 }
 
+/**
+ * MCP tool: manage_product_variations.
+ *
+ * The shell around @/lib/storefront/variation-plan. Everything that decides what
+ * a change MEANS lives in that pure module (npm run test:mcp-variations); this
+ * function only resolves the tenant and product, uploads any option photos, and
+ * writes the list the plan returns through the same
+ * normalizeProductInput -> productToDbWrite path the store admin uses.
+ *
+ * It exists as its own tool rather than a mode on update_products because the
+ * agent cannot see the option list it is editing: an update_products patch
+ * replaces `variations` wholesale, so "add a 10mg" would silently delete the
+ * other 80 colorways the operator never mentioned.
+ */
+async function callManageProductVariations(req: NextRequest, args: Record<string, unknown>) {
+  const authError = requireMcpAuth(req, args);
+  if (authError) {
+    return { content: [{ type: "text", text: authError }], isError: true };
+  }
+
+  const tenantSlug = cleanString(args.tenantSlug ?? args.slug, 80).toLowerCase();
+  if (!tenantSlug) {
+    return { content: [{ type: "text", text: "tenantSlug is required." }], isError: true };
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, slug: true, name: true },
+  });
+  if (!tenant) {
+    return { content: [{ type: "text", text: `Tenant "${tenantSlug}" was not found.` }], isError: true };
+  }
+
+  // `match` is the documented shape, but models routinely flatten it onto the
+  // call; both are accepted so a well-formed request is never refused on shape.
+  const matchSource = plainObject(args.match) ?? args;
+  const match = productMatchFrom(matchSource);
+
+  try {
+    const context = await withTenant(tenant.id, async (db) => {
+      const branding = await db.branding.findUnique({
+        where: { tenantId: tenant.id },
+        select: { config: true },
+      });
+      const brandingConfig = plainObject(branding?.config) ?? {};
+      const defaultCurrency =
+        cleanString(args.currency, 8) || cleanString(brandingConfig.currency, 8) || "\u20b1";
+      const rows = (await db.product.findMany({
+        where: { status: { not: "archived" } },
+        orderBy: { createdAt: "asc" },
+      })) as McpProductRow[];
+      return { defaultCurrency, rows };
+    });
+
+    const resolved = resolveProductMatch(context.rows, match);
+    if (!isProductRow(resolved)) {
+      return { content: [{ type: "text", text: resolved.error }], isError: true };
+    }
+
+    const displaySymbol = context.defaultCurrency;
+    const current = dbProductToStorefront(resolved, displaySymbol);
+
+    // Upload any option photos BEFORE planning, so the plan only ever sees
+    // hosted URLs and a failed upload refuses the call instead of saving a
+    // half-photographed picker.
+    const rawList = Array.isArray(args.variations) ? args.variations : [];
+    const prepared: unknown[] = [];
+    for (const raw of rawList) {
+      const o = plainObject(raw);
+      if (!o) {
+        prepared.push(raw);
+        continue;
+      }
+      const asset = plainObject(o.imageAsset);
+      if (asset) {
+        if (cleanString(o.image, 2_000)) {
+          throw new Error(`"${cleanString(o.name, 80)}": provide either image or imageAsset, not both.`);
+        }
+        const { imageAsset: _asset, ...rest } = o;
+        void _asset;
+        const uploaded = await resolveMcpImage(tenant.id, asset, "product");
+        prepared.push({ ...rest, image: uploaded.url });
+        continue;
+      }
+      const image = cleanString(o.image, 2_000);
+      if (image) {
+        prepared.push({ ...o, image: await validatePublicMcpImageUrl(image, "variation image") });
+        continue;
+      }
+      prepared.push(o);
+    }
+
+    const plan = buildVariationPlan(current.variations ?? [], {
+      mode: args.mode,
+      variations: prepared,
+      remove: args.remove,
+    });
+    if ("error" in plan) {
+      return { content: [{ type: "text", text: plan.error }], isError: true };
+    }
+
+    const next = normalizeProductInput({ ...current, variations: plan.variations, id: resolved.id });
+    const write = productToDbWrite(next, currencySymbolToIso(next.currency), next.currency);
+    const resellerEntitled = await hasFeature(tenant.id, FEATURES.STORE_RESELLER_PORTAL);
+
+    const saved = await withTenant(tenant.id, (db) =>
+      db.product.update({
+        where: { id: resolved.id },
+        data: {
+          metadata: preserveResellerMetadata(
+            write.metadata as Record<string, unknown>,
+            resolved.metadata,
+            resellerEntitled,
+          ) as Prisma.InputJsonValue,
+        },
+      }),
+    );
+
+    revalidateTenant(tenant.id, tenant.slug);
+
+    const product = dbProductToStorefront(saved as DbProductRow, displaySymbol);
+    const result = {
+      tenant,
+      product: { id: product.id, name: product.name, slug: resolved.slug },
+      added: plan.added,
+      updated: plan.updated,
+      removed: plan.removed,
+      variations: product.variations ?? [],
+    };
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result,
+      isError: false,
+    };
+  } catch (e) {
+    return {
+      content: [
+        { type: "text", text: e instanceof Error ? e.message : "Failed to update product variations." },
+      ],
+      isError: true,
+    };
+  }
+}
+
 async function callUploadHeroImage(req: NextRequest, args: Record<string, unknown>) {
   const authError = requireMcpAuth(req, args);
   if (authError) {
@@ -1142,7 +1382,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. To add, edit, or remove a product's size/dose/colorway variations, call manage_product_variations rather than update_products \u2014 it changes only the options you name, while an update_products patch replaces the whole option list and would silently delete the ones you did not mention. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1156,6 +1396,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
         UPDATE_BRANDING_TOOL,
         BULK_ADD_PRODUCTS_TOOL,
         UPDATE_PRODUCTS_TOOL,
+        MANAGE_PRODUCT_VARIATIONS_TOOL,
         UPLOAD_HERO_IMAGE_TOOL,
         LIST_FEATURES_TOOL,
         SET_FEATURES_TOOL,
@@ -1182,6 +1423,9 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     }
     if (name === UPDATE_PRODUCTS_TOOL.name) {
       return jsonRpcResult(message.id, await callUpdateProducts(req, args));
+    }
+    if (name === MANAGE_PRODUCT_VARIATIONS_TOOL.name) {
+      return jsonRpcResult(message.id, await callManageProductVariations(req, args));
     }
     if (name === UPLOAD_HERO_IMAGE_TOOL.name) {
       return jsonRpcResult(message.id, await callUploadHeroImage(req, args));
