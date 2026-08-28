@@ -497,14 +497,15 @@ function ProductDetailModal({
                 <h3 className="sf-detail__reviews-title">What customers say</h3>
                 {productReviews.map((r, i) => (
                   <figure key={r.id ?? i} className="sf-detail__review">
-                    {r.image && (
+                    {r.image.trim() && canOpenReviewViewer(r) && (
                       // The thumb is 56px — a chat screenshot is unreadable at
                       // that size, so it is a control that opens the full view.
+                      // One rule decides whether it exists: a row the viewer
+                      // would open empty renders no thumb rather than a dead one.
                       <button
                         type="button"
                         className="sf-detail__review-zoom"
                         onClick={() => setReviewViewer(r)}
-                        disabled={!canOpenReviewViewer(r)}
                         aria-label={`View ${r.title || "this review"} full size`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}

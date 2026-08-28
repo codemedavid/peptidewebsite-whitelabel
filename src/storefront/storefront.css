@@ -1291,6 +1291,20 @@
   font-weight: 600;
   color: var(--brand-text-muted, var(--brand-main));
 }
+/* The list price a sale was marked down FROM, struck through beside the price
+   the cart will charge. Sized in `em` so it tracks the price it hangs off —
+   which is restyled at small widths and again per Card Studio design — and kept
+   deliberately quiet: the loud number must stay the one the shopper pays. */
+.sf-root .product-card__compare {
+  margin-left: 8px;
+  font-size: 0.62em;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand-text) 45%, transparent);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1.5px;
+  white-space: nowrap;
+}
+
 /* Wholesale / reseller tiers shown under the retail price. Reset the inherited
    display font (the price block is .font-display) so these read as small,
    muted metadata rather than another headline. */
@@ -6098,6 +6112,17 @@
 }
 .sf-root .product-card[data-cd-badge="hidden"] .product-card__badge { display: none; }
 
+/* A markdown badge reads as a markdown, not as another "Featured" pin — colour
+   carries the meaning. Declared AFTER the [data-cd-badge] variants above and at
+   matching specificity so a Card Studio card keeps the sale colour; `hidden`
+   still wins, because it sets `display` and these set only paint. */
+.sf-root .product-card__badge--sale,
+.sf-root .product-card[data-cd] .product-card__badge--sale {
+  background: var(--brand-danger, #b4405a);
+  color: #fff;
+  border-color: transparent;
+}
+
 /* Rating row (Card Studio sample previews; real cards render it only when
    rating data is supplied) */
 .sf-root .product-card__rating {
@@ -8150,6 +8175,15 @@
   color: var(--brand-main, #7c5ca8);
   font-family: var(--brand-price-font);
 }
+.sf-root .sf-detail__compare {
+  margin-left: 10px;
+  font-size: 0.62em;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand-text) 45%, transparent);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1.5px;
+  white-space: nowrap;
+}
 .sf-root .sf-detail__desc {
   margin: 0;
   font-size: 14.5px;
@@ -9277,7 +9311,6 @@
   outline: 2px solid var(--brand-main);
   outline-offset: 2px;
 }
-.sf-root .sf-detail__review-zoom:disabled { cursor: default; transform: none; }
 
 /* The store-admin manager thumb — fills the .review-admin-card__thumb box. */
 .sf-root .review-admin-card__zoom {
@@ -9295,7 +9328,6 @@
   outline: 2px solid var(--brand-main);
   outline-offset: -2px;
 }
-.sf-root .review-admin-card__zoom:disabled { cursor: default; }
 .sf-root .review-admin-card__zoom img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ---- The dialog ---- */

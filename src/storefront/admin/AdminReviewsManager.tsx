@@ -532,12 +532,11 @@ export function AdminReviewsManager({ brand, onBack }: { brand: Brand; onBack: (
           {list.map((r) => (
             <div key={r.id} className="review-admin-card">
               <div className="review-admin-card__thumb">
-                {r.image ? (
+                {r.image.trim() && canOpenReviewViewer(r) ? (
                   <button
                     type="button"
                     className="review-admin-card__zoom"
                     onClick={() => setViewing(r)}
-                    disabled={!canOpenReviewViewer(r)}
                     aria-label={`View ${r.title || "this review"} full size`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
