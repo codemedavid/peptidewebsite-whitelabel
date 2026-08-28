@@ -9,6 +9,7 @@ import { isResellerPricingVisible, isWholesalePricingVisible } from "../visibili
 import {
   VARIATION_PRESETS,
   applyVariationPreset,
+  assignVariationImages,
   type VariationDraft,
 } from "./variation-presets";
 import { unpricedVariationNames } from "@/lib/storefront/variations";
@@ -122,21 +123,109 @@ type VariationsEditorProps = {
   items: Variation[];
   currency: string;
   onChange: (items: Variation[]) => void;
+  /** Uploads one file and resolves its hosted URL, or an error message. Injected
+   *  rather than called directly so this editor stays a plain form component and
+   *  the parent keeps owning every server action. */
+  onUpload: (file: File) => Promise<{ url?: string; error?: string }>;
 };
 
-function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) {
+function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEditorProps) {
   const add = () => onChange([...items, { name: "", price: "" }]);
   const upd = (i: number, patch: Partial<Variation>) =>
     onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const rm = (i: number) => onChange(items.filter((_, j) => j !== i));
+
+  // Which row is mid-upload (so its thumb can show a spinner), and the last
+  // failure. One message rather than one per row: uploads are sequential, and a
+  // per-row error string would push the grid around while the seller works.
+  const [busyRow, setBusyRow] = useState<number | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<{ done: number; total: number } | null>(null);
+  const [imgErr, setImgErr] = useState("");
+  const rowFileRef = useRef<HTMLInputElement | null>(null);
+  const bulkFileRef = useRef<HTMLInputElement | null>(null);
+  const pendingRow = useRef<number | null>(null);
+
+  /** One row's photo. */
+  const handleRowFile = async (file: File | undefined) => {
+    const row = pendingRow.current;
+    pendingRow.current = null;
+    if (!file || row === null) return;
+    setImgErr("");
+    setBusyRow(row);
+    const res = await onUpload(file);
+    setBusyRow(null);
+    if (res.error) {
+      setImgErr(res.error);
+      return;
+    }
+    if (res.url) upd(row, { image: res.url });
+  };
+
+  /**
+   * Every colorway at once. Files upload one at a time (the server action takes
+   * a single file, and a burst of 81 parallel requests would be throttled or
+   * dropped), then assignVariationImages matches them to rows by filename.
+   * A failure part-way keeps the photos that already succeeded rather than
+   * discarding the whole batch — re-picking the stragglers is cheap, redoing
+   * eighty uploads is not.
+   */
+  const handleBulkFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setImgErr("");
+    const picked = Array.from(files);
+    const uploaded: { fileName: string; url: string }[] = [];
+    let firstError = "";
+
+    for (const [i, file] of picked.entries()) {
+      setBulkBusy({ done: i, total: picked.length });
+      const res = await onUpload(file);
+      if (res.url) uploaded.push({ fileName: file.name, url: res.url });
+      else if (res.error && !firstError) firstError = res.error;
+    }
+
+    setBulkBusy(null);
+    if (uploaded.length > 0) onChange(assignVariationImages(items, uploaded));
+    if (firstError) {
+      setImgErr(
+        `${firstError} (${uploaded.length} of ${picked.length} uploaded)`,
+      );
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {items.map((it, i) => (
         <div
           key={i}
-          style={{ display: "grid", gridTemplateColumns: "1fr 130px 110px 36px", gap: 10 }}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "48px 1fr 130px 110px 36px",
+            gap: 10,
+            alignItems: "center",
+          }}
         >
+          {/* The option's own photo. A colorway option is unbuyable guesswork
+              without one — this is the image the storefront card swipes to. */}
+          <button
+            type="button"
+            className="admin-variation-thumb"
+            title={it.image ? `Change photo for ${it.name || "this option"}` : "Add a photo"}
+            aria-label={it.image ? `Change photo for ${it.name || "this option"}` : `Add a photo for ${it.name || "this option"}`}
+            disabled={busyRow !== null || bulkBusy !== null}
+            onClick={() => {
+              pendingRow.current = i;
+              rowFileRef.current?.click();
+            }}
+          >
+            {busyRow === i ? (
+              <span className="admin-variation-thumb__label">…</span>
+            ) : it.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={it.image} alt="" />
+            ) : (
+              <span className="admin-variation-thumb__label">+</span>
+            )}
+          </button>
           <input
             className="admin-input"
             placeholder="Variation (e.g. 5mg)"
@@ -177,10 +266,53 @@ function VariationsEditor({ items, currency, onChange }: VariationsEditorProps) 
           </button>
         </div>
       ))}
+      {/* One picker reused by every row — 81 mounted <input type="file"> elements
+          would be 81 nodes for a control only one row uses at a time. */}
+      <input
+        ref={rowFileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+          void handleRowFile(e.target.files?.[0]);
+          // Clear it, or re-picking the same file fires no change event.
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={bulkFileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+          void handleBulkFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      {imgErr && (
+        <div className="admin-form__hint" role="alert" style={{ color: "var(--sf-danger, #b42318)" }}>
+          {imgErr}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <button className="admin-image-btn admin-image-btn--secondary" onClick={add}>
           + Add variation
         </button>
+        {items.length > 1 && (
+          <button
+            className="admin-image-btn admin-image-btn--secondary"
+            disabled={bulkBusy !== null || busyRow !== null}
+            title="Upload many photos at once — each file is matched to the option whose name it shares (silk-barbie.jpg → Silk Barbie)."
+            onClick={() => bulkFileRef.current?.click()}
+          >
+            {bulkBusy
+              ? `Uploading ${bulkBusy.done + 1} of ${bulkBusy.total}…`
+              : "🖼️ Upload photos for all options"}
+          </button>
+        )}
         {VARIATION_PRESETS.map((preset) => {
           // Already in the list → the button would be a no-op, so retire it
           // rather than leave a control that silently does nothing.
@@ -338,6 +470,32 @@ export function AdminAddProduct({
   // Upload the chosen file to the tenant's ImageKit folder (server action) and
   // store the returned hosted URL. No more base64 in the DB — and if ImageKit
   // isn't configured the action returns a clear message we surface inline.
+  /**
+   * Upload one per-variation photo and hand back its hosted URL.
+   *
+   * Shares the product image action (and so its 10 MB cap, ImageKit folder and
+   * media-library bookkeeping) but returns the result instead of setting state:
+   * the variations editor owns its own busy/error display, and the bulk path
+   * needs to await each file in turn.
+   */
+  const uploadVariationImage = async (
+    file: File,
+  ): Promise<{ url?: string; error?: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      // UploadImageResult is a union ({url} | {error}), so narrow rather than
+      // reaching for an optional field that only exists on one arm.
+      const res = await uploadProductImageAction(fd);
+      if ("url" in res && res.url) return { url: res.url };
+      return {
+        error: ("error" in res && res.error) || "Upload failed — please try again.",
+      };
+    } catch {
+      return { error: "Upload failed — please try again." };
+    }
+  };
+
   const handleImage = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -388,7 +546,14 @@ export function AdminAddProduct({
           // normalizeProductInput so the client and server agree.
           const s = v.stock;
           const tracked = typeof s === "number" || (typeof s === "string" && s.trim() !== "");
-          return tracked ? { ...base, stock: Math.max(0, Math.floor(Number(s) || 0)) } : base;
+          const withStock = tracked
+            ? { ...base, stock: Math.max(0, Math.floor(Number(s) || 0)) }
+            : base;
+          // Same opt-in rule for the option's photo: send it only when there is
+          // one. The server re-validates it to http(s) (cleanVariations), so a
+          // pasted junk value is dropped rather than stored.
+          const image = (v.image ?? "").trim();
+          return image ? { ...withStock, image } : withStock;
         })
         .filter((v) => v.name),
       stock: Number(stock) || 0,
@@ -611,7 +776,12 @@ export function AdminAddProduct({
             Customers pick the option on the storefront. Leave empty to sell the
             product as a single option at the base price above.
           </div>
-          <VariationsEditor items={variations} currency={currency} onChange={setVariations} />
+          <VariationsEditor
+            items={variations}
+            currency={currency}
+            onChange={setVariations}
+            onUpload={uploadVariationImage}
+          />
           {unpriced.length > 0 && (
             <div
               className="admin-field__hint"

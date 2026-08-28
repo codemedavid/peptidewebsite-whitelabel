@@ -75,8 +75,20 @@ export type Product = {
    *  option's group price. Absent means "no group price for this option", and
    *  the option sells at its own `price`; it deliberately does NOT fall back to
    *  the product's `gbPrice`, which would undercharge every larger size. See
-   *  makeVariationEntry in storefront/checkout.ts. */
-  variations?: { name: string; price: number; stock?: number; gbPrice?: number }[];
+   *  makeVariationEntry in storefront/checkout.ts.
+   *
+   *  `image` is optional per variation too: the option's own hosted photo. It
+   *  exists because variations are not always doses — a seller may list 81
+   *  colorways, where a bare name says nothing about the product. The card turns
+   *  these into a swipeable gallery (see lib/storefront/product-gallery.ts); a
+   *  product whose options carry none renders exactly as it always has. */
+  variations?: {
+    name: string;
+    price: number;
+    stock?: number;
+    gbPrice?: number;
+    image?: string;
+  }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
    *  underlying catalog product id — used so the shared product stock is counted

@@ -210,6 +210,10 @@ const PRODUCT_SCHEMA = {
           price: { type: "number" },
           stock: { type: "number" },
           gbPrice: { type: "number" },
+          // Hosted http(s) photo for this option — the connector can set the
+          // colorway images the card's swipe gallery is built from. Without the
+          // key, additionalProperties:false would reject a variation carrying one.
+          image: { type: "string" },
         },
       },
     },

@@ -14,6 +14,19 @@
  * rejects un-hosted data URLs), and it keeps javascript:/data: out of <img src>.
  */
 export function normalizeDefaultProductImage(value: unknown): string | undefined {
+  return normalizeHostedImageUrl(value);
+}
+
+/**
+ * The same rule under a name that doesn't claim to be about the brand default.
+ *
+ * Per-variation photos (metadata.variations[].image) arrive from the same
+ * tenant-editable JSON and are rendered into the same <img src>, so they get the
+ * identical treatment: a trimmed http(s) URL or nothing. Sharing one function
+ * means a future tightening (an allowlisted host, say) can't protect one call
+ * site and miss the other.
+ */
+export function normalizeHostedImageUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return undefined;

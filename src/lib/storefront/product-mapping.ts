@@ -11,6 +11,7 @@
 
 import type { Product } from "@/storefront/types";
 import { toProductClass, type ProductClass } from "./product-class";
+import { normalizeHostedImageUrl } from "./product-image";
 
 /** The subset of the Prisma `Product` row this layer reads. */
 export type DbProductRow = {
@@ -56,7 +57,15 @@ export type ProductMetadata = {
    *  `gbPrice` is likewise present only when the option has its own group-buy
    *  price; absent = no group price for that option (it sells at its own
    *  `price`, NOT at the product-level `gbPrice`). */
-  variations?: { name: string; price: number; stock?: number; gbPrice?: number }[];
+  /** `image` is the option's own hosted photo, present only when the seller
+   *  uploaded one. Persisted only as a valid http(s) URL — see cleanVariations. */
+  variations?: {
+    name: string;
+    price: number;
+    stock?: number;
+    gbPrice?: number;
+    image?: string;
+  }[];
   /** Order Ratio Control classification (peptide / bacWater / other) set by the
    *  storefront admin. Absent → the ratio engine's name heuristic decides. */
   productClass?: ProductClass;
@@ -275,9 +284,11 @@ function cleanWholesale(
  * price no storefront surface would honour.
  */
 function cleanVariations(
-  v: { name?: string; price?: number; stock?: number; gbPrice?: number }[] | undefined,
+  v:
+    | { name?: string; price?: number; stock?: number; gbPrice?: number; image?: string }[]
+    | undefined,
   keepGbPrice = false,
-): { name: string; price: number; stock?: number; gbPrice?: number }[] | undefined {
+): { name: string; price: number; stock?: number; gbPrice?: number; image?: string }[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out = v
     .map((x) => {
@@ -293,11 +304,17 @@ function cleanVariations(
       // product's gbPrice", which would undercharge every larger size.
       const gb = Number(x?.gbPrice);
       const hasGb = keepGbPrice && Number.isFinite(gb) && gb > 0;
+      // The option's own photo. Normalized through the same http(s)-only rule as
+      // the brand default image, because this string is tenant-editable and ends
+      // up in an <img src>; anything else (a data: URL, a bare path, a cleared
+      // field) is dropped rather than stored as an unusable value.
+      const image = normalizeHostedImageUrl(x?.image);
       return {
         name,
         price,
         ...(hasStock ? { stock: Math.max(0, Math.round(x!.stock as number)) } : {}),
         ...(hasGb ? { gbPrice: gb } : {}),
+        ...(image ? { image } : {}),
       };
     })
     .filter((x) => x.name);

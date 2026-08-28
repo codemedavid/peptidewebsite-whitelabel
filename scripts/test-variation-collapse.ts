@@ -218,11 +218,14 @@ check("imports splitOptionsForCard from the shared variations module", () => {
   assert.match(catalog, /splitOptionsForCard/, "the helper is never imported");
 });
 
-check("BOTH the card and the modal split their options", () => {
-  const uses = catalog.match(/splitOptionsForCard\(/g) ?? [];
+check("BOTH the card and the modal render the collapsing picker", () => {
+  // One shared <OptionPicker> rather than two copies of the split logic: the
+  // card and the modal must never disagree about which option a pill selects.
+  // So the guard counts RENDER sites, not calls to the helper.
+  const uses = catalog.match(/<OptionPicker/g) ?? [];
   assert.ok(
     uses.length >= 2,
-    `expected the card AND the modal to split (found ${uses.length} call site(s))`,
+    `expected the card AND the modal to use the picker (found ${uses.length} render site(s))`,
   );
 });
 

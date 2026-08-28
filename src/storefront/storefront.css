@@ -9458,3 +9458,193 @@
      the screenshot off screen. */
   .sf-root .sf-review-viewer__caption { max-height: 30vh; overflow-y: auto; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Swipeable product gallery + the collapsed variation picker
+   (mstomato: 81 colorways per product, each with its own photo)
+
+   Appended at the END of this file deliberately. Several small-screen blocks
+   above restyle .product-card__media at the same specificity, and a rule placed
+   earlier would be silently overridden by them — the same cascade trap that
+   broke the flush image hero. Everything here is additive: a product without
+   per-variation photos never gets .product-card__media--gallery, and an option
+   list at or under VARIATION_PREVIEW_COUNT never renders the "+N more" pill.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* The gallery fills the media box instead of centering a single image in it.
+   The box itself keeps its class, so every Card Studio [data-cd-layout] rule
+   (horizontal, overlay, inset) still applies unchanged. */
+.sf-root .product-card__media--gallery {
+  display: block;
+  padding: 0;
+}
+
+.sf-root .product-card__gallery {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.sf-root .product-card__gallery-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  /* Keep a horizontal swipe inside the card: without this, flicking past the
+     last colorway triggers the browser's back-navigation gesture. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sf-root .product-card__gallery-track::-webkit-scrollbar { display: none; }
+
+.sf-root .product-card__gallery-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+
+.sf-root .product-card__gallery-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The whole slide is the "open details" target, matching the non-gallery card
+   where the media itself is a button. */
+.sf-root .product-card__gallery-hit {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.sf-root .product-card__gallery-hit:focus-visible {
+  outline: 2px solid var(--brand-main);
+  outline-offset: -2px;
+}
+
+/* Arrows are for pointer devices; a touchscreen already swipes. */
+.sf-root .product-card__gallery-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-background) 82%, transparent);
+  color: var(--brand-text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+.sf-root .product-card__gallery-nav--prev { left: 8px; }
+.sf-root .product-card__gallery-nav--next { right: 8px; }
+.sf-root .product-card__gallery:hover .product-card__gallery-nav,
+.sf-root .product-card__gallery-nav:focus-visible { opacity: 1; }
+.sf-root .product-card__gallery-nav:disabled { opacity: 0; pointer-events: none; }
+
+@media (hover: none) {
+  /* No hover to reveal them and no room to spare — swiping is the affordance. */
+  .sf-root .product-card__gallery-nav { display: none; }
+}
+
+.sf-root .product-card__gallery-dots {
+  position: absolute;
+  left: 0; right: 0; bottom: 8px;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.sf-root .product-card__gallery-dot {
+  width: 5px; height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-text) 30%, transparent);
+  transition: background var(--duration-fast, 150ms) ease;
+}
+.sf-root .product-card__gallery-dot.is-active {
+  background: var(--brand-main);
+}
+
+/* Stand-in for the dots once there are too many to read at a glance. */
+.sf-root .product-card__gallery-count {
+  position: absolute;
+  right: 8px; bottom: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-background) 82%, transparent);
+  color: var(--brand-text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* The "+75 more" / "Show less" toggle. Deliberately reads as a control rather
+   than as another colorway, so it is never mistaken for a pickable option. */
+.sf-root .product-card__variations-more {
+  cursor: pointer;
+  border: 1px dashed var(--brand-border);
+  background: transparent;
+  color: color-mix(in srgb, var(--brand-text) 70%, transparent);
+  font-weight: 600;
+}
+.sf-root .product-card__variations-more:hover {
+  color: var(--brand-main);
+  border-color: var(--brand-main);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The JS already passes behavior:"auto"; this covers the snap animation and
+     any scroll the browser drives itself. */
+  .sf-root .product-card__gallery-track { scroll-behavior: auto; }
+  .sf-root .product-card__gallery-nav,
+  .sf-root .product-card__gallery-dot { transition: none; }
+}
+
+/* Per-variation photo thumb in the product editor's Variations list. Small and
+   square so a row of 81 stays scannable; the "+" state has to read as an action
+   rather than as a broken image. */
+.sf-root .admin-variation-thumb {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-surface-2);
+  color: color-mix(in srgb, var(--brand-text) 55%, transparent);
+  cursor: pointer;
+}
+.sf-root .admin-variation-thumb:hover:not(:disabled) {
+  border-color: var(--brand-main);
+  color: var(--brand-main);
+}
+.sf-root .admin-variation-thumb:disabled { opacity: 0.6; cursor: default; }
+.sf-root .admin-variation-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sf-root .admin-variation-thumb__label {
+  font-size: 18px;
+  line-height: 1;
+}

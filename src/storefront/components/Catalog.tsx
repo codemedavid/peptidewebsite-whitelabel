@@ -6,6 +6,11 @@ import { cardDesignAttrs, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import {
+  buildProductGallery,
+  hasGallery,
+  type GallerySlide,
+} from "@/lib/storefront/product-gallery";
+import {
   imageUrl,
   imageSrcSet,
   CARD_WIDTHS,
@@ -14,6 +19,8 @@ import {
 import {
   buildProductOptions,
   shouldShowOptionPicker,
+  splitOptionsForCard,
+  type ProductOption,
 } from "@/lib/storefront/variations";
 import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { buildProductCta } from "@/lib/storefront/product-cta";
@@ -32,6 +39,302 @@ import {
   sortCategoryOptions,
 } from "@/lib/storefront/sort-categories";
 import { normalizeOnHandOrder, orderOnHandProducts } from "@/lib/storefront/on-hand-order";
+
+/**
+ * The option picker, shared by the product card and its detail modal.
+ *
+ * Long lists collapse. mstomato sells vial cases in 81 colorways, and rendering
+ * every pill turned one card into a multi-screen wall that buried the price and
+ * the Add to Cart button. Only the first few show; the rest sit behind a
+ * "+75 more" toggle. A list at or under VARIATION_PREVIEW_COUNT is returned
+ * whole by splitOptionsForCard and reports `collapsible: false`, so the 2-4
+ * option products every other tenant sells render exactly as they always have —
+ * no toggle appears out of nowhere.
+ *
+ * One component rather than two copies because the card and the modal must never
+ * disagree about which option a given pill selects; they differ only in where
+ * their sold-out signal comes from, which is why that arrives as a callback.
+ */
+function OptionPicker({
+  options,
+  selectedIndex,
+  onSelect,
+  isSoldOut,
+  label,
+  marginTop,
+}: {
+  options: ProductOption[];
+  /** -1 until the customer picks — the card's "no price yet" state. */
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  /** The card reads live product stock; the modal reads its precomputed array. */
+  isSoldOut: (option: ProductOption, index: number) => boolean;
+  label: string;
+  marginTop: number;
+}) {
+  const [showAllOpts, setShowAllOpts] = useState(false);
+  // The selected index is passed through so a pick living in the hidden tail is
+  // pulled into view — otherwise choosing "Verdance" (option 60) and collapsing
+  // would hide the customer's own choice while the price still refers to it.
+  const { visible, hiddenCount, collapsible } = splitOptionsForCard(options, {
+    expanded: showAllOpts,
+    selectedIndex,
+  });
+
+  return (
+    <div
+      className="product-card__variations"
+      role="group"
+      aria-label={label}
+      style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop }}
+    >
+      {visible.map(({ option, index }) => {
+        const active = index === selectedIndex;
+        const soldOut = isSoldOut(option, index);
+        return (
+          <button
+            key={`${option.name}-${index}`}
+            type="button"
+            className="badge"
+            aria-pressed={active}
+            onClick={() => onSelect(index)}
+            title={soldOut ? `${option.name} is out of stock` : undefined}
+            style={{
+              cursor: "pointer",
+              border: active
+                ? "1px solid var(--brand-main)"
+                : "1px solid var(--brand-border)",
+              background: active ? "var(--brand-main)" : "transparent",
+              color: active ? "var(--brand-button-text)" : "inherit",
+              fontWeight: active ? 600 : 500,
+              opacity: soldOut ? 0.5 : 1,
+              textDecoration: soldOut ? "line-through" : "none",
+            }}
+          >
+            {option.name}
+            {soldOut ? " · out" : ""}
+          </button>
+        );
+      })}
+      {collapsible && (
+        <button
+          type="button"
+          className="badge product-card__variations-more"
+          aria-expanded={showAllOpts}
+          onClick={() => setShowAllOpts((v) => !v)}
+        >
+          {showAllOpts ? "Show less" : `+${hiddenCount} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Above this many slides the gallery shows a "3 / 82" counter instead of one
+ *  dot per photo, which stops being readable well before a seller's 81st
+ *  colorway. */
+const GALLERY_DOTS_MAX = 8;
+
+/**
+ * The swipeable product image gallery.
+ *
+ * Rendered only when a product has more than one slide — i.e. when the seller
+ * gave at least one variation its own photo. Everything else keeps the single
+ * <img> the card has always drawn, so no tenant without per-variation photos
+ * gains a track, dots or an observer.
+ *
+ * Swiping and picking are bound both ways: scrolling a variation's photo into
+ * view selects that option (its price reveals, Add to Cart binds to it), and
+ * clicking its pill scrolls the photo back into view. Motion is native
+ * scroll-snap rather than a gesture library — it stays on the compositor, works
+ * with a trackpad and a touchscreen alike, and costs no JS on the drag itself.
+ * Selection is read with an IntersectionObserver rather than a scroll handler so
+ * nothing runs per frame.
+ */
+function ProductGallery({
+  slides,
+  selectedIndex,
+  onSelect,
+  onOpenDetail,
+  alt,
+  width,
+  srcSetWidths,
+  sizes,
+}: {
+  slides: GallerySlide[];
+  selectedIndex: number;
+  onSelect: (optionIndex: number) => void;
+  /** Absent in the Card Studio preview and in the modal — slides aren't clickable there. */
+  onOpenDetail?: () => void;
+  alt: string;
+  width: number;
+  srcSetWidths: number[];
+  sizes: string;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [active, setActive] = useState(0);
+  // Which slide the observer last reported. Read by the scroll-into-view effect
+  // so a pill click that lands on the already-visible slide doesn't re-scroll —
+  // that is the feedback loop (swipe → select → scroll → observe → select).
+  const activeRef = useRef(0);
+  // The observer fires once for the initially-visible slide as soon as it starts
+  // watching. Acting on that would SELECT an option on mount for any product
+  // whose first slide is a variation (one with no base photo), silently
+  // revealing a price the customer never asked for. Skip the first batch.
+  const readyRef = useRef(false);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    readyRef.current = false;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Take the most-visible slide in this batch rather than the last one to
+        // cross the line, so a fast swipe past several slides settles correctly.
+        const winner = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!winner) return;
+
+        const index = slideRefs.current.indexOf(winner.target as HTMLDivElement);
+        if (index < 0) return;
+
+        activeRef.current = index;
+        setActive(index);
+
+        if (!readyRef.current) {
+          readyRef.current = true;
+          return;
+        }
+        const optionIndex = slides[index]?.optionIndex;
+        if (typeof optionIndex === "number") onSelect(optionIndex);
+      },
+      // Against the track, not the viewport: a card scrolled off-screen must not
+      // report its slides as hidden and re-fire when it scrolls back.
+      { root: track, threshold: 0.6 },
+    );
+
+    for (const el of slideRefs.current) if (el) observer.observe(el);
+    return () => observer.disconnect();
+    // `onSelect` is intentionally excluded — the card passes a fresh closure each
+    // render, and re-observing on every render would re-fire the mount skip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides]);
+
+  // Picking a pill brings its photo back into view.
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    const target = slides.findIndex((s) => s.optionIndex === selectedIndex);
+    if (target < 0 || target === activeRef.current) return;
+    const el = slideRefs.current[target];
+    if (!el) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({
+      behavior: reduce ? "auto" : "smooth",
+      inline: "center",
+      // "nearest" so bringing a slide into view never scrolls the whole page.
+      block: "nearest",
+    });
+  }, [selectedIndex, slides]);
+
+  const go = (delta: number) => {
+    const next = Math.min(slides.length - 1, Math.max(0, activeRef.current + delta));
+    slideRefs.current[next]?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  };
+
+  return (
+    <div className="product-card__gallery">
+      <div className="product-card__gallery-track" ref={trackRef}>
+        {slides.map((slide, i) => (
+          <div
+            key={`${slide.src}-${i}`}
+            className="product-card__gallery-slide"
+            ref={(el) => {
+              slideRefs.current[i] = el;
+            }}
+          >
+            {onOpenDetail ? (
+              <button
+                type="button"
+                className="product-card__gallery-hit"
+                onClick={onOpenDetail}
+                aria-label={`View details for ${alt}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl(slide.src, { width })}
+                  srcSet={imageSrcSet(slide.src, srcSetWidths)}
+                  sizes={sizes}
+                  alt={slide.label}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </button>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageUrl(slide.src, { width })}
+                srcSet={imageSrcSet(slide.src, srcSetWidths)}
+                sizes={sizes}
+                alt={slide.label}
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="product-card__gallery-nav product-card__gallery-nav--prev"
+        aria-label="Previous image"
+        onClick={() => go(-1)}
+        disabled={active <= 0}
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        className="product-card__gallery-nav product-card__gallery-nav--next"
+        aria-label="Next image"
+        onClick={() => go(1)}
+        disabled={active >= slides.length - 1}
+      >
+        ›
+      </button>
+
+      {/* A dot per slide reads well for a handful of photos and becomes noise at
+          82 — a seller who photographed every colorway would get a grey smear
+          across the bottom of the card. Past the threshold, show a counter. */}
+      {slides.length <= GALLERY_DOTS_MAX ? (
+        <div className="product-card__gallery-dots" aria-hidden>
+          {slides.map((slide, i) => (
+            <span
+              key={`${slide.src}-dot-${i}`}
+              className={`product-card__gallery-dot${i === active ? " is-active" : ""}`}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="product-card__gallery-count" aria-hidden>
+          {active + 1} / {slides.length}
+        </div>
+      )}
+      <span className="sf-sr-only" aria-live="polite">
+        {slides[active]?.label}
+      </span>
+    </div>
+  );
+}
 
 /**
  * The storefront product card. Also rendered by the admin Card Studio for its
@@ -102,6 +405,13 @@ export function ProductCard({
   const cd = design ? cardDesignAttrs(design) : null;
   // Product photo, or the brand's default product image, or the SVG placeholder.
   const image = resolveProductImage(product.image, defaultImage);
+  // Slides for the swipe gallery: the base photo plus every variation the seller
+  // photographed. Memoized so the IntersectionObserver isn't torn down and
+  // rebuilt on each render (which would re-arm its skip-the-first-batch guard).
+  const slides = useMemo(
+    () => buildProductGallery(product, defaultImage),
+    [product, defaultImage],
+  );
   // What the buy controls say and whether they work — one shared rule (the
   // modal calls the same helper), so the card can never again invite a choice
   // ("Select an option") on a product whose every option is sold out. It also
@@ -141,7 +451,25 @@ export function ProductCard({
           <button> (not an onClick div) so keyboard and screen-reader users get
           the same "view details" affordance; falls back to a plain div in the
           Card Studio preview where onOpenDetail is absent. */}
-      {onOpenDetail ? (
+      {/* A product whose variations carry photos gets the swipe gallery; every
+          other product keeps the exact single-image markup below, so nothing
+          changes for tenants that never uploaded per-variation images. The
+          outer .product-card__media box is kept either way — the Card Studio
+          [data-cd-layout] rules (horizontal, overlay, inset) all target it. */}
+      {hasGallery(slides) ? (
+        <div className="product-card__media product-card__media--gallery">
+          <ProductGallery
+            slides={slides}
+            selectedIndex={optIdx}
+            onSelect={setOptIdx}
+            onOpenDetail={onOpenDetail}
+            alt={product.name}
+            width={480}
+            srcSetWidths={[...CARD_WIDTHS]}
+            sizes={CARD_SIZES}
+          />
+        </div>
+      ) : onOpenDetail ? (
         <button
           type="button"
           className="product-card__media product-card__media--interactive"
@@ -226,41 +554,14 @@ export function ProductCard({
           <span className="badge badge-soft">{product.purity} Purity</span>
         )}
         {showSelector && !poa && (
-          <div
-            className="product-card__variations"
-            role="group"
-            aria-label={`Options for ${product.name}`}
-            style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
-          >
-            {options.map((o, i) => {
-              const active = i === optIdx;
-              const soldOut = isOptionOutOfStock(product, o);
-              return (
-                <button
-                  key={`${o.name}-${i}`}
-                  type="button"
-                  className="badge"
-                  aria-pressed={active}
-                  onClick={() => setOptIdx(i)}
-                  title={soldOut ? `${o.name} is out of stock` : undefined}
-                  style={{
-                    cursor: "pointer",
-                    border: active
-                      ? "1px solid var(--brand-main)"
-                      : "1px solid var(--brand-border)",
-                    background: active ? "var(--brand-main)" : "transparent",
-                    color: active ? "var(--brand-button-text)" : "inherit",
-                    fontWeight: active ? 600 : 500,
-                    opacity: soldOut ? 0.5 : 1,
-                    textDecoration: soldOut ? "line-through" : "none",
-                  }}
-                >
-                  {o.name}
-                  {soldOut ? " · out" : ""}
-                </button>
-              );
-            })}
-          </div>
+          <OptionPicker
+            options={options}
+            selectedIndex={optIdx}
+            onSelect={setOptIdx}
+            isSoldOut={(o) => isOptionOutOfStock(product, o)}
+            label={`Options for ${product.name}`}
+            marginTop={10}
+          />
         )}
       </div>
 
@@ -378,6 +679,12 @@ function ProductDetailModal({
   brand: Brand;
 }) {
   const detail = buildProductDetail(product, defaultImage);
+  // Memoized for the same reason as the card's: a new array each render would
+  // tear down and re-arm the gallery's IntersectionObserver.
+  const slides = useMemo(
+    () => buildProductGallery(product, defaultImage),
+    [product, defaultImage],
+  );
   // Testimonials the owner connected to THIS product. A review may name several
   // products, so the same testimonial can appear under each of them.
   const productReviews = reviewsForProduct(brand.reviews ?? [], product.id);
@@ -444,7 +751,20 @@ function ProductDetailModal({
 
         <div className="sf-detail__grid">
           <div className="sf-detail__media">
-            {detail.image ? (
+            {hasGallery(slides) ? (
+              // Same two-way binding as the card: swipe a colorway into view and
+              // its pill activates below; tap a pill and its photo scrolls back.
+              // No onOpenDetail — the modal IS the detail view.
+              <ProductGallery
+                slides={slides}
+                selectedIndex={optIdx}
+                onSelect={setOptIdx}
+                alt={detail.name}
+                width={720}
+                srcSetWidths={[360, 720, 1080]}
+                sizes="(max-width: 640px) 90vw, 520px"
+              />
+            ) : detail.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageUrl(detail.image, { width: 720 })}
@@ -533,41 +853,14 @@ function ProductDetailModal({
             )}
 
             {detail.showOptions && !detail.priceOnRequest && (
-              <div
-                className="product-card__variations"
-                role="group"
-                aria-label={`Options for ${detail.name}`}
-                style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}
-              >
-                {detail.options.map((o, i) => {
-                  const active = i === optIdx;
-                  const soldOut = (detail.optionStock[i] ?? 0) <= 0;
-                  return (
-                    <button
-                      key={`${o.name}-${i}`}
-                      type="button"
-                      className="badge"
-                      aria-pressed={active}
-                      onClick={() => setOptIdx(i)}
-                      title={soldOut ? `${o.name} is out of stock` : undefined}
-                      style={{
-                        cursor: "pointer",
-                        border: active
-                          ? "1px solid var(--brand-main)"
-                          : "1px solid var(--brand-border)",
-                        background: active ? "var(--brand-main)" : "transparent",
-                        color: active ? "var(--brand-button-text)" : "inherit",
-                        fontWeight: active ? 600 : 500,
-                        opacity: soldOut ? 0.5 : 1,
-                        textDecoration: soldOut ? "line-through" : "none",
-                      }}
-                    >
-                      {o.name}
-                      {soldOut ? " · out" : ""}
-                    </button>
-                  );
-                })}
-              </div>
+              <OptionPicker
+                options={detail.options}
+                selectedIndex={optIdx}
+                onSelect={setOptIdx}
+                isSoldOut={(_o, i) => (detail.optionStock[i] ?? 0) <= 0}
+                label={`Options for ${detail.name}`}
+                marginTop={4}
+              />
             )}
 
             {detail.specs.length > 0 && (

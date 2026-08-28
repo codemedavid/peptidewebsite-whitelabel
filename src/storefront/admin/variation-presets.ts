@@ -13,7 +13,70 @@
  *  back. `stock` left blank means "untracked → fall back to the base product
  *  stock" (see effectiveStock in lib/storefront/inventory.ts); a number tracks
  *  that option's own inventory. Mirrors the editor row in AdminAddProduct.tsx. */
-export type VariationDraft = { name: string; price: number | string; stock?: number | string };
+/** `image` is the option's own hosted photo (an ImageKit URL from
+ *  uploadProductImageAction). Present only once the seller uploads or pastes
+ *  one; the storefront card turns these into a swipe gallery. */
+export type VariationDraft = {
+  name: string;
+  price: number | string;
+  stock?: number | string;
+  image?: string;
+};
+
+/**
+ * Assign a batch of uploaded photos to variation rows, immutably.
+ *
+ * WHY: a seller with 81 colorways will not click through 81 separate file
+ * pickers — a per-row upload on its own is a feature nobody finishes using.
+ * This spreads one multi-select upload across the rows in a single step.
+ *
+ * Matching is by FILENAME first: "silk-barbie.jpg" finds the "Silk Barbie" row
+ * wherever it sits, so a seller can pick a whole folder in any order and each
+ * photo lands on its own colorway. Comparison ignores case, punctuation and the
+ * extension, because "Trans. Ocean" is realistically saved as "trans-ocean.png".
+ *
+ * Anything matching no row falls back to filling the first rows that still have
+ * no photo, in order — a sensible result for files named DSC_0001.jpg, and never
+ * one that silently overwrites a photo the seller already placed.
+ */
+export function assignVariationImages(
+  items: readonly VariationDraft[],
+  uploads: readonly { fileName: string; url: string }[],
+): VariationDraft[] {
+  const key = (s: string) =>
+    s
+      .replace(/\.[a-z0-9]+$/i, "") // drop the extension
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+
+  const next = items.map((it) => ({ ...it }));
+  const claimed = new Set<number>();
+  const leftovers: string[] = [];
+
+  for (const upload of uploads) {
+    const wanted = key(upload.fileName);
+    const at = next.findIndex(
+      (it, i) => !claimed.has(i) && it.name.trim() !== "" && key(it.name) === wanted,
+    );
+    if (at === -1) {
+      leftovers.push(upload.url);
+      continue;
+    }
+    next[at] = { ...next[at], image: upload.url };
+    claimed.add(at);
+  }
+
+  for (const url of leftovers) {
+    const at = next.findIndex(
+      (it, i) => !claimed.has(i) && it.name.trim() !== "" && !(it.image ?? "").trim(),
+    );
+    if (at === -1) break; // more photos than empty rows — drop the rest
+    next[at] = { ...next[at], image: url };
+    claimed.add(at);
+  }
+
+  return next;
+}
 
 export const VARIATION_PRESETS = ["Vials only", "Complete set"] as const;
 

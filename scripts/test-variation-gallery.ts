@@ -425,8 +425,13 @@ check("each variation row can upload its own photo", () => {
   );
   assert.match(
     admin,
-    /variationImage|onVariationImage|handleVariationImage/,
-    "no per-variation image handler exists",
+    /uploadVariationImage/,
+    "no per-variation upload handler exists",
+  );
+  assert.match(
+    admin,
+    /assignVariationImages/,
+    "no bulk assign path — 81 colorways one file picker at a time is unusable",
   );
 });
 
@@ -434,8 +439,8 @@ check("the save path forwards the variation photo", () => {
   const at = admin.indexOf("variations: variations");
   assert.ok(at > 0, "the save path no longer maps variations — update this guard");
   assert.match(
-    admin.slice(at, at + 700),
-    /image/,
+    admin.slice(at, at + 1200),
+    /\{ \.\.\.withStock, image \}/,
     "the editor collects a photo but never sends it to the server",
   );
 });

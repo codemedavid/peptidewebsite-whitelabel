@@ -35,7 +35,19 @@ export function hasDoseToken(name: string): boolean {
  *  each dose's group buy separately, and an option WITHOUT one sells at its own
  *  price rather than inheriting the base option's discount (see
  *  makeVariationEntry / gbPageOptions). Mirrors `Product.variations`. */
-export type Variation = { name: string; price: number; stock?: number; gbPrice?: number };
+/** `image` is likewise optional and per-variation: a hosted photo of THIS option.
+ *  It exists because a seller's variations are not always doses — mstomato sells
+ *  vial cases in 81 colorways ("Silk Barbie", "Trans. Ocean"), and a name-only
+ *  pill tells a customer nothing about what they are buying. Present only when
+ *  the seller uploaded one; the card's gallery is built from these (see
+ *  ./product-gallery) and a product with none renders exactly as it always has. */
+export type Variation = {
+  name: string;
+  price: number;
+  stock?: number;
+  gbPrice?: number;
+  image?: string;
+};
 
 /** An option offered on the product card. `variation` is absent on the product's
  *  own base price ("Standard") and present on every real variation — the cart
@@ -92,6 +104,82 @@ export function buildProductOptions(product: OptionSource): ProductOption[] {
  */
 export function shouldShowOptionPicker(product: OptionSource): boolean {
   return variationsOf(product).length > 0;
+}
+
+// ── Collapsing a long option list ───────────────────────────────────────────
+
+/**
+ * How many option pills a card renders before hiding the rest behind a reveal.
+ *
+ * Sized to the card, not to a data model: six pills is roughly two rows in the
+ * catalog grid at every breakpoint, which reads as "here are some options" while
+ * leaving the description, price and buy controls above the fold. Sellers with
+ * 2-4 variations (nearly all of them) never reach it and see no change at all.
+ */
+export const VARIATION_PREVIEW_COUNT = 6;
+
+/** One rendered pill: the option plus its index in the FULL option list. The
+ *  index is the whole point — the card calls setOptIdx(index) and reads
+ *  optionStock[index] with it, so a truncated list must not renumber. */
+export type VisibleOption = { option: ProductOption; index: number };
+
+export type OptionSplit = {
+  /** The pills to render right now, in seller order, each with its true index. */
+  visible: VisibleOption[];
+  /** How many options are NOT rendered — the number on the "+75 more" button. */
+  hiddenCount: number;
+  /** Is this list long enough to be worth collapsing at all? Drives whether the
+   *  reveal button exists; stays true while expanded so it can offer "show less". */
+  collapsible: boolean;
+};
+
+/**
+ * Split an option list into the pills to show now and a count of the rest.
+ *
+ * WHY (mstomato, 2026-08-28): the picker rendered every option unconditionally.
+ * A tenant selling vial cases in 81 colorways turned a single product card into
+ * a multi-screen wall of pills, burying the price and the Add to Cart button.
+ *
+ * Three rules, in order:
+ *
+ *   - A list at or under `previewCount` is returned WHOLE and reports
+ *     `collapsible: false`. This is the non-regression guarantee: the 2-4
+ *     variation products every other tenant sells render exactly as before, with
+ *     no reveal button appearing out of nowhere.
+ *   - `expanded` returns everything, but stays `collapsible` so the caller can
+ *     still offer "show less".
+ *   - Collapsed, the SELECTED option is always pulled into view even when it
+ *     lives in the hidden tail. Without this, picking "Verdance" (option 60) and
+ *     then collapsing would hide the customer's own choice while the price and
+ *     cart still refer to it.
+ *
+ * The pulled-in selection is appended rather than sorted into place, so it sits
+ * next to the reveal button and reads as "your pick", and it carries its real
+ * index so the cart adds the colorway the customer actually chose.
+ */
+export function splitOptionsForCard(
+  options: readonly ProductOption[],
+  opts: { expanded?: boolean; selectedIndex?: number; previewCount?: number } = {},
+): OptionSplit {
+  // Clamp rather than trust: a previewCount of 0 or NaN would render a picker
+  // with no pills and only a "+81 more" button, which looks broken.
+  const raw = Math.round(Number(opts.previewCount ?? VARIATION_PREVIEW_COUNT));
+  const previewCount = Number.isFinite(raw) ? Math.max(1, raw) : VARIATION_PREVIEW_COUNT;
+
+  const all: VisibleOption[] = options.map((option, index) => ({ option, index }));
+  const collapsible = all.length > previewCount;
+  if (!collapsible || opts.expanded) {
+    return { visible: all, hiddenCount: 0, collapsible };
+  }
+
+  const selectedIndex = opts.selectedIndex ?? -1;
+  // Only a selection genuinely in the TAIL needs pulling in — one already inside
+  // the preview would be rendered twice.
+  const pulled =
+    selectedIndex >= previewCount && selectedIndex < all.length ? [all[selectedIndex]] : [];
+  const visible = [...all.slice(0, previewCount), ...pulled];
+
+  return { visible, hiddenCount: all.length - visible.length, collapsible };
 }
 
 /** Label for one option pill, e.g. "Vials only · ₱2,500". Still used by the
