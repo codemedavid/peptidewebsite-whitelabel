@@ -65,6 +65,7 @@
     "test:variation-price-reveal": "tsx scripts/test-variation-price-reveal.ts",
     "test:variation-collapse": "tsx scripts/test-variation-collapse.ts",
     "test:variation-gallery": "tsx scripts/test-variation-gallery.ts",
+    "test:mstomato-categories": "tsx scripts/test-mstomato-categories.ts",
     "test:sale-price": "tsx scripts/test-sale-price.ts",
     "test:variant-inventory": "tsx scripts/test-variant-inventory.ts",
     "test:variation-gb-pricing": "tsx scripts/test-variation-gb-pricing.ts",
