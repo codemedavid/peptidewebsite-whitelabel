@@ -63,6 +63,8 @@
     "test:product-variations": "tsx scripts/test-product-variations.ts",
     "test:product-add-gates": "tsx scripts/test-product-add-gates.ts",
     "test:variation-price-reveal": "tsx scripts/test-variation-price-reveal.ts",
+    "test:variation-collapse": "tsx scripts/test-variation-collapse.ts",
+    "test:variation-gallery": "tsx scripts/test-variation-gallery.ts",
     "test:sale-price": "tsx scripts/test-sale-price.ts",
     "test:variant-inventory": "tsx scripts/test-variant-inventory.ts",
     "test:variation-gb-pricing": "tsx scripts/test-variation-gb-pricing.ts",
