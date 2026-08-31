@@ -340,6 +340,21 @@ export function AdminOrderDetail({
               </div>
             </section>
 
+            {/* The buyer's own request, verbatim. READ-ONLY on purpose: this is
+                the customer's record of what they asked for, and the editable
+                Shipping Note below is the owner's channel back to them. An
+                order without one renders nothing rather than an empty card. */}
+            {o.customerNote?.trim() && (
+              <section className="od-card od-note-card">
+                <h2 className="od-h2" style={{ marginBottom: 12 }}>
+                  <span className="od-h2-ico od-h2-ico--amber">📝</span>
+                  Customer Note
+                </h2>
+                <p className="od-note-body">{o.customerNote}</p>
+                <CopyButton value={o.customerNote} />
+              </section>
+            )}
+
             {/* Shipping & tracking */}
             <section className="od-card">
               <h2 className="od-h2" style={{ marginBottom: 18 }}>

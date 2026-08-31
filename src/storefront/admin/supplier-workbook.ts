@@ -128,6 +128,10 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     { header: "Order Status", width: 13 },
     { header: "Counted", width: 9 },
     { header: "Proof of Payment", width: 46 },
+    // The buyer's own request. Owner's copy ONLY — the supplier workbook above
+    // carries no PII, and a free-text note is exactly where an address or a
+    // phone number ends up.
+    { header: "Customer Note", width: 46 },
   ];
   orders.getRow(1).font = { bold: true };
   for (const l of prep.orderLines) {
@@ -147,8 +151,11 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
       l.orderStatus,
       l.counted ? "Yes" : "No",
       l.proofUrl ?? "",
+      l.customerNote,
     ]);
     row.getCell(2).numFmt = "yyyy-mm-dd";
+    // A packing instruction is only useful if it's readable in the cell.
+    row.getCell(15).alignment = { wrapText: true, vertical: "top" };
     // The proof stays a clickable link — the owner opens it, never re-downloads it.
     if (l.proofUrl) row.getCell(14).value = { text: l.proofUrl, hyperlink: l.proofUrl };
     // Cancelled lines are present for the audit trail but must never be mistaken

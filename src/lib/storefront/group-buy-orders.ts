@@ -65,6 +65,9 @@ export type LinkableOrder = {
   customer?: { name?: string; email?: string; phone?: string };
   shipping?: ReportShipping;
   items: ReportOrderItem[];
+  /** The buyer's checkout note. Reaches the owner's own customer workbook only
+   *  — never the supplier copy, which carries no PII (see supplier-workbook). */
+  customerNote?: string;
 };
 
 export type PaymentDisplayStatus = "Pending" | "Confirmed" | "Cancelled";
@@ -299,6 +302,8 @@ export type RoundOrderRow = {
   paymentStatus: PaymentDisplayStatus;
   orderStatus: string;
   proofUrl: string | null;
+  /** The buyer's checkout note, "" when they left it blank. Owner's copy only. */
+  customerNote: string;
   /** False for cancelled orders: listed for the audit trail, excluded from every total. */
   counted: boolean;
 };
@@ -339,6 +344,10 @@ export function buildRoundOrderRows(
         paymentStatus,
         orderStatus: o.status,
         proofUrl: o.paymentProof ?? null,
+        // Repeated on every line of a multi-product order: the workbook is one
+        // row per LINE, and an instruction that appeared on only the first row
+        // is one a packer reading the middle of a batch would never see.
+        customerNote: (o.customerNote ?? "").trim(),
         counted,
       });
     }

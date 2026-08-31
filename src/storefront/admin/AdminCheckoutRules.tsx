@@ -16,8 +16,10 @@ import type { Brand } from "../types";
 import { useStore } from "../store";
 import { saveCheckoutRulesAction } from "@/actions/storefront-admin";
 import {
+  CHECKOUT_RULE_CUSTOMER_NOTE_LABEL,
   CHECKOUT_RULE_DEFAULT_MESSAGES,
   CHECKOUT_RULE_MIN_QTY_MAX,
+  CUSTOMER_NOTE_LABEL_MAX,
   normalizeCheckoutRules,
   type CheckoutRulesConfig,
 } from "@/lib/storefront/checkout-rules";
@@ -204,6 +206,27 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
               }
             />
           </div>
+
+          <Toggle
+            label="Customer note box"
+            hint="Lets the buyer add a request at checkout — a delivery window, a gate code, packaging preferences. Always optional; it never blocks an order. You'll see it on the order and in your export."
+            checked={rules.customerNoteEnabled}
+            onChange={(v) => set({ customerNoteEnabled: v })}
+          />
+          {rules.customerNoteEnabled && (
+            <div className="admin-field" style={{ marginBottom: 18 }}>
+              <label className="admin-field__label">Note box label</label>
+              <input
+                className="admin-input"
+                value={rules.customerNoteLabel}
+                maxLength={CUSTOMER_NOTE_LABEL_MAX}
+                placeholder={CHECKOUT_RULE_CUSTOMER_NOTE_LABEL}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  set({ customerNoteLabel: e.target.value })
+                }
+              />
+            </div>
+          )}
 
           {(
             [

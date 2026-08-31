@@ -417,6 +417,14 @@ model StorefrontOrder {
   courier        String   @default("")
   trackingNumber String   @default("")
   shippingNote   String   @default("")
+  // The BUYER's own note, typed at checkout ("deliver after 5pm", "gate code
+  // 1234"). Flows the opposite way to shippingNote above: the owner writes that
+  // one and the customer reads it on the public Track page, whereas this one is
+  // the customer's request and the owner's to read. Kept as a separate column
+  // for exactly that reason — sharing one would let the owner overwrite what a
+  // buyer asked for, and would republish the buyer's words on a page reachable
+  // with only an order number. Never patched by the admin (see cleanPatch).
+  customerNote   String   @default("")
   placedAt       DateTime @default(now()) // the storefront-facing order date
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt

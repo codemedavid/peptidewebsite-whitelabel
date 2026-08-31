@@ -286,9 +286,12 @@ ok(
 const cells = Object.fromEntries(ORDER_COLUMNS.map((c, i) => [c, exportRow[i]]));
 eq("the customer's note is its own column", cells["Customer Note"], "Please deliver after 5pm");
 eq("the owner's shipping note stays a SEPARATE column", cells["Shipping Note"], "Shipped Monday");
+eq("a note that looks like a formula lands in Excel as inert text", csvCell("=1+1"), "'=1+1");
 ok(
-  "a note that looks like a formula lands in Excel as inert text",
-  csvCell('=HYPERLINK("http://evil","click")').startsWith("'="),
+  // Quotes in the note make csvCell wrap the whole cell, so the apostrophe
+  // guard sits INSIDE the wrapper rather than at position 0 — still inert.
+  "the formula guard survives a note that also needs CSV quoting",
+  csvCell('=HYPERLINK("http://evil","click")').startsWith("\"'="),
   csvCell('=HYPERLINK("http://evil","click")'),
 );
 

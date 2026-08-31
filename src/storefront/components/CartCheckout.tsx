@@ -18,7 +18,12 @@ import { classifyProofFile } from "@/lib/upload/image-file";
 import { settleUpload } from "@/lib/upload/settle";
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
-import { checkoutRuleViolations, normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
+import {
+  checkoutRuleViolations,
+  customerNoteLabel,
+  normalizeCheckoutRules,
+} from "@/lib/storefront/checkout-rules";
+import { CUSTOMER_NOTE_MAX } from "@/lib/orders/customer-note";
 import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
@@ -64,6 +69,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
+  // The buyer's own note. Never required, never a checkout blocker — an empty
+  // one simply stores "" and prints nothing anywhere downstream.
+  const [customerNote, setCustomerNote] = useState("");
   const [touched, setTouched] = useState(false);
   // Courier + shipping location the customer picks at checkout. The customer
   // chooses a courier first; only that courier's locations are then offered, and
@@ -437,7 +445,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // and tracking both read this. Empty when the store has no shipping set up.
       courier: selectedCourier?.name || "",
       trackingNumber: "",
+      // The OWNER's outbound note — theirs to write later from the admin, never
+      // seeded from the buyer. The buyer's own words go in customerNote below.
       shippingNote: "",
+      // Trimmed here only so a whitespace-only box doesn't render an empty note
+      // card on the confirmation screen; the server re-normalizes it regardless.
+      customerNote: customerNote.trim(),
       items: lines.map((l) => ({
         // The underlying catalog row id (a variation line carries a composite id),
         // so the server matches stock + checkout rules to the real product.
@@ -531,6 +544,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // The same wholesale scope the cart priced through, so the seller's copy
       // quotes the wholesale totals the customer actually owes.
       wholesaleScope,
+      // The note the SERVER stored, not the local box — same rule as the fee and
+      // the discount above: the chat message quotes the persisted order.
+      order.customerNote ?? "",
     );
 
     clearCart();
@@ -754,6 +770,29 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     </label>
                   )}
                 </div>
+              )}
+
+              {/* The buyer's note. Sits after the address and courier — it is
+                  usually ABOUT the delivery — and before payment, so nothing
+                  about it interrupts the money step. Optional, always. */}
+              {rules.customerNoteEnabled && (
+                <label className="sf-cart__field sf-cart__note-field">
+                  <span>
+                    {customerNoteLabel(rules)}{" "}
+                    <em className="sf-cart__note-opt">(optional)</em>
+                  </span>
+                  <textarea
+                    className="sf-cart__note-input"
+                    rows={3}
+                    maxLength={CUSTOMER_NOTE_MAX}
+                    placeholder="Anything we should know? e.g. deliver after 5pm, gate code, preferred packaging"
+                    value={customerNote}
+                    onChange={(e) => setCustomerNote(e.target.value)}
+                  />
+                  <span className="sf-cart__note-count" aria-hidden>
+                    {customerNote.length}/{CUSTOMER_NOTE_MAX}
+                  </span>
+                </label>
               )}
 
               <div className="sf-cart__promo">

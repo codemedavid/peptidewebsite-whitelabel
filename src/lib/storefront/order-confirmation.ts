@@ -46,6 +46,9 @@ export interface ConfirmationOrder {
   }[];
   adminFee?: { label: string; amount: number } | null;
   discount?: { code?: string; label: string; amount: number } | null;
+  /** The buyer's own note from checkout. Shown back to them here so a typo in a
+   *  delivery instruction is discoverable before the order is handed off. */
+  customerNote?: string;
 }
 
 /** The catalog rows the item table joins against, for purity. */
@@ -161,6 +164,7 @@ export function buildOrderConfirmation(
     },
     shipping: { address: address || DASH, courier: orDash(order.courier) },
     items,
+    note: (order.customerNote ?? "").trim(),
     totals: {
       subtotal,
       discount,
@@ -242,5 +246,8 @@ export function formatOrderMessage(
     `Phone: ${view.customer.phone}`,
     `Ship to: ${view.shipping.address}`,
     `Payment: ${view.paymentMethod}`,
+    // Mirrors buildOrderMessage's block so a pasted message and a prefilled one
+    // are indistinguishable to the seller.
+    ...(view.note ? ["", "Customer note:", view.note] : []),
   ].join("\n");
 }

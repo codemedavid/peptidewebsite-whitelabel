@@ -22,6 +22,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
+import { normalizeCustomerNote } from "@/lib/orders/customer-note";
 import {
   ACTIVE_ORDERS_WHERE,
   MAX_TRASH_IDS,
@@ -698,6 +699,10 @@ function normalizeOrderInput(input: unknown): Order {
     courier: str(o.courier, 120),
     trackingNumber: str(o.trackingNumber, 120),
     shippingNote: str(o.shippingNote, 500),
+    // The buyer's own note. Bounded by the SHARED helper rather than str() so
+    // there is one definition of what a stored note may be — this value comes
+    // straight off an anonymous checkout payload.
+    customerNote: normalizeCustomerNote(o.customerNote),
     items: normalizeItems(o.items),
     statusHistory: normalizeStatusHistory(o.statusHistory),
     adminFee: normalizeOrderFee(o.adminFee),
@@ -735,6 +740,7 @@ type DbOrderRow = {
   courier: string;
   trackingNumber: string;
   shippingNote: string;
+  customerNote: string;
   placedAt: Date;
   groupBuyId?: string | null;
   groupBuyName?: string | null;
@@ -759,6 +765,7 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     courier: row.courier,
     trackingNumber: row.trackingNumber,
     shippingNote: row.shippingNote,
+    customerNote: row.customerNote,
     groupBuyId: row.groupBuyId,
     groupBuyName: row.groupBuyName,
     paymentProof: row.paymentProofUrl,
@@ -798,6 +805,9 @@ function orderToDbCreate(tenantId: string, p: Order) {
     courier: p.courier,
     trackingNumber: p.trackingNumber,
     shippingNote: p.shippingNote,
+    // Written once, at placement. There is deliberately no path that updates it
+    // afterwards — cleanPatch does not accept it (see updateStorefrontOrderAction).
+    customerNote: p.customerNote ?? "",
     placedAt: new Date(p.date),
   };
 }

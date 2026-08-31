@@ -21,6 +21,10 @@ import { isResellerQty } from "@/storefront/checkout";
 export const CHECKOUT_RULE_MESSAGE_MAX = 300;
 export const CHECKOUT_RULE_NOTICE_MAX = 500;
 export const CHECKOUT_RULE_MIN_QTY_MAX = 10_000;
+export const CUSTOMER_NOTE_LABEL_MAX = 80;
+
+/** Built-in copy for the checkout note box when the owner hasn't renamed it. */
+export const CHECKOUT_RULE_CUSTOMER_NOTE_LABEL = "Order notes / special requests";
 
 /** The per-rule validation copy the owner can override. Blank → the default. */
 export type CheckoutRuleMessages = {
@@ -62,6 +66,12 @@ export type CheckoutRulesConfig = {
   checkoutNotice: string;
   /** Informational banner shown at the top of the cart. */
   cartWarning: string;
+  /** Show the buyer a free-text note box on the checkout details step, so they
+   *  can tell the owner about a delivery window, a gate code, a substitution.
+   *  Always optional — it never blocks checkout. */
+  customerNoteEnabled: boolean;
+  /** The owner's own wording for that box. Blank → CHECKOUT_RULE_CUSTOMER_NOTE_LABEL. */
+  customerNoteLabel: string;
 };
 
 /** Defaults for a tenant that has never opened the Smart Checkout panel.
@@ -80,6 +90,11 @@ export const CHECKOUT_RULES_DEFAULTS: CheckoutRulesConfig = {
   messages: { singleOrderType: "", mixedCart: "", minQuantity: "", bacWater: "" },
   checkoutNotice: "",
   cartWarning: "",
+  // ON: an optional note box costs a store nothing and answers the question
+  // every owner ends up asking in chat anyway. An owner who doesn't want it
+  // gets a switch rather than needing a code change.
+  customerNoteEnabled: true,
+  customerNoteLabel: "",
 };
 
 /** The built-in copy used when the owner hasn't customized a message.
@@ -125,7 +140,16 @@ export function normalizeCheckoutRules(input: unknown): CheckoutRulesConfig {
     },
     checkoutNotice: text(x.checkoutNotice, CHECKOUT_RULE_NOTICE_MAX),
     cartWarning: text(x.cartWarning, CHECKOUT_RULE_NOTICE_MAX),
+    customerNoteEnabled: bool(x.customerNoteEnabled, d.customerNoteEnabled),
+    customerNoteLabel: text(x.customerNoteLabel, CUSTOMER_NOTE_LABEL_MAX),
   };
+}
+
+/** The label for the checkout note box — the owner's wording, else the built-in.
+ *  `text()` has already trimmed, so a whitespace-only entry reads as unset
+ *  rather than rendering a blank label above the box. */
+export function customerNoteLabel(rules: CheckoutRulesConfig): string {
+  return rules.customerNoteLabel.trim() || CHECKOUT_RULE_CUSTOMER_NOTE_LABEL;
 }
 
 /** The message for a rule — the owner's custom copy, else the built-in. */

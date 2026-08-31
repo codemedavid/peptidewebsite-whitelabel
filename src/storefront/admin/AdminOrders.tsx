@@ -547,6 +547,19 @@ export function AdminOrders({
               <div className="admin-order-card__id">Order {o.orderNumber || `#${o.id.slice(0, 8)}`}</div>
               <OrderStatusPill status={o.status} />
               <PaymentStatusPill status={o.paymentStatus} />
+                </span>
+              )}
+              {/* A request the buyer typed is easy to ship straight past when
+                  the list shows no sign of it. The full text lives on the
+                  order detail — this is only the tell that there IS one. */}
+              {o.customerNote?.trim() && (
+                <span
+                  className="admin-order-card__note-flag"
+                  title={o.customerNote}
+                >
+                  📝 Note
+                </span>
+              )}
             </div>
             <div className="admin-order-card__row">
               <div>

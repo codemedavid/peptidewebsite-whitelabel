@@ -189,6 +189,11 @@ export type Order = {
   courier: string;
   trackingNumber: string;
   shippingNote: string;
+  /** The BUYER's note from checkout — a special request, a delivery window, a
+   *  gate code. Read-only to the owner: `shippingNote` above is their channel,
+   *  this one is the customer's record of what they asked for. "" when the
+   *  store's note box is off or the buyer left it blank. */
+  customerNote?: string;
   items: OrderItem[];
   /** Fulfillment journey, oldest event first. Optional on legacy/demo orders. */
   statusHistory?: OrderStatusEvent[];

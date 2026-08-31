@@ -408,6 +408,10 @@ export function buildOrderMessage(
   // stored order and the confirmation table all charge at wholesale — seller and
   // system disagreeing on what is owed.
   wholesale: WholesaleScope | null = null,
+  // The buyer's own note from checkout. Most owners on this platform work the
+  // order out of the chat thread, so a note that never reached this message
+  // would, for them, not exist.
+  customerNote = "",
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -465,6 +469,12 @@ export function buildOrderMessage(
     .filter(Boolean)
     .join(", ");
 
+  // Its own block, after the address — the note is usually ABOUT the delivery,
+  // and an empty heading in a chat message reads as a bug.
+  const noteLines = customerNote.trim()
+    ? ["", "Customer note:", customerNote.trim()]
+    : [];
+
   const paymentLines = payment
     ? [
         "",
@@ -489,6 +499,7 @@ export function buildOrderMessage(
     `Email: ${customer.email}`,
     `Phone: ${customer.phone}`,
     `Ship to: ${ship || "—"}`,
+    ...noteLines,
     ...paymentLines,
   ].join("\n");
 }
