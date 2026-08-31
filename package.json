@@ -48,6 +48,7 @@
     "test:currency-picker": "tsx scripts/test-currency-picker.ts",
     "test:pureluxxe": "tsx scripts/test-pureluxxe.ts",
     "test:order-trash": "tsx scripts/test-order-trash.ts",
+    "test:order-note": "tsx scripts/test-order-note.ts",
     "test:gb-content": "tsx scripts/test-gb-content.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
     "test:gb-cart-doses": "tsx scripts/test-gb-cart-doses.ts",
