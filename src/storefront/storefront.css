@@ -375,6 +375,27 @@
 }
 .sf-root .sf-cart__field input[aria-invalid="true"] { border-color: #d23; }
 
+/* Customer note box. Spans the full grid like the address rows above it — a
+   request is prose, not a half-width field — and the counter is anchored to the
+   corner so a long note never pushes it out of view. */
+.sf-root .sf-cart__note-field { grid-column: 1 / -1; position: relative; }
+.sf-root .sf-cart__note-opt { color: var(--brand-text-muted); font-weight: 500; font-size: 12px; }
+.sf-root .sf-cart__note-input {
+  padding: 9px 11px; border-radius: 8px;
+  border: var(--brand-border-width) solid var(--brand-border);
+  background: var(--brand-surface); color: var(--brand-text);
+  font: inherit;
+  /* 16px keeps iOS Safari from zooming the viewport on focus, exactly as the
+     sibling inputs above do. */
+  font-size: 16px;
+  resize: vertical; min-height: 76px;
+}
+.sf-root .sf-cart__note-count {
+  align-self: flex-end;
+  font-size: 11px; font-weight: 500;
+  color: var(--brand-text-muted);
+}
+
 /* Courier + shipping-location selectors in the checkout details step. */
 .sf-root .sf-cart__ship { display: flex; flex-direction: column; gap: 12px; }
 .sf-root .sf-cart__select {
@@ -4515,6 +4536,23 @@
   color: var(--brand-text);
   letter-spacing: -0.01em;
 }
+  white-space: nowrap;
+}
+
+/* The tell that a buyer left a request. Amber rather than the brand colour:
+   it is an instruction to act on, and it must not read as another status pill. */
+.sf-root .admin-order-card__note-flag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  background: color-mix(in srgb, #B45309 12%, transparent);
+  color: #B45309;
+  border: 1px solid color-mix(in srgb, #B45309 28%, transparent);
+  white-space: nowrap;
+  cursor: default;
+}
+
 .sf-root .admin-order-card__row {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
@@ -4597,6 +4635,8 @@
 .sf-root .od-page {
   --od-success: #1F8A5B;
   --od-success-bg: color-mix(in srgb, #22B07D 16%, transparent);
+  --od-warn: #B45309;
+  --od-warn-bg: color-mix(in srgb, #F59E0B 14%, transparent);
   --od-field-bg: color-mix(in srgb, var(--brand-text) 3%, var(--brand-surface));
   --od-radius: 16px;
   --od-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
@@ -4668,6 +4708,24 @@
   color: var(--brand-accent); font-size: 15px;
 }
 .sf-root .od-h2-ico--green { background: var(--od-success-bg); color: var(--od-success); }
+.sf-root .od-h2-ico--amber { background: var(--od-warn-bg); color: var(--od-warn); }
+
+/* The customer's own words, quoted. Left rule + tinted ground so it reads as
+   something received rather than something the owner typed — the editable
+   Shipping Note further down is deliberately styled as a plain form field. */
+.sf-root .od-note-card { border-left: 3px solid var(--od-warn); }
+.sf-root .od-note-body {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--od-warn-bg);
+  color: var(--brand-text);
+  font-size: 15px; line-height: 1.6;
+  /* A buyer's list is a list — keep their line breaks, and never let a pasted
+     tracking code or URL blow out the card. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* ── copy button (matches the design's compact pill) ── */
 .sf-root .od-copy {
