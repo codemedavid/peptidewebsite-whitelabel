@@ -12,11 +12,14 @@
  * sale, which lifts them off the stock gate entirely (see
  * lib/storefront/made-to-order and `npm run test:made-to-order`).
  *
- * NOT marked:
- *   • the four "Sample …" rows — `status=draft` seed leftovers the owner never
- *     published. Marking them would quietly make four placeholder listings
- *     sellable the moment anyone flips them active.
- *   • any product that already carries the flag (re-running writes nothing).
+ * Marks EVERY product by default, drafts included: the owner confirmed the whole
+ * catalog is made to order, so a draft that is later published must come out of
+ * the gate the same way — otherwise the one row nobody remembered to tick shows
+ * up "Sold out" on a shelf where nothing else can. Pass --active-only for the
+ * conservative pass that leaves drafts alone.
+ *
+ * A product that already carries the flag is left untouched (re-running writes
+ * nothing).
  *
  * The feature grant is separate and must be in place, or the flag is stripped
  * fail-closed at render and at placement:
@@ -30,6 +33,7 @@
  *
  *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --dry
  *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts
+ *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --active-only
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -41,6 +45,8 @@ const prisma = new PrismaClient({
 
 const TENANT_SLUG = "mstomato";
 const DRY = process.argv.includes("--dry");
+/** Leave unpublished rows alone. Off by default — see the header. */
+const ACTIVE_ONLY = process.argv.includes("--active-only");
 
 /** Retry a thunk a few times to ride out transient connection resets. */
 async function withRetry<T>(label: string, fn: () => Promise<T>, tries = 4): Promise<T> {
@@ -79,7 +85,7 @@ async function main() {
   for (const p of products) {
     const meta = (p.metadata ?? {}) as Record<string, unknown>;
 
-    if (p.status !== "active") {
+    if (ACTIVE_ONLY && p.status !== "active") {
       console.log(`  ·  skip (${p.status})      ${p.name}`);
       skipped++;
       continue;
@@ -90,7 +96,8 @@ async function main() {
       continue;
     }
 
-    console.log(`  ✓  mark made-to-order     ${p.name}  (stock was ${p.stock})`);
+    const tag = p.status === "active" ? "" : ` [${p.status}]`;
+    console.log(`  ✓  mark made-to-order     ${p.name}${tag}  (stock was ${p.stock})`);
     marked++;
     if (DRY) continue;
 
@@ -103,7 +110,8 @@ async function main() {
   }
 
   console.log(
-    `\n${marked} marked, ${already} already set, ${skipped} skipped (not active).` +
+    `\n${marked} marked, ${already} already set` +
+      (ACTIVE_ONLY ? `, ${skipped} skipped (not active).` : ".") +
       (DRY ? "  [DRY RUN — nothing written]" : ""),
   );
   if (!DRY && marked > 0) {

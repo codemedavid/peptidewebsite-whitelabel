@@ -112,8 +112,8 @@ bypasses it":
 
 ```bash
 npm run db:sync-features                       # the Feature row does not exist yet
-npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --dry   # 17 marked, 4 drafts skipped
-npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts
+npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --dry   # marks ALL 21
+npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts        # --active-only to skip drafts
 npx tsx --env-file=.env scripts/grant-feature.ts mstomato storefront.made_to_order on
 ```
 
@@ -125,6 +125,9 @@ keeps serving the old catalog until it turns over.
 
 - No coverage tool is configured in this repo; coverage is expressed as the
   behavioural table above, matching every neighbouring suite's convention.
+- New products are NOT made-to-order by default; the owner ticks the box. A
+  store-wide default was considered and deliberately left out (YAGNI) — revisit
+  if mstomato adds products often enough for the tick to be a nuisance.
 - `AdminInventory` still edits product-level stock only. A made-to-order row
   keeps its (unused) stepper rather than hiding it — display polish, no
   behavioural effect, since nothing reads the column for these products.
