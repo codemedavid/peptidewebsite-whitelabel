@@ -18,6 +18,7 @@ import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
 import { resolveWholesale } from "@/lib/storefront/wholesale";
+import { resolveBaseSaleView } from "@/lib/storefront/sale";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { verifyResellerCodeAction } from "@/actions/storefront-admin";
 
@@ -91,6 +92,11 @@ function MerchantCard({
   // reseller page is a second SURFACE onto one product config and one pricing
   // engine, never a second wholesale system with rules of its own.
   const wholesale = resolveWholesale(product);
+  // The Retail tier must quote the price the cart actually charges. This card
+  // has no option picker, so it reads the base-price sale view — resolveWholesale
+  // already prices its own tier off effectiveBasePrice, and a Retail figure that
+  // ignored a running markdown made the wholesale saving shown against it wrong.
+  const retail = resolveBaseSaleView(product);
   const hasReseller = wholesale != null;
   // Legacy products carry the two priced tiers (vials only / complete set); the
   // current config carries neither.
@@ -123,8 +129,16 @@ function MerchantCard({
 
         <div className="merchant-card__tiers">
           <div className="merchant-card__tier merchant-card__tier--retail">
-            <span className="merchant-card__tier-label">Retail</span>
-            <span className="merchant-card__tier-val">{money(product.price)}</span>
+            <span className="merchant-card__tier-label">
+              Retail
+              {/* The tier VALUE is already struck through on this card — retail
+                  is the figure wholesale beats — so a running markdown is named
+                  in the label rather than drawn as a second struck price. */}
+              {retail.badgeLabel && (
+                <span className="merchant-card__tag is-applied">{retail.badgeLabel}</span>
+              )}
+            </span>
+            <span className="merchant-card__tier-val">{money(retail.price)}</span>
           </div>
           {/* The current config is ONE minimum at ONE price, so it renders as a
               single row. The two legacy tiers below are shown only for products

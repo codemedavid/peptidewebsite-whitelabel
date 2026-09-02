@@ -499,6 +499,19 @@
   color: color-mix(in oklab, var(--brand-button-text) 70%, transparent);
 }
 
+/* The list price a marked-down product was reduced FROM, struck beside the price
+   the cart will charge. Sized in `em` so it tracks .ed-edit__price, and dimmer
+   than it for the same reason the catalog card's compare-at is: the loud number
+   has to stay the one the shopper actually pays. */
+.sf-root[data-sf-home="editorial"] .ed-edit__compare {
+  margin-left: 7px;
+  font-size: 0.86em;
+  color: color-mix(in oklab, var(--brand-button-text) 42%, transparent);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1.5px;
+  white-space: nowrap;
+}
+
 /* ── The notices strip ────────────────────────────────────────────────────── */
 
 .sf-root[data-sf-home="editorial"] .ed-notes {

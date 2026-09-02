@@ -396,10 +396,13 @@ check("the Retail tier prices from the sale helper, not the raw list price", () 
   );
 });
 
-check("the Retail tier renders a struck-through compare-at price", () => {
+check("a running markdown is named on the card, not applied silently", () => {
+  // The retail tier VALUE is already struck through on this card (retail is the
+  // figure wholesale beats), so the markdown is announced in the label rather
+  // than drawn as a second struck price.
   assert.ok(
-    merchantPage.includes("merchant-card__compare"),
-    "no compare-at element on the reseller card — the retail figure silently changes with no sign a markdown is running",
+    merchantPage.includes("retail.badgeLabel"),
+    "the retail figure changes with no sign a markdown is running — the reseller cannot tell a temporary sale from the standing retail price",
   );
 });
 

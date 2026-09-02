@@ -120,17 +120,8 @@ export function resolveSaleView(p: SaleSource, selectedIndex: number): SaleView 
 
   if (options.length === 0) {
     // No picker: the base price is the only price, so the sale applies and shows
-    // straight away.
-    const discount = activeDiscount(p);
-    if (discount === null) return NO_SALE(p.price);
-    const percent = percentOff(p.price, discount);
-    return {
-      price: discount,
-      compareAt: p.price,
-      percentOff: percent,
-      onSale: true,
-      badgeLabel: saleBadgeLabel(percent),
-    };
+    // straight away — exactly what a picker-less surface asks for.
+    return resolveBaseSaleView(p);
   }
 
   const selected =
@@ -147,6 +138,37 @@ export function resolveSaleView(p: SaleSource, selectedIndex: number): SaleView 
   return {
     price: discount,
     compareAt: selected.price,
+    percentOff: percent,
+    onSale: true,
+    badgeLabel: saleBadgeLabel(percent),
+  };
+}
+
+/**
+ * The sale treatment for a browsing surface with NO option picker to consult —
+ * the editorial home's featured band, the reseller price list. These show one
+ * figure per product and cannot ask the customer which size they mean, so they
+ * cannot call `resolveSaleView` (which answers `null` until something is picked)
+ * and were left printing the raw list price. That is the reported bug surviving
+ * on the surfaces the first fix missed.
+ *
+ * A product with variations keeps its base figure and advertises NO saving. The
+ * cart clones a chosen variation without the base product's markdown
+ * (`makeVariationEntry`), and when the seller re-entered the base price as a
+ * named variation there is no separately purchasable "Standard" to apply it to —
+ * so promising a markdown here would promise a price the cart then refuses to
+ * charge. That is this module's own bug pointed the other way, and the list
+ * price is the only safe direction to err.
+ */
+export function resolveBaseSaleView(p: SaleSource): SaleView {
+  if (buildProductOptions(p).length > 0) return NO_SALE(p.price);
+
+  const discount = activeDiscount(p);
+  if (discount === null) return NO_SALE(p.price);
+  const percent = percentOff(p.price, discount);
+  return {
+    price: discount,
+    compareAt: p.price,
     percentOff: percent,
     onSale: true,
     badgeLabel: saleBadgeLabel(percent),

@@ -13,6 +13,7 @@
 import type { Brand, Product } from "../types";
 import { EDIT_COLUMNS_DEFAULT, type EditColumns } from "@/lib/storefront/editorial-home";
 import { imageUrl } from "@/lib/media/image-url";
+import { resolveBaseSaleView } from "@/lib/storefront/sale";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 
 export function EditorialEdit({
@@ -55,6 +56,11 @@ export function EditorialEdit({
         >
           {products.map((product) => {
             const image = resolveProductImage(product.image, brand.defaultProductImage);
+            // The band has no option picker, so it asks for the base-price view:
+            // a marked-down product is quoted at the price the cart will charge,
+            // with the list price struck beside it, instead of advertising a
+            // saving the shopper only discovers at checkout.
+            const sale = resolveBaseSaleView(product);
             return (
               <li key={product.id}>
                 <button
@@ -84,7 +90,14 @@ export function EditorialEdit({
                   <span className="ed-edit__name font-display">{product.name}</span>
                   <span className="ed-edit__price">
                     {product.currency}
-                    {product.price?.toLocaleString()}
+                    {sale.price?.toLocaleString()}
+                    {sale.compareAt !== null && (
+                      <s className="ed-edit__compare">
+                        <span className="sf-sr-only">Was </span>
+                        {product.currency}
+                        {sale.compareAt.toLocaleString()}
+                      </s>
+                    )}
                   </span>
                 </button>
               </li>
