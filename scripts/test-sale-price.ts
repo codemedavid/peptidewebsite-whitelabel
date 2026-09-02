@@ -18,8 +18,13 @@
  *      browsing surface asks for its price, its struck compare-at and its badge.
  *   2. Parity with src/storefront/checkout.ts → unitPrice(), the price actually
  *      charged. A display rule that can disagree with checkout IS the bug.
- *   3. Structural guards on the surfaces (Catalog.tsx card + modal,
- *      two-ways-home.ts shelf) so they actually consume the helper.
+ *   3. resolveBaseSaleView(product) — the same rule for a browsing surface that
+ *      has NO option picker to consult: the editorial featured band and the
+ *      reseller price list. Both shipped printing the raw list price, which is
+ *      the reported bug surviving on the two surfaces the original fix missed.
+ *   4. Structural guards on the surfaces (Catalog.tsx card + modal,
+ *      two-ways-home.ts shelf, EditorialEdit.tsx band, MerchantPage.tsx retail
+ *      tier) so they actually consume the helper.
  *
  *   npm run test:sale-price
  */
@@ -30,6 +35,7 @@ import { join } from "node:path";
 
 import {
   isDiscountActive,
+  resolveBaseSaleView,
   resolveSaleView,
   saleBadgeLabel,
 } from "../src/lib/storefront/sale";
@@ -289,6 +295,112 @@ check("the shelf advertises the sale price and the price it was marked down from
 check("a product with no sale exposes no compare-at on the shelf", () => {
   const view = buildTwoWaysHomeView([noSale], null, "₱");
   assert.equal(view.onHand.lines[0].compareAtLabel, "");
+});
+
+// ───────────────── resolveBaseSaleView — surfaces with no picker ────────────
+// The editorial featured band and the reseller price list are browsing surfaces
+// with no option picker: they show one figure per product and cannot ask the
+// customer which size they mean. Both printed `product.price` raw, so a marked
+// down product advertised the list price and the saving reappeared only in the
+// cart — the reported bug, surviving on the two surfaces the first fix missed.
+console.log("resolveBaseSaleView — surfaces with no option picker");
+
+check("a single-price product on sale shows the SALE price, with no pick to make", () => {
+  const view = resolveBaseSaleView(onSale);
+  assert.equal(view.price, 1500);
+  assert.equal(view.onSale, true);
+});
+
+check("it carries the list price it was marked down from, for the struck figure", () => {
+  const view = resolveBaseSaleView(onSale);
+  assert.equal(view.compareAt, 2000);
+  assert.equal(view.badgeLabel, "25% off");
+});
+
+check("a product with no sale shows its list price and no compare-at", () => {
+  const view = resolveBaseSaleView(noSale);
+  assert.equal(view.price, 2000);
+  assert.equal(view.compareAt, null);
+  assert.equal(view.onSale, false);
+});
+
+check("an enabled-but-unpriced discount shows the LIST price, not free", () => {
+  const view = resolveBaseSaleView(
+    product({ id: "x", price: 2000, discountEnabled: true, discountPrice: 0 }),
+  );
+  assert.equal(view.price, 2000);
+  assert.equal(view.onSale, false);
+});
+
+check("a product WITH variations shows the base price and advertises NO saving", () => {
+  // A picker-less surface cannot know which option the customer will buy, and a
+  // variation clone drops the base product's markdown (makeVariationEntry). If
+  // the base price is not separately purchasable — the seller re-entered it as a
+  // named variation, so buildProductOptions offers no "Standard" — advertising
+  // the markdown here promises a price the cart then refuses to charge, which is
+  // the very bug this module exists to close, pointed the other way.
+  const view = resolveBaseSaleView(variationSale);
+  assert.equal(view.price, 2000);
+  assert.equal(view.compareAt, null);
+  assert.equal(view.onSale, false);
+});
+
+check("a picker-less surface shows the price the cart charges", () => {
+  const shown = resolveBaseSaleView(onSale).price;
+  const charged = unitPrice(onSale, 1);
+  assert.equal(
+    shown,
+    charged,
+    `the band shows ${shown} but checkout charges ${charged} — the shopper only learns the real price in the cart`,
+  );
+});
+
+// ─────────────── EditorialEdit.tsx — the editorial featured band ────────────
+console.log("EditorialEdit.tsx — the editorial featured band");
+
+const editorialEdit = readFileSync(
+  join(process.cwd(), "src/storefront/components/EditorialEdit.tsx"),
+  "utf8",
+);
+
+check("the featured band prices from the sale helper, not the raw list price", () => {
+  assert.ok(
+    editorialEdit.includes("resolveBaseSaleView("),
+    "the editorial featured band still prints product.price — a marked-down product advertises the pre-sale price on the home page",
+  );
+});
+
+check("the band renders a struck-through compare-at price", () => {
+  assert.ok(
+    editorialEdit.includes("ed-edit__compare"),
+    "no compare-at element in the featured band — the shopper cannot see what the price was marked down FROM",
+  );
+});
+
+// ──────────────── MerchantPage.tsx — the reseller price list ────────────────
+console.log("MerchantPage.tsx — the reseller price list");
+
+const merchantPage = readFileSync(
+  join(process.cwd(), "src/storefront/pages/MerchantPage.tsx"),
+  "utf8",
+);
+
+check("the Retail tier prices from the sale helper, not the raw list price", () => {
+  assert.ok(
+    merchantPage.includes("resolveBaseSaleView("),
+    "the wholesale page's Retail tier still prints product.price — the reseller is quoted a retail figure the cart will not charge, so the wholesale saving shown against it is wrong",
+  );
+  assert.ok(
+    !/money\(product\.price\)/.test(merchantPage),
+    "the Retail tier still reads product.price directly — a third copy of the sale rule is how this broke the first time",
+  );
+});
+
+check("the Retail tier renders a struck-through compare-at price", () => {
+  assert.ok(
+    merchantPage.includes("merchant-card__compare"),
+    "no compare-at element on the reseller card — the retail figure silently changes with no sign a markdown is running",
+  );
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────
