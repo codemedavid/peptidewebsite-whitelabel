@@ -162,7 +162,8 @@
     "test:mcp-features": "tsx scripts/test-mcp-features.ts",
     "test:mcp-variations": "tsx scripts/test-mcp-variations.ts",
     "test:qrph-fee": "tsx scripts/test-qrph-fee.ts",
-    "test:courier-booking": "tsx scripts/test-courier-booking.ts"
+    "test:courier-booking": "tsx scripts/test-courier-booking.ts",
+    "test:reseller-placement": "tsx scripts/test-reseller-placement.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
