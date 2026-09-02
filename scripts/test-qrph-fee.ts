@@ -98,6 +98,7 @@ function makeOrder(over: Partial<Order> = {}): Order {
     trackingNumber: "",
     shippingNote: "",
     items: [{ name: "Semaglutide", qty: 1, price: 1000 }],
+    paymentProof: null,
     ...over,
   };
 }

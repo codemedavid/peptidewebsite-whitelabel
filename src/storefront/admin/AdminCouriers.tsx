@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Brand, Courier } from "../types";
 import { useStore } from "../store";
+import { safeExternalUrl } from "@/lib/storefront/courier-booking";
 
 // ─── CourierModal ─────────────────────────────────────────────────────────────
 
@@ -10,15 +11,20 @@ type CourierEditing = Courier & { _new?: boolean };
 
 function CourierModal({
   courier,
+  bookingEntitled,
   onCancel,
   onSave,
 }: {
   courier: CourierEditing;
+  /** Whether this tenant may show a booking form at checkout. Off hides the
+   *  field but never clears a URL already saved. */
+  bookingEntitled: boolean;
   onCancel: () => void;
   onSave: (c: CourierEditing) => void;
 }) {
   const [name, setName] = useState<string>(courier.name || "");
   const [trackingUrl, setTrackingUrl] = useState<string>(courier.trackingUrl || "");
+  const [bookingUrl, setBookingUrl] = useState<string>(courier.bookingUrl || "");
   const [active, setActive] = useState<boolean>(courier.active !== false);
   const [noLocation, setNoLocation] = useState<boolean>(courier.noLocation === true);
 
@@ -79,6 +85,33 @@ function CourierModal({
           </div>
         </div>
 
+        {bookingEntitled && (
+          <div className="admin-modal__row">
+            <label className="admin-field__label">
+              Booking / Delivery Form Link (Optional)
+            </label>
+            <input
+              className="admin-input"
+              value={bookingUrl}
+              placeholder="e.g., https://.../lalamove-form"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setBookingUrl(e.target.value)
+              }
+            />
+            <div className="admin-field__hint">
+              Shown to the customer at checkout when they pick this courier, so
+              they can fill in the delivery form before placing the order. Must
+              start with http:// or https://. Leave blank for no form.
+            </div>
+            {bookingUrl.trim() && !safeExternalUrl(bookingUrl) && (
+              <div className="admin-field__hint" style={{ color: "#b45309", fontWeight: 600 }}>
+                That isn&apos;t a web link — it won&apos;t be saved. Start it with
+                https://
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="admin-modal__row">
           <label className="admin-check">
             <input
@@ -122,6 +155,7 @@ function CourierModal({
                 ...courier,
                 name: name.trim(),
                 trackingUrl: trackingUrl.trim(),
+                bookingUrl: safeExternalUrl(bookingUrl),
                 active,
                 noLocation,
               })
@@ -146,8 +180,8 @@ export function AdminCouriers({
 }) {
   const { couriers, setCouriers, shippingLocations } = useStore();
   const [editing, setEditing] = useState<CourierEditing | null>(null);
-
-  void brand;
+  // Default-OFF feature: undefined reads as NOT entitled.
+  const bookingEntitled = brand.courierBookingEntitled === true;
 
   // A courier is only offered at checkout when it's active AND either it's a
   // COD/no-location courier OR it has at least one active shipping location (the
@@ -257,6 +291,15 @@ export function AdminCouriers({
                 {c.trackingUrl && (
                   <div className="admin-ship-row__code" style={{ textTransform: "none" }}>
                     {c.trackingUrl}
+                  </div>
+                )}
+                {bookingEntitled && c.bookingUrl && (
+                  <div
+                    className="admin-ship-row__code"
+                    style={{ textTransform: "none", color: "var(--brand-accent)" }}
+                    title="Shown at checkout when this courier is picked"
+                  >
+                    Booking form · {c.bookingUrl}
                   </div>
                 )}
                 {c.noLocation && (
@@ -394,6 +437,7 @@ export function AdminCouriers({
         {editing && (
           <CourierModal
             courier={editing}
+            bookingEntitled={bookingEntitled}
             onCancel={() => setEditing(null)}
             onSave={save}
           />

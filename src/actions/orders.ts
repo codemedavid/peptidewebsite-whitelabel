@@ -109,6 +109,12 @@ import {
   effectiveShippingFee,
   orderHasFreeShippingProduct,
 } from "@/storefront/checkout";
+import {
+  activePaymentFee,
+  normalizeOrderPaymentFee,
+  paymentFeeBase,
+  paymentFeeOvercharges,
+} from "@/lib/storefront/payment-fee";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import { after } from "next/server";
@@ -374,6 +380,41 @@ function stampShipping(config: Record<string, unknown>, p: Order, catalog: Produ
   // fall back to the client-sent name only when the courier was since removed.
   const courier = couriers.find((c) => String((c ?? {}).id ?? "") === String(loc.courierId ?? ""));
   if (courier) p.courier = str(courier.name, 120);
+}
+
+/**
+ * Re-derive the SERVER-AUTHORITATIVE QR PH processing fee and stamp it on the
+ * order. Mirrors the admin-fee and shipping stamps: whatever the client sent is
+ * discarded and the fee is recomputed from the tenant's OWN config — the method
+ * the owner tagged as QR PH — so a tampered payload cannot skip the charge.
+ *
+ * Must run AFTER repriceItems, the admin-fee stamp, stampShipping and
+ * stampDiscount, because the percentage is charged on what those produce.
+ *
+ * Returns a customer-facing error only in the one case we refuse to ship
+ * silently: the checkout displayed a SMALLER fee than we would now charge, so
+ * placing the order would bill more than the customer agreed to. Charging the
+ * same or less always proceeds — a price that moved mid-checkout is not a
+ * reason to reject someone's order.
+ */
+function stampPaymentFee(
+  config: Record<string, unknown>,
+  p: Order,
+  entitled: boolean,
+  shown: unknown,
+): string | null {
+  const base = paymentFeeBase({
+    subtotal: itemsSubtotal(p.items),
+    discount: p.discount?.amount ?? 0,
+    shipping: p.shipping?.fee ?? 0,
+    adminFee: p.adminFee?.amount ?? 0,
+  });
+  const fee = activePaymentFee(config.paymentMethods, p.paymentMethod, base, entitled);
+  if (paymentFeeOvercharges(shown, fee?.amount ?? 0)) {
+    return "The store's fees changed while you were checking out — please review your updated total and try again.";
+  }
+  p.paymentFee = fee ?? undefined;
+  return null;
 }
 
 /**
@@ -706,6 +747,7 @@ function normalizeOrderInput(input: unknown): Order {
     items: normalizeItems(o.items),
     statusHistory: normalizeStatusHistory(o.statusHistory),
     adminFee: normalizeOrderFee(o.adminFee),
+    paymentFee: normalizeOrderPaymentFee(o.paymentFee),
     discount: normalizeOrderDiscount(o.discount),
     // Carried for stored orders (admin list, demo file). Checkout never trusts
     // these — placeStorefrontOrderAction re-stamps them server-side.
@@ -736,6 +778,7 @@ type DbOrderRow = {
   items: unknown;
   statusHistory: unknown;
   adminFee: unknown;
+  paymentFee: unknown;
   discount: unknown;
   courier: string;
   trackingNumber: string;
@@ -761,6 +804,7 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
     items: row.items,
     statusHistory: row.statusHistory,
     adminFee: row.adminFee,
+    paymentFee: row.paymentFee,
     discount: row.discount,
     courier: row.courier,
     trackingNumber: row.trackingNumber,
@@ -798,6 +842,8 @@ function orderToDbCreate(tenantId: string, p: Order) {
     statusHistory: (p.statusHistory ?? []) as unknown as Prisma.InputJsonValue,
     // NULL (column default) when no fee was charged — omit rather than store {}.
     ...(p.adminFee ? { adminFee: p.adminFee as unknown as Prisma.InputJsonValue } : {}),
+    // Same rule for the QR PH processing fee: NULL when none was charged.
+    ...(p.paymentFee ? { paymentFee: p.paymentFee as unknown as Prisma.InputJsonValue } : {}),
     // NULL when no code was applied — omit rather than store {}.
     ...(p.discount ? { discount: p.discount as unknown as Prisma.InputJsonValue } : {}),
     groupBuyId: p.groupBuyId ?? null,
@@ -912,6 +958,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   // the admin-fee validation rule can tell "showed no fee" from "legacy client
   // that sent nothing".
   const clientFee = ((input ?? {}) as Record<string, unknown>).adminFee;
+  // Same, for the QR PH processing fee: kept RAW so "displayed no fee" is
+  // distinguishable from "legacy client that sent nothing at all".
+  const clientPaymentFee = ((input ?? {}) as Record<string, unknown>).paymentFee;
 
   // Seed the fulfillment journey with the opening event so the Track page can
   // show "Order received" with a real timestamp from the moment of checkout.
@@ -1016,6 +1065,16 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the one they saw.
     const demoDiscountError = stampDiscount(config, p);
     if (demoDiscountError) return { error: demoDiscountError };
+    // QR PH processing fee — re-derived from the tenant's tagged payment method,
+    // after the fees/discount above because it is charged on their sum. Same
+    // entitlement gate the storefront used to decide whether to SHOW the line.
+    const demoPaymentFeeError = stampPaymentFee(
+      config,
+      p,
+      await hasFeature(tenantId, FEATURES.STORE_QRPH_FEE),
+      clientPaymentFee,
+    );
+    if (demoPaymentFeeError) return { error: demoPaymentFeeError };
     // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
     const demoGbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, demoProducts);
     if (demoGbOnHand) return { error: demoGbOnHand };
@@ -1105,6 +1164,17 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the one they saw.
     const discountError = stampDiscount(config, p);
     if (discountError) return { error: discountError };
+    // QR PH processing fee — re-derived from the tenant's tagged payment method,
+    // after the fees/discount above because it is charged on their sum. Same
+    // entitlement gate the storefront used to decide whether to SHOW the line,
+    // re-checked here so a stale or hand-rolled request can't skip the charge.
+    const paymentFeeError = stampPaymentFee(
+      config,
+      p,
+      await hasFeature(tenantId, FEATURES.STORE_QRPH_FEE),
+      clientPaymentFee,
+    );
+    if (paymentFeeError) return { error: paymentFeeError };
 
     // Inventory guard: reject the order outright when any line asks for more
     // than the product has in stock, so the admin never has to confirm an
@@ -1249,6 +1319,7 @@ export type TrackedOrder = {
   items: OrderItem[];
   shippingFee: number;
   adminFee: { label: string; amount: number } | null;
+  paymentFee: { label: string; amount: number } | null;
   discount: { code: string; label: string; amount: number } | null;
   statusHistory: OrderStatusEvent[];
 };
@@ -1279,6 +1350,7 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
     items: o.items,
     shippingFee: o.shipping?.fee ?? 0,
     adminFee: o.adminFee ?? null,
+    paymentFee: o.paymentFee ?? null,
     discount: o.discount ?? null,
     statusHistory: o.statusHistory ?? [],
   });

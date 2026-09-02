@@ -4,17 +4,23 @@ import { useRef, useState } from "react";
 import type { Brand, PaymentMethod } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
+import { QRPH_FEE_PERCENT } from "@/lib/storefront/payment-fee";
 
 // Editing state includes an optional _new flag not present on PaymentMethod.
 type EditingMethod = PaymentMethod & { _new?: boolean };
 
 function AdminPaymentMethodForm({
   method,
+  qrphEntitled,
   onCancel,
   onSave,
 }: {
   brand: Brand;
   method: EditingMethod;
+  /** Whether this tenant may charge the QR PH processing fee. Off hides the tag
+   *  field but never clears a tag already saved — the operator can grant the
+   *  feature back and the owner's choice is still there. */
+  qrphEntitled: boolean;
   onCancel: () => void;
   onSave: (m: EditingMethod) => void;
 }) {
@@ -22,6 +28,7 @@ function AdminPaymentMethodForm({
   const [number, setNumber]   = useState<string>(method.number || "");
   const [account, setAccount] = useState<string>(method.account || "");
   const [qrImage, setQrImage] = useState<string>(method.qrImage || "");
+  const [qrph, setQrph]       = useState<boolean>(method.qrph === true);
   const [drag, setDrag]       = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -65,7 +72,7 @@ function AdminPaymentMethodForm({
         <div className="admin-form__bar-spacer"></div>
         <button className="admin-form__cancel" onClick={onCancel}>Cancel</button>
         <button className="admin-form__save"
-          onClick={() => onSave({ ...method, name, number, account, qrImage })}
+          onClick={() => onSave({ ...method, name, number, account, qrImage, qrph })}
           disabled={!canSave}>
           Save
         </button>
@@ -99,6 +106,28 @@ function AdminPaymentMethodForm({
               placeholder="ACCOUNT NAME"
               onChange={(e) => setAccount(e.target.value)} />
           </div>
+
+          {qrphEntitled && (
+            <div className="admin-field" style={{ marginBottom: 22 }}>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={qrph}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setQrph(e.target.checked)
+                  }
+                />
+                <span>QR PH account</span>
+              </label>
+              <div className="admin-field__hint">
+                Tag this if it's your QR PH account. QR PH charges you a
+                percentage on what it collects, so a {QRPH_FEE_PERCENT}% processing
+                fee is added to the customer's total when they pay this way —
+                shown as its own line before they place the order. Your other
+                payment methods are never charged.
+              </div>
+            </div>
+          )}
 
           <div className="admin-field">
             <label className="admin-field__label">QR Code Image (Optional)</label>
@@ -191,6 +220,9 @@ export function AdminPaymentMethods({
 }) {
   const { paymentMethods, setPaymentMethods } = useStore();
   const [editing, setEditing] = useState<EditingMethod | null>(null);
+  // Default-OFF feature: undefined must read as NOT entitled, so a brand blob
+  // rendered before page.tsx projected the flag shows no tag field.
+  const qrphEntitled = brand.qrphFeeEntitled === true;
 
   const commit = (next: PaymentMethod[]) => setPaymentMethods(next);
 
@@ -232,6 +264,7 @@ export function AdminPaymentMethods({
       <AdminPaymentMethodForm
         brand={brand}
         method={editing}
+        qrphEntitled={qrphEntitled}
         onCancel={() => setEditing(null)}
         onSave={save}
       />
@@ -288,7 +321,14 @@ export function AdminPaymentMethods({
                 )}
               </div>
               <div className="pay-row__body">
-                <div className="pay-row__name">{m.name || "Untitled"}</div>
+                <div className="pay-row__name">
+                  {m.name || "Untitled"}
+                  {qrphEntitled && m.qrph && (
+                    <span className="pay-row__tag" title={`Adds a ${QRPH_FEE_PERCENT}% processing fee at checkout`}>
+                      QR PH · {QRPH_FEE_PERCENT}%
+                    </span>
+                  )}
+                </div>
                 {m.number && <div className="pay-row__num">{m.number}</div>}
                 <div className="pay-row__account">Account: {m.account || "—"}</div>
                 <div className="pay-row__meta">ID: {m.id} · Order: #{m.order}</div>

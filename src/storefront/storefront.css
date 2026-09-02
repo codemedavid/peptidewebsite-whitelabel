@@ -469,6 +469,34 @@
 /* Breakdown rows shown above the total when the store charges an admin fee. */
 .sf-root .sf-cart__total--sub { font-size: 13px; color: var(--brand-text-muted); }
 .sf-root .sf-cart__cta { width: 100%; }
+
+/* Courier booking form card (e.g. Lalamove). Informational, so it reads as a
+   quiet note rather than a warning: the tenant's own accent on a tinted surface,
+   sharing the checkout's border tokens so it belongs to the same drawer. */
+.sf-root .sf-cart__booking {
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-left-width: 3px;
+  border-left-color: var(--brand-accent);
+  border-radius: var(--brand-radius, 4px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--brand-surface-2, rgba(0, 0, 0, 0.02));
+}
+.sf-root .sf-cart__booking-head { font-size: 14px; font-weight: 700; }
+.sf-root .sf-cart__booking-note { margin: 0; font-size: 13px; color: var(--brand-text-muted); }
+.sf-root .sf-cart__booking-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-accent);
+  text-decoration: none;
+}
+.sf-root .sf-cart__booking-link:hover { text-decoration: underline; }
 .sf-root .sf-cart__channels-label { font-size: 13px; color: var(--brand-text-muted); margin: 0; text-align: center; }
 .sf-root .sf-cart__channels { display: flex; flex-wrap: wrap; gap: 8px; }
 .sf-root .sf-cart__channel { flex: 1 1 30%; }

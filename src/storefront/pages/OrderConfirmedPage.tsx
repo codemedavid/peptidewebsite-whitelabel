@@ -283,6 +283,12 @@ export function OrderConfirmedPage({
                 <dd>{money(view.totals.fee)}</dd>
               </>
             )}
+            {view.totals.paymentFee > 0 && (
+              <>
+                <dt>{view.totals.paymentFeeLabel || "Processing fee"}</dt>
+                <dd>{money(view.totals.paymentFee)}</dd>
+              </>
+            )}
             <dt className="is-total">Total</dt>
             <dd className="is-total">{money(view.totals.total)}</dd>
           </dl>

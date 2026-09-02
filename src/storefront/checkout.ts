@@ -412,6 +412,10 @@ export function buildOrderMessage(
   // order out of the chat thread, so a note that never reached this message
   // would, for them, not exist.
   customerNote = "",
+  // The stored order's `paymentFee` (QR PH), for the same reason as adminFee:
+  // the messaged total must equal what was persisted. Appended LAST rather than
+  // grouped with the other fees so no existing positional caller shifts.
+  paymentFee?: { label: string; amount: number } | null,
 ): string {
   const currency = brand.currency || lines[0]?.product.currency || "";
   const items = lines
@@ -429,12 +433,16 @@ export function buildOrderMessage(
   const shippingFee = shipping?.fee ?? 0;
   const discountAmount = discount?.amount ?? 0;
   // The grand total never drops below zero (a discount caps at the subtotal).
-  const grandTotal = Math.max(0, subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee);
+  const paymentFeeAmount = paymentFee?.amount ?? 0;
+  const grandTotal = Math.max(
+    0,
+    subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee + paymentFeeAmount,
+  );
   // With a fee (shipping and/or admin) or a discount, break the math down so the
   // customer sees why the total differs from the items; without any, keep the
   // historical single Total line.
   const totalLines =
-    adminFee || shippingFee > 0 || discountAmount > 0
+    adminFee || paymentFee || shippingFee > 0 || discountAmount > 0
       ? [
           `Subtotal: ${money(subtotal, currency)}`,
           ...(discountAmount > 0
@@ -454,6 +462,7 @@ export function buildOrderMessage(
               ]
             : []),
           ...(adminFee ? [`${adminFee.label}: ${money(adminFee.amount, currency)}`] : []),
+          ...(paymentFee ? [`${paymentFee.label}: ${money(paymentFee.amount, currency)}`] : []),
           `Total: ${money(grandTotal, currency)}`,
         ]
       : [`Total: ${money(subtotal, currency)}`];

@@ -27,7 +27,8 @@ function totalOf(o: Order): number {
     (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -
       (o.discount?.amount || 0) +
       (o.shipping?.fee || 0) +
-      (o.adminFee?.amount || 0),
+      (o.adminFee?.amount || 0) +
+      (o.paymentFee?.amount || 0),
   );
 }
 

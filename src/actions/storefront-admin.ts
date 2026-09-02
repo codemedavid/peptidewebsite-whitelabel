@@ -33,6 +33,7 @@ import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } fro
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeGroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
+import { safeExternalUrl } from "@/lib/storefront/courier-booking";
 import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 
@@ -172,6 +173,9 @@ function normalizeMethods(input: unknown): PaymentMethod[] {
       qrImage: typeof o.qrImage === "string" ? o.qrImage : "",
       order: Number.isFinite(Number(o.order)) ? Number(o.order) : i + 1,
       active: o.active !== false,
+      // The owner's QR PH tag — only persisted when set, so every existing
+      // method's stored shape is byte-identical and no store starts charging.
+      ...(o.qrph === true ? { qrph: true } : {}),
     };
   });
 }
@@ -424,6 +428,13 @@ function normalizeCouriers(input: unknown): Courier[] {
       id,
       name,
       trackingUrl: typeof o.trackingUrl === "string" ? o.trackingUrl.slice(0, 300).trim() : "",
+      // Booking/delivery form link. Scheme-validated on the way in because this
+      // one is rendered as a link at checkout (trackingUrl above never is), so
+      // a javascript: URL saved here would fire for every customer. Only
+      // persisted when a safe URL survives, keeping legacy rows unchanged.
+      ...(safeExternalUrl(o.bookingUrl)
+        ? { bookingUrl: safeExternalUrl(o.bookingUrl).slice(0, 500) }
+        : {}),
       active: o.active !== false,
       // COD/no-location couriers (Lalamove, Maxim) need no shipping location or
       // fee — only persist the flag when set so legacy rows stay unchanged.

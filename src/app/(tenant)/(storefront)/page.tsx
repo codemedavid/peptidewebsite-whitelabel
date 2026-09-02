@@ -256,6 +256,15 @@ export default async function HomePage() {
     delete (brand as Record<string, unknown>).adminFee;
   }
 
+  // The two checkout extras, both operator-grant / default OFF. Unlike the admin
+  // fee above, nothing is deleted from the brand when they're off: the QR PH tag
+  // and the booking URL live INSIDE paymentMethods/couriers, which the store
+  // admin reads and writes back wholesale — stripping them here would make the
+  // owner's next save silently erase their own config. The flags gate DISPLAY;
+  // placeStorefrontOrderAction re-checks the entitlement before charging.
+  brand.qrphFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_QRPH_FEE);
+  brand.courierBookingEntitled = await hasFeature(tenantId, FEATURES.STORE_COURIER_BOOKING);
+
   // Group Buy MANAGEMENT module (the "Group Buys" manager, distinct from the
   // rules editor above): ship the resolved groupbuy.* capability set so the
   // admin view knows which buttons to draw, plus the operator-set form

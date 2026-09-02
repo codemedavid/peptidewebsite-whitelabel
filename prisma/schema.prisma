@@ -403,6 +403,12 @@ model StorefrontOrder {
   // server-side at placement from branding.config.adminFee so changing the
   // tenant's fee never rewrites existing orders. NULL = no fee was charged.
   adminFee      Json?
+  // Payment processing fee charged on this order — { label, amount }, snapshotted
+  // server-side at placement when the customer paid with the method the owner
+  // tagged as QR PH (QR PH bills the merchant a percentage; no other method
+  // does). Separate from adminFee because an order can carry BOTH, and the
+  // customer was shown them as two lines. NULL = no processing fee was charged.
+  paymentFee    Json?
   // Discount code applied to this order — { code, label, amount }, snapshotted
   // server-side at placement from branding.config.promoCodes (re-derived, never
   // trusted from the client) so the saved amount can't be inflated and a later

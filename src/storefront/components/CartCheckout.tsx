@@ -17,6 +17,8 @@ import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/
 import { classifyProofFile } from "@/lib/upload/image-file";
 import { settleUpload } from "@/lib/upload/settle";
 import { activeAdminFee } from "@/lib/storefront/admin-fee";
+import { activePaymentFee, paymentFeeBase } from "@/lib/storefront/payment-fee";
+import { resolveCourierBooking } from "@/lib/storefront/courier-booking";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
 import {
   checkoutRuleViolations,
@@ -155,6 +157,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // value is re-stamped server-side at placement from the same config.
   const adminFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
 
+  // The chosen method's NAME — what the order stores and what the server
+  // re-derives the processing fee from. Declared here (rather than beside
+  // `selectedMethod` further down) because the fee memo below needs it.
+  const selectedMethodName = payMethods.find((m) => m.id === methodId)?.name ?? "";
+
   // Shipping: couriers linked to locations. A courier is offered when it's active
   // AND either it's a COD/no-location courier (Lalamove, Maxim — no location or
   // fee, the customer just pays on delivery) OR it has at least one active
@@ -201,9 +208,50 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     () => promoDiscountAmount(appliedPromo, subtotal),
     [appliedPromo, subtotal],
   );
+  // QR PH processing fee. DERIVED on every render from (chosen method, current
+  // base) — deliberately not state — so switching methods can never accumulate
+  // it and there is no stale value to clear. Charged on what the store actually
+  // collects (items − discount + shipping + admin fee), because QR PH takes its
+  // cut of the whole transaction. The server re-derives the same number at
+  // placement; this is only what the customer is SHOWN.
+  const paymentFee = useMemo(
+    () =>
+      activePaymentFee(
+        paymentMethods,
+        selectedMethodName,
+        paymentFeeBase({
+          subtotal,
+          discount: discountAmount,
+          shipping: shippingFee,
+          adminFee: adminFee?.amount ?? 0,
+        }),
+        brand.qrphFeeEntitled === true,
+      ),
+    [
+      paymentMethods,
+      selectedMethodName,
+      subtotal,
+      discountAmount,
+      shippingFee,
+      adminFee,
+      brand.qrphFeeEntitled,
+    ],
+  );
+
+  // The courier's booking form (a Lalamove link, say), shown while that courier
+  // is selected. Null for every other courier and for a store that configured
+  // none, so the card simply doesn't render.
+  const courierBooking = useMemo(
+    () => resolveCourierBooking(couriers, courierId, brand.courierBookingEntitled === true),
+    [couriers, courierId, brand.courierBookingEntitled],
+  );
+
   // Total never goes below zero — a discount caps at the items subtotal, but a
   // store could in theory configure a fee larger than the cart.
-  const total = Math.max(0, subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee);
+  const total = Math.max(
+    0,
+    subtotal - discountAmount + (adminFee?.amount ?? 0) + shippingFee + (paymentFee?.amount ?? 0),
+  );
 
   // Smart Cart & Checkout rules (branding.config.checkoutRules) — the cart
   // restrictions and checkout validations the owner configured, plus their
@@ -470,6 +518,10 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // order when the configured fee changed mid-session, so the customer is
       // never charged a total they didn't see.
       adminFee: { label: adminFee?.label ?? "", amount: adminFee?.amount ?? 0 },
+      // What the customer was SHOWN as the processing fee. The server discards
+      // it and re-derives its own, using this only to refuse an order that
+      // would bill more than the total on screen.
+      paymentFee: { label: paymentFee?.label ?? "", amount: paymentFee?.amount ?? 0 },
       // The discount this checkout DISPLAYED. The server re-derives the
       // authoritative amount from config.promoCodes by `code` (like the admin
       // fee / shipping), so a tampered/stale client can't inflate it; it's
@@ -547,6 +599,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // The note the SERVER stored, not the local box — same rule as the fee and
       // the discount above: the chat message quotes the persisted order.
       order.customerNote ?? "",
+      // The server-stamped QR PH processing fee, so the seller's copy of the
+      // total matches the one the customer saw and the one that was persisted.
+      order.paymentFee ?? null,
     );
 
     clearCart();
@@ -969,8 +1024,50 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
         {lines.length > 0 && (
           <footer className="sf-cart__foot">
+            {/* The courier's own booking form (a Lalamove link, say). Shown only
+                while that courier is selected, and only once the customer has
+                reached the steps where a courier exists — informational, never a
+                gate: the store cannot verify an off-site form was completed, so
+                blocking Place Order on it would strand honest buyers. */}
+            {courierBooking && step !== "cart" && (
+              <div className="sf-cart__booking">
+                <div className="sf-cart__booking-head">
+                  {courierBooking.name} delivery
+                </div>
+                <p className="sf-cart__booking-note">
+                  Complete the delivery form before submitting your order.
+                </p>
+                <a
+                  className="sf-cart__booking-link"
+                  href={courierBooking.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open {courierBooking.name} form
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              </div>
+            )}
             <div className="sf-cart__totals">
-              {(adminFee || shippingFee > 0 || shippingWaived || discountAmount > 0) && (
+              {(adminFee ||
+                paymentFee ||
+                shippingFee > 0 ||
+                shippingWaived ||
+                discountAmount > 0) && (
                 <>
                   <div className="sf-cart__total sf-cart__total--sub">
                     <span>Subtotal</span>
@@ -1012,6 +1109,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       <span>
                         {currency}
                         {adminFee.amount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {paymentFee && (
+                    <div className="sf-cart__total sf-cart__total--sub">
+                      <span>{paymentFee.label}</span>
+                      <span>
+                        {currency}
+                        {paymentFee.amount.toLocaleString()}
                       </span>
                     </div>
                   )}

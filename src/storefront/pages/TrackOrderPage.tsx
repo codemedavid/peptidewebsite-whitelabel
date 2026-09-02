@@ -121,6 +121,7 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
     items: o.items,
     shippingFee: o.shipping?.fee ?? 0,
     adminFee: o.adminFee ?? null,
+    paymentFee: o.paymentFee ?? null,
     discount: o.discount ?? null,
     statusHistory: o.statusHistory ?? [],
   });
@@ -299,6 +300,7 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
                   const subtotal = result.items.reduce((s, it) => s + it.price * it.qty, 0);
                   const shipping = result.shippingFee || 0;
                   const fee = result.adminFee;
+                  const payFee = result.paymentFee;
                   const discount = result.discount;
                   const discountAmount = discount?.amount ?? 0;
                   return (
@@ -325,9 +327,26 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
                           <span>{money(fee.amount)}</span>
                         </div>
                       )}
+                      {payFee && (
+                        <div className="track-summary__row">
+                          <span>{payFee.label}</span>
+                          <span>{money(payFee.amount)}</span>
+                        </div>
+                      )}
                       <div className="track-summary__row track-summary__row--total">
                         <span>Total</span>
-                        <span>{money(Math.max(0, subtotal - discountAmount + shipping + (fee?.amount ?? 0)))}</span>
+                        <span>
+                          {money(
+                            Math.max(
+                              0,
+                              subtotal -
+                                discountAmount +
+                                shipping +
+                                (fee?.amount ?? 0) +
+                                (payFee?.amount ?? 0),
+                            ),
+                          )}
+                        </span>
                       </div>
                     </div>
                   );

@@ -555,6 +555,12 @@ export function AdminOrderDetail({
                     <span>{money(totals.fee)}</span>
                   </div>
                 )}
+                {totals.paymentFee > 0 && (
+                  <div className="od-totals-row">
+                    <span>{o.paymentFee?.label || "Processing fee"}</span>
+                    <span>{money(totals.paymentFee)}</span>
+                  </div>
+                )}
               </div>
               <div className="od-total">
                 <span className="od-total-label">Total</span>
