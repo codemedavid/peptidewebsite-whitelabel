@@ -4,14 +4,15 @@ import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/features/entitlements";
 import type { FeatureKey } from "@/lib/features/catalog";
 import { isDemoMode, getDemoContext } from "@/lib/demo/fixtures";
+import { stripInlineMedia } from "@/lib/storefront/inline-media";
 
 // Cross-request cache: per-tenant identity + branding + settings. Tagged so
 // branding/settings mutations can revalidateTag(`tenant:<id>`) and the next
 // request reads fresh data without paying for a full DB round-trip first.
 const loadTenant = (tenantId: string) =>
   unstable_cache(
-    () =>
-      prisma.tenant.findUnique({
+    async () => {
+      const row = await prisma.tenant.findUnique({
         where: { id: tenantId },
         select: {
           id: true,
@@ -23,7 +24,22 @@ const loadTenant = (tenantId: string) =>
           settings: true,
           orderNumberFormat: true,
         },
-      }),
+      });
+      if (!row?.branding) return row;
+      // Disarm inline media HERE — the one choke point every storefront surface
+      // loads branding through, so no tenant can ship raw image bytes to a
+      // browser regardless of which of the ~20 branding writers put them there.
+      // Inside the cached loader on purpose: the walk is paid once per TTL
+      // rather than per render, and the Next data-cache entry itself stays small
+      // instead of holding the very bytes we are refusing to serve.
+      const config = stripInlineMedia(row.branding.config);
+      const logoUrl = stripInlineMedia(row.branding.logoUrl);
+      if (config.stripped.length === 0 && logoUrl.stripped.length === 0) return row;
+      return {
+        ...row,
+        branding: { ...row.branding, config: config.value, logoUrl: logoUrl.value },
+      };
+    },
     ["tenant-row", tenantId],
     { tags: [`tenant:${tenantId}`], revalidate: 300 },
   )();
