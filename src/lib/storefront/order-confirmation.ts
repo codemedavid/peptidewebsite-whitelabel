@@ -45,6 +45,9 @@ export interface ConfirmationOrder {
     variation?: string;
   }[];
   adminFee?: { label: string; amount: number } | null;
+  /** QR PH processing fee snapshotted at placement. Null/absent for every other
+   *  payment method — an order can carry this AND the admin fee. */
+  paymentFee?: { label: string; amount: number } | null;
   discount?: { code?: string; label: string; amount: number } | null;
   /** The buyer's own note from checkout. Shown back to them here so a typo in a
    *  delivery instruction is discoverable before the order is handed off. */
@@ -78,6 +81,10 @@ export interface OrderConfirmation {
   customer: { name: string; email: string; phone: string };
   shipping: { address: string; courier: string };
   items: ConfirmationItem[];
+  /** The buyer's note, "" when they left it blank. Unlike the contact fields
+   *  this never becomes a dash — an absent note has nothing to show, and a
+   *  "Note: —" card reads as a store that lost something. */
+  note: string;
   totals: {
     subtotal: number;
     discount: number;
@@ -85,6 +92,8 @@ export interface OrderConfirmation {
     shipping: number;
     fee: number;
     feeLabel: string;
+    paymentFee: number;
+    paymentFeeLabel: string;
     total: number;
   };
 }
@@ -137,9 +146,10 @@ export function buildOrderConfirmation(
   const discount = Math.max(0, money(order.discount?.amount));
   const shipping = Math.max(0, money(order.shipping?.fee));
   const fee = Math.max(0, money(order.adminFee?.amount));
+  const paymentFee = Math.max(0, money(order.paymentFee?.amount));
   // Floored at zero, matching buildOrderMessage — an over-large discount must
   // never show the customer a negative amount due.
-  const total = Math.max(0, subtotal - discount + shipping + fee);
+  const total = Math.max(0, subtotal - discount + shipping + fee + paymentFee);
 
   const address = [
     order.shipping.address,
@@ -172,6 +182,8 @@ export function buildOrderConfirmation(
       shipping,
       fee,
       feeLabel: order.adminFee?.label ?? "",
+      paymentFee,
+      paymentFeeLabel: order.paymentFee?.label ?? "",
       total,
     },
   };
@@ -213,12 +225,13 @@ export function formatOrderMessage(
     return `• ${label} ×${item.qty} — ${amount(item.lineTotal)}`;
   });
 
-  const { subtotal, discount, discountCode, shipping, fee, feeLabel, total } = view.totals;
+  const { subtotal, discount, discountCode, shipping, fee, feeLabel, paymentFee, paymentFeeLabel, total } =
+    view.totals;
   const courier = present(view.shipping.courier);
   // Show the arithmetic only when something moved the total off the subtotal —
   // otherwise a simple order reads as a wall of identical figures.
   const totals =
-    discount > 0 || shipping > 0 || fee > 0
+    discount > 0 || shipping > 0 || fee > 0 || paymentFee > 0
       ? [
           `Subtotal: ${amount(subtotal)}`,
           ...(discount > 0
@@ -228,6 +241,9 @@ export function formatOrderMessage(
             ? [`Shipping${courier ? ` (${courier})` : ""}: ${amount(shipping)}`]
             : []),
           ...(fee > 0 ? [`${feeLabel || "Fee"}: ${amount(fee)}`] : []),
+          ...(paymentFee > 0
+            ? [`${paymentFeeLabel || "Processing fee"}: ${amount(paymentFee)}`]
+            : []),
           `Total: ${amount(total)}`,
         ]
       : [`Total: ${amount(total)}`];

@@ -50,6 +50,10 @@ export const FEATURES = {
   STORE_SMART_CHECKOUT: "storefront.smart_checkout",
   STORE_ACCESS_CODE: "storefront.access_code",
   STORE_ADMIN_FEE: "storefront.admin_fee",
+  // Checkout extras. Both operator-grantable, default OFF (outside every plan
+  // ceiling), so no existing tenant changes behavior on deploy.
+  STORE_QRPH_FEE: "storefront.qrph_fee",
+  STORE_COURIER_BOOKING: "storefront.courier_booking_link",
   // Track-page delivery note (region → estimate card). Business/Automated
   // exclusive per the trial system; operator-grantable for legacy Starter stores.
   STORE_TRACK_NOTE: "storefront.track_note",
@@ -308,6 +312,14 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // (resolveGroupBuyCaps ANDs every capability with the module switch).
   FEATURES.GB_SCHEDULED,
   FEATURES.GB_REPORT_AUTO_ON_CLOSE,
+  // QR PH processing fee. Outside every plan ceiling (default OFF) for the same
+  // reason as Wholesale pricing: granting it changes what customers PAY. A grant
+  // alone is still inert — the store owner must also tag one of their payment
+  // methods as QR PH, and no existing method is ever auto-tagged.
+  FEATURES.STORE_QRPH_FEE,
+  // Courier booking link. Default OFF and sold per tenant; a grant is inert
+  // until the owner pastes a URL onto one of their couriers.
+  FEATURES.STORE_COURIER_BOOKING,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
@@ -376,6 +388,8 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_SMART_CHECKOUT]: { label: "Smart Checkout", description: "Smart Cart & Checkout rules view in the store admin — cart restrictions, checkout validations and custom messages. Off hides the editor and stops saved rules from constraining the cart.", group: "Ecommerce" },
   [FEATURES.STORE_ACCESS_CODE]: { label: "Access code gate", description: "Private-store access code: visitors must enter a code to view the storefront. Off hides the Access Code manager in the store admin and stops the gate from being enforced. Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.STORE_ADMIN_FEE]: { label: "Admin fee", description: "The flat checkout admin (service) fee, configured per tenant in platform settings → Admin fee. Off hides the section, drops the fee line at checkout and stops orders charging it; saved label/amount are kept for when it's switched back on.", group: "Ecommerce" },
+  [FEATURES.STORE_QRPH_FEE]: { label: "QR PH processing fee", description: "Adds a 2% processing fee at checkout when the customer pays with QR PH \u2014 QR PH charges the merchant a percentage, unlike GCash or a bank transfer. The store owner tags which of their payment methods is the QR PH one (Payment Methods \u2192 QR PH account); untagged methods are never charged. The fee is shown as its own line before the customer places the order and is re-derived server-side at placement. Operator-grantable, default OFF \u2014 granting it changes what customers pay. A grant alone charges nothing until a method is tagged.", group: "Ecommerce" },
+  [FEATURES.STORE_COURIER_BOOKING]: { label: "Courier booking link", description: "Lets the store owner put a booking / delivery form URL on a courier (Couriers \u2192 edit \u2192 Booking form link, e.g. a Lalamove form). At checkout, picking that courier shows a card linking to the form before the customer places their order; picking any other courier hides it. Not an API integration \u2014 nothing is booked or quoted automatically. Operator-grantable, default OFF; inert until a URL is saved.", group: "Ecommerce" },
   [FEATURES.STORE_TRACK_NOTE]: { label: "Delivery note", description: "The Track Order page's delivery-estimates card (region → estimate rows), edited by the store owner in the store admin. Business/Automated exclusive; off locks the editor tile and hides the card. Operator-grantable for legacy Starter stores.", group: "Ecommerce" },
   [FEATURES.STORE_STAFF_ACCOUNTS]: { label: "Staff Accounts", description: "Owner-managed staff sub-accounts with per-module permissions in the store admin. Included with Business and Automated plans; operator-grantable on Starter. Off hides the Staff Accounts manager and blocks staff sign-in and management.", group: "Ecommerce" },
 

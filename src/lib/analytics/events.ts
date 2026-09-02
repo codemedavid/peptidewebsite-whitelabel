@@ -179,13 +179,15 @@ export function resolveDistinctId(order: Order): string {
 }
 
 /** Order grand total, mirroring every storefront total surface:
- *  items subtotal + shipping fee + admin fee − discount, clamped at zero. */
+ *  items subtotal + shipping fee + admin fee + payment fee − discount,
+ *  clamped at zero. */
 export function orderTotal(order: Order): number {
   const subtotal = (order.items ?? []).reduce((s, it) => s + (it.price || 0) * (it.qty || 0), 0);
   const shipping = order.shipping?.fee ?? 0;
   const fee = order.adminFee?.amount ?? 0;
+  const paymentFee = order.paymentFee?.amount ?? 0;
   const discount = order.discount?.amount ?? 0;
-  return Math.max(0, subtotal + shipping + fee - discount);
+  return Math.max(0, subtotal + shipping + fee + paymentFee - discount);
 }
 
 /**

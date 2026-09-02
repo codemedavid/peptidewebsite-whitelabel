@@ -202,6 +202,13 @@ export type Order = {
    *  rewrites what an existing order was charged. Absent on legacy orders and
    *  when the tenant's fee is off. Total = items + shipping.fee + adminFee. */
   adminFee?: { label: string; amount: number };
+  /** Payment processing fee charged on this order (QR PH), snapshotted
+   *  SERVER-SIDE at placement from the tenant's tagged payment method so a later
+   *  config change never rewrites what an existing order was charged. Kept
+   *  separate from `adminFee` because an order can carry BOTH. Absent when the
+   *  customer paid by any other method, or the tenant isn't entitled.
+   *  Total = items − discount + shipping.fee + adminFee + paymentFee. */
+  paymentFee?: { label: string; amount: number };
   /** Discount code applied at checkout, snapshotted SERVER-SIDE at placement
    *  from the tenant's branding.config.promoCodes (re-derived, never trusted from
    *  the client) so the saved amount can't be inflated and a later code change
@@ -249,6 +256,13 @@ export type Courier = {
   name: string;
   /** Optional tracking page URL shared with customers (e.g. LBC's tracker). */
   trackingUrl: string;
+  /** Optional external booking / delivery form the customer completes BEFORE
+   *  placing the order (e.g. a Lalamove booking form). Shown at checkout only
+   *  while this courier is selected, and only for an entitled tenant. Unlike
+   *  `trackingUrl` above this is rendered as a link, so it must be a http(s)
+   *  URL — validated on save and again at render (lib/storefront/courier-booking).
+   *  Absent/blank → no card is shown and checkout is unaffected. */
+  bookingUrl?: string;
   active: boolean;
   /** When true, this courier needs NO shipping location or fee — the customer
    *  just pays cash on delivery (e.g. Lalamove, Maxim, same-day riders). It's
@@ -288,6 +302,14 @@ export type PaymentMethod = {
   qrImage: string;
   order: number;
   active: boolean;
+  /** Tagged by the store owner as a QR PH account. QR PH settles through the
+   *  national QR standard, which charges the MERCHANT a percentage, so a tagged
+   *  method adds the processing fee to the customer's total at checkout — every
+   *  other method is untouched. A tag, not a name match: a store may call the
+   *  method anything, and a rename must never start or stop the charge.
+   *  Absent/false on every existing method, so no store starts charging on
+   *  deploy. Gated on FEATURES.STORE_QRPH_FEE. See lib/storefront/payment-fee. */
+  qrph?: boolean;
 };
 
 export type FaqItem = { q: string; a: string };
@@ -451,6 +473,13 @@ export type Brand = {
   // lock only ever engages on an explicit false or an active trial.
   adminFeeEntitled?: boolean;
   trackNoteEntitled?: boolean;
+  /** Operator entitlements for the two checkout extras, projected server-side in
+   *  page.tsx. Both are default OFF for every tenant. Undefined counts as OFF —
+   *  these fail closed, so a legacy brand blob rendered before the projection
+   *  existed shows no fee and no booking card. The server re-checks each
+   *  entitlement independently at placement; this flag only drives display. */
+  qrphFeeEntitled?: boolean;
+  courierBookingEntitled?: boolean;
   // Operator-flagged "new feature" advertised on the trial dashboard as a
   // Business exclusive (pickFeatureSpotlight). Absent → no spotlight strip.
   featureSpotlight?: FeatureSpotlight;

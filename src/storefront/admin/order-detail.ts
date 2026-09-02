@@ -95,11 +95,13 @@ export type OrderTotals = {
   discount: number;
   shipping: number;
   fee: number;
+  /** QR PH processing fee — 0 when the customer paid by any other method. */
+  paymentFee: number;
   total: number;
 };
 
 /** Order money breakdown. Mirrors checkout: Total = items − discount + shipping
- *  + adminFee, floored at 0. */
+ *  + adminFee + paymentFee, floored at 0. */
 export function computeOrderTotals(order: Order): OrderTotals {
   const subtotal = (order.items || []).reduce(
     (s, i) => s + (i.price || 0) * (i.qty || 1),
@@ -107,9 +109,12 @@ export function computeOrderTotals(order: Order): OrderTotals {
   );
   const shipping = order.shipping?.fee || 0;
   const fee = order.adminFee?.amount || 0;
+  // QR PH processing fee — its own line, because an order can carry both it and
+  // the admin fee and the customer was shown them separately.
+  const paymentFee = order.paymentFee?.amount || 0;
   const discount = order.discount?.amount || 0;
-  const total = Math.max(0, subtotal - discount + shipping + fee);
-  return { subtotal, discount, shipping, fee, total };
+  const total = Math.max(0, subtotal - discount + shipping + fee + paymentFee);
+  return { subtotal, discount, shipping, fee, paymentFee, total };
 }
 
 /** True only when a real, non-blank payment-proof URL is present. Governs both
