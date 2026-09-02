@@ -50,18 +50,25 @@ function check(name: string, fn: () => void) {
 }
 
 // Only the field under test matters; the rest of Brand is irrelevant here.
-const brandWith = (showAdminReseller?: boolean) => ({ showAdminReseller }) as Brand;
+// NOTE: the product editor's card is gated on `resellerPricingEditable` (the
+// reseller PAGE child) rather than on `showAdminReseller`. The two were one flag
+// until the Reseller Portal manager was moved onto the PARENT entitlement, so a
+// tenant granted "Reseller" would find a settings screen explaining which child
+// is still off instead of finding nothing at all. The price FIELDS kept the
+// stricter gate — see the drift check below, which now pins the split open.
+const brandWith = (resellerPricingEditable?: boolean) =>
+  ({ resellerPricingEditable }) as Brand;
 
 console.log("\nProduct editor — reseller gate + variation presets\n");
 
 // ───────────────────── isResellerPricingVisible (the bug) ───────────────────
 console.log("isResellerPricingVisible");
 
-check("hidden when the tenant's Reseller Portal entitlement is off", () => {
+check("hidden when the tenant has no reseller-page entitlement", () => {
   assert.equal(isResellerPricingVisible(brandWith(false)), false);
 });
 
-check("shown when the tenant is entitled to the Reseller Portal", () => {
+check("shown when the tenant is entitled to the reseller page", () => {
   assert.equal(isResellerPricingVisible(brandWith(true)), true);
 });
 
@@ -69,14 +76,19 @@ check("shown for a legacy brand blob that predates the flag (undefined = entitle
   assert.equal(isResellerPricingVisible(brandWith(undefined)), true);
 });
 
-check("agrees with the Reseller Portal manager view — one entitlement, no drift", () => {
-  for (const flag of [true, false, undefined]) {
-    assert.equal(
-      isResellerPricingVisible(brandWith(flag)),
-      isAdminViewVisible(brandWith(flag), "reseller"),
-      `showAdminReseller=${String(flag)} should match the manager view`,
-    );
-  }
+check("the manager view can open without unlocking the price fields", () => {
+  // The deliberate split. A tenant granted only the Reseller PARENT sees the
+  // Reseller Portal screen — that is what tells them which child is still off —
+  // but must NOT get per-product wholesale price inputs, because nothing would
+  // ever sell what they typed there. Before the split these were one flag, so
+  // making the screen discoverable would have re-opened that hole.
+  const parentOnly = { showAdminReseller: true, resellerPricingEditable: false } as Brand;
+  assert.equal(isAdminViewVisible(parentOnly, "reseller"), true, "manager should open");
+  assert.equal(isResellerPricingVisible(parentOnly), false, "price fields should stay closed");
+});
+
+check("revoking the parent still closes the manager view", () => {
+  assert.equal(isAdminViewVisible({ showAdminReseller: false } as Brand, "reseller"), false);
 });
 
 check("the editor actually gates its wholesale card on the helper", () => {

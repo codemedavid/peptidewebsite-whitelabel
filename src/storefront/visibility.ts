@@ -89,9 +89,18 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Not tied to a storefront page — a direct super-admin switch. On for every
   // package by default; flips off per tenant from the branding editor.
   analytics: (b) => b.showAdminAnalytics !== false,
-  // Reseller Portal manager. Server-derived from the platform Features toggle
-  // (FEATURES.STORE_RESELLER_PORTAL). In every plan ceiling, so default ON —
-  // unlike the #merchant page, which additionally needs an access code.
+  // Reseller Portal manager. Server-derived from the Reseller PARENT
+  // (FEATURES.STORE_RESELLER_PORTAL) — deliberately the parent and not the page
+  // child, unlike everything customer-facing.
+  //
+  // This screen sells nothing: it shows the owner which parts of the feature
+  // their operator has switched on and lets them set the password. Gating it on
+  // the page child meant a tenant granted only the parent — which is what
+  // "turn on Reseller" looks like from the operator's Features list — got a
+  // store with no reseller page, no reseller settings, and no product pricing
+  // fields, with nothing anywhere saying why. The feature read as broken. Now
+  // the manager appears with the parent and tells them exactly which child is
+  // still off. The PRICE fields stay gated (see isResellerPricingVisible).
   reseller: (b) => b.showAdminReseller !== false,
   // Card Studio ("design" view). Server-derived: platform Features toggle AND
   // the branding-editor switch. Default ON.
@@ -172,16 +181,28 @@ export function isAdminViewVisible(brand: Brand, view: string): boolean {
   return check ? check(brand) : true;
 }
 
-// Is the product editor's "Reseller / Wholesale Pricing" card available? It
-// writes the prices the Reseller Portal sells, so it rides the exact same
-// entitlement (FEATURES.STORE_RESELLER_PORTAL → brand.showAdminReseller) as the
-// portal manager view. Deliberately delegates to isAdminViewVisible rather than
-// re-reading the flag, so the two can't drift apart. Unentitled tenants used to
-// still see this card — filling in wholesale prices that no storefront surface
-// would ever sell. Saved values are left untouched: turning the feature back on
-// restores them.
+/**
+ * Is the product editor's legacy "Reseller / Wholesale Pricing" card available?
+ *
+ * Gated on the reseller PAGE child (brand.resellerPricingEditable), which is the
+ * surface that sells these two legacy tiers. It used to delegate to the manager
+ * view's flag, but the manager now opens on the parent so the feature can
+ * explain itself (see ADMIN_VIEW_TOGGLE.reseller above) — and these are price
+ * fields, so they keep the stricter gate. Showing them to a tenant with no
+ * selling surface is the exact bug that gate was added for: an owner fills in
+ * wholesale prices that nothing will ever charge.
+ *
+ * Undefined counts as ON, matching the default-on `showAdminReseller` this used
+ * to delegate to: a Brand assembled outside page.tsx (a demo fixture, a preview)
+ * predates the flag and must keep rendering exactly as it does today. That is
+ * safe because the gate here is only about EDITING — whether the prices are ever
+ * charged is decided by stripResellerPricing on the server, which fails closed on
+ * the real entitlements no matter what any Brand blob claims.
+ *
+ * Saved values are never touched — granting the child brings them back intact.
+ */
 export function isResellerPricingVisible(brand: Brand): boolean {
-  return isAdminViewVisible(brand, "reseller");
+  return brand.resellerPricingEditable !== false;
 }
 
 /**

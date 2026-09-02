@@ -12,7 +12,8 @@
 // which opens the same product editor (AdminAddProduct) with its Reseller /
 // Wholesale Pricing section.
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
@@ -20,10 +21,16 @@ import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout
 import { resolveWholesale } from "@/lib/storefront/wholesale";
 import { resolveBaseSaleView } from "@/lib/storefront/sale";
 import { resolveProductImage } from "@/lib/storefront/product-image";
-import { verifyResellerCodeAction } from "@/actions/storefront-admin";
+import { verifyResellerCodeAction, resellerSignOutAction } from "@/actions/storefront-admin";
 
-// Per-tenant key so unlocking one store doesn't unlock another in the same browser.
-const UNLOCK_KEY = "sf_merchant_unlocked";
+// The unlock is a SERVER session, not a browser flag. `brand.resellerUnlocked` is
+// derived in page.tsx from the httpOnly, tenant-scoped, version-stamped
+// `sf.reseller` cookie (lib/auth/reseller-session.ts). The old implementation
+// kept a `sessionStorage` boolean here, which decided nothing: the wholesale
+// prices were serialized into the page for every visitor, so the "gate" could be
+// walked past from devtools — or simply by reading View Source. Now the server
+// withholds the prices themselves until the password is presented, and this flag
+// only chooses which of the two screens to draw.
 
 // Wholesale order control for a reseller card: a quantity stepper floored at the
 // product's minimum (so a line can never be added below the wholesale threshold)
@@ -208,11 +215,9 @@ function Gate({
     const res = await verifyResellerCodeAction(code);
     setBusy(false);
     if ("ok" in res) {
-      try {
-        sessionStorage.setItem(UNLOCK_KEY, "1");
-      } catch {
-        /* ignore */
-      }
+      // The action set the session cookie. Re-render from the server so the page
+      // comes back WITH the wholesale prices in it — they were never sent to this
+      // browser before now, so there is nothing local to reveal.
       onUnlock();
     } else {
       setError(res.error || "Incorrect access code.");
@@ -231,13 +236,13 @@ function Gate({
         </div>
         <h1 className="merchant-gate__title">{brand.merchantGateTitle || "Reseller Access"}</h1>
         <p className="merchant-gate__sub">
-          {brand.merchantGateSub || "Enter your reseller code to view wholesale pricing."}
+          {brand.merchantGateSub || "Enter the reseller password to access wholesale pricing."}
         </p>
         <input
-          type="text"
+          type="password"
           className={`merchant-gate__input ${error ? "is-error" : ""}`}
           value={code}
-          placeholder="Access code"
+          placeholder="Reseller password"
           autoFocus
           autoComplete="off"
           onChange={(e) => {
@@ -247,7 +252,7 @@ function Gate({
         />
         <div className="merchant-gate__error">{error}</div>
         <button type="submit" className="btn btn-primary merchant-gate__submit" disabled={busy || !code.trim()}>
-          {busy ? "Checking…" : "Unlock pricing"}
+          {busy ? "Checking…" : "Access Reseller Store"}
         </button>
       </form>
     </div>
@@ -263,16 +268,20 @@ export function MerchantPage({
 }) {
   // Read the catalog from the shared store so price changes made in the admin
   // (which go through AdminAddProduct → setProducts) re-render this list.
-  const { products, categories, addToCart } = useStore();
-  const [unlocked, setUnlocked] = useState(false);
-
-  useEffect(() => {
-    try {
-      setUnlocked(sessionStorage.getItem(UNLOCK_KEY) === "1");
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const { products, categories, addToCart, refreshProducts } = useStore();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  // Seeded from the server (page.tsx reads the httpOnly cookie) and flipped
+  // locally once the verify action succeeds, because the store holds `brand` in
+  // useState and so will not pick up a refreshed prop on its own.
+  //
+  // This local flag is UX ONLY — it chooses which of the two screens to draw.
+  // It cannot conjure prices: the wholesale numbers live in `products`, which
+  // comes from the server, and the server only includes them for a request that
+  // presents the cookie. That is the difference from the old sessionStorage
+  // unlock, where the prices were already in the page and the flag was the
+  // entire gate. Flipping this by hand today shows an empty price list.
+  const [unlocked, setUnlocked] = useState(brand.resellerUnlocked === true);
 
   const catLabel = (id: string) => (categories || []).find((c) => c.id === id)?.label || id;
 
@@ -294,8 +303,29 @@ export function MerchantPage({
   const money = (n?: number | null) => (n && n > 0 ? `${currency}${n.toLocaleString()}` : "—");
 
   if (!unlocked) {
-    return <Gate brand={brand} onUnlock={() => setUnlocked(true)} />;
+    return (
+      <Gate
+        brand={brand}
+        onUnlock={() => {
+          setUnlocked(true);
+          // Pull the catalog again now that the request carries the session
+          // cookie — THIS is what actually brings the wholesale prices down.
+          refreshProducts();
+          startTransition(() => router.refresh());
+        }}
+      />
+    );
   }
+
+  const lock = () => {
+    void resellerSignOutAction().then(() => {
+      setUnlocked(false);
+      // Re-fetch without the cookie so the wholesale prices leave the browser
+      // too, rather than lingering in the client store behind a hidden screen.
+      refreshProducts();
+      startTransition(() => router.refresh());
+    });
+  };
 
   return (
     <section className="page" id="merchant">
@@ -305,6 +335,14 @@ export function MerchantPage({
           {brand.merchantEyebrow && <div className="eyebrow">{brand.merchantEyebrow}</div>}
           <h1 className="page__title">{brand.merchantTitle || "Reseller Price List"}</h1>
           {brand.merchantSub && <p className="page__sub">{brand.merchantSub}</p>}
+          <button type="button" className="merchant-lock" onClick={lock} disabled={pending}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
+                 strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            {pending ? "Locking…" : "Lock reseller pricing"}
+          </button>
         </div>
 
         <div className="merchant-note">

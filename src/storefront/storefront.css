@@ -4564,6 +4564,17 @@
   color: var(--brand-text);
   letter-spacing: -0.01em;
 }
+/* Reseller-order flag in the admin order list. Deliberately quiet — it sits
+   beside the status pills and marks WHY the prices on this order are below the
+   shelf ones, so it reads as provenance rather than as another status. */
+.sf-root .admin-order-card__reseller-flag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  background: color-mix(in srgb, var(--brand-main) 12%, transparent);
+  color: var(--brand-main);
+  border: 1px solid color-mix(in srgb, var(--brand-main) 28%, transparent);
   white-space: nowrap;
 }
 
@@ -9734,3 +9745,25 @@
   font-size: 18px;
   line-height: 1;
 }
+
+/* "Lock reseller pricing" — signs the reseller session out again. Sits under the
+   price-list heading, understated: it is an exit, not a call to action. */
+.sf-root .merchant-lock {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--brand-border, rgba(0,0,0,.14));
+  background: transparent;
+  color: var(--brand-text-muted);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.sf-root .merchant-lock:hover:not(:disabled) {
+  color: var(--brand-text);
+  border-color: var(--brand-text);
+  background: var(--brand-surface-2);
+}
+.sf-root .merchant-lock:disabled { opacity: .55; cursor: default; }
+.sf-root .merchant-lock svg { width: 14px; height: 14px; }

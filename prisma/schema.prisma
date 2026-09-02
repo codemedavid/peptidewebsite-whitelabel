@@ -442,6 +442,17 @@ model StorefrontOrder {
   groupBuyId   String?
   groupBuyName String?
 
+  // How the order was placed: "retail" (everything before the reseller portal,
+  // and every ordinary storefront order since) or "reseller" — a wholesale order
+  // from a customer holding a verified reseller session. Stamped SERVER-SIDE at
+  // placement from the httpOnly `sf.reseller` cookie, never from the client, for
+  // the same reason `imported` is: a buyer who could declare their own order a
+  // reseller order would be declaring their own prices.
+  //
+  // Defaulted rather than nullable so every existing row reads as "retail" with
+  // no data migration, and so the admin's filters never have to special-case NULL.
+  orderType    String   @default("retail")
+
   // Carried over from the store's PREVIOUS system rather than placed through
   // this checkout (see lib/orders/legacy-import). Such an order is real history
   // and counts as revenue and demand like any other — but its stock was consumed

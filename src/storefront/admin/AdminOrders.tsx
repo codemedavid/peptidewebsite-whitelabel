@@ -548,6 +548,15 @@ export function AdminOrders({
               <div className="admin-order-card__id">Order {o.orderNumber || `#${o.id.slice(0, 8)}`}</div>
               <OrderStatusPill status={o.status} />
               <PaymentStatusPill status={o.paymentStatus} />
+              {/* Placed through the gated reseller catalog, so its lines were
+                  priced at the wholesale tier rather than retail. Server-stamped
+                  at placement (orders.ts stampResellerOrder) — the buyer can't
+                  set it. Worth a flag in the list because a reseller order looks
+                  wrong at a glance otherwise: big quantities at prices below the
+                  ones on the shelf. */}
+              {o.orderType === "reseller" && (
+                <span className="admin-order-card__reseller-flag" title="Placed through the reseller portal at wholesale pricing">
+                  🤝 Reseller
                 </span>
               )}
               {/* A request the buyer typed is easy to ship straight past when
