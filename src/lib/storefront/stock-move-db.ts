@@ -55,6 +55,13 @@ function readVariations(metadata: unknown): Variation[] | undefined {
   return Array.isArray(meta.variations) ? (meta.variations as Variation[]) : undefined;
 }
 
+/** The made-to-order flag out of the same blob. It has to reach the pure engine
+ *  or applyStockMovesToProducts would deduct from a product that holds no
+ *  inventory — writing a row on every confirm to clamp the same 0 back to 0. */
+function readMadeToOrder(metadata: unknown): boolean {
+  return ((metadata ?? {}) as { madeToOrder?: unknown }).madeToOrder === true;
+}
+
 /** Every product key the moves refer to: ids when the line carries one (the
  *  modern path), exact names for legacy orders placed before productId existed. */
 function referencedKeys(moves: readonly StockMoveEntry[]): { ids: string[]; names: string[] } {
@@ -98,6 +105,7 @@ export async function applyOrderStockMovesBatched(
     name: r.name,
     stock: r.stock,
     variations: readVariations(r.metadata),
+    madeToOrder: readMadeToOrder(r.metadata),
   }));
   const after = applyStockMovesToProducts(before, moves);
 

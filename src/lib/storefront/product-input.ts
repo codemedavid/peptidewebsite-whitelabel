@@ -100,6 +100,12 @@ export function normalizeProductInput(input: unknown): Product {
     // Product-level shipping promo edited in the product form. Default false so
     // old products and omitted client payloads keep normal shipping.
     freeShipping: o.freeShipping === true,
+    // "Made to order" — the product sells without an inventory. Round-tripped
+    // here for the same reason as productClass and purchasable above: this is
+    // what EVERY admin save funnels through, so dropping the key would let one
+    // unrelated edit in the product form silently put the listing back on the
+    // stock gate — which for a made-to-order store means back to "Sold out".
+    madeToOrder: o.madeToOrder === true,
     // The editor's "Order ratio class" tag. Narrowed to a real ProductClass, so
     // an unknown value becomes undefined and Order Ratio Control falls back to
     // its name heuristic — never passed through raw. Dropping this key silently

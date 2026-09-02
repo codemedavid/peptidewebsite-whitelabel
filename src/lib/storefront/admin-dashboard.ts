@@ -18,6 +18,7 @@
  */
 
 import type { Brand, Category, Order, Product } from "@/storefront/types";
+import { isMadeToOrder } from "./made-to-order";
 import { formatMoney } from "./currency";
 import { isAdminViewVisible } from "@/storefront/visibility";
 import { isViewAllowed, type StaffActor } from "@/storefront/admin/staff-permissions";
@@ -113,6 +114,10 @@ export function orderTotal(o: Order): number {
  * variation) — mirroring the fallback rule in lib/storefront/inventory.ts.
  */
 export function productUnits(p: Product): number {
+  // Made to order: no pool to count. Reported as 0 rather than Infinity because
+  // this number is SUMMED into the dashboard's "units on hand" tile, and one
+  // unbounded product would make the whole total unbounded.
+  if (isMadeToOrder(p)) return 0;
   const variations = p.variations ?? [];
   const tracked = variations.filter((v) => typeof v.stock === "number");
   const sharesBase = variations.length === 0 || tracked.length < variations.length;
@@ -125,7 +130,11 @@ function isUnfulfilled(o: Order): boolean {
 }
 
 function lowStockProducts(products: Product[]): Product[] {
-  return products.filter((p) => productUnits(p) <= LOW_STOCK_AT);
+  // A made-to-order product holds no inventory, so it is never low on it.
+  // Without this every made-to-order listing would sit in the owner's
+  // "restock these" tile permanently, drowning the products that genuinely
+  // need attention.
+  return products.filter((p) => !isMadeToOrder(p) && productUnits(p) <= LOW_STOCK_AT);
 }
 
 function startOfDay(d: Date): Date {

@@ -183,6 +183,7 @@ const PRODUCT_SCHEMA = {
     purchasable: { type: "boolean", description: "False keeps the item listed but not orderable." },
     priceOnRequest: { type: "boolean" },
     freeShipping: { type: "boolean" },
+    madeToOrder: { type: "boolean", description: "True = manufactured per order: sells with no stock, never reads Sold out, and confirming an order deducts nothing. Requires the made-to-order feature grant." },
     productClass: { type: "string", enum: ["peptide", "bacWater", "other"] },
     isSet: { type: "boolean" },
     inclusions: {

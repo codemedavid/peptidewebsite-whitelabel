@@ -128,6 +128,13 @@ export type Product = {
   /** When true, any checkout containing this product waives the configured
    *  shipping-location fee. Stored in Product.metadata.freeShipping. */
   freeShipping?: boolean;
+  /** "Made to order": the item is manufactured AFTER the order is placed, so it
+   *  has no inventory and is never stock-gated — no "Sold out" badge, no cart
+   *  cap, no deduction on confirm. The same statement isGroupBuyPreorder makes
+   *  about a live round, but permanent and per-product. Stored in
+   *  `metadata.madeToOrder`; gated on FEATURES.STORE_MADE_TO_ORDER and stripped
+   *  fail-closed when the tenant isn't entitled. See lib/storefront/made-to-order. */
+  madeToOrder?: boolean;
 };
 
 export type Category = { id: string; label: string };
@@ -153,6 +160,10 @@ export type OrderStatus =
   | "shipped"
   | "delivered"
   | "cancelled";
+
+/** Retail (the default for every order ever placed before the reseller portal)
+ *  or a wholesale order placed through the gated reseller catalog. */
+export type OrderType = "retail" | "reseller";
 
 /** One entry in an order's fulfillment journey — a status and when it was set. */
 export type OrderStatusEvent = { status: OrderStatus; at: string };
@@ -215,6 +226,14 @@ export type Order = {
    *  never rewrites what an existing order received. Absent when no code was used.
    *  It REDUCES the total: Total = items − discount.amount + shipping.fee + adminFee. */
   discount?: { code: string; label: string; amount: number };
+  /** How this order was placed. "reseller" means it came from a customer holding
+   *  a verified reseller session, so its lines were priced through the wholesale
+   *  tier. Stamped SERVER-SIDE at placement from the `sf.reseller` cookie
+   *  (stampResellerOrder in actions/orders.ts) — never accepted from the client,
+   *  for the same reason `imported` isn't: a buyer who could declare their own
+   *  order a reseller order would be declaring their own prices. Absent on legacy
+   *  rows and on every ordinary retail order, both of which read as "retail". */
+  orderType?: OrderType;
   /** Group buy this order was placed under, stamped SERVER-SIDE at placement
    *  (id + name snapshot — see lib/storefront/group-buy). Null/absent = placed
    *  outside any group buy or before the module existed. */
@@ -480,6 +499,12 @@ export type Brand = {
    *  entitlement independently at placement; this flag only drives display. */
   qrphFeeEntitled?: boolean;
   courierBookingEntitled?: boolean;
+  /** Operator entitlement for made-to-order products, projected server-side in
+   *  page.tsx. Default OFF; undefined counts as OFF. Drives whether the store
+   *  admin offers the "Made to order" control — the flag itself is already
+   *  stripped from the products when this is false (stripMadeToOrder), and
+   *  placement re-checks the entitlement independently. */
+  madeToOrderEntitled?: boolean;
   // Operator-flagged "new feature" advertised on the trial dashboard as a
   // Business exclusive (pickFeatureSpotlight). Absent → no spotlight strip.
   featureSpotlight?: FeatureSpotlight;
@@ -609,6 +634,13 @@ export type Brand = {
   // plan ceiling so it defaults ON; the #merchant page additionally needs an
   // access code (showPageMerchant).
   showAdminReseller?: boolean;
+  /** May the owner edit the legacy per-product reseller tiers (vials only /
+   *  complete set)? Server-derived from the reseller PAGE child — the surface
+   *  that sells them. Separate from `showAdminReseller`, which now opens on the
+   *  parent so the Reseller Portal screen can tell an owner which child is still
+   *  off instead of simply not existing. Undefined = on, so a Brand assembled
+   *  outside page.tsx keeps today's behavior (see isResellerPricingVisible). */
+  resellerPricingEditable?: boolean;
   // Store-admin module ids (Quick Actions) that the platform operator has flagged
   // as newly available — the storefront admin shows a "New" tag next to each.
   // Server-derived from the operator-controlled feature registry (feature_registry
@@ -821,6 +853,17 @@ export type Brand = {
    *  and apply wholesale pricing. Independent of `showPageMerchant` — a tenant
    *  can have wholesale pricing with no reseller page, and vice versa. */
   wholesalePricing?: boolean;
+  /** Does THIS visitor hold a verified reseller session for this tenant? Derived
+   *  server-side in page.tsx from the httpOnly `sf.reseller` cookie, so the
+   *  browser can neither read nor forge it. Drives whether MerchantPage renders
+   *  the password screen or the price list — and, more importantly, whether the
+   *  catalog shipped alongside it carries any wholesale prices at all
+   *  (wholesaleVisibleTo in lib/storefront/reseller-access.ts). */
+  resellerUnlocked?: boolean;
+  /** @deprecated The reseller password is never sent to the browser. It is stored
+   *  as a scrypt hash in branding.config and verified server-side
+   *  (verifyResellerCodeAction); page.tsx deletes both shapes off the Brand.
+   *  Retained only so legacy config blobs still type-check. */
   resellerAccessCode?: string;
 
   // Checkout / order contact. Customers complete an order by messaging the

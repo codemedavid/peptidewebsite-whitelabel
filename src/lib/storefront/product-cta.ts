@@ -11,7 +11,7 @@
 
 import type { Product } from "@/storefront/types";
 import { buildProductOptions, resolveSelectedPrice } from "./variations";
-import { optionStock, productOutOfStock } from "./inventory";
+import { effectiveStock, optionStock, productOutOfStock } from "./inventory";
 
 /** Copy used by the buy controls. One place, so the card and the modal can't
  *  drift into two different words for the same state. */
@@ -83,9 +83,13 @@ export function buildProductCta(
     selectedIndex >= 0 && selectedIndex < options.length
       ? options[selectedIndex]
       : null;
+  // Both legs resolve through the inventory engine rather than the raw column,
+  // so a made-to-order product reads as unbounded here too. Reading
+  // `product.stock` directly used to leave the final `stock <= 0` branch below
+  // saying "Sold out" for an item that productOutOfStock had just cleared.
   const stock = selected
     ? optionStock(product, selected)
-    : Math.max(0, product.stock || 0);
+    : effectiveStock(product);
 
   // The shop itself is shut. The price stays on screen — the catalog is still
   // browsable by design, and a shopper deciding whether to come back needs to

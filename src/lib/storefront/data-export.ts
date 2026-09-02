@@ -23,6 +23,7 @@
  */
 
 import type { Order, Product } from "@/storefront/types";
+import { isMadeToOrder } from "./made-to-order";
 import { orderTotal } from "./admin-dashboard";
 
 export type CsvValue = string | number | null | undefined;
@@ -120,6 +121,7 @@ export const PRODUCT_COLUMNS: readonly string[] = [
   "Discount Price",
   "Currency",
   "Stock",
+  "Made To Order",
   "Featured",
   "Available",
   "Description",
@@ -162,7 +164,10 @@ export function buildProductRows(products: readonly Product[], currency: string)
         opt.price,
         p.discountEnabled ? p.discountPrice ?? "" : "",
         p.currency || currency,
-        opt.stock,
+        // Blank rather than 0 for a made-to-order option: an importer reading
+        // "0" would create the product sold out on the other platform.
+        isMadeToOrder(p) ? "" : opt.stock,
+        isMadeToOrder(p) ? "Yes" : "No",
         p.featured ? "Yes" : "No",
         p.available === false ? "No" : "Yes",
         p.description,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { listProductsAction, saveProductAction } from "@/actions/products";
+import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
 
 // Low-stock threshold: at or below this (but above zero) a product is flagged
 // "Low" so the owner can restock before it sells out.
@@ -83,14 +84,21 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
     }
   };
 
-  const totalUnits = products.reduce((sum, p) => sum + (p.stock ?? 0), 0);
-  const outOfStock = products.filter((p) => (p.stock ?? 0) <= 0).length;
-  const lowStock = products.filter((p) => {
+  // Made-to-order products hold no inventory, so they are neither counted nor
+  // flagged here. Left in, all 19 of a made-to-order store's listings would sit
+  // permanently in "Out of stock" and bury the products that genuinely need
+  // restocking — the same reason lowStockProducts skips them on the dashboard.
+  const stocked = products.filter((p) => !isMadeToOrder(p));
+  const totalUnits = stocked.reduce((sum, p) => sum + (p.stock ?? 0), 0);
+  const outOfStock = stocked.filter((p) => (p.stock ?? 0) <= 0).length;
+  const lowStock = stocked.filter((p) => {
     const s = p.stock ?? 0;
     return s > 0 && s <= LOW_STOCK;
   }).length;
 
-  const stockTag = (stock: number) => {
+  const stockTag = (p: Product, stock: number) => {
+    if (isMadeToOrder(p))
+      return { label: MADE_TO_ORDER_LABEL, cls: "admin-pill--available" };
     if (stock <= 0) return { label: "Out of stock", cls: "admin-pill--inactive" };
     if (stock <= LOW_STOCK) return { label: "Low stock", cls: "admin-pill--featured" };
     return { label: "In stock", cls: "admin-pill--available" };
@@ -167,7 +175,7 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
             <tbody>
               {products.map((p) => {
                 const d = draftFor(p);
-                const tag = stockTag(d.stock);
+                const tag = stockTag(p, d.stock);
                 return (
                   <tr key={p.id}>
                     <td className="admin-cell-product">

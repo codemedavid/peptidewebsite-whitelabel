@@ -23,6 +23,7 @@ import {
   type ProductOption,
 } from "@/lib/storefront/variations";
 import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
+import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
 import { buildProductCta } from "@/lib/storefront/product-cta";
 import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
@@ -420,6 +421,9 @@ export function ProductCard({
   const cta = buildProductCta(product, optIdx, { gbBlocked, storeClosed });
   const { stock } = cta;
   const productOut = productOutOfStock(product);
+  // Manufactured per order: not stocked, but not unavailable either — the card
+  // says so instead of showing nothing where a stock badge would sit.
+  const madeToOrder = isMadeToOrder(product);
   // "Price on request": on hand but no fixed price. Show a label instead of a
   // price and block add-to-cart — the customer messages the store to order.
   const poa = product.priceOnRequest === true;
@@ -431,6 +435,12 @@ export function ProductCard({
     <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
       {productOut ? (
         <span className="product-card__badge badge badge-soft">Out of stock</span>
+      ) : madeToOrder ? (
+        // Made to order sits directly below "Out of stock" because it answers the
+        // same question — can I get this, and when — and above every promotional
+        // badge: a shopper needs to know the item is manufactured for them before
+        // a markdown or a Featured pin competes for the same corner.
+        <span className="product-card__badge badge badge-soft">{MADE_TO_ORDER_LABEL}</span>
       ) : poa ? (
         <span className="product-card__badge badge badge-soft">On hand</span>
       ) : gbBlocked ? (

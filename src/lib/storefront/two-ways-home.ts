@@ -19,6 +19,7 @@ import { gbCountdownLabel, productInitial, formatGbMoney } from "./group-buy-pag
 import type { GroupBuyBanner } from "./group-buy-banner";
 import { orderOnHandProducts, type OnHandOrder } from "./on-hand-order";
 import { availableUnits, productOutOfStock } from "./inventory";
+import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "./made-to-order";
 import { effectiveBasePrice, isDiscountActive } from "./sale";
 import {
   TWO_WAYS_MODE_DEFAULT,
@@ -40,6 +41,9 @@ export type TwhProduct = TwoWaysInput & {
    *  kit when the shelf is ordered per-vial-first, and for `stock` when a dose
    *  tracks its own pool (see ./inventory). */
   variations?: { name: string; price: number; stock?: number }[];
+  /** Manufactured per order — the shelf labels it instead of counting units
+   *  it does not have (see ./made-to-order). */
+  madeToOrder?: boolean;
 };
 
 /** One on-hand ("ships now") product row. */
@@ -176,7 +180,12 @@ function onHandLine<T extends TwhProduct>(
   // Stock is genuinely UNKNOWN only when no pool carries a number. Unknown is
   // not a sold-out signal — such a product stays buyable and unlabelled, the
   // same treatment the catalog gives it.
-  const known = isNum(product.stock) || (product.variations ?? []).some((v) => isNum(v.stock));
+  // A made-to-order product has no pool to report. Without this its unbounded
+  // availableUnits would render literally as "Infinity in stock".
+  const madeToOrder = isMadeToOrder(product);
+  const known =
+    !madeToOrder &&
+    (isNum(product.stock) || (product.variations ?? []).some((v) => isNum(v.stock)));
   const inStock = known ? !productOutOfStock(product) : true;
   return {
     product,
@@ -185,7 +194,7 @@ function onHandLine<T extends TwhProduct>(
     priceLabel: formatGbMoney(currency, price),
     compareAtLabel: isDiscountActive(product) ? formatGbMoney(currency, list) : "",
     inStock,
-    stockLabel: known ? `${availableUnits(product)} in stock` : "",
+    stockLabel: madeToOrder ? MADE_TO_ORDER_LABEL : known ? `${availableUnits(product)} in stock` : "",
     buyable: inStock && wayOpen,
   };
 }

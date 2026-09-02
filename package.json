@@ -164,7 +164,12 @@
     "test:qrph-fee": "tsx scripts/test-qrph-fee.ts",
     "test:courier-booking": "tsx scripts/test-courier-booking.ts",
     "test:reseller-placement": "tsx scripts/test-reseller-placement.ts",
-    "test:reseller-hardening": "tsx scripts/test-reseller-hardening.ts"
+    "test:reseller-hardening": "tsx scripts/test-reseller-hardening.ts",
+    "test:reseller-access": "tsx scripts/test-reseller-access.ts",
+    "test:reseller-session": "tsx scripts/test-reseller-session.ts",
+    "test:reseller-moq": "tsx scripts/test-reseller-moq.ts",
+    "test:inline-media": "tsx scripts/test-inline-media.ts",
+    "test:made-to-order": "tsx scripts/test-made-to-order.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

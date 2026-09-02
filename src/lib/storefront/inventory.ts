@@ -14,11 +14,18 @@ import type { Product, OrderItem } from "@/storefront/types";
 import { baseProductId, cartDisplayName } from "@/storefront/checkout";
 import { buildProductOptions, type ProductOption, type Variation } from "./variations";
 import { isGroupBuyPreorder } from "./two-ways-cart";
+import { isMadeToOrder } from "./made-to-order";
 import type { GroupBuyPriceScope } from "./two-ways";
 
 /** Just the fields the stock rules read — keeps callers from needing the full
  *  `Product` type (and avoids an import cycle back into components). */
-type StockSource = { stock?: number | null; variations?: Variation[] };
+type StockSource = {
+  stock?: number | null;
+  variations?: Variation[];
+  /** Manufactured per order — see ./made-to-order. Makes every reading below
+   *  unbounded, which is what removes the product from all six stock gates. */
+  madeToOrder?: boolean;
+};
 
 /** What the whole-product availability rules read: the stock pools plus the base
  *  price, which decides whether a distinct "Standard" option is even offered.
@@ -45,6 +52,14 @@ export function variationStock(
  * base column. Clamped to ≥ 0 so no caller ever sees a negative count.
  */
 export function effectiveStock(product: StockSource, variationName?: string): number {
+  // Made to order: the item is manufactured after the order, so there is no
+  // on-hand number to compare against. Answering Infinity here — rather than
+  // adding a sixth `if (madeToOrder)` beside every existing gate — is what lets
+  // the card badge, the option pills, the CTA, the qty stepper, addToCart, the
+  // cart drawer and the placement guard all resolve correctly through the one
+  // number they already share. Mirrors cartLineRoom's Infinity for a group-buy
+  // pre-order, which is the same statement about the same kind of item.
+  if (isMadeToOrder(product)) return Infinity;
   const own = variationStock(product, variationName);
   return Math.max(0, own ?? product.stock ?? 0);
 }
@@ -76,6 +91,8 @@ export type MovableProduct = {
   name: string;
   stock?: number | null;
   variations?: Variation[];
+  /** Made-to-order products hold no inventory, so nothing moves for them. */
+  madeToOrder?: boolean;
 };
 
 /** One order's contribution to a batch: its lines and the direction they move. */
@@ -117,6 +134,11 @@ export function applyStockMovesToProducts<T extends MovableProduct>(
   });
 
   return products.map((p, index) => {
+    // A made-to-order product has no inventory to move. Returning it untouched
+    // (same identity) also keeps the DB layer from writing a row that would only
+    // ever clamp back to the same number — see stock-move-db's round-trip budget.
+    if (isMadeToOrder(p)) return p;
+
     let variations = p.variations;
     let baseDelta = 0;
 
@@ -181,7 +203,10 @@ export function isOptionOutOfStock(product: StockSource, option: ProductOption):
  */
 export function productOutOfStock(product: AvailabilitySource): boolean {
   const options = buildProductOptions(product);
-  if (options.length === 0) return Math.max(0, product.stock ?? 0) <= 0;
+  // Resolved through effectiveStock, not the raw column: a product with no
+  // variations still has to honour the made-to-order exemption, and this branch
+  // is the one every simple listing takes.
+  if (options.length === 0) return effectiveStock(product) <= 0;
   return options.every((o) => isOptionOutOfStock(product, o));
 }
 
@@ -203,6 +228,10 @@ export function productOutOfStock(product: AvailabilitySource): boolean {
  * option is exhausted.
  */
 export function availableUnits(product: AvailabilitySource): number {
+  // Unbounded rather than the stale 0 its empty stock column would report.
+  // Callers that render this as text must check Number.isFinite — see
+  // two-ways-home, which shows the made-to-order label instead of a count.
+  if (isMadeToOrder(product)) return Infinity;
   const base = Math.max(0, product.stock ?? 0);
   const variations = product.variations ?? [];
   if (variations.length === 0) return base;

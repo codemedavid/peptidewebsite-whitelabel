@@ -381,6 +381,12 @@ export function AdminAddProduct({
   const [featured, setFeatured]     = useState<boolean>(initial?.featured || false);
   const [available, setAvailable]   = useState<boolean>(initial?.available !== false);
   const [freeShipping, setFreeShipping] = useState<boolean>(initial?.freeShipping === true);
+  // "Made to order": the item is manufactured after the order, so it sells with
+  // no inventory (see lib/storefront/made-to-order). Only offered when the
+  // operator granted the feature — but the STATE is seeded from the product
+  // either way, so an unentitled owner editing a previously-marked product
+  // saves it back unchanged instead of silently clearing the flag.
+  const [madeToOrder, setMadeToOrder] = useState<boolean>(initial?.madeToOrder === true);
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   // Group Buy product: lists under the storefront's Group Buy section (priced by
@@ -560,6 +566,7 @@ export function AdminAddProduct({
       featured,
       available,
       freeShipping,
+      madeToOrder,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
       productType: isGroupBuy ? "gb" : "onhand",
@@ -844,6 +851,15 @@ export function AdminAddProduct({
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFreeShipping(e.target.checked)} />
                 <span>Free shipping</span>
               </label>
+              {brand.madeToOrderEntitled === true && (
+                <label className="admin-check">
+                  <input type="checkbox" checked={madeToOrder}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMadeToOrder(e.target.checked)} />
+                  <span title="Made after the order is placed — this product sells with no stock: never 'Sold out', no quantity cap, and confirming an order does not deduct inventory.">
+                    🧵 Made to order — no stock needed
+                  </span>
+                </label>
+              )}
             </div>
           </div>
         </div>

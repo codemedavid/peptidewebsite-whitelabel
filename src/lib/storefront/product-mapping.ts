@@ -99,6 +99,9 @@ export type ProductMetadata = {
   /** Any checkout containing this product gets the configured shipping fee
    *  waived. Persisted only as `true` (absent = normal shipping). */
   freeShipping?: true;
+  /** Manufactured per order, so never stock-gated — see Product.madeToOrder.
+   *  Persisted only as `true` (absent = an ordinary stocked product). */
+  madeToOrder?: true;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -227,6 +230,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     purchasable: meta.purchasable !== false,
     priceOnRequest: meta.priceOnRequest === true,
     freeShipping: meta.freeShipping === true,
+    madeToOrder: meta.madeToOrder === true,
   };
 }
 
@@ -382,6 +386,7 @@ export function productToDbWrite(
       purchasable: p.purchasable === false ? false : undefined,
       priceOnRequest: p.priceOnRequest ? true : undefined,
       freeShipping: p.freeShipping ? true : undefined,
+      madeToOrder: p.madeToOrder ? true : undefined,
     }),
   };
 }
