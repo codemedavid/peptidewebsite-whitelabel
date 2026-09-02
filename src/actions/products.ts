@@ -25,6 +25,7 @@ import {
   getDemoProducts,
   getDemoStoreProducts,
   saveDemoStoreProducts,
+  getDemoBranding,
 } from "@/lib/demo/fixtures";
 import { str, normalizeProductInput } from "@/lib/storefront/product-input";
 import {
@@ -37,6 +38,8 @@ import {
 } from "@/lib/storefront/product-mapping";
 import { stripResellerPricing, preserveResellerMetadata } from "@/lib/storefront/reseller-gate";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
+import { readResellerCredential, resolveWholesaleAccess } from "@/lib/storefront/reseller-access";
+import { isResellerUnlocked } from "@/lib/auth/reseller-session";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Product } from "@/storefront/types";
@@ -108,16 +111,30 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
   // legs the render removed, and the cart would advertise prices checkout
   // re-prices away.
   const resellerCaps = await resolveResellerCaps(tenantId);
+  // …and the SAME session gate the render applies, for the same reason. This
+  // action is PUBLIC (no admin session, by design — it is the storefront's own
+  // price refresh), so gating only on the entitlement made it a way around the
+  // reseller password: a page-only tenant's whole wholesale price list came back
+  // to any anonymous caller who invoked it. `resolveWholesaleAccess` keeps public
+  // storefront wholesale public and holds gated-page prices back until this
+  // request proves a verified reseller session.
+  const resellerCred = readResellerCredential(
+    isDemoMode()
+      ? (getDemoBranding((await getTenantSlug()) ?? tenantId).config ?? {})
+      : ((await getTenantContext(tenantId)).branding?.config ?? {}),
+  );
+  const resellerUnlocked = resellerCaps.resellerPage
+    ? await isResellerUnlocked(tenantId, resellerCred.version)
+    : false;
+  // The same shared decision the render and order placement use.
+  const wholesaleAccess = resolveWholesaleAccess(resellerCaps, resellerUnlocked);
+  const stripArgs = [wholesaleAccess.visible, wholesaleAccess.visible] as const;
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
     return {
       ok: true,
-      products: stripResellerPricing(
-        demoEffectiveProducts(slug, "₱"),
-        resellerCaps.enabled,
-        resellerCaps.wholesalePricing,
-      ),
+      products: stripResellerPricing(demoEffectiveProducts(slug, "₱"), ...stripArgs),
     };
   }
 
@@ -135,8 +152,7 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
       ok: true,
       products: stripResellerPricing(
         rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
-        resellerCaps.enabled,
-        resellerCaps.wholesalePricing,
+        ...stripArgs,
       ),
     };
   } catch (e) {

@@ -143,12 +143,45 @@ const pageSrc = readFileSync(join(ROOT, "src/app/(tenant)/(storefront)/page.tsx"
 const ordersSrc = readFileSync(join(ROOT, "src/actions/orders.ts"), "utf8");
 const productsSrc = readFileSync(join(ROOT, "src/actions/products.ts"), "utf8");
 
-check("page.tsx gates the rendered catalog on BOTH reseller entitlements", () => {
-  assert.match(
-    pageSrc,
-    /stripResellerPricing\(\s*products,\s*resellerEntitled,\s*resellerCaps\.wholesalePricing,?\s*\)/,
-    "the render must pass the parent gate AND the wholesale child gate",
-  );
+check("every catalog surface strips from the SAME shared decision", () => {
+  // These three used to compute visibility separately, and diverged: the render
+  // honoured the verified reseller session while placement read the bare
+  // `wholesalePricing` cap, so an unlocked reseller browsed at ₱7 and was
+  // charged ₱10. The rule itself is exercised in test-reseller-placement.ts;
+  // what is asserted HERE is only that no surface computes its own answer —
+  // a source check, because these call sites need a tenant + DB to execute.
+  for (const [name, src] of [
+    ["page.tsx", pageSrc],
+    ["orders.ts", ordersSrc],
+    ["products.ts", productsSrc],
+  ] as const) {
+    assert.match(
+      src,
+      /resolveWholesaleAccess\(/,
+      `${name} must take its wholesale decision from the shared resolver`,
+    );
+    assert.doesNotMatch(
+      src,
+      /stripResellerPricing\([^)]*resellerCaps\.wholesalePricing/s,
+      `${name} must not strip from the bare cap — that is the divergence bug`,
+    );
+  }
+});
+
+check("page.tsx never ships the reseller password to the browser", () => {
+  // In EITHER shape. The hash matters as much as the legacy plaintext: reseller
+  // codes are short and human-chosen, so a leaked scrypt hash is crackable.
+  for (const key of [
+    "resellerAccessCode",
+    "resellerAccessCodeHash",
+    "resellerCodeVersion",
+  ]) {
+    assert.match(
+      pageSrc,
+      new RegExp(`delete \\(brand as Record<string, unknown>\\)\\.${key};`),
+      `page.tsx must delete ${key} off the client Brand`,
+    );
+  }
 });
 
 check("orders.ts gates BOTH placement catalogs (demo + DB) on the entitlement", () => {
@@ -160,11 +193,16 @@ check("orders.ts gates BOTH placement catalogs (demo + DB) on the entitlement", 
   // The gate is resolved through resolveResellerCaps now (which ANDs each child
   // with the STORE_RESELLER_PORTAL parent) rather than a bare hasFeature call.
   assert.match(ordersSrc, /resolveResellerCaps/);
-  const wholesaleFlags = ordersSrc.match(/\.wholesalePricing/g) ?? [];
+  // Both placement paths take the strip AND the order-wide MOQ scope from the
+  // shared decision. This used to count `.wholesalePricing` occurrences, which
+  // is what the divergence bug looked like from the inside: reading that cap
+  // directly at placement is now precisely the thing being ruled out.
+  // Three per path: both arguments of the strip, plus the order-wide MOQ scope.
+  const accessUses = ordersSrc.match(/holesaleAccess\.visible/g) ?? [];
   assert.ok(
-    wholesaleFlags.length >= 4,
-    `both placement paths must pass the wholesale flag to the strip AND build the
-     order-wide MOQ scope from it; found ${wholesaleFlags.length} uses`,
+    accessUses.length >= 6,
+    `both placement paths must feed the strip and the MOQ scope from the shared
+     wholesale decision; found ${accessUses.length} uses`,
   );
 });
 

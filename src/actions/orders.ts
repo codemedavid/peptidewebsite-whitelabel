@@ -54,6 +54,7 @@ import {
   type DbProductRow as DbProductRowMap,
 } from "@/lib/storefront/product-mapping";
 import { effectiveStock, applyStockMoveToProducts } from "@/lib/storefront/inventory";
+import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
@@ -67,8 +68,14 @@ import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
-import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
+import { resolveResellerCaps, type ResellerCapabilities } from "@/lib/storefront/reseller-caps";
 import { orderWholesaleScope, type WholesaleScope } from "@/lib/storefront/wholesale";
+import { resellerMoqViolation } from "@/lib/storefront/reseller-moq";
+import {
+  readResellerCredential,
+  resolveWholesaleAccess,
+} from "@/lib/storefront/reseller-access";
+import { isResellerUnlocked } from "@/lib/auth/reseller-session";
 import {
   groupBuyViolations,
   normalizeGroupBuyRules,
@@ -109,14 +116,14 @@ import {
   effectiveShippingFee,
   orderHasFreeShippingProduct,
 } from "@/storefront/checkout";
+import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import {
   activePaymentFee,
   normalizeOrderPaymentFee,
   paymentFeeBase,
   paymentFeeOvercharges,
 } from "@/lib/storefront/payment-fee";
-import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
-import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { sendAdminOrderNotification } from "@/lib/analytics/admin-notify";
@@ -554,6 +561,26 @@ async function stampGroupBuy(
 }
 
 /**
+ * Stamp whether this is a RESELLER order — server-side, from the httpOnly
+ * `sf.reseller` cookie, never from the client. Returns the decision so the MOQ
+ * validation below can key off it.
+ *
+ * The cookie is checked against the tenant AND the current password version, so
+ * a session minted for another store, or under a password the owner has since
+ * changed, does not qualify. Best-effort like the group-buy stamp: a failure
+ * here means the order records as retail, which is the safe direction (retail is
+ * the higher price, and the wholesale tier is applied by the re-price on its own
+ * MOQ evidence rather than on this flag).
+ */
+function resellerOrderType(
+  caps: ResellerCapabilities,
+  unlocked: boolean,
+): "retail" | "reseller" {
+  return caps.resellerPage && unlocked ? "reseller" : "retail";
+}
+
+
+/**
  * Block on-hand (non-group-buy) products at checkout when a run is live and the
  * owner has turned on-hand sales off (branding.config.groupBuyAllowOnHand ===
  * false). Mirrors the storefront cart gate (store.tsx → isOnHandBlocked) so a
@@ -787,6 +814,7 @@ type DbOrderRow = {
   placedAt: Date;
   groupBuyId?: string | null;
   groupBuyName?: string | null;
+  orderType?: string | null;
   imported?: boolean;
   deletedAt?: Date | string | null;
 };
@@ -820,9 +848,14 @@ function dbOrderToStorefront(row: DbOrderRow): Order {
   // rides the same rule for the same reason: a buyer able to set it would place
   // orders that land straight in the trash, invisible to the owner.
   const withImported = row.imported ? { ...base, imported: true } : base;
+  // Set from the ROW for the same reason `imported` is (see above): orderType is
+  // server-stamped authority about how the order was priced, so it must never be
+  // rehydrated through normalizeOrderInput, which also parses untrusted payloads.
+  const withType: Order =
+    row.orderType === "reseller" ? { ...withImported, orderType: "reseller" } : withImported;
   const deletedAt =
     row.deletedAt instanceof Date ? row.deletedAt.toISOString() : row.deletedAt || null;
-  return deletedAt ? { ...withImported, deletedAt } : withImported;
+  return deletedAt ? { ...withType, deletedAt } : withType;
 }
 
 /** Shape the normalized Order into the columns/JSON the DB row expects.
@@ -848,6 +881,8 @@ function orderToDbCreate(tenantId: string, p: Order) {
     ...(p.discount ? { discount: p.discount as unknown as Prisma.InputJsonValue } : {}),
     groupBuyId: p.groupBuyId ?? null,
     groupBuyName: p.groupBuyName ?? null,
+    // Server-stamped (resellerOrderType); "retail" for every ordinary order.
+    orderType: p.orderType === "reseller" ? "reseller" : "retail",
     courier: p.courier,
     trackingNumber: p.trackingNumber,
     shippingNote: p.shippingNote,
@@ -987,10 +1022,18 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // re-price can never charge a wholesale tier a tampered client kept
     // (test:reseller-gate) — the same strip page.tsx applies at render.
     const demoResellerCaps = await resolveResellerCaps(tenantId);
+    const demoResellerUnlocked = await isResellerUnlocked(
+      tenantId,
+      readResellerCredential(getDemoBranding(slug).config ?? {}).version,
+    );
+    const demoWholesaleAccess = resolveWholesaleAccess(
+      demoResellerCaps,
+      demoResellerUnlocked,
+    );
     const demoProducts = stripResellerPricing(
       demoProductsRaw,
-      demoResellerCaps.enabled,
-      demoResellerCaps.wholesalePricing,
+      demoWholesaleAccess.visible,
+      demoWholesaleAccess.visible,
     );
     // Group-buy attribution FIRST — it decides whether this order is in a live
     // round AND returns that round's pricing scope, which drives whether GB
@@ -1008,8 +1051,15 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const demoWholesaleScope = orderWholesaleScope(
       p.items,
       demoProducts,
-      demoResellerCaps.wholesalePricing,
+      demoWholesaleAccess.visible,
     );
+    // Reseller attribution + the gated page's MOQ rule, before the re-price so a
+    // rejected order never gets as far as touching stock or the promo counter.
+    p.orderType = resellerOrderType(demoResellerCaps, demoResellerUnlocked);
+    if (demoWholesaleAccess.moqEnforced) {
+      const violation = resellerMoqViolation(p.items, demoProducts);
+      if (violation) return { error: violation };
+    }
     repriceItems(p.items, demoProducts, demoGbScope, demoWholesaleScope);
     const demoPaused = purchasableViolation(demoProducts, p.items);
     if (demoPaused) return { error: demoPaused };
@@ -1120,13 +1170,29 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     const catalogRaw = rows.map((r) =>
       dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
     );
-    // Same reseller entitlement gate as the demo path / storefront render —
-    // an unentitled tenant's placement catalog carries no wholesale legs.
+    // The SAME wholesale decision the storefront render and the price refresh
+    // make (resolveWholesaleAccess), from the same inputs. Reading the bare
+    // `wholesalePricing` cap here instead is what charged an unlocked reseller
+    // on a page-only tenant ₱10/unit for a cart the page quoted at ₱7: the page
+    // honoured their verified session and placement did not.
     const resellerCaps = await resolveResellerCaps(tenantId);
-    const catalog = stripResellerPricing(
+    const resellerUnlocked = await isResellerUnlocked(
+      tenantId,
+      readResellerCredential(config).version,
+    );
+    const wholesaleAccess = resolveWholesaleAccess(resellerCaps, resellerUnlocked);
+    const catalogResold = stripResellerPricing(
       catalogRaw,
-      resellerCaps.enabled,
-      resellerCaps.wholesalePricing,
+      wholesaleAccess.visible,
+      wholesaleAccess.visible,
+    );
+    // Made-to-order, same fail-closed shape and for the same reason: the flag
+    // lives in product metadata and outlives a revoked grant, so an unentitled
+    // tenant's placement catalog must not carry it. This is the boundary a stale
+    // tab or a hand-rolled request has to clear — the storefront's strip is UX.
+    const catalog = stripMadeToOrder(
+      catalogResold,
+      await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER),
     );
     // Tenant slug (used for group-buy attribution + the on-hand gate below).
     const slug = (await getTenantSlug()) ?? tenantId;
@@ -1140,7 +1206,17 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // their gbPrice (the single price the group-buy page advertised). Runs before
     // the fee/discount stamps below so they charge the current subtotal.
     // Same combined-quantity scope as the demo path above (and as the cart).
-    const wholesaleScope = orderWholesaleScope(p.items, catalog, resellerCaps.wholesalePricing);
+    const wholesaleScope = orderWholesaleScope(p.items, catalog, wholesaleAccess.visible);
+    // Reseller attribution, then the gated page's MOQ rule — before the re-price
+    // so a rejected order never reaches the stock guard or the promo counter.
+    // `moqEnforced` is narrower than "is a reseller": the minimum belongs to the
+    // gated price list, so a reseller shopping the ORDINARY storefront of a
+    // public-wholesale tenant buys one unit at retail like anybody else.
+    p.orderType = resellerOrderType(resellerCaps, resellerUnlocked);
+    if (wholesaleAccess.moqEnforced) {
+      const violation = resellerMoqViolation(p.items, catalog);
+      if (violation) return { error: violation };
+    }
     repriceItems(p.items, catalog, gbScope, wholesaleScope);
 
     // Admin fee is operator-revocable per tenant (admin → Features) AND

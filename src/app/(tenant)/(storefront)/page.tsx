@@ -37,7 +37,15 @@ import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
+import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
+import {
+  readResellerCredential,
+  hasResellerCode,
+  resolveWholesaleAccess,
+} from "@/lib/storefront/reseller-access";
+import { readResellerPageCopy } from "@/lib/storefront/reseller-page-copy";
+import { isResellerUnlocked } from "@/lib/auth/reseller-session";
 import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
 import { getBestSellerCounts } from "@/lib/storefront/best-sellers";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
@@ -83,23 +91,45 @@ export default async function HomePage() {
   // stale `showPageMerchant` may sit in config.
   const resellerCaps = await resolveResellerCaps(tenantId);
   const resellerEntitled = resellerCaps.enabled;
-  const resellerCode =
-    typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
-  brand.showPageMerchant = resellerEntitled && resellerCode !== "";
+  const resellerCred = readResellerCredential(config);
+  brand.showPageMerchant = resellerEntitled && hasResellerCode(resellerCred);
   // The store-admin manager view gates on the entitlement alone — the owner
   // sets the access code from inside it, so it can't require one to appear.
   // The Reseller PAGE is its own child entitlement: a tenant can be granted
   // wholesale pricing on the regular storefront without ever getting the gated
   // #merchant page, so both surfaces AND its admin manager gate on that child.
   brand.showPageMerchant = brand.showPageMerchant && resellerCaps.resellerPage;
-  brand.showAdminReseller = resellerCaps.resellerPage;
+  // The manager view opens on the PARENT so an owner whose operator switched
+  // "Reseller" on finds a screen that explains what is still missing, rather
+  // than no screen at all. The price FIELDS it links to stay on the page child.
+  brand.showAdminReseller = resellerCaps.enabled;
+  brand.resellerPricingEditable = resellerCaps.resellerPage;
   // Wholesale (MOQ) pricing on the regular storefront — cards, product pages,
   // cart and checkout. Independent of the page above.
   brand.wholesalePricing = resellerCaps.wholesalePricing;
 
-  // The reseller access code is validated server-side (verifyResellerCodeAction);
-  // never ship it to the browser, even though the rest of `config` is public.
+  // Does THIS request hold a verified reseller session for THIS tenant at the
+  // CURRENT password version? Server-side and httpOnly — the browser cannot set
+  // or read it — so it is safe to decide what the page is allowed to contain.
+  // Read only when the tenant actually runs a gated portal, to keep the cookie
+  // parse off every other store's render path.
+  const resellerUnlocked =
+    brand.showPageMerchant === true
+      ? await isResellerUnlocked(tenantId, resellerCred.version)
+      : false;
+  brand.resellerUnlocked = resellerUnlocked;
+  // Owner-editable gate copy (falls back to the shared defaults).
+  const resellerCopy = readResellerPageCopy(config);
+  brand.merchantGateTitle = resellerCopy.gateTitle;
+  brand.merchantGateSub = resellerCopy.gateSub;
+
+  // The reseller password is verified server-side (verifyResellerCodeAction);
+  // never ship it — in EITHER shape — to the browser, even though the rest of
+  // `config` is public. The hash matters as much as the legacy plaintext: it is
+  // an offline-crackable credential, and these codes are short and human-chosen.
   delete (brand as Record<string, unknown>).resellerAccessCode;
+  delete (brand as Record<string, unknown>).resellerAccessCodeHash;
+  delete (brand as Record<string, unknown>).resellerCodeVersion;
 
   // Same for the store-admin credential. It now lives on the Tenant row, but
   // stores created before that migration may still carry a legacy plaintext
@@ -399,7 +429,34 @@ export default async function HomePage() {
   // stray product data (test:reseller-gate). orders.ts re-applies this strip at
   // placement so a tampered client can't restore it. DB rows keep their data —
   // re-granting the feature brings the prices back untouched.
-  products = stripResellerPricing(products, resellerEntitled, resellerCaps.wholesalePricing);
+  //
+  // The gated reseller page adds a SECOND reason to strip. Its prices are the
+  // thing the password protects, so they must not be serialized into the page
+  // for a visitor who has not presented it. `resolveWholesaleAccess` encodes the
+  // split: a tenant selling wholesale on the regular storefront ships those
+  // prices to everyone (they are public by design — any shopper who reaches the
+  // MOQ pays them), while a page-only tenant ships them to nobody until the
+  // server-verified cookie says this reseller unlocked the portal. Before this,
+  // the whole wholesale price list was readable in View Source by any visitor,
+  // because the only gate was a `sessionStorage` flag in the browser.
+  // ONE decision, shared with the price refresh (products.ts) and with order
+  // placement (orders.ts), so the price a customer browses is the price they are
+  // charged. These used to be computed separately and disagreed.
+  const wholesaleAccess = resolveWholesaleAccess(resellerCaps, resellerUnlocked);
+  products = stripResellerPricing(
+    products,
+    wholesaleAccess.visible,
+    wholesaleAccess.visible,
+  );
+
+  // Made-to-order: items manufactured per order sell with no inventory at all.
+  // Stripped fail-closed for an unentitled tenant so a metadata key left behind
+  // by a revoked grant can never keep a product off its own stock gate. The same
+  // strip runs again in placeStorefrontOrderAction — this one only decides what
+  // is DISPLAYED, and display and charge have to agree.
+  const madeToOrderEntitled = await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER);
+  brand.madeToOrderEntitled = madeToOrderEntitled;
+  products = stripMadeToOrder(products, madeToOrderEntitled);
 
   // How many group-buy listings exist at all, independent of any round. Between
   // rounds there is no round scope to read, so the productType "gb" tag is the
