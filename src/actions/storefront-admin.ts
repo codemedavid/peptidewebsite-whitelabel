@@ -33,9 +33,19 @@ import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } fro
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeGroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
-import { safeExternalUrl } from "@/lib/storefront/courier-booking";
 import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
+import {
+  readResellerCredential,
+  hasResellerCode,
+  verifyResellerCode,
+  nextCredential,
+} from "@/lib/storefront/reseller-access";
+import { readResellerPageCopy, readResellerPageCopyPatch } from "@/lib/storefront/reseller-page-copy";
+import { rateLimit, clientIp } from "@/lib/security/rate-limit";
+import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
+import { safeExternalUrl } from "@/lib/storefront/courier-booking";
+import { saveResellerSession, clearResellerSession } from "@/lib/auth/reseller-session";
 
 export type ActionResult = { ok: true } | { error: string };
 
@@ -887,38 +897,71 @@ export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionRes
 // ── Reseller / merchant portal ────────────────────────────────────────────────
 
 // Whether the reseller portal is available is a PLATFORM entitlement
-// (FEATURES.STORE_RESELLER_PORTAL), toggled per tenant by the operator in
-// admin → Features. The store owner only controls the access code (+ per-product
-// wholesale prices). The storefront shows #merchant when entitled AND a code is
-// set (see (storefront)/page.tsx); the code is validated server-side here.
+// (FEATURES.STORE_RESELLER_PORTAL + its .page child), toggled per tenant by the
+// operator in admin → Features. The store owner controls the PASSWORD and the
+// page copy (+ per-product wholesale prices). The storefront shows the portal
+// when entitled AND a password is set (see (storefront)/page.tsx); the password
+// is verified server-side here and never leaves the server.
 export type ResellerSettings = {
-  /** Operator entitlement — the store owner can't change this, only see it. */
+  /** The Reseller parent entitlement — the owner can't change this, only see it. */
   available: boolean;
-  code: string;
+  /** The reseller PAGE child. Without it the gated portal doesn't render at all. */
+  pageAvailable: boolean;
+  /** The wholesale-pricing child — MOQ pricing on the regular storefront. */
+  wholesaleAvailable: boolean;
+  /** Whether a password is currently set. The password ITSELF is never returned:
+   *  it is stored as a scrypt hash and cannot be read back, so the admin UI shows
+   *  "set / not set" and offers replace + remove rather than an editable value. */
+  hasCode: boolean;
+  /** Owner-editable gate copy. */
+  gateTitle: string;
+  gateSub: string;
 };
 
 /**
- * The reseller portal settings for the current tenant (store-admin only — it
- * returns the access code, so it must never be exposed to the public). Reads the
- * `resellerAccessCode` from branding.config plus the platform entitlement so the
- * owner can see whether their provider has enabled the feature.
+ * The reseller portal settings for the current tenant (store-admin only).
+ *
+ * Deliberately returns `hasCode` rather than the password. The password used to
+ * be stored — and returned — in plaintext, so anyone who reached this action, or
+ * any log that captured its response, saw the live wholesale credential. It is a
+ * scrypt hash now (lib/storefront/reseller-access.ts), which is one-way: even the
+ * owner cannot read their own password back, only replace or remove it.
  */
 export async function getResellerSettingsAction(): Promise<ResellerSettings | { error: string }> {
   const ctx = await requireStaffPermission("reseller");
   if (!ctx) return { error: NO_ACCESS };
   const tenantId = ctx.tenantId;
   const config = await readConfig(tenantId);
+  const caps = await resolveResellerCaps(tenantId);
+  const cred = readResellerCredential(config);
+  const copy = readResellerPageCopy(config);
   return {
-    available: await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL),
-    code: typeof config.resellerAccessCode === "string" ? config.resellerAccessCode : "",
+    available: caps.enabled,
+    pageAvailable: caps.resellerPage,
+    wholesaleAvailable: caps.wholesalePricing,
+    hasCode: hasResellerCode(cred),
+    gateTitle: copy.gateTitle,
+    gateSub: copy.gateSub,
   };
 }
 
 /**
- * Persist the reseller access code into the shared `branding.config` blob
- * (read-modify-write, mirroring the other save* actions so it never clobbers the
- * rest of the Brand config). The on/off is the operator's entitlement, not stored
- * here; the storefront goes live once this code is set AND the tenant is entitled.
+ * Persist the reseller password + page copy into the shared `branding.config`
+ * blob (read-modify-write, mirroring the other save* actions so it never
+ * clobbers the rest of the Brand config).
+ *
+ * The password is hashed with scrypt before it is stored and the legacy
+ * plaintext field is deleted in the same write, so a tenant is fully migrated off
+ * plaintext the first time their owner touches this screen. Every save bumps
+ * `resellerCodeVersion`, which invalidates every reseller session currently
+ * holding the old password — that is what makes changing or removing the
+ * password actually revoke access rather than merely change what the next login
+ * expects.
+ *
+ * `code` semantics:
+ *   omitted / undefined → keep the existing password (the owner only edited copy)
+ *   a non-empty string  → set it as the new password
+ *   "" with clear: true → REMOVE the password, re-locking the portal
  */
 export async function saveResellerSettingsAction(input: unknown): Promise<ActionResult> {
   const ctx = await requireStaffPermission("reseller");
@@ -926,11 +969,35 @@ export async function saveResellerSettingsAction(input: unknown): Promise<Action
   const tenantId = ctx.tenantId;
 
   const o = (input ?? {}) as Record<string, unknown>;
-  const code = String(o.code ?? "").slice(0, 120).trim();
+  const rawCode = typeof o.code === "string" ? o.code.slice(0, 120).trim() : null;
+  const clear = o.clear === true;
 
   const slug = await getTenantSlug();
   const current = await readConfig(tenantId);
-  const config = { ...current, resellerAccessCode: code };
+  const cred = readResellerCredential(current);
+
+  // A blank submission is NOT a removal — that has to be asked for explicitly,
+  // or an owner who saved the page copy with the (unreadable) password box empty
+  // would silently lock every one of their resellers out.
+  if (rawCode !== null && !rawCode && !clear) {
+    return { error: "Enter a password, or use Remove password to clear it." };
+  }
+  if (rawCode !== null && rawCode && rawCode.length < 4) {
+    return { error: "Use a password of at least 4 characters." };
+  }
+
+  const config: Record<string, unknown> = {
+    ...current,
+    ...readResellerPageCopyPatch(o, current),
+  };
+  if (clear || rawCode) {
+    Object.assign(config, nextCredential(clear ? "" : (rawCode ?? ""), cred));
+    // `nextCredential` sets the legacy plaintext key to undefined so it is
+    // dropped rather than left beside the new hash; strip it explicitly because
+    // an undefined value would otherwise survive into the stored JSON as null.
+    delete config.resellerAccessCode;
+    if (clear) delete config.resellerAccessCodeHash;
+  }
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });
@@ -947,27 +1014,63 @@ export async function saveResellerSettingsAction(input: unknown): Promise<Action
 }
 
 /**
- * Verify a reseller access code (server-side) for the current tenant. Public —
- * no admin session — so the wholesale price list can be unlocked by resellers.
- * Returns ok only when the tenant is ENTITLED to the reseller portal (operator
- * toggle) AND the (case-insensitive) code matches the one in branding.config. The
- * code is compared on the server and never shipped to the client.
+ * Verify a reseller password (server-side) for the current tenant and, on
+ * success, MINT THE SESSION COOKIE. Public — no admin session — so resellers can
+ * unlock the wholesale price list themselves.
+ *
+ * Three things changed here relative to the original check, all of them
+ * load-bearing:
+ *
+ *  1. It gates on the reseller PAGE child, not just the Reseller parent. The
+ *     storefront already hid the page on that child (page.tsx), so verifying
+ *     against the parent alone meant this action would happily authenticate
+ *     against a page the tenant was not entitled to run.
+ *  2. It compares against a scrypt hash (falling back to the legacy plaintext for
+ *     tenants who have not re-saved yet) instead of a plaintext string.
+ *  3. It sets an httpOnly, tenant-scoped, version-stamped cookie. The unlock used
+ *     to be a `sessionStorage` flag in the browser, which decided nothing on the
+ *     server — the wholesale prices were already in the page for everyone. The
+ *     cookie is what lets the RENDER withhold those prices until the password is
+ *     actually presented.
  */
+/** Brute-force window for the public reseller code check — the same 15 minutes
+ *  the visitor access gate uses. */
+const RESELLER_VERIFY_WINDOW_MS = 15 * 60 * 1000;
+
 export async function verifyResellerCodeAction(code: string): Promise<ActionResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Could not resolve this store." };
 
-  if (!(await hasFeature(tenantId, FEATURES.STORE_RESELLER_PORTAL))) {
-    return { error: "Reseller access isn't available." };
-  }
+  const caps = await resolveResellerCaps(tenantId);
+  if (!caps.resellerPage) return { error: "Reseller access isn't available." };
+
+  // ~10 attempts / 15 min / IP, exactly as the visitor access gate does
+  // (actions/storefront-gate.ts). This endpoint is public and unauthenticated
+  // and it guards a wholesale price list; codes are accepted at 4 characters and
+  // lowercased before comparison, so the keyspace is small enough to walk.
+  // Scoped to tenant AND ip so one store's attacker cannot lock out another's
+  // resellers. Checked BEFORE the comparison below: verifyResellerCode runs a
+  // synchronous scrypt, so limiting afterwards would still let an attacker burn
+  // the event loop at will.
+  const ip = await clientIp();
+  const limited = rateLimit(`reseller:verify:${tenantId}:${ip}`, 10, RESELLER_VERIFY_WINDOW_MS);
+  if (!limited.ok) return { error: "Too many attempts. Try again in a few minutes." };
 
   const config = await readConfig(tenantId);
-  const expected = typeof config.resellerAccessCode === "string" ? config.resellerAccessCode.trim() : "";
-  if (!expected) return { error: "Reseller access isn't available." };
+  const cred = readResellerCredential(config);
+  if (!hasResellerCode(cred)) return { error: "Reseller access isn't available." };
 
-  if ((code ?? "").trim().toLowerCase() !== expected.toLowerCase()) {
+  if (!verifyResellerCode(code ?? "", cred)) {
     return { error: "Incorrect access code." };
   }
+
+  await saveResellerSession(tenantId, cred.version);
+  return { ok: true };
+}
+
+/** Drop the reseller session (the portal's "Lock" / sign-out). Always succeeds. */
+export async function resellerSignOutAction(): Promise<ActionResult> {
+  await clearResellerSession();
   return { ok: true };
 }
 
