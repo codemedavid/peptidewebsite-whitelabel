@@ -13,7 +13,7 @@
 // pre-add control, the live cart count on a cart-backed one. Every `onChange`
 // carries an ABSOLUTE quantity, never a delta.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import {
   clampQty,
@@ -77,9 +77,27 @@ export function QtyField({
   // the customer's own keystrokes, which must survive re-renders untouched —
   // clamping an in-progress "1" up to a 50-unit MOQ makes the field unusable.
   const [draft, setDraft] = useState<string | null>(null);
+
+  // The last quantity this field itself asked for. Without it the field cannot
+  // tell "the owner reset me" from "I just committed", and it has to handle
+  // those opposite ways — see the resync below.
+  const pushedRef = useRef<number | null>(null);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    // The quantity moved underneath an open draft. If this field asked for the
+    // move, the draft is still the customer's live text and must survive —
+    // otherwise typing "1" toward "120" on a 50-unit MOQ would be snapped back
+    // to "50" mid-word. If anything ELSE moved it — Add-to-Cart resetting the
+    // card to 1, or the cart trimming a line to available stock — the draft is
+    // describing a quantity that no longer exists, so the box follows the truth.
+    if (pushedRef.current !== value) setDraft(null);
+  }
+
   const shown = draft ?? String(value);
 
   const push = (next: number) => {
+    pushedRef.current = next;
     if (next !== value) onChange(next);
   };
 

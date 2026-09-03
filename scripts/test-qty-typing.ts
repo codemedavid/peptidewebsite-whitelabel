@@ -202,6 +202,26 @@ check("commits on Enter as well as blur, so a keyboard shopper is never stranded
   assert.ok(qtyField.includes('"Enter"'), "no Enter handler — typing 12 then pressing Enter does nothing");
 });
 
+check("surrenders the draft when the OWNER changes the quantity underneath it", () => {
+  // Found by driving the real storefront: type 12, press Add to Cart. The card
+  // resets its qty to 1, but the box went on showing "12" — the customer's own
+  // draft outlived the quantity it described, so the next add silently offered
+  // a number the control no longer held. The field must follow an external
+  // change (an add-to-cart reset, or the cart trimming a line to stock) while
+  // still ignoring the value it pushed itself — otherwise every keystroke on a
+  // MOQ product would be snapped back to the minimum mid-word.
+  assert.ok(
+    qtyField.includes("pushedRef"),
+    "QtyField cannot tell its own commits from an external change, so it either " +
+      "strands a stale draft after Add to Cart or destroys typing on a MOQ product",
+  );
+  assert.ok(
+    /if \(value !== seen\)/.test(qtyField),
+    "QtyField never compares the incoming value with the one it last rendered — " +
+      "an owner-driven reset leaves the typed draft on screen",
+  );
+});
+
 check("routes every edit through the shared helpers", () => {
   assert.ok(
     qtyField.includes("sanitizeQtyDraft") && qtyField.includes("commitQtyDraft"),
