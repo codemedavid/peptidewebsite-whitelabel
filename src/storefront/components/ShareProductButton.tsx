@@ -33,9 +33,15 @@ export function ShareProductButton({
   /** Used as the share sheet's title, so the target app shows the store, not a
    *  bare URL. Optional — the product name alone is a fine fallback. */
   storeName?: string;
-  /** `card` is the compact icon that rides the product card; `detail` is the
-   *  labelled button in the quick-view modal, which has room for words. */
-  variant?: "card" | "detail";
+  /** `card`   — the compact icon that rides the classic product card, absolutely
+   *              positioned in its corner.
+   *  `detail` — the labelled button in the quick-view modal, which has room for
+   *              words.
+   *  `row`    — an in-flow icon for the layouts whose cards are list rows and
+   *              clip their overflow (the two-ways shelf, the group-buy page).
+   *              Its fallback panel is in-flow too, so an `overflow: hidden`
+   *              parent cannot swallow the one path that always works. */
+  variant?: "card" | "detail" | "row";
 }) {
   const [state, setState] = useState<ShareState>("idle");
   // The resolved URL, only needed for the manual fallback panel.

@@ -246,7 +246,7 @@ check(
 // while the best-seller tally moved behind a cached loader (lib/storefront/
 // best-sellers.ts) to stop rescanning every active order per render. Both files
 // are audited so moving a read can never move it out from under this rule.
-const homeAudit = audit("src/app/(tenant)/(storefront)/page.tsx");
+const homeAudit = audit("src/app/(tenant)/(storefront)/storefront-home.tsx");
 check(
   "the storefront home — the group-buy fill count filters",
   homeAudit.total >= 1 && homeAudit.filtered === homeAudit.total,
@@ -377,7 +377,7 @@ check(
 );
 check(
   "the storefront home filters its demo lists too",
-  /activeOrders\(/.test(src("src/app/(tenant)/(storefront)/page.tsx")),
+  /activeOrders\(/.test(src("src/app/(tenant)/(storefront)/storefront-home.tsx")),
 );
 check(
   "the cached best-seller tally filters its demo list too",

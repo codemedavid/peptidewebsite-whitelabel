@@ -139,7 +139,7 @@ check("preservation is immutable — the incoming metadata object is unchanged",
 // ── Wiring: both server surfaces apply the gate ──────────────────────────────
 
 const ROOT = join(__dirname, "..");
-const pageSrc = readFileSync(join(ROOT, "src/app/(tenant)/(storefront)/page.tsx"), "utf8");
+const pageSrc = readFileSync(join(ROOT, "src/app/(tenant)/(storefront)/storefront-home.tsx"), "utf8");
 const ordersSrc = readFileSync(join(ROOT, "src/actions/orders.ts"), "utf8");
 const productsSrc = readFileSync(join(ROOT, "src/actions/products.ts"), "utf8");
 

@@ -123,11 +123,15 @@ check("Brand type declares defaultProductImage", () => {
   assert.ok(read("src/storefront/types.ts").includes("defaultProductImage"));
 });
 check("storefront page.tsx normalizes config.defaultProductImage server-side", () => {
-  assert.ok(read("src/app/(tenant)/(storefront)/page.tsx").includes("normalizeDefaultProductImage"));
+  assert.ok(read("src/app/(tenant)/(storefront)/storefront-home.tsx").includes("normalizeDefaultProductImage"));
 });
-check("SEO product detail page falls back to the brand default", () => {
+check("shared product link page falls back to the brand default", () => {
+  // The old /products/[slug] page now permanently redirects here (see
+  // scripts/test-product-link.ts); /p/<slug> is the canonical product URL, and
+  // it is where the fallback has to hold — that image is the link preview a
+  // customer sees in chat before they ever open the store.
   assert.ok(
-    read("src/app/(tenant)/(storefront)/products/[slug]/page.tsx").includes(
+    read("src/app/(tenant)/(storefront)/p/[slug]/page.tsx").includes(
       "normalizeDefaultProductImage",
     ),
   );

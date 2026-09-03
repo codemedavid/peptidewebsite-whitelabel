@@ -33,6 +33,7 @@ import {
 import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
+import { ShareProductButton } from "./ShareProductButton";
 
 export function TwoWaysHome({
   brand,
@@ -196,6 +197,7 @@ export function TwoWaysHome({
                 addToCart={addToCart}
                 setLineQty={setLineQty}
                 storeClosed={storeClosed}
+                storeName={brand.name}
               />
             ))}
           </ul>
@@ -289,6 +291,7 @@ function OnHandRow({
   addToCart,
   setLineQty,
   storeClosed,
+  storeName,
 }: {
   line: OnHandLine<Product>;
   image: string | null;
@@ -305,6 +308,8 @@ function OnHandRow({
   /** The owner shut the whole shop (Admin → Store Status). The row still shows
    *  the product and its price; the buy control becomes an inert "Closed". */
   storeClosed: boolean;
+  /** Store name, used only as the native share sheet's title. */
+  storeName?: string;
 }) {
   const p = line.product;
   const options = buildProductOptions(p);
@@ -342,7 +347,12 @@ function OnHandRow({
         )}
       </span>
       <div className="sf-twh__row-main">
-        <div className="sf-twh__row-name">{p.name}</div>
+        <div className="sf-twh__row-name">
+          {p.name}
+          {/* This layout never mounts <Catalog>, so it does not inherit the
+              catalog card's share control — it needs its own. */}
+          <ShareProductButton product={p} storeName={storeName} variant="row" />
+        </div>
         <div className="sf-twh__row-meta">
           {line.stockLabel && (
             <span className={`sf-twh__stock${line.inStock ? "" : " sf-twh__stock--out"}`}>

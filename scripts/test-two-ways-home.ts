@@ -533,7 +533,7 @@ check("the ways argument is never mutated", () => {
 // at their on-hand price. So the components gate on the way state instead.
 check("the storefront page never deletes the banner to hide the group-buy way", () => {
   const src = readFileSync(
-    join(__dirname, "..", "src/app/(tenant)/(storefront)/page.tsx"),
+    join(__dirname, "..", "src/app/(tenant)/(storefront)/storefront-home.tsx"),
     "utf8",
   );
   assert.doesNotMatch(

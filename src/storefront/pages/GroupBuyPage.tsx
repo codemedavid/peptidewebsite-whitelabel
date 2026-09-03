@@ -28,6 +28,7 @@ import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
 import { isStoreClosed } from "@/lib/storefront/store-status";
+import { ShareProductButton } from "../components/ShareProductButton";
 
 export function GroupBuyPage({
   brand,
@@ -149,6 +150,7 @@ export function GroupBuyPage({
               setLineQty={setLineQty}
               storeClosed={storeClosed}
               viewOnly={view.viewOnly}
+              storeName={brand.name}
             />
           ))}
         </div>
@@ -212,6 +214,7 @@ function GbProductCard({
   setLineQty,
   storeClosed,
   viewOnly,
+  storeName,
 }: {
   line: GroupBuyPageLine<Product>;
   image: string | null;
@@ -230,6 +233,8 @@ function GbProductCard({
   /** The group buy is a pricing reference right now — no round running, or the
    *  owner turned ordering off. Everything renders; only the buying stops. */
   viewOnly: boolean;
+  /** Store name, used only as the native share sheet's title. */
+  storeName?: string;
 }) {
   const p = line.product;
   const options = line.options;
@@ -274,7 +279,14 @@ function GbProductCard({
       </div>
       <div className="gbpage__card-body">
         <div>
-          <div className="gbpage__card-name">{line.displayName}</div>
+          <div className="gbpage__card-name">
+            {line.displayName}
+            {/* The group-buy page renders its own cards, so it does not inherit
+                the catalog card's share control. `row` keeps the button in flow:
+                .gbpage__card clips its overflow, which would swallow an
+                absolutely-positioned corner icon and its fallback panel. */}
+            <ShareProductButton product={p} storeName={storeName} variant="row" />
+          </div>
           <div className="gbpage__card-note">COA ✓ · third-party tested</div>
         </div>
         {showOptions && (

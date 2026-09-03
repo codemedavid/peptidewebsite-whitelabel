@@ -348,6 +348,33 @@ check("the share button offers the native share sheet where available", () => {
   );
 });
 
+// ─────────────── card surfaces that never mount <Catalog> ───────────────────
+console.log("\nNon-catalog card surfaces");
+
+// These two layouts render their OWN product cards, so they inherit nothing
+// from Catalog.tsx. That gap is exactly how the quick-view modal shipped
+// classic-only; the share link must not repeat it.
+for (const [label, file] of [
+  ["the two-ways on-hand shelf", "src/storefront/components/TwoWaysHome.tsx"],
+  ["the group-buy page", "src/storefront/pages/GroupBuyPage.tsx"],
+] as const) {
+  check(`${label} renders a share control`, () => {
+    assert.ok(
+      /<ShareProductButton/.test(src(file)),
+      `${file} has no ShareProductButton — its products cannot be shared`,
+    );
+  });
+
+  check(`${label} uses the in-flow row variant`, () => {
+    // Both clip their overflow, so an absolutely-positioned corner icon (and
+    // more importantly its copy-failed fallback panel) would be invisible.
+    assert.ok(
+      /variant="row"/.test(src(file)),
+      `${file} uses a positioned share variant inside an overflow-clipped card`,
+    );
+  });
+}
+
 // ───────────────────────── the /p/[slug] server route ───────────────────────
 console.log("\n/p/[slug] server route");
 

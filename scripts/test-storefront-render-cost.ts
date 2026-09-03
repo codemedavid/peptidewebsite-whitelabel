@@ -82,7 +82,7 @@ check("selects only status+items (no PII)", /status:\s*true/.test(code(bs)) && /
 check("failure degrades to empty counts, not a broken page", /catch/.test(bs));
 
 console.log("wiring — the home page uses the cached loaders");
-const page = read("src/app/(tenant)/(storefront)/page.tsx");
+const page = read("src/app/(tenant)/(storefront)/storefront-home.tsx");
 check("home page imports the best-seller loader", /from "@\/lib\/storefront\/best-sellers"/.test(page));
 check("home page no longer inlines the order scan", !/db\.storefrontOrder\.findMany/.test(page));
 

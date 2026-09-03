@@ -330,7 +330,7 @@ check("a real tenant with no saved reviews shows none — not the demo rows", ()
     /brandSeed\.reviews \?\? SEED_REVIEWS/.test(store),
     "store seeds from the server prop and only falls back when it is absent",
   );
-  const page = src("src/app/(tenant)/(storefront)/page.tsx");
+  const page = src("src/app/(tenant)/(storefront)/storefront-home.tsx");
   assert.ok(
     /brand\.reviews = normalizeReviews\(/.test(page),
     "page.tsx always assigns brand.reviews, so a real tenant never hits the fallback",
@@ -338,7 +338,7 @@ check("a real tenant with no saved reviews shows none — not the demo rows", ()
 });
 
 check("the storefront page feeds branding.config.reviews into the brand prop", () => {
-  const p = src("src/app/(tenant)/(storefront)/page.tsx");
+  const p = src("src/app/(tenant)/(storefront)/storefront-home.tsx");
   assert.ok(/normalizeReviews\s*\(/.test(p), "page.tsx normalizes the stored reviews");
   assert.ok(/reviews/.test(p), "page.tsx reads reviews from config");
 });

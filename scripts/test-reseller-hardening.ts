@@ -109,7 +109,7 @@ check("isResellerUnlocked answers false instead of throwing", () => {
 check("the storefront render no longer needs its own guard around the call", () => {
   // If the function fails closed, a missing secret degrades the reseller portal
   // instead of 500-ing the whole home page.
-  const src = read("src/app/(tenant)/(storefront)/page.tsx");
+  const src = read("src/app/(tenant)/(storefront)/storefront-home.tsx");
   assert.match(src, /isResellerUnlocked\(/, "the render still consults the session");
 });
 

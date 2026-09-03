@@ -9979,3 +9979,23 @@
   .sf-root .sf-detail__share .sf-share__btn { padding: 7px; }
   .sf-root .sf-detail__share { right: 54px; }
 }
+
+/* Row variant: for layouts whose "card" is a list row (the two-ways shelf) or
+   clips its overflow (the group-buy card). Stays in normal flow — no absolute
+   positioning to depend on, and no corner to be clipped out of. */
+.sf-root .sf-share[data-variant="row"] {
+  flex: none;
+  vertical-align: middle;
+}
+.sf-root .sf-share[data-variant="row"] .sf-share__btn {
+  padding: 5px;
+  border-color: transparent;
+}
+/* The fallback panel goes in-flow here too: an `overflow: hidden` ancestor
+   would otherwise clip the one path that works when both copy APIs refuse. */
+.sf-root .sf-share[data-variant="row"] .sf-share__manual {
+  position: static;
+  margin-left: 6px;
+  box-shadow: none;
+}
+.sf-root .sf-share[data-variant="row"] .sf-share__manual-input { width: 150px; }
