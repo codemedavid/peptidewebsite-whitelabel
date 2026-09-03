@@ -53,6 +53,10 @@ import {
   pairingUsable,
 } from "../src/lib/integrations/telegram-pairing";
 import { makeUpdateDeduper } from "../src/lib/integrations/telegram-dedupe";
+import {
+  buildWebhookUrl,
+  webhookHostIssue,
+} from "../src/lib/integrations/telegram-webhook-url";
 import { planStatusChange } from "../src/lib/storefront/order-status";
 import { orderTotal } from "../src/lib/analytics/events";
 import type { Order } from "../src/storefront/types";
@@ -384,6 +388,40 @@ dedupe.seen(5); // evicts 1
 ok("memory is bounded — the oldest id is forgotten", dedupe.seen(1) === false);
 ok("a recent id is still remembered", dedupe.seen(5) === true);
 
+// ── 7b. The webhook URL Telegram will accept ─────────────────────────────────
+// Telegram only calls back to public HTTPS on 80/88/443/8443. A dev host
+// (lvh.me:3100) fails ALL of that, and handing it over anyway produced a
+// cryptic "bad webhook" from Telegram after the token had already been stored.
+// Better to know before the call, so the panel can say what is actually wrong.
+console.log("\nwebhook URL — refuse a doomed registration before Telegram does");
+
+eq(
+  "a production host builds a clean https URL",
+  buildWebhookUrl("app.pepweb.store", "abc123"),
+  "https://app.pepweb.store/api/webhooks/telegram/abc123",
+);
+eq("a production host has no issue", webhookHostIssue("app.pepweb.store"), null);
+eq("an explicit :443 is fine", webhookHostIssue("app.pepweb.store:443"), null);
+eq("port 8443 is fine", webhookHostIssue("app.pepweb.store:8443"), null);
+
+ok(
+  "the dev host is refused for its port",
+  (webhookHostIssue("app.lvh.me:3100") ?? "").includes("3100"),
+  `got ${webhookHostIssue("app.lvh.me:3100")}`,
+);
+ok("localhost is refused", !!webhookHostIssue("localhost:3100"));
+ok("a bare loopback name is refused even on 443", !!webhookHostIssue("localhost"));
+ok("127.0.0.1 is refused", !!webhookHostIssue("127.0.0.1"));
+ok("an unset host is refused rather than building https:///…", !!webhookHostIssue(""));
+ok(
+  "a .local host is refused — Telegram cannot resolve it",
+  !!webhookHostIssue("mymac.local"),
+);
+ok(
+  "the refusal names the requirement, so the operator knows what to change",
+  /80|443|public/i.test(webhookHostIssue("app.lvh.me:3100") ?? ""),
+);
+
 // ── 8. Confirming twice moves stock once ─────────────────────────────────────
 // The Telegram door reuses planStatusChange through applyOrderStatusChange, so
 // the guarantee is the same one the admin has. Proven here on the shared core.
@@ -481,6 +519,14 @@ ok(
 ok(
   "no action returns the token to the client",
   !/return\s*\{[^}]*botToken/.test(actions),
+);
+ok(
+  "the action refuses an unreachable webhook host before calling Telegram",
+  /webhookHostIssue/.test(actions),
+);
+ok(
+  "the webhook can be re-registered without re-pasting the token",
+  /registerTelegramWebhookAction/.test(actions),
 );
 
 const integrations = src("src/app/(platform)/admin/tenants/[slug]/integrations/page.tsx");

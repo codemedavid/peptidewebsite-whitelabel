@@ -35,6 +35,7 @@ import {
 } from "@/lib/integrations/telegram-store";
 import { generatePairingCode } from "@/lib/integrations/telegram-pairing";
 import { getMe, setWebhook, deleteWebhook } from "@/lib/integrations/telegram";
+import { buildWebhookUrl, webhookHostIssue } from "@/lib/integrations/telegram-webhook-url";
 
 export type TelegramActionResult = { ok: true } | { error: string };
 
@@ -101,17 +102,35 @@ export async function loadTelegramPanelAction(
 }
 
 /**
- * The absolute URL Telegram posts updates to.
+ * The platform host Telegram should call back on.
  *
  * Pinned to the PLATFORM host, not the tenant's storefront subdomain: a tenant
  * can move to a custom domain, and a webhook registered against a host they stop
  * using would go quietly dead. The secret path segment carries the tenant
  * identity, so one host serves every tenant's bot.
  */
-function webhookUrl(secret: string): string {
+function webhookHost(): string {
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "";
-  const base = process.env.NEXT_PUBLIC_ADMIN_HOST || (root ? `app.${root}` : "");
-  return `https://${base}/api/webhooks/telegram/${secret}`;
+  return process.env.NEXT_PUBLIC_ADMIN_HOST || (root ? `app.${root}` : "");
+}
+
+/**
+ * Register the callback, unless the configured host is one Telegram cannot
+ * reach. Returns a human note on skip/failure, or null on success.
+ *
+ * The skip is the point. On a dev host we used to hand Telegram
+ * `https://app.lvh.me:3100/...` and surface its reply verbatim — which reads as
+ * though the TOKEN was rejected. The token is fine; the callback simply cannot
+ * be registered from a laptop.
+ */
+async function registerWebhook(token: string, secret: string): Promise<string | null> {
+  const host = webhookHost();
+  const issue = webhookHostIssue(host);
+  if (issue) {
+    return `Bot connected and token saved. Webhook NOT registered: ${issue} It will register from a deployed environment — or use a tunnel and re-register here.`;
+  }
+  const hooked = await setWebhook(token, buildWebhookUrl(host, secret), secret);
+  return hooked.ok ? null : `Connected, but Telegram refused the webhook: ${hooked.error}`;
 }
 
 /**
@@ -153,10 +172,12 @@ export async function saveTelegramTokenAction(
     return { error: e instanceof Error ? e.message : "Couldn't save the token." };
   }
 
-  const hooked = await setWebhook(token, webhookUrl(secret), secret);
-  await recordTelegramHealth(g.tenantId, hooked.ok);
+  const note = await registerWebhook(token, secret);
+  // Health tracks the WEBHOOK, not the token: a stored token whose callback was
+  // never registered delivers nothing, and the panel should show that honestly.
+  await recordTelegramHealth(g.tenantId, note === null);
   refresh(slug);
-  if (!hooked.ok) return { error: `Connected, but Telegram refused the webhook: ${hooked.error}` };
+  if (note) return { error: note };
   return { ok: true };
 }
 
@@ -252,4 +273,37 @@ export async function testTelegramConnectionAction(
   refresh(slug);
   if (!identity.ok) return { error: identity.error };
   return { ok: true, botUsername: identity.result.username ?? "" };
+}
+
+
+/**
+ * Re-register the callback for an already-connected bot.
+ *
+ * Needed because registration can legitimately fail after the token is stored —
+ * on a dev host, during a domain move, or if Telegram was briefly unreachable —
+ * and re-pasting a token just to retry a network call is a poor answer (the
+ * operator may not still have it).
+ */
+export async function registerTelegramWebhookAction(
+  slug: string,
+): Promise<TelegramActionResult> {
+  const g = await guard(slug);
+  if ("error" in g) return g;
+  const creds = await getTelegramCredentials(g.tenantId);
+  if (!creds) return { error: "Connect a bot first." };
+  const note = await registerWebhook(creds.botToken, creds.webhookSecret);
+  await recordTelegramHealth(g.tenantId, note === null);
+  refresh(slug);
+  return note ? { error: note } : { ok: true };
+}
+
+/** The callback URL this deployment would register, plus why it can't (if it
+ *  can't) — so the panel can show the operator the actual target. */
+export async function getTelegramWebhookTargetAction(
+  slug: string,
+): Promise<{ url: string; issue: string | null } | { error: string }> {
+  const g = await guard(slug);
+  if ("error" in g) return g;
+  const host = webhookHost();
+  return { url: buildWebhookUrl(host || "<no host configured>", "…"), issue: webhookHostIssue(host) };
 }

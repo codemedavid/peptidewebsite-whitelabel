@@ -21,6 +21,8 @@ import {
   unlinkTelegramRecipientAction,
   setTelegramRecipientFlagsAction,
   testTelegramConnectionAction,
+  registerTelegramWebhookAction,
+  getTelegramWebhookTargetAction,
   type RecipientView,
   type TelegramPanelState,
 } from "@/actions/admin-telegram";
@@ -41,6 +43,9 @@ export function AdminTelegramBot({
   const [token, setToken] = useState("");
   const [note, setNote] = useState<Note>(null);
   const [pairing, setPairing] = useState<{ code: string; expiresAt: string } | null>(null);
+  // The callback URL this deployment would register. Shown because when it can't
+  // be registered, the URL itself is the explanation.
+  const [target, setTarget] = useState<{ url: string; issue: string | null } | null>(null);
 
   const reload = useCallback(async () => {
     const res = await loadTelegramPanelAction(slug);
@@ -54,8 +59,12 @@ export function AdminTelegramBot({
   }, [slug]);
 
   useEffect(() => {
-    if (!demo) void reload();
-  }, [reload, demo]);
+    if (demo) return;
+    void reload();
+    void getTelegramWebhookTargetAction(slug).then((r) => {
+      if (!("error" in r)) setTarget(r);
+    });
+  }, [reload, demo, slug]);
 
   const run = (fn: () => Promise<{ ok: true } | { error: string }>, ok: string) =>
     startTransition(async () => {
@@ -152,6 +161,21 @@ export function AdminTelegramBot({
               </div>
             </Field>
 
+            {target && (
+              <div style={{ fontSize: 12, color: "var(--ink-500)", lineHeight: 1.6 }}>
+                <div>
+                  Callback URL:{" "}
+                  <code style={{ fontSize: 11 }}>{target.url}</code>
+                </div>
+                {target.issue && (
+                  <div style={{ color: "#b45309", marginTop: 4 }}>
+                    ⚠ {target.issue} The token still saves; register the callback from a
+                    deployed environment.
+                  </div>
+                )}
+              </div>
+            )}
+
             {configured && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -170,6 +194,15 @@ export function AdminTelegramBot({
                   }
                 >
                   Test connection
+                </button>
+                <button
+                  className="btn"
+                  disabled={pending}
+                  onClick={() =>
+                    run(() => registerTelegramWebhookAction(slug), "Webhook registered")
+                  }
+                >
+                  Re-register webhook
                 </button>
                 <button
                   className="btn"
