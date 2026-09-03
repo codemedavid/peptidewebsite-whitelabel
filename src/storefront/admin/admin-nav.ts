@@ -97,7 +97,6 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   { view: "notice", label: "Notice Modal", hint: "Storefront pop-up notice", icon: "shield", tint: "orange", group: "occasional", ownerOnly: true },
   { view: "tracknote", label: "Delivery Note", hint: "Track-page delivery estimates", icon: "truck", tint: "mint", group: "occasional", ownerOnly: true },
   { view: "notify", label: "Order Notifications", hint: "Email me on new orders", icon: "bell", tint: "cyan", group: "occasional", ownerOnly: true },
-  { view: "telegram", label: "Telegram Alerts", hint: "Order alerts you can confirm from chat", icon: "bell", tint: "mint", group: "occasional", ownerOnly: true },
   { view: "billing", label: "Billing", hint: "Pay & submit proof", icon: "card", tint: "green", group: "occasional", ownerOnly: true },
   { view: "export", label: "Export My Data", hint: "Download products, customers & orders", icon: "download", tint: "mint", group: "occasional", ownerOnly: true },
   { view: "account", label: "Account Settings", hint: "Change your password", icon: "shield", tint: "red", group: "occasional" },

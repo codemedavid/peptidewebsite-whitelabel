@@ -1,12 +1,13 @@
 # TDD evidence — per-tenant Telegram order bot
 
 **Source plan:** inline `/ecc:plan` output in-session (no `*.plan.md` artifact).
-**Branch:** `feat/made-to-order` · **Commits:** `7fe7280` (RED) → `0a498d3` (GREEN)
+**Branch:** `feat/made-to-order` · **Commits:** `7fe7280` (RED) → `0a498d3` (GREEN) → operator-only move (below)
 
 ## User journeys
 
 1. As a store owner, I want an alert the moment someone orders, in the app I
-   already have open all day, so I stop refreshing the admin.
+   already have open all day, so I stop refreshing the admin. (Setup itself is
+   done FOR them by the operator — see "Where setup lives" below.)
 2. As that owner, I want to **confirm** the order from the chat, so a customer
    isn't waiting while I find a laptop.
 3. As that owner, I want the bot to be **mine** — my store's name on it — not a
@@ -16,6 +17,20 @@
 5. As a buyer, I don't want my name, phone and home address broadcast into a
    staff group chat I never agreed to.
 6. As the operator, I want to grant this per tenant without moving plan ceilings.
+
+## Where setup lives
+
+Setup is **super-admin only**, on `/tenants/<slug>/integrations`, beside the
+tenant's PostHog credentials. It is not a store-owner screen and the storefront
+admin has no Telegram surface at all — asserted three ways (no `MODULE_FEATURE`
+entry, no sidebar item, no registered view) so it cannot creep back in through
+any one of them.
+
+The reason is what the credential is: a bot token can read every message the bot
+receives and post as the store, and saving one registers a webhook pointing a
+third party at this deployment. That is operator infrastructure, not a per-store
+preference. `notify.telegram` still gates whether a tenant's orders dispatch at
+all, so the operator grants the feature and does the setup in the same console.
 
 ## The two load-bearing design decisions
 

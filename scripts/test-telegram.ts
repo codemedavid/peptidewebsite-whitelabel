@@ -463,19 +463,47 @@ ok(
   !/botToken:\s*(row|token|creds)/.test(store),
 );
 
-const actions = src("src/actions/telegram.ts");
-ok("every telegram action is owner-only", /requireStoreOwner/.test(actions));
+// The bot is OPERATOR infrastructure, not a store-owner setting. It carries a
+// credential that can read every message the bot receives and post as the store,
+// and pointing it at the wrong webhook silently breaks a tenant — so setup lives
+// in the super admin, beside the tenant's other third-party credentials, and the
+// storefront admin has no Telegram surface at all.
+const actions = src("src/actions/admin-telegram.ts");
+ok("every telegram action requires a platform session", /getPlatformUser/.test(actions));
+ok(
+  "no telegram action is reachable with a store-owner session",
+  !/requireStoreOwner|requireStaffPermission|getStorefrontAdminActor/.test(actions),
+);
+ok(
+  "actions are addressed by tenant slug — the operator acts ON a tenant, not AS one",
+  /slug:\s*string/.test(actions),
+);
 ok(
   "no action returns the token to the client",
   !/return\s*\{[^}]*botToken/.test(actions),
 );
 
+const integrations = src("src/app/(platform)/admin/tenants/[slug]/integrations/page.tsx");
+ok("the operator's integrations page carries the bot setup", /Telegram/.test(integrations));
+
+const botPanel = src("src/components/admin/AdminTelegramBot.tsx");
+ok("the operator panel connects a bot", /saveTelegramTokenAction/.test(botPanel));
+ok("the operator panel mints linking codes", /createTelegramPairingAction/.test(botPanel));
+ok("the operator panel manages recipients", /unlinkTelegramRecipientAction/.test(botPanel));
+
+// The negative half of the requirement, asserted three ways so the surface
+// cannot creep back in through any one of them.
 const visibility = src("src/storefront/visibility.ts");
-ok("the admin module is mapped to the telegram entitlement", /telegram:\s*FEATURES\.NOTIFY_TELEGRAM/.test(visibility));
+ok(
+  "the storefront admin has NO telegram module",
+  !/telegram/i.test(visibility),
+);
 
 const nav = src("src/storefront/admin/admin-nav.ts");
-ok("the sidebar offers the telegram tool", /view:\s*"telegram"/.test(nav));
-ok("the telegram tool is owner-only", /view:\s*"telegram"[^}]*ownerOnly:\s*true/.test(nav));
+ok("the store-owner sidebar offers no telegram tool", !/telegram/i.test(nav));
+
+const adminPage = src("src/storefront/admin/AdminPage.tsx");
+ok("the storefront admin registers no telegram view", !/telegram/i.test(adminPage));
 
 const catalog = src("src/lib/features/catalog.ts");
 ok(
