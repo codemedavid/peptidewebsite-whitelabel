@@ -357,6 +357,17 @@
   background: var(--brand-surface); color: var(--brand-text);
   font-size: 16px; line-height: 1; cursor: pointer;
 }
+.sf-root .sf-cart__qty input {
+  width: 3ch; min-width: 0; padding: 0;
+  border: 0; background: transparent;
+  text-align: center; font: inherit; font-weight: 600;
+  color: var(--brand-text); appearance: none;
+}
+.sf-root .sf-cart__qty input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-main) 55%, transparent);
+  outline-offset: 2px; border-radius: 4px;
+}
+.sf-root .sf-cart__qty button:disabled { opacity: 0.4; cursor: not-allowed; }
 .sf-root .sf-cart__remove { background: none; border: 0; color: var(--brand-text-muted); font-size: 12px; cursor: pointer; text-decoration: underline; }
 
 .sf-root .sf-cart__form { display: flex; flex-direction: column; gap: 16px; }
@@ -1458,6 +1469,28 @@
   font-size: 15px;
   color: var(--brand-text);
 }
+/* The quantity is TYPABLE (see components/QtyField.tsx). Styled to read as the
+   plain number it replaced — no field chrome inside the pill — while staying a
+   real input: 3ch holds "999" before it needs to grow, and the focus ring is
+   explicit because the borderless box has no other focus affordance. */
+.sf-root .sf-qty input {
+  width: 3ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--brand-text);
+  appearance: none;
+}
+.sf-root .sf-qty input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-main) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 
 /* ---------- CATALOG / PRODUCT CARD — responsive ---------- */
 /* Below ~700px the auto-fill grid would otherwise leave a single full-width
@@ -1479,6 +1512,7 @@
   .sf-root .product-card__buy { gap: 8px; }
   .sf-root .sf-qty button { width: 26px; height: 26px; font-size: 16px; }
   .sf-root .sf-qty span { min-width: 18px; font-size: 13px; }
+  .sf-root .sf-qty input { font-size: 13px; }
   .sf-root .product-card__badge { top: 10px; left: 10px; }
 }
 @media (max-width: 380px) {
@@ -6257,7 +6291,8 @@
   border-color: color-mix(in srgb, var(--cd-heading, #ffffff) 25%, transparent);
 }
 .sf-root .product-card[data-cd-dark="1"] .sf-qty button,
-.sf-root .product-card[data-cd-dark="1"] .sf-qty span {
+.sf-root .product-card[data-cd-dark="1"] .sf-qty span,
+.sf-root .product-card[data-cd-dark="1"] .sf-qty input {
   color: var(--cd-heading, #ffffff);
 }
 .sf-root .product-card[data-cd-dark="1"] .sf-qty button:hover:not(:disabled) {

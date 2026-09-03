@@ -15,6 +15,7 @@ import { useState } from "react";
 import { imageUrl } from "@/lib/media/image-url";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
+import { QtyField } from "./QtyField";
 import { baseProductId } from "../checkout";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
 import { resolveSaleView } from "@/lib/storefront/sale";
@@ -44,7 +45,7 @@ export function TwoWaysHome({
   /** Navigate to the dedicated group-buy page (the open round). */
   onOpenGroupBuy: () => void;
 }) {
-  const { products, cart, addToCart, decrementCart } = useStore();
+  const { products, cart, addToCart, setLineQty } = useStore();
   const currency = brand.currency || "₱";
   // The owner shut the whole shop. Both ways still render — the shopper can see
   // what the store sells either way — but every buy control goes inert.
@@ -193,7 +194,7 @@ export function TwoWaysHome({
                 currency={currency}
                 qty={qtyOf(line.product.id)}
                 addToCart={addToCart}
-                decrementCart={decrementCart}
+                setLineQty={setLineQty}
                 storeClosed={storeClosed}
               />
             ))}
@@ -286,7 +287,7 @@ function OnHandRow({
   currency,
   qty,
   addToCart,
-  decrementCart,
+  setLineQty,
   storeClosed,
 }: {
   line: OnHandLine<Product>;
@@ -294,7 +295,13 @@ function OnHandRow({
   currency: string;
   qty: number;
   addToCart: AddToCart;
-  decrementCart: (productId: string) => void;
+  /** Set this row's cart line to an absolute quantity — the typed-quantity
+   *  path. Typing 5 must SET the line to 5, not add 5 more. */
+  setLineQty: (
+    product: Product,
+    qty: number,
+    variation?: { name: string; price: number },
+  ) => void;
   /** The owner shut the whole shop (Admin → Store Status). The row still shows
    *  the product and its price; the buy control becomes an inert "Closed". */
   storeClosed: boolean;
@@ -396,15 +403,17 @@ function OnHandRow({
               Add
             </button>
           ) : (
-            <div className="sf-twh__stepper" aria-label={`Quantity of ${p.name}`}>
-              <button type="button" aria-label={`Remove one ${p.name}`} onClick={() => decrementCart(p.id)}>
-                −
-              </button>
-              <span aria-live="polite">{qty}</span>
-              <button type="button" aria-label={`Add one ${p.name}`} onClick={() => addToCart(p)}>
-                +
-              </button>
-            </div>
+            // min 0: this stepper only exists once the row is in the cart, so
+            // stepping (or typing) down to nothing is how it comes back out and
+            // the "Add" button returns.
+            <QtyField
+              value={qty}
+              onChange={(next) => setLineQty(p, next)}
+              min={0}
+              itemName={p.name}
+              className="sf-twh__stepper"
+              commit="blur"
+            />
           )
         ) : null}
       </div>
@@ -511,6 +520,16 @@ const twhCss = `
 .sf-root .sf-twh__stepper button:first-child { background: #fff; color: var(--brand-main); }
 .sf-root .sf-twh__stepper button:last-child { background: var(--brand-main); color: var(--brand-button-text); }
 .sf-root .sf-twh__stepper span { font-weight: 700; font-size: 13px; min-width: 16px; text-align: center; color: var(--brand-main); }
+.sf-root .sf-twh__stepper input {
+  width: 3ch; min-width: 0; padding: 0; border: 0; background: transparent;
+  font: inherit; font-weight: 700; font-size: 13px; text-align: center;
+  color: var(--brand-main); appearance: none;
+}
+.sf-root .sf-twh__stepper input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-main) 55%, transparent);
+  outline-offset: 2px; border-radius: 4px;
+}
+.sf-root .sf-twh__stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
 .sf-root .sf-twh__gb {
   background: var(--brand-main); color: var(--brand-button-text);
   border-radius: 26px; padding: 24px 18px;

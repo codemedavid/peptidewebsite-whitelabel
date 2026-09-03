@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { QtyField } from "../components/QtyField";
 import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout";
 import { resolveWholesale } from "@/lib/storefront/wholesale";
 import { resolveBaseSaleView } from "@/lib/storefront/sale";
@@ -55,20 +56,16 @@ function OrderCell({
 
   return (
     <div className="merchant-order">
-      <div className="sf-qty merchant-order__qty">
-        <button
-          type="button"
-          aria-label={`Remove one ${product.name}`}
-          onClick={() => setQty((q) => Math.max(min, q - 1))}
-          disabled={qty <= min}
-        >
-          −
-        </button>
-        <span aria-live="polite">{qty}</span>
-        <button type="button" aria-label={`Add one ${product.name}`} onClick={() => setQty((q) => q + 1)}>
-          +
-        </button>
-      </div>
+      {/* Floored at the MOQ, and typable — a 50-unit wholesale minimum used to
+          cost forty-nine taps to reach. No cap: wholesale quantities are
+          negotiated against the supplier order, not the on-hand column. */}
+      <QtyField
+        value={qty}
+        onChange={setQty}
+        min={min}
+        itemName={product.name}
+        className="sf-qty merchant-order__qty"
+      />
       <button type="button" className="btn btn-primary merchant-order__add" onClick={add}>
         {added ? "Added ✓" : "Add to cart"}
       </button>

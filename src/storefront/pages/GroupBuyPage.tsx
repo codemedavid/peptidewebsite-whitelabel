@@ -14,6 +14,7 @@ import { useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { QtyField } from "../components/QtyField";
 import { baseProductId, unitPrice, variationEntryId } from "../checkout";
 import {
   buildGroupBuyPageView,
@@ -38,7 +39,7 @@ export function GroupBuyPage({
   /** Open the cart/checkout drawer (owned by the storefront shell). */
   onCheckout: () => void;
 }) {
-  const { products, cart, addToCart, decrementCart } = useStore();
+  const { products, cart, addToCart, setLineQty } = useStore();
   const currency = brand.currency || "₱";
   // The owner shut the whole shop — the round still advertises itself, but no
   // one can join it. store.addToCart and the server re-check the same rule.
@@ -145,7 +146,7 @@ export function GroupBuyPage({
               image={resolveProductImage(line.product.image, brand.defaultProductImage)}
               cart={cart}
               addToCart={addToCart}
-              decrementCart={decrementCart}
+              setLineQty={setLineQty}
               storeClosed={storeClosed}
               viewOnly={view.viewOnly}
             />
@@ -208,7 +209,7 @@ function GbProductCard({
   image,
   cart,
   addToCart,
-  decrementCart,
+  setLineQty,
   storeClosed,
   viewOnly,
 }: {
@@ -216,7 +217,13 @@ function GbProductCard({
   image: string | null;
   cart: Product[];
   addToCart: (product: Product, qty?: number, variation?: { name: string; price: number }) => void;
-  decrementCart: (productId: string) => void;
+  /** Set the CHOSEN dose's cart line to an absolute quantity — the typed-quantity
+   *  path. Typing 5 must SET that dose to 5, not add 5 more. */
+  setLineQty: (
+    product: Product,
+    qty: number,
+    variation?: { name: string; price: number },
+  ) => void;
   /** The owner shut the whole shop (Admin → Store Status). The round and its
    *  prices still show; joining is off. */
   storeClosed: boolean;
@@ -311,19 +318,18 @@ function GbProductCard({
             Join GB
           </button>
         ) : (
-          <div className="gbpage__stepper" aria-label={`Quantity of ${shownName}`}>
-            <button
-              type="button"
-              aria-label={`Remove one ${shownName}`}
-              onClick={() => decrementCart(entryId)}
-            >
-              −
-            </button>
-            <span aria-live="polite">{qty}</span>
-            <button type="button" aria-label={`Add one ${shownName}`} onClick={join}>
-              +
-            </button>
-          </div>
+          // min 0: the stepper replaces "Join GB" only once the dose is in the
+          // cart, so typing (or stepping) down to nothing brings the button back.
+          // No cap — a live round is a PRE-ORDER, so on-hand stock never limits
+          // it (see isGroupBuyPreorder).
+          <QtyField
+            value={qty}
+            onChange={(next) => setLineQty(p, next, chosen.variation)}
+            min={0}
+            itemName={shownName}
+            className="gbpage__stepper"
+            commit="blur"
+          />
         )}
       </div>
     </article>
@@ -423,6 +429,16 @@ const gbPageCss = `
 .sf-root .gbpage__stepper button:first-child { background: #fff; color: var(--brand-main); }
 .sf-root .gbpage__stepper button:last-child { background: var(--brand-main); color: var(--brand-button-text); }
 .sf-root .gbpage__stepper span { font-weight: 700; font-size: 14px; color: var(--brand-main); }
+.sf-root .gbpage__stepper input {
+  width: 3ch; min-width: 0; padding: 0; border: 0; background: transparent;
+  font: inherit; font-weight: 700; font-size: 14px; text-align: center;
+  color: var(--brand-main); appearance: none;
+}
+.sf-root .gbpage__stepper input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-main) 55%, transparent);
+  outline-offset: 2px; border-radius: 4px;
+}
+.sf-root .gbpage__stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
 .sf-root .gbpage__how {
   margin: 24px 0; background: var(--brand-surface); border: 1px solid var(--brand-border);
   border-radius: 18px; padding: 18px;

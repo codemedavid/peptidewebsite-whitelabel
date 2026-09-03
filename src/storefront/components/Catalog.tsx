@@ -31,6 +31,7 @@ import { buildProductDetail } from "@/lib/storefront/product-detail";
 import { resolveReviewDescStyle, reviewsForProduct } from "@/lib/storefront/reviews";
 import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
 import { ReviewViewer } from "./ReviewViewer";
+import { QtyField } from "./QtyField";
 import {
   normalizeSortCategories,
   orderCatalogByCategories,
@@ -613,25 +614,17 @@ export function ProductCard({
           </div>
         ) : (
           <div className="product-card__buy">
-            <div className="sf-qty product-card__qty">
-              <button
-                type="button"
-                aria-label={`Remove one ${product.name}`}
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                disabled={qty <= 1}
-              >
-                −
-              </button>
-              <span aria-live="polite">{qty}</span>
-              <button
-                type="button"
-                aria-label={`Add one ${product.name}`}
-                onClick={() => setQty((q) => Math.min(stock || 1, q + 1))}
-                disabled={stock <= 0 || qty >= stock}
-              >
-                +
-              </button>
-            </div>
+            {/* Typable: ordering 12 vials is one entry, not eleven taps. Capped
+                at the SELECTED option's units (Infinity for made-to-order), so
+                the box can't hold a quantity the store cannot fill. */}
+            <QtyField
+              value={qty}
+              onChange={setQty}
+              max={stock}
+              itemName={product.name}
+              className="sf-qty product-card__qty"
+              plusDisabled={stock <= 0}
+            />
             <button
               className="btn btn-primary product-card__cta"
               disabled={cta.disabled}
@@ -886,25 +879,13 @@ function ProductDetailModal({
 
             <div className="sf-detail__buy">
               {canBuy && (
-                <div className="sf-qty product-card__qty">
-                  <button
-                    type="button"
-                    aria-label={`Remove one ${detail.name}`}
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    disabled={qty <= 1}
-                  >
-                    −
-                  </button>
-                  <span aria-live="polite">{qty}</span>
-                  <button
-                    type="button"
-                    aria-label={`Add one ${detail.name}`}
-                    onClick={() => setQty((q) => Math.min(selectedStock || 1, q + 1))}
-                    disabled={qty >= selectedStock}
-                  >
-                    +
-                  </button>
-                </div>
+                <QtyField
+                  value={qty}
+                  onChange={setQty}
+                  max={selectedStock}
+                  itemName={detail.name}
+                  className="sf-qty product-card__qty"
+                />
               )}
               <button
                 type="button"

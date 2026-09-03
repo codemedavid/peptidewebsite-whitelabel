@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { imageUrl } from "@/lib/media/image-url";
 import { useStore } from "../store";
+import { QtyField } from "./QtyField";
 import type { Order, PromoCode } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import { classifyProofFile } from "@/lib/upload/image-file";
@@ -68,7 +69,7 @@ const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; t
 ];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, addToCart, decrementCart, removeLine, clearCart, toast } = useStore();
+  const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   // The buyer's own note. Never required, never a checkout blocker — an empty
@@ -715,20 +716,22 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       </span>
                     )}
                   </div>
-                  <div className="sf-cart__qty">
-                    <button aria-label={`Remove one ${shownName}`} onClick={() => decrementCart(l.product.id)}>−</button>
-                    <span>{l.qty}</span>
-                    <button
-                      aria-label={`Add one ${shownName}`}
-                      // Stop at what the store can actually supply. addToCart
-                      // refuses beyond the cap anyway, but a live "+" that only
-                      // ever toasts an error reads as broken.
-                      disabled={cartLineRoom(l, groupBuyScope) <= 0}
-                      onClick={() => addToCart(l.product)}
-                    >
-                      +
-                    </button>
-                  </div>
+                  {/* Typable, and it SETS the line rather than adding to it —
+                      typing 5 into a line of 2 adds 3. Capped at everything the
+                      store can supply for this line (what is already in the
+                      cart plus the room left), so the box can't hold a quantity
+                      checkout would reject; Infinity for a group-buy pre-order.
+                      min 0 keeps the old behaviour where "−" on the last unit
+                      clears the line. */}
+                  <QtyField
+                    value={l.qty}
+                    onChange={(next) => setLineQty(l.product, next)}
+                    min={0}
+                    max={l.qty + cartLineRoom(l, groupBuyScope)}
+                    itemName={shownName}
+                    className="sf-cart__qty"
+                    commit="blur"
+                  />
                   <button className="sf-cart__remove" aria-label={`Remove ${shownName}`} onClick={() => removeLine(l.product.id)}>
                     Remove
                   </button>

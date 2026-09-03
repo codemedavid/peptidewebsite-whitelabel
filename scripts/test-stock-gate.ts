@@ -397,10 +397,31 @@ check("the cart drawer merges stock violations into its blocking list", () => {
 
 check("the cart's re-add button stops at the line's remaining stock", () => {
   const s = src("src/storefront/components/CartCheckout.tsx");
+  // The cap used to sit directly on the "+" as `disabled={cartLineRoom(…)}`.
+  // The line's quantity is now typable (components/QtyField.tsx), so a cap that
+  // only guarded the button would leave the BOX free to hold an unfillable
+  // number. It is therefore expressed as the control's upper bound — everything
+  // already in the line, plus the room left — which QtyField enforces on the
+  // typed value and the "+" alike. Same guarantee, one rung higher.
   assert.match(
     s,
-    /disabled=\{cartLineRoom\(/,
-    "the cart's '+' stays live past the cap, so it only ever toasts an error",
+    /max=\{l\.qty \+ cartLineRoom\(/,
+    "the cart's quantity control is no longer bounded by cartLineRoom, so its '+' " +
+      "(and now its typed value) run past the cap and only ever toast an error",
+  );
+});
+
+check("the cart's quantity control enforces that cap on both the box and the '+'", () => {
+  const s = src("src/storefront/components/QtyField.tsx");
+  assert.match(
+    s,
+    /disabled=\{plusDisabled \|\| value >= max\}/,
+    "QtyField's '+' ignores `max`, so the cart's cap is passed in and then dropped",
+  );
+  assert.match(
+    s,
+    /sanitizeQtyDraft\(raw, bounds\)/,
+    "QtyField does not clamp the TYPED value to its bounds — the cap only guards the buttons",
   );
 });
 

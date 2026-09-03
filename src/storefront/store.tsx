@@ -50,6 +50,7 @@ import { brandBorderVars } from "@/lib/storefront/brand-border";
 import { priceFontVar } from "@/lib/storefront/price-font";
 import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
 import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
+import { qtyDelta } from "@/lib/storefront/qty-input";
 import { TWO_WAYS_MODE_DEFAULT } from "@/lib/storefront/two-ways-mode";
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import {
@@ -140,6 +141,13 @@ export type Store = {
   addToCart: (
     product: Product,
     qty?: number,
+    variation?: { name: string; price: number },
+  ) => void;
+  /** Set a cart line to an ABSOLUTE quantity — the typed-quantity path behind
+   *  QtyField. 0 clears the line. */
+  setLineQty: (
+    product: Product,
+    qty: number,
     variation?: { name: string; price: number },
   ) => void;
   /** Remove one unit of the product from the cart. */
@@ -598,6 +606,51 @@ export function StoreProvider({
     [cart, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner, brand.twoWaysMode],
   );
 
+  // Set a line to an ABSOLUTE quantity — what QtyField hands back when a
+  // customer types a number instead of tapping "+" per piece.
+  //
+  // The increase delegates to addToCart so a TYPED quantity has to clear the
+  // exact same gates a tapped "+" does: store closed, price-on-request, paused
+  // product, the on-hand group-buy gate, the per-way block, the two-ways mix
+  // rule, Smart Checkout restrictions and the stock cap (which trims to the
+  // available room and toasts). Re-implementing any of that here is how a
+  // shortcut like this quietly becomes a way to over-sell.
+  //
+  // The decrease is a local splice: the cart is a flat Product[] with one entry
+  // per unit, so dropping the surplus is the whole operation.
+  const setLineQty = useCallback(
+    (
+      product: Product,
+      qty: number,
+      variation?: { name: string; price: number },
+    ) => {
+      // Same entry identity addToCart uses, so a variation lands on its own
+      // line and a re-add from the cart (which passes the clone through with no
+      // `variation` argument) still targets that clone.
+      const entry = variation ? makeVariationEntry(product, variation) : product;
+      const target = Math.max(0, Math.floor(qty));
+      const delta = qtyDelta(cart.filter((p) => p.id === entry.id).length, target);
+      if (delta === 0) return;
+      if (delta > 0) {
+        addToCart(product, delta, variation);
+        return;
+      }
+      setCart((c) => {
+        // Recounted inside the updater rather than trusting the count from the
+        // render that scheduled it, so two edits in one tick can't over-remove.
+        let remove = Math.max(0, c.filter((p) => p.id === entry.id).length - target);
+        return c.filter((p) => {
+          if (remove > 0 && p.id === entry.id) {
+            remove--;
+            return false;
+          }
+          return true;
+        });
+      });
+    },
+    [cart, addToCart],
+  );
+
   const decrementCart = useCallback((productId: string) => {
     setCart((c) => {
       const i = c.findIndex((p) => p.id === productId);
@@ -965,7 +1018,7 @@ export function StoreProvider({
     faqGroups, setFaqGroups,
     protocols, setProtocols,
     reviews, setReviews,
-    cart, addToCart, decrementCart, removeLine, clearCart,
+    cart, addToCart, setLineQty, decrementCart, removeLine, clearCart,
     toast, toastMsg,
   };
 
