@@ -173,7 +173,8 @@
     "test:made-to-order": "tsx scripts/test-made-to-order.ts",
     "test:qty-typing": "tsx scripts/test-qty-typing.ts",
     "test:channelless-checkout": "tsx scripts/test-channelless-checkout.ts",
-    "test:nova-lab-catalog": "tsx scripts/test-nova-lab-catalog.ts"
+    "test:nova-lab-catalog": "tsx scripts/test-nova-lab-catalog.ts",
+    "test:telegram": "tsx scripts/test-telegram.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
