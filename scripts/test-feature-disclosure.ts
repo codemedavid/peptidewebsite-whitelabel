@@ -16,11 +16,12 @@
 
 import assert from "node:assert";
 
-import { FEATURE_GROUPS } from "../src/lib/features/catalog";
+import { FEATURE_GROUPS, FEATURES } from "../src/lib/features/catalog";
 import {
   isGroupOpen,
   toggleGroupOpen,
   groupBodyId,
+  inertDependency,
 } from "../src/components/admin/feature-disclosure";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
@@ -106,6 +107,45 @@ check("ids are stable for a given group name", () => {
   assert.equal(groupBodyId("Group Buy"), groupBodyId("Group Buy"));
   assert.equal(groupBodyId("Sales Analytics"), "ftr-grp-sales-analytics");
   assert.equal(groupBodyId("Growth & Automation"), "ftr-grp-growth-automation");
+});
+
+// ────────────────────────────── inertDependency ─────────────────────────────
+// A child switch that is ON while its master switch is OFF renders nothing at
+// all. Nova Lab sat in exactly that state — "Wholesale reseller page" on, the
+// "Reseller" parent above it off — and the screen gave no sign, so the store had
+// no reseller page and the toggle looked broken rather than inert.
+console.log("\ninertDependency");
+
+const PARENT = FEATURES.STORE_RESELLER_PORTAL;
+const PAGE = FEATURES.STORE_RESELLER_PAGE;
+
+check("a child that is ON while its parent is OFF names the parent it needs", () => {
+  const state = { [PAGE]: true, [PARENT]: false };
+  assert.equal(inertDependency({ key: PAGE, dependsOn: PARENT }, state), PARENT);
+});
+
+check("the same child goes live the moment the parent is switched on", () => {
+  const state = { [PAGE]: true, [PARENT]: true };
+  assert.equal(inertDependency({ key: PAGE, dependsOn: PARENT }, state), null);
+});
+
+check("a child that is OFF is not inert — it is simply off", () => {
+  const state = { [PAGE]: false, [PARENT]: false };
+  assert.equal(inertDependency({ key: PAGE, dependsOn: PARENT }, state), null);
+});
+
+check("a top-level switch with no parent is never inert", () => {
+  assert.equal(inertDependency({ key: PARENT, dependsOn: null }, { [PARENT]: true }), null);
+});
+
+check("an unknown parent entry counts as OFF, so the badge fails closed", () => {
+  assert.equal(inertDependency({ key: PAGE, dependsOn: PARENT }, { [PAGE]: true }), PARENT);
+});
+
+check("the state map is never mutated while deciding", () => {
+  const state = Object.freeze({ [PAGE]: true, [PARENT]: false });
+  inertDependency({ key: PAGE, dependsOn: PARENT }, state);
+  assert.deepEqual(state, { [PAGE]: true, [PARENT]: false });
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────

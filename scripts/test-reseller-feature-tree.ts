@@ -28,7 +28,9 @@ import {
   type FeatureKey,
 } from "../src/lib/features/catalog";
 import { getPlanScope } from "../src/lib/features/plan-scope";
+import { buildFeatureInventory, requiredPlanFor } from "../src/lib/tenant/feature-toggle";
 import { resellerCapsFrom, RESELLER_CAPS_OFF } from "../src/lib/storefront/reseller-caps";
+import { merchantPageVisible } from "../src/lib/storefront/reseller-access";
 
 let passed = 0;
 let failed = 0;
@@ -148,6 +150,111 @@ check("parent ON alone exposes nothing", () => {
     wholesalePricing: false,
     resellerPage: false,
   });
+});
+
+// ── The operator must be able to REACH the parent ────────────────────────────
+// The children are useless without it, and two of the three plan ceilings do not
+// include it. Nova Lab (Pro) had both children on and the parent off, with the
+// parent rendering as a locked "upgrade" row the operator could not flip — so
+// the Reseller group offered a live page switch that could never do anything.
+
+const TIERS = ["starter", "pro", "enterprise"];
+
+check("the reseller PARENT is operator-grantable, so any plan can be granted it", () => {
+  assert.ok(
+    OPERATOR_GRANTABLE.has(PARENT),
+    `${PARENT} must be grantable per tenant — it is absent from the Pro ceiling, ` +
+      "so without this a Pro tenant's reseller children can never be switched on",
+  );
+});
+
+check("no plan renders the reseller parent as a plan-locked row", () => {
+  for (const plan of PLANS) {
+    const rows = buildFeatureInventory({ planKey: plan, current: new Set() }).groups.flatMap(
+      (g) => g.features,
+    );
+    const row = rows.find((r) => r.key === PARENT);
+    assert.ok(row, `${plan}: ${PARENT} missing from the feature sheet`);
+    assert.strictEqual(
+      row.lockedByPlan,
+      false,
+      `${plan}: the parent is locked, so both children below it are unreachable`,
+    );
+  }
+});
+
+check("a locked row never points the operator at a plan below the tenant's own", () => {
+  for (const plan of PLANS) {
+    const own = TIERS.indexOf(plan);
+    if (own < 0) continue;
+    const rows = buildFeatureInventory({ planKey: plan, current: new Set() }).groups.flatMap(
+      (g) => g.features,
+    );
+    for (const row of rows) {
+      if (!row.lockedByPlan) continue;
+      const required = requiredPlanFor(row.key);
+      if (!required) continue;
+      assert.ok(
+        TIERS.indexOf(required) > own,
+        `${plan}: "${row.key}" is locked but tells the operator to upgrade to ${required}`,
+      );
+    }
+  }
+});
+
+check("Nova Lab's shape — both children on, parent off — names the parent they need", () => {
+  const rows = buildFeatureInventory({
+    planKey: "pro",
+    current: new Set([WHOLESALE, PAGE]),
+  }).groups.flatMap((g) => g.features);
+
+  assert.strictEqual(rows.find((r) => r.key === PARENT)?.enabled, false, "parent was never granted");
+  for (const child of [WHOLESALE, PAGE]) {
+    const row = rows.find((r) => r.key === child);
+    assert.ok(row, `${child} missing from the feature sheet`);
+    assert.strictEqual(row.enabled, true, `${child} was toggled on`);
+    assert.strictEqual(
+      row.dependsOn,
+      PARENT,
+      `${child} must tell the operator it stays inert until ${PARENT} is on`,
+    );
+  }
+});
+
+// ── The #merchant page's own gate ────────────────────────────────────────────
+// Three conditions, all required. Nova Lab satisfied none of the first two.
+
+check("the reseller page needs the parent, the page child AND an owner password", () => {
+  const caps = resellerCapsFrom(new Set([PARENT, PAGE]));
+  assert.strictEqual(merchantPageVisible(caps, true), true);
+  assert.strictEqual(merchantPageVisible(caps, false), false, "no password set → no page");
+});
+
+check("the page child WITHOUT the parent never shows the page, password or not", () => {
+  const caps = resellerCapsFrom(new Set([WHOLESALE, PAGE]));
+  assert.strictEqual(merchantPageVisible(caps, true), false);
+  assert.strictEqual(merchantPageVisible(caps, false), false);
+});
+
+check("the parent WITHOUT the page child never shows the page either", () => {
+  const caps = resellerCapsFrom(new Set([PARENT, WHOLESALE]));
+  assert.strictEqual(merchantPageVisible(caps, true), false);
+});
+
+check("Nova Lab's live state resolves to no reseller page, and names what fixes it", () => {
+  // As found in the database: both children granted, parent never granted, and
+  // no reseller password in branding.config.
+  assert.strictEqual(merchantPageVisible(resellerCapsFrom(new Set([WHOLESALE, PAGE])), false), false);
+  // Granting the parent is necessary but not sufficient — the owner still sets a password.
+  assert.strictEqual(
+    merchantPageVisible(resellerCapsFrom(new Set([PARENT, WHOLESALE, PAGE])), false),
+    false,
+  );
+  // Parent + page child + password is the whole gate.
+  assert.strictEqual(
+    merchantPageVisible(resellerCapsFrom(new Set([PARENT, WHOLESALE, PAGE])), true),
+    true,
+  );
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
