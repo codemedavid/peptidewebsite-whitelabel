@@ -68,6 +68,34 @@ function src(rel: string): string {
   return readFileSync(join(process.cwd(), rel), "utf8");
 }
 
+/**
+ * Split a JSX `{cond ? (…) : (…)}` into its two branches, matching parentheses
+ * properly so a nested ternary inside either branch doesn't end the scan early.
+ * `marker` is the literal text up to and including the consequent's "(".
+ */
+function ternaryBranches(source: string, marker: string): [string, string] {
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, `no ${marker} in the source`);
+
+  const readGroup = (openIdx: number): [string, number] => {
+    let depth = 0;
+    for (let i = openIdx; i < source.length; i += 1) {
+      if (source[i] === "(") depth += 1;
+      else if (source[i] === ")") {
+        depth -= 1;
+        if (depth === 0) return [source.slice(openIdx + 1, i), i];
+      }
+    }
+    throw new Error(`unbalanced parentheses after ${marker}`);
+  };
+
+  const [consequent, closeIdx] = readGroup(start + marker.length - 1);
+  const altOpen = source.indexOf("(", closeIdx + 1);
+  assert.match(source.slice(closeIdx + 1, altOpen + 1), /^\s*:\s*\($/, `no ": (" after ${marker}`);
+  const [alternate] = readGroup(altOpen);
+  return [consequent, alternate];
+}
+
 /** A Brand carrying only what the hand-off predicate reads. */
 function brandWith(channels: ContactChannel[]): Brand {
   return { contactChannels: channels } as unknown as Brand;
@@ -263,12 +291,19 @@ check("the tracker link is gated on the owner actually serving that page", () =>
 
 check("direct mode does not ask the customer to 'finalize' anything", () => {
   // The chat-hand-off headline and the copy-the-message fallback both imply the
-  // order is unfinished. In direct mode it is already placed.
-  assert.match(
-    confirm,
-    /!isDirect[\s\S]{0,600}Finalize your order/,
-    "the 'Finalize your order' section must be suppressed in direct mode",
+  // order is unfinished. In direct mode it is already placed, so neither may
+  // render there. Split the `{isDirect ? (…) : (…)}` on balanced parens rather
+  // than by regex — the direct branch has a nested ternary of its own, and a
+  // lazy `\) : \(` would stop at that one and prove nothing.
+  const [direct, chat] = ternaryBranches(confirm, "{isDirect ? (");
+
+  assert.match(direct, /Thank you for placing your order/i, "the direct branch must thank them");
+  assert.ok(!/Finalize your order/.test(direct), "'Finalize your order' must not render in direct mode");
+  assert.ok(
+    !/Copy order details/.test(direct),
+    "there is nothing to copy and paste when there is no chat to paste it into",
   );
+  assert.match(chat, /Finalize your order/, "the chat branch keeps its hand-off heading");
 });
 
 // ───────────────────────────── 5. TRACK ──────────────────────────────────────

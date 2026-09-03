@@ -3,17 +3,21 @@
 // Cart drawer + checkout. Opens from the header cart button / floating cart FAB.
 // Three steps: review the cart, enter contact + shipping details, then pay —
 // the customer picks a payment method, sends payment to the shown account / QR,
-// and uploads proof of payment. Only then can they hand the order off to a
-// messaging channel (WhatsApp / Telegram / Messenger) with a prefilled summary.
+// and uploads proof of payment. Only then is the order placed.
+//
+// How it is placed depends on what the store has enabled (see checkout-handoff):
+// with contact channels, one button per channel hands the order to that chat
+// with a prefilled summary; with none, a single "Place order" button stores it
+// and the confirmation screen becomes a thank-you pointing at the order tracker.
 // When the store has no payment methods configured, the payment step is skipped
-// and the order goes straight to the channel hand-off. The enabled channels and
-// payment methods are configured by the store / super admin.
+// entirely. The enabled channels and payment methods are configured by the
+// store / super admin.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { imageUrl } from "@/lib/media/image-url";
 import { useStore } from "../store";
 import { QtyField } from "./QtyField";
-import type { Order, PromoCode } from "../types";
+import type { ContactChannel, Order, PromoCode } from "../types";
 import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import { classifyProofFile } from "@/lib/upload/image-file";
 import { settleUpload } from "@/lib/upload/settle";
@@ -30,6 +34,8 @@ import { CUSTOMER_NOTE_MAX } from "@/lib/orders/customer-note";
 import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
+import { DIRECT_CONTACT_METHOD, isDirectHandoff } from "@/lib/storefront/checkout-handoff";
+import { rememberRecentOrder } from "@/lib/storefront/recent-order";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildWholesaleScope, wholesaleRemaining } from "@/lib/storefront/wholesale";
 import {
@@ -151,6 +157,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   );
   const pricesUpdated = cart.length > 0 && snapshotSubtotal !== subtotal;
   const channels = useMemo(() => activeChannels(brand), [brand]);
+  // No channel to hand the order to. The order is still placed — on the site —
+  // and the confirmation screen becomes a thank-you rather than a chat hand-off.
+  // Read through the shared predicate so this drawer and that page can never
+  // disagree about which regime the store is in.
+  const directHandoff = useMemo(() => isDirectHandoff(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
   const currency = brand.currency || lines[0]?.product.currency || "";
   // Per-tenant admin fee (super admin toggle, branding.config.adminFee) — a flat
@@ -430,11 +441,16 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     setUploadingProof(false);
   };
 
-  async function placeOrder(channelType: string) {
-    const channel = channels.find((c) => c.type === channelType);
+  /**
+   * Place the order. `channel` is the chat channel the customer chose, or null
+   * when the store has none enabled — that store still takes the order (the
+   * server has never required a channel), the customer just lands on the
+   * confirmation screen as a thank-you instead of a hand-off.
+   */
+  async function placeOrder(channel: ContactChannel | null) {
     // Synchronous lock first (see placingRef note) — rejects a second click in
     // the same tick before any state update or await.
-    if (!channel || placingRef.current) return;
+    if (placingRef.current) return;
     // A blocking Smart Checkout violation (e.g. the cart was edited from
     // another tab after passing the cart step) stops the hand-off — the server
     // would reject it anyway, this just fails before the chat window opens.
@@ -474,7 +490,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
-        contactMethod: CHANNEL_LABELS[channel.type],
+        // Where the order came from, for the owner's order detail. A store with
+        // no channel records the site itself rather than leaving this blank.
+        contactMethod: channel ? CHANNEL_LABELS[channel.type] : DIRECT_CONTACT_METHOD,
       },
       shipping: {
         address: customer.address,
@@ -578,6 +596,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       { ...order, paymentProof: null },
       ...prev.filter((o) => o.id !== order.id),
     ]);
+    // And remember the NUMBER in a cookie, so the Track page can look this order
+    // up without the customer transcribing it off the confirmation screen. It
+    // matters most to a channel-less store, whose customers are sent to the
+    // tracker instead of a chat thread — but it costs nothing to keep for every
+    // store, so tracking is one tap everywhere.
+    rememberRecentOrder(orderNum);
 
     const message = buildOrderMessage(
       brand,
@@ -1167,10 +1191,6 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   Checkout
                 </button>
               </>
-            ) : channels.length === 0 ? (
-              <p className="sf-cart__unavailable">
-                Online checkout isn&apos;t set up yet — please contact the store directly.
-              </p>
             ) : step === "details" && requiresPayment ? (
               <>
                 {touched && !detailsValid && (
@@ -1212,24 +1232,44 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     {placeError}
                   </p>
                 )}
-                <p className="sf-cart__channels-label">Send your order via</p>
-                <div className="sf-cart__channels">
-                  {channels.map((c) => (
-                    <button
-                      key={c.type}
-                      className="btn btn-primary sf-cart__channel"
-                      disabled={placing}
-                      aria-busy={placing}
-                      onClick={() => {
-                        if (step === "details") setTouched(true);
-                        if (step === "payment") setPaymentTouched(true);
-                        if (detailsValid && shippingValid && paymentValid) void placeOrder(c.type);
-                      }}
-                    >
-                      {placing ? "Placing order…" : CHANNEL_LABELS[c.type]}
-                    </button>
-                  ))}
-                </div>
+                {directHandoff ? (
+                  // No chat channel to send it to, so the site itself takes the
+                  // order. Same validation gates as the channel buttons below —
+                  // only the destination differs.
+                  <button
+                    className="btn btn-primary sf-cart__cta sf-cart__place"
+                    disabled={placing}
+                    aria-busy={placing}
+                    onClick={() => {
+                      if (step === "details") setTouched(true);
+                      if (step === "payment") setPaymentTouched(true);
+                      if (detailsValid && shippingValid && paymentValid) void placeOrder(null);
+                    }}
+                  >
+                    {placing ? "Placing order…" : "Place order"}
+                  </button>
+                ) : (
+                  <>
+                    <p className="sf-cart__channels-label">Send your order via</p>
+                    <div className="sf-cart__channels">
+                      {channels.map((c) => (
+                        <button
+                          key={c.type}
+                          className="btn btn-primary sf-cart__channel"
+                          disabled={placing}
+                          aria-busy={placing}
+                          onClick={() => {
+                            if (step === "details") setTouched(true);
+                            if (step === "payment") setPaymentTouched(true);
+                            if (detailsValid && shippingValid && paymentValid) void placeOrder(c);
+                          }}
+                        >
+                          {placing ? "Placing order…" : CHANNEL_LABELS[c.type]}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <button
                   className="sf-cart__back"
                   onClick={() => setStep(step === "payment" ? "details" : "cart")}

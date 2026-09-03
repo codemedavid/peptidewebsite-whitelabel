@@ -513,7 +513,10 @@
 .sf-root .sf-cart__channel { flex: 1 1 30%; }
 .sf-root .sf-cart__back { background: none; border: 0; color: var(--brand-text-muted); cursor: pointer; font-size: 13px; }
 .sf-root .sf-cart__error { color: #d23; font-size: 13px; margin: 0; text-align: center; }
-.sf-root .sf-cart__unavailable { color: var(--brand-text-muted); font-size: 13px; margin: 0; text-align: center; }
+/* The channel-less place-order button. It reuses .sf-cart__cta's shape (it is
+   the same kind of full-width commitment) and only needs to sit clear of the
+   validation errors stacked above it. */
+.sf-root .sf-cart__place { margin-top: 4px; }
 
 /* Payment step: method picker, account/QR detail, proof-of-payment upload. */
 .sf-root .sf-cart__pay { display: flex; flex-direction: column; gap: 16px; }

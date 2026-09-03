@@ -25,6 +25,8 @@ import {
   CONFIRM_HANDOFF_KEY,
 } from "@/lib/storefront/order-confirmation";
 import { activeChannels, channelUrl, channelPrefills, CHANNEL_LABELS } from "../checkout";
+import { isDirectHandoff } from "@/lib/storefront/checkout-handoff";
+import { isPageVisible } from "../visibility";
 
 type Handoff = { orderId: string; message: string };
 
@@ -108,6 +110,13 @@ export function OrderConfirmedPage({
   );
 
   const channels = activeChannels(brand);
+  // The store has no chat channel, so there is nothing for the customer to send:
+  // the order is already with the seller and this page is purely a receipt. Same
+  // predicate the drawer branched on, so the two screens agree by construction.
+  const isDirect = isDirectHandoff(brand);
+  // Only offer the tracker if the owner actually serves that page — pointing at
+  // a hidden #track would land them back on the home page with no explanation.
+  const canTrack = isPageVisible(brand, "track");
   const money = (n: number) => `${view?.currency ?? ""}${n.toLocaleString()}`;
 
   // The message the customer sends. Normally it is the one the checkout already
@@ -186,10 +195,13 @@ export function OrderConfirmedPage({
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </span>
-          <h1 id="confirm-heading" className="sf-confirm__title font-display">Order Confirmed</h1>
+          <h1 id="confirm-heading" className="sf-confirm__title font-display">
+            {isDirect ? "Order Received" : "Order Confirmed"}
+          </h1>
           <p className="sf-confirm__lede">
-            Your order details have been pre-filled. Please review everything below, then
-            click your preferred contact method to finalize your order.
+            {isDirect
+              ? "We've got your order and it's now with the store. Please review the details below and keep your order number handy."
+              : "Your order details have been pre-filled. Please review everything below, then click your preferred contact method to finalize your order."}
           </p>
         </header>
 
@@ -294,76 +306,100 @@ export function OrderConfirmedPage({
           </dl>
         </section>
 
-        {/* ── Hand-off ─────────────────────────────────────────────────── */}
-        <section className="sf-confirm__send" aria-labelledby="confirm-send">
-          <h2 id="confirm-send" className="sf-confirm__card-title">Finalize your order</h2>
-          {channels.length === 0 ? (
-            <p className="sf-confirm__note">
-              This store hasn&rsquo;t set up a contact channel yet — please reach out using
-              the details in the footer, quoting order #{view.reference}.
+        {/* ── What happens next (no chat channel) ──────────────────────
+            Nothing to send: the order is already stored and the seller has it.
+            So this section is a receipt, not a call to action — it tells the
+            customer to wait, and hands them the one thing they need to follow
+            it up, their order number. */}
+        {isDirect ? (
+          <section className="sf-confirm__next" aria-labelledby="confirm-next">
+            <h2 id="confirm-next" className="sf-confirm__card-title">What happens next</h2>
+            <p className="sf-confirm__next-lede">
+              Thank you for placing your order! We&rsquo;ve received it and it&rsquo;s now
+              waiting for confirmation. Please keep an eye out — we&rsquo;ll be in touch
+              shortly.
             </p>
-          ) : (
-            <>
+            {canTrack ? (
+              <>
+                <p className="sf-confirm__note">
+                  You can check your order status any time on the Track Order page — just
+                  search your order number, <strong>#{view.reference}</strong>. We&rsquo;ve
+                  remembered it in this browser, so it should already be filled in for you.
+                </p>
+                <a className="btn btn-primary sf-confirm__track" href="#track">
+                  Track my order
+                </a>
+              </>
+            ) : (
               <p className="sf-confirm__note">
-                Your message is already written. Pick a channel and press send.
+                Please keep your order number, <strong>#{view.reference}</strong> — quote it
+                if you need to get in touch about this order.
               </p>
-              <div className="sf-confirm__channels">
-                {channels.map((c) => (
-                  <button
-                    key={c.type}
-                    type="button"
-                    className="btn btn-primary sf-confirm__channel"
-                    onClick={() => void send(c.type)}
-                  >
-                    {CHANNEL_LABELS[c.type]}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* ── Manual fallback ─────────────────────────────────────────
-              Deliberately always visible, not revealed after a failure: the
-              page cannot detect that a chat app opened with an empty compose
-              box, so the customer has to be able to reach for this themselves. */}
-          <div className="sf-confirm__fallback">
-            <p className="sf-confirm__fallback-note">
-              Opened blank, or the details didn&rsquo;t come through? Copy your order and
-              paste it into the chat.
-            </p>
-            <div className="sf-confirm__fallback-actions">
-              <button
-                type="button"
-                className="sf-confirm__copy"
-                onClick={() => void copyOrder()}
-              >
-                Copy order details
-              </button>
-              <button
-                type="button"
-                className="sf-confirm__reveal"
-                onClick={() => setShowMessage((shown) => !shown)}
-                aria-expanded={showMessage}
-                aria-controls="confirm-message"
-              >
-                {showMessage ? "Hide order text" : "Show order text"}
-              </button>
-            </div>
-            {showMessage && (
-              <textarea
-                id="confirm-message"
-                className="sf-confirm__message"
-                readOnly
-                rows={14}
-                value={messageText}
-                aria-label="Your order details, ready to copy"
-                // Tapping it selects the lot, so a customer whose browser blocks
-                // the clipboard entirely still only needs one gesture.
-                onFocus={(e) => e.currentTarget.select()}
-              />
             )}
-          </div>
-        </section>
+          </section>
+        ) : (
+          /* ── Hand-off ───────────────────────────────────────────────── */
+          <section className="sf-confirm__send" aria-labelledby="confirm-send">
+            <h2 id="confirm-send" className="sf-confirm__card-title">Finalize your order</h2>
+            <p className="sf-confirm__note">
+              Your message is already written. Pick a channel and press send.
+            </p>
+            <div className="sf-confirm__channels">
+              {channels.map((c) => (
+                <button
+                  key={c.type}
+                  type="button"
+                  className="btn btn-primary sf-confirm__channel"
+                  onClick={() => void send(c.type)}
+                >
+                  {CHANNEL_LABELS[c.type]}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Manual fallback ───────────────────────────────────────
+                Deliberately always visible, not revealed after a failure: the
+                page cannot detect that a chat app opened with an empty compose
+                box, so the customer has to be able to reach for this themselves. */}
+            <div className="sf-confirm__fallback">
+              <p className="sf-confirm__fallback-note">
+                Opened blank, or the details didn&rsquo;t come through? Copy your order and
+                paste it into the chat.
+              </p>
+              <div className="sf-confirm__fallback-actions">
+                <button
+                  type="button"
+                  className="sf-confirm__copy"
+                  onClick={() => void copyOrder()}
+                >
+                  Copy order details
+                </button>
+                <button
+                  type="button"
+                  className="sf-confirm__reveal"
+                  onClick={() => setShowMessage((shown) => !shown)}
+                  aria-expanded={showMessage}
+                  aria-controls="confirm-message"
+                >
+                  {showMessage ? "Hide order text" : "Show order text"}
+                </button>
+              </div>
+              {showMessage && (
+                <textarea
+                  id="confirm-message"
+                  className="sf-confirm__message"
+                  readOnly
+                  rows={14}
+                  value={messageText}
+                  aria-label="Your order details, ready to copy"
+                  // Tapping it selects the lot, so a customer whose browser blocks
+                  // the clipboard entirely still only needs one gesture.
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </section>
   );

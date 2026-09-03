@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brand, Order, OrderStatusEvent } from "../types";
 import { BackLink } from "../components/BackLink";
 import { TrackNoteCard } from "../components/TrackNoteCard";
 import { useStore } from "../store";
 import { trackStorefrontOrderAction, type TrackedOrder } from "@/actions/orders";
 import { isTrackNoteVisible } from "@/lib/storefront/track-note";
+import { recallRecentOrder } from "@/lib/storefront/recent-order";
 
 const STATUS_LABELS: Record<Order["status"], string> = {
   new: "Order Received",
@@ -128,27 +129,52 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
 
   // `override` lets the recent-orders buttons track directly (one tap) without a
   // render round-trip through the input's state.
-  const lookup = async (override?: string) => {
-    const n = (override ?? orderNumber).trim();
-    if (!n) return;
-    setOrderNumber(n);
-    setSearched(n);
-    const local = myOrders.find(
-      (o) =>
-        (o.orderNumber || "").toUpperCase() === n.toUpperCase() ||
-        o.id.toUpperCase() === n.toUpperCase(),
-    );
-    // Show the cached copy immediately so tracking appears instantly; the server
-    // result below overwrites it with the authoritative latest status + journey.
-    if (local) setResult(toTracked(local));
-    try {
-      const res = await trackStorefrontOrderAction(n);
-      if ("ok" in res && res.order) setResult(res.order);
-      else if (!local) setResult("not_found");
-    } catch {
-      if (!local) setResult("not_found");
-    }
-  };
+  const lookup = useCallback(
+    async (override?: string) => {
+      const n = (override ?? orderNumber).trim();
+      if (!n) return;
+      setOrderNumber(n);
+      setSearched(n);
+      const local = myOrders.find(
+        (o) =>
+          (o.orderNumber || "").toUpperCase() === n.toUpperCase() ||
+          o.id.toUpperCase() === n.toUpperCase(),
+      );
+      // Show the cached copy immediately so tracking appears instantly; the server
+      // result below overwrites it with the authoritative latest status + journey.
+      if (local) setResult(toTracked(local));
+      try {
+        const res = await trackStorefrontOrderAction(n);
+        if ("ok" in res && res.order) setResult(res.order);
+        else if (!local) setResult("not_found");
+      } catch {
+        if (!local) setResult("not_found");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toTracked is a pure
+    // local formatter re-created every render; depending on it would re-run the
+    // seeding effect below on every render.
+    [orderNumber, myOrders],
+  );
+
+  // Seed the page with the customer's most recent order.
+  //
+  // The number is remembered in a cookie at placement (see recent-order.ts), and
+  // `myOrders` is the local fallback for a browser that blocks cookies. Without
+  // this a channel-less store's customer — who is sent here INSTEAD of a chat
+  // thread — has to transcribe "HP-000482" off the confirmation screen, which is
+  // exactly the step people get wrong.
+  //
+  // Runs once. `seeded` is a ref, not state, so a customer who clears the box or
+  // searches for a different order is never yanked back to their own last one.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current) return;
+    const recent = recallRecentOrder() || myOrders[0]?.orderNumber || "";
+    if (!recent) return;
+    seeded.current = true;
+    void lookup(recent);
+  }, [myOrders, lookup]);
 
   return (
     <section className="page" id="track">
