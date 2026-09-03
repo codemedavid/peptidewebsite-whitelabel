@@ -73,6 +73,7 @@
     "test:dragon-pricelist": "tsx scripts/test-dragon-pricelist.ts",
     "test:stock-gate": "tsx scripts/test-stock-gate.ts",
     "test:product-detail": "tsx scripts/test-product-detail.ts",
+    "test:product-link": "tsx scripts/test-product-link.ts",
     "test:plan-scope": "tsx scripts/test-plan-scope.ts",
     "test:plan-feature-config": "tsx scripts/test-plan-feature-config.ts",
     "test:plan-distribution": "tsx scripts/test-plan-distribution.ts",
