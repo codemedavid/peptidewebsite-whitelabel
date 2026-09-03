@@ -160,7 +160,12 @@ export default async function StorefrontLayout({
   // own header/footer/navigation. Other storefront routes (e.g. product detail)
   // keep the lightweight shared chrome below.
   const pathname = (await headers()).get("x-pathname") ?? "/";
-  const isStorefrontHome = pathname === "/";
+  // The storefront app brings its own header/footer/navigation, so the shared
+  // lightweight chrome below must not wrap it. `/p/<slug>` share links render
+  // that same app (see p/[slug]/page.tsx) — without this they would paint the
+  // full storefront INSIDE the legacy header, which is the first thing a
+  // customer sees when an owner sends them a product.
+  const isStorefrontHome = pathname === "/" || pathname.startsWith("/p/");
 
   return (
     <div

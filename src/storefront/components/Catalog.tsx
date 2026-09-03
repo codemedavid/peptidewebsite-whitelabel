@@ -28,6 +28,12 @@ import { buildProductCta } from "@/lib/storefront/product-cta";
 import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
+import {
+  findProductByLinkKey,
+  parseProductHash,
+  productHash,
+} from "@/lib/storefront/product-link";
+import { ShareProductButton } from "./ShareProductButton";
 import { resolveReviewDescStyle, reviewsForProduct } from "@/lib/storefront/reviews";
 import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
 import { ReviewViewer } from "./ReviewViewer";
@@ -353,6 +359,7 @@ export function ProductCard({
   gbBlocked,
   storeClosed,
   defaultImage,
+  storeName,
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
@@ -376,6 +383,10 @@ export function ProductCard({
    *  product has no image of its own. Prop (not useStore) because the platform
    *  admin's CardDesignPicker renders this card outside the StoreProvider. */
   defaultImage?: string | null;
+  /** Store name, used only as the native share sheet's title. Optional so the
+   *  admin Card Studio preview (rendered outside StoreProvider) still works —
+   *  there the share control simply titles itself with the product name. */
+  storeName?: string;
 }) {
   const [qty, setQty] = useState(1);
   // Per-product variations (e.g. 5mg / 10mg), each with its own price. When a
@@ -434,6 +445,10 @@ export function ProductCard({
   // resellers get wholesale at checkout without it being advertised here.
   return (
     <article className="product-card card" style={cd?.style} {...(cd?.data ?? {})}>
+      {/* Opposite corner from the badge stack above, so the two never collide.
+          Hidden until card hover on pointer devices (always shown on touch) —
+          the owner needs it, the shopper does not. */}
+      <ShareProductButton product={product} storeName={storeName} />
       {productOut ? (
         <span className="product-card__badge badge badge-soft">Out of stock</span>
       ) : madeToOrder ? (
@@ -752,6 +767,16 @@ function ProductDetailModal({
           ×
         </button>
 
+        {/* The modal is where an owner lands after opening a product to check
+            it, so the share control is labelled here rather than icon-only. */}
+        <div className="sf-detail__share">
+          <ShareProductButton
+            product={product}
+            storeName={brand.name}
+            variant="detail"
+          />
+        </div>
+
         <div className="sf-detail__grid">
           <div className="sf-detail__media">
             {hasGallery(slides) ? (
@@ -925,6 +950,7 @@ export function Catalog({
   brand,
   query: queryProp,
   onQueryChange,
+  openProductSlug,
 }: {
   products: Product[];
   category: string;
@@ -936,6 +962,12 @@ export function Catalog({
    *  boutique layout's header bar — filters this same grid. */
   query?: string;
   onQueryChange?: (q: string) => void;
+  /** Link key (slug or id) of a product to open the quick-view modal for, from
+   *  a shared /p/<slug> link or a #p/<slug> hash. Undefined = nothing to open;
+   *  a key that matches nothing in this catalog is ignored, so a link to a
+   *  hidden or deleted product falls back to the plain grid rather than a
+   *  dead-end. See lib/storefront/product-link.ts. */
+  openProductSlug?: string | null;
 }) {
   // The owner shut the whole shop (Admin → Store Status). The catalog still
   // renders in full — that is the point of "closed" rather than "hidden" — but
@@ -953,6 +985,37 @@ export function Catalog({
   const [sort, setSort] = useState("");
   // The product whose full-detail quick-view modal is open (null = closed).
   const [selected, setSelected] = useState<Product | null>(null);
+
+  // A shared link (/p/<slug>, or #p/<slug> from inside the SPA) opens straight
+  // into the quick-view modal. Re-runs when the key changes so navigating from
+  // one product link to another swaps the modal instead of leaving the first
+  // one up, and when `products` changes so a link that arrives before the
+  // catalog has hydrated still resolves. An unmatched key is deliberately a
+  // no-op: a link to a since-hidden product shows the catalog, not an error.
+  useEffect(() => {
+    if (!openProductSlug) return;
+    const target = findProductByLinkKey(products, openProductSlug);
+    if (target) setSelected(target);
+  }, [openProductSlug, products]);
+
+  // Opening the modal puts the product's own link in the address bar, so the
+  // browser's share/copy affordances and the Back button both work on it.
+  // `replaceState` rather than a hash assignment: assigning would push an entry
+  // and fire `hashchange`, which the SPA router would treat as a navigation.
+  const openDetail = (p: Product) => {
+    setSelected(p);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", productHash(p));
+    }
+  };
+  const closeDetail = () => {
+    setSelected(null);
+    if (typeof window !== "undefined" && parseProductHash(window.location.hash)) {
+      // Drop the product hash on close, keeping the path + query intact so the
+      // catalog does not jump or reload.
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  };
 
   // The sort menu is the owner's own list now (Admin → Product Sort Categories),
   // not a hardcoded three. A tenant who has never opened that screen is seeded
@@ -1072,8 +1135,9 @@ export function Catalog({
               defaultImage={brand.defaultProductImage}
               gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
               storeClosed={storeClosed}
+              storeName={brand.name}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
-              onOpenDetail={() => setSelected(p)}
+              onOpenDetail={() => openDetail(p)}
             />
           ))}
           {filtered.length === 0 && (
@@ -1092,7 +1156,7 @@ export function Catalog({
       {selected && (
         <ProductDetailModal
           product={selected}
-          onClose={() => setSelected(null)}
+          onClose={closeDetail}
           onAddToCart={onAddToCart}
           defaultImage={brand.defaultProductImage}
           gbBlocked={isOnHandBlocked(selected.id, brand.groupBuyGate)}

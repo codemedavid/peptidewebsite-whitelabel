@@ -3,6 +3,7 @@ import { getTenantId } from "@/lib/tenant/headers";
 import { withTenant } from "@/lib/db/tenant-client";
 import { formatPrice } from "@/lib/utils";
 import { isDemoMode, getDemoProducts } from "@/lib/demo/fixtures";
+import { productPath } from "@/lib/storefront/product-link";
 
 export type ProductGridProps = {
   title?: string;
@@ -37,7 +38,7 @@ export async function ProductGrid({ title = "Catalog", limit = 8 }: ProductGridP
             return (
               <Link
                 key={p.id}
-                href={p.slug ? `/products/${p.slug}` : "#"}
+                href={productPath(p)}
                 className="group rounded-[var(--radius)] border border-border bg-card p-4 transition hover:shadow-lg"
               >
                 {images[0] && (

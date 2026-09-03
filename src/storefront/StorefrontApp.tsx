@@ -30,6 +30,7 @@ import { isBoutiqueLayout, isEditorialLayout } from "@/lib/storefront/home-layou
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
+import { parseProductHash } from "@/lib/storefront/product-link";
 import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
 import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
 import {
@@ -71,10 +72,20 @@ const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "me
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
   const h = (window.location.hash || "").replace(/^#/, "");
+  // A product deep link (#p/<slug>) is not its own page — it is the home/catalog
+  // view with one product's quick-view open. Resolving it to "home" keeps it out
+  // of the flat exact-match list above, so it can never shadow a real route.
+  if (parseProductHash(h)) return "home";
   return ROUTES.includes(h) ? h : "home";
 }
 
-function Shell() {
+/** The product link key in the current hash, or null. */
+function productKeyFromHash(): string | null {
+  if (typeof window === "undefined") return null;
+  return parseProductHash(window.location.hash);
+}
+
+function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
   const { brand, products, categories, cart, addToCart } = useStore();
   const [category, setCategory] = useState("all");
   // "Explore GB #N" scope toggle — default OFF so the normal view is the full
@@ -94,6 +105,10 @@ function Shell() {
   // Drives the top progress bar — fires immediately on any hash navigation so
   // users get instant visual feedback even before the JS chunk loads.
   const [navKey, setNavKey] = useState(0);
+  // Which product's quick-view a shared link asked for. Seeded from the server
+  // route (/p/<slug>) so the modal is open on the FIRST paint of a pasted link
+  // — waiting for the mount effect below would flash the bare catalog first.
+  const [productKey, setProductKey] = useState<string | null>(initialProductKey ?? null);
 
   // A toggled-off sub-page should behave as if it isn't there: treat its hash
   // as "home" so direct visits land on the storefront instead of a blank shell.
@@ -110,6 +125,9 @@ function Shell() {
   // Resolve initial route + auth after mount (avoids SSR hash mismatch).
   useEffect(() => {
     setPage(pageFromHash());
+    // A #p/<slug> hash present at mount (someone pasted the SPA form of the
+    // link) resolves the same way the server route's initialProductKey does.
+    setProductKey((prev) => productKeyFromHash() ?? prev);
 
     // The admin gate is a REAL server session — always ask the server, never a
     // cached client-side hint. Store-admin sessions are killed on every document
@@ -129,6 +147,10 @@ function Shell() {
       const next = pageFromHash();
       setNavKey((k) => k + 1); // triggers a fresh progress bar animation
       setPage(next);
+      // Follow the hash in BOTH directions: a new product link opens that
+      // product, and navigating away (Back out of #p/<slug>) clears it so the
+      // modal doesn't reopen itself on the next render.
+      setProductKey(productKeyFromHash());
       if (next === "admin") verifyAdmin();
       if (next !== "catalog") window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
@@ -345,6 +367,7 @@ function Shell() {
           onQueryChange={setQuery}
           onCategoryChange={setCategory}
           onAddToCart={addToCart}
+          openProductSlug={productKey}
           onHeroPrimary={heroCtaHandler(1)}
           onHeroSecondary={heroCtaHandler(2)}
           onHeroMedia={heroMediaHandler}
@@ -364,6 +387,7 @@ function Shell() {
           onQueryChange={setQuery}
           onCategoryChange={setCategory}
           onAddToCart={addToCart}
+          openProductSlug={productKey}
           onHeroPrimary={heroCtaHandler(1)}
           onHeroSecondary={heroCtaHandler(2)}
           onHeroMedia={heroMediaHandler}
@@ -411,6 +435,7 @@ function Shell() {
               category={category}
               onAddToCart={addToCart}
               brand={brand}
+              openProductSlug={productKey}
             />
           )}
         </>
@@ -438,11 +463,16 @@ export function StorefrontApp({
   brand = BRAND,
   products,
   tenantKey,
+  initialProduct,
 }: {
   brand?: Brand;
   products?: Product[];
   /** Per-tenant id/slug used to namespace this storefront's localStorage. */
   tenantKey?: string;
+  /** Link key (slug or id) of the product the /p/<slug> server route resolved,
+   *  so a pasted share link paints with the quick-view already open instead of
+   *  flashing the catalog first. Undefined on the plain "/" render. */
+  initialProduct?: string | null;
 }) {
   return (
     <div
@@ -462,7 +492,7 @@ export function StorefrontApp({
       }
     >
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
-        <Shell />
+        <Shell initialProductKey={initialProduct} />
       </StoreProvider>
     </div>
   );

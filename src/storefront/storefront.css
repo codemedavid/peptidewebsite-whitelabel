@@ -9824,3 +9824,158 @@
 }
 .sf-root .merchant-lock:disabled { opacity: .55; cursor: default; }
 .sf-root .merchant-lock svg { width: 14px; height: 14px; }
+
+/* ── Share product link ──────────────────────────────────────────────────────
+   The "send this product" control on the card and in the quick-view modal.
+   Appended at the END of the file on purpose: this stylesheet has a recorded
+   cascade hazard where a later same-specificity block silently overrides an
+   earlier one, so these rules — including their own responsive and
+   reduced-motion variants — sit after everything that could reach them.
+   Covered by scripts/test-product-link.ts. */
+.sf-root .sf-share {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sf-root .sf-share__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--brand-text-muted);
+  cursor: pointer;
+  /* Compositor-friendly only — no width/padding animation. */
+  transition: color .15s, border-color .15s, background .15s, transform .15s;
+}
+.sf-root .sf-share__btn:hover {
+  color: var(--brand-accent);
+  border-color: var(--brand-border, rgba(0, 0, 0, .14));
+  background: var(--brand-surface-2);
+}
+.sf-root .sf-share__btn:active { transform: scale(.92); }
+.sf-root .sf-share__btn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+/* Success reads as a state change, not just a swapped glyph. */
+.sf-root .sf-share__btn[data-copied] {
+  color: var(--brand-accent);
+  border-color: color-mix(in srgb, var(--brand-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--brand-accent) 10%, transparent);
+}
+
+/* Card variant: an unobtrusive icon pinned opposite the badge, which lifts on
+   card hover so it never competes with the product photo at rest. */
+.sf-root .sf-share[data-variant="card"] {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+}
+.sf-root .sf-share[data-variant="card"] .sf-share__btn {
+  background: color-mix(in srgb, var(--brand-background) 82%, transparent);
+  border-color: var(--brand-border, rgba(0, 0, 0, .10));
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity .18s, color .15s, border-color .15s, background .15s, transform .15s;
+}
+.sf-root .product-card:hover .sf-share[data-variant="card"] .sf-share__btn,
+.sf-root .sf-share[data-variant="card"] .sf-share__btn:focus-visible,
+.sf-root .sf-share[data-variant="card"] .sf-share__btn[data-copied] {
+  opacity: 1;
+}
+
+/* Detail variant: labelled, sitting beside the modal's close button. */
+.sf-root .sf-share[data-variant="detail"] .sf-share__btn {
+  padding: 8px 14px;
+  border-color: var(--brand-border, rgba(0, 0, 0, .14));
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.sf-root .sf-share__label { white-space: nowrap; }
+
+/* Screen-reader-only announcement region. */
+.sf-root .sf-share__live {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Last-resort panel: both copy paths refused, so the URL goes on screen. */
+.sf-root .sf-share__manual {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, .14));
+  background: var(--brand-background);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .16);
+}
+.sf-root .sf-share__manual-input {
+  width: 210px;
+  max-width: 46vw;
+  border: 0;
+  background: transparent;
+  color: var(--brand-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 4px 6px;
+}
+.sf-root .sf-share__manual-input:focus { outline: none; }
+.sf-root .sf-share__manual-close {
+  border: 0;
+  background: transparent;
+  color: var(--brand-text-muted);
+  font-size: 17px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.sf-root .sf-share__manual-close:hover { color: var(--brand-text); }
+
+/* Touch devices have no hover to reveal the card icon, so it is always shown. */
+@media (hover: none) {
+  .sf-root .sf-share[data-variant="card"] .sf-share__btn { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-share__btn { transition: none; }
+  .sf-root .sf-share__btn:active { transform: none; }
+}
+
+/* Share control in the quick-view modal: left of the close button, which is
+   absolutely positioned at top/right 12px with a 36px box. */
+.sf-root .sf-detail__share {
+  position: absolute;
+  top: 12px;
+  right: 58px;
+  z-index: 2;
+}
+.sf-root .sf-detail__share .sf-share__btn {
+  height: 36px;
+  background: var(--brand-surface, #fff);
+}
+/* The modal's own share panel opens leftward — at top/right there is no room
+   below-right without clipping against the dialog edge. */
+.sf-root .sf-detail__share .sf-share__manual { right: 0; }
+
+@media (max-width: 640px) {
+  /* Narrow dialogs: drop the word, keep the icon, so the title never collides. */
+  .sf-root .sf-detail__share .sf-share__label { display: none; }
+  .sf-root .sf-detail__share .sf-share__btn { padding: 7px; }
+  .sf-root .sf-detail__share { right: 54px; }
+}

@@ -49,6 +49,7 @@ export function EditorialHome({
   category,
   query,
   onQueryChange,
+  openProductSlug,
   onCategoryChange,
   onAddToCart,
   onHeroPrimary,
@@ -69,6 +70,9 @@ export function EditorialHome({
   category: string;
   query: string;
   onQueryChange: (q: string) => void;
+  /** Product link key from a shared /p/<slug> link, forwarded to the grid
+   *  below so this layout honours share links exactly like the classic home. */
+  openProductSlug?: string | null;
   onCategoryChange: (id: string) => void;
   onAddToCart: (p: Product, qty?: number, variation?: { name: string; price: number }) => void;
   onHeroPrimary: () => void;
@@ -145,6 +149,7 @@ export function EditorialHome({
           category={category}
           query={query}
           onQueryChange={onQueryChange}
+          openProductSlug={openProductSlug}
           onAddToCart={onAddToCart}
           brand={brand}
         />

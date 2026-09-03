@@ -31,6 +31,11 @@ import type { EditorialConfig } from "@/lib/storefront/editorial-home";
 
 export type Product = {
   id: string;
+  /** URL-safe, unique-per-tenant key this product is SHARED by: /p/<slug> and
+   *  #p/<slug>. Optional because the DB column is nullable and is only filled on
+   *  the create path — imported and seeded rows have none and fall back to `id`.
+   *  Never read directly; go through lib/storefront/product-link.ts. */
+  slug?: string | null;
   name: string;
   description: string;
   price: number;

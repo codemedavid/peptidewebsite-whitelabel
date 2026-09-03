@@ -190,6 +190,9 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
   const images = asStringArray(row.images);
   return {
     id: row.id,
+    // Carried through so the card can build its share link (/p/<slug>). Null on
+    // rows created outside the create path — product-link.ts falls back to `id`.
+    slug: row.slug,
     name: row.name,
     description: row.description ?? "",
     price: (row.priceCents ?? 0) / 100,

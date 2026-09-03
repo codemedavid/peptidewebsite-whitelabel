@@ -326,10 +326,17 @@ check("the share button component exists", () => {
 });
 
 check("the share button copies to the clipboard with a fallback path", () => {
+  // The routine lives in the shared lib, so follow the import rather than
+  // grepping the component — and assert BOTH legs are actually in there.
   const shareSrc = src("src/storefront/components/ShareProductButton.tsx");
   assert.ok(
-    /navigator\.clipboard/.test(shareSrc) && /execCommand/.test(shareSrc),
-    "share button has no clipboard fallback — navigator.clipboard is undefined on insecure origins and in some in-app webviews",
+    /from "@\/lib\/storefront\/clipboard"/.test(shareSrc),
+    "share button does not use the shared clipboard helper",
+  );
+  const clipSrc = src("src/lib/storefront/clipboard.ts");
+  assert.ok(
+    /navigator\.clipboard/.test(clipSrc) && /execCommand/.test(clipSrc),
+    "clipboard helper has no execCommand fallback — navigator.clipboard is undefined on insecure origins and in some in-app webviews",
   );
 });
 
@@ -371,14 +378,36 @@ check("it looks the product up tenant-scoped and 404s an unknown one", () => {
 
 check("it renders the real storefront app, not a second product page design", () => {
   const routeSrc = src(routePath);
+  // The route renders the storefront home (which itself renders StorefrontApp),
+  // handing it the product key — that is what keeps a shared link on the
+  // tenant's own design instead of a bespoke page that can drift from it.
   assert.ok(
-    /StorefrontApp/.test(routeSrc),
-    "the route renders its own markup — that is the off-design legacy page all over again",
+    /<StorefrontHome[\s\S]{0,80}initialProduct/.test(routeSrc),
+    "the route does not render the shared storefront home with the product key",
+  );
+  // And it must not hand-roll product markup the way the legacy page did.
+  assert.ok(
+    !/<h1|font-heading|text-accent/.test(routeSrc),
+    "the route builds its own product markup — that is the off-design legacy page all over again",
+  );
+  // Both routes must render ONE component, or the share link grows its own page.
+  const homeSrc = src("src/app/(tenant)/(storefront)/storefront-home.tsx");
+  assert.ok(
+    /<StorefrontApp/.test(homeSrc) && /initialProduct={initialProduct}/.test(homeSrc),
+    "the shared storefront home does not forward initialProduct to StorefrontApp",
+  );
+  assert.ok(
+    /<StorefrontHome/.test(src("src/app/(tenant)/(storefront)/page.tsx")),
+    'the "/" route no longer renders the shared home — the two routes have forked',
   );
 });
 
 check("it is NOT gated behind the site.products entitlement", () => {
-  const routeSrc = src(routePath);
+  // Strip comments first: the route explains in prose why it does NOT call this,
+  // and a bare grep would read that explanation as the call itself.
+  const routeSrc = src(routePath)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
   assert.ok(
     !/requireFeaturePage/.test(routeSrc),
     "share links 404 for tenants without site.products — every storefront has a catalog",
@@ -389,9 +418,13 @@ check("it is NOT gated behind the site.products entitlement", () => {
 console.log("\nLegacy /products/[slug]");
 
 check("the legacy product page redirects instead of serving a rival design", () => {
-  const legacy = src("src/app/(tenant)/(storefront)/products/[slug]/page.tsx");
+  // Comments stripped for the same reason as the route's entitlement check: the
+  // file names the old chrome in prose to explain what it replaced.
+  const legacy = src("src/app/(tenant)/(storefront)/products/[slug]/page.tsx")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
   assert.ok(
-    /redirect\(/.test(legacy),
+    /permanentRedirect\(|\bredirect\(/.test(legacy),
     "legacy /products/[slug] still renders its own off-design page — two URLs for one product",
   );
   assert.ok(
