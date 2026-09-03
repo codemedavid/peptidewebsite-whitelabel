@@ -161,6 +161,7 @@
     "test:image-optimization": "tsx scripts/test-image-optimization.ts",
     "test:storefront-render-cost": "tsx scripts/test-storefront-render-cost.ts",
     "test:mcp-features": "tsx scripts/test-mcp-features.ts",
+    "test:tenant-lookup": "tsx scripts/test-tenant-lookup.ts",
     "test:mcp-variations": "tsx scripts/test-mcp-variations.ts",
     "test:qrph-fee": "tsx scripts/test-qrph-fee.ts",
     "test:courier-booking": "tsx scripts/test-courier-booking.ts",
