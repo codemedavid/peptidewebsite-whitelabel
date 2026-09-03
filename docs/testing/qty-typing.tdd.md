@@ -101,6 +101,37 @@ guarded the button would have left the box free to hold an unfillable number,
 so the anchor was re-pointed and a second check added for the other half of the
 chain. `42 passed, 0 failed`.
 
+### 4. A defect the tests did not catch, found by driving the browser
+
+Structural tests proved the wiring; they could not prove the *interaction*.
+Running the real storefront did:
+
+`shown = draft ?? String(value)` ignores `value` entirely while a draft is open,
+so an external change could not reach the box. Type 12, press **Add to Cart** —
+the card resets its quantity to 1 while the field goes on showing "12", the
+customer's own text outliving the quantity it described. The same failure would
+strand a cart line's box after the store trimmed it to available stock.
+
+Naively clearing the draft on any value change breaks the opposite case: in
+live-commit mode every keystroke pushes a value, so typing "1" toward "120" on a
+50-unit MOQ would be snapped back to "50" mid-word. The field therefore records
+what *it* last asked for (`pushedRef`) and surrenders the draft only when the
+change came from somewhere else.
+
+RED → `npm run test:qty-typing` 44 passed, **1 failed**; GREEN → 45 passed, 0
+failed. Commit `b7f9e42`.
+
+### 5. Browser verification (hpglow storefront, dev, 41 product cards)
+
+| Checked | Result |
+|---|---|
+| Type `12` on a product with 4 units | box clamps live to `4`, adds 4, resets to `1` — journey 3 |
+| Type `12` on a well-stocked product, Add to Cart with the draft still open | box resets to `1`, typing works immediately after — the §4 fix |
+| Cart line holding 12 → type `5` → blur | line becomes **5**, not 17; total PHP4,995 = 5 × 999 — journey 5 |
+| Blur-commit on cart lines | cart untouched while typing; one mutation on blur |
+| 375px-class width (500px viewport, ≤700px CSS branch) | 41 controls, **0** overflowing their pill, no horizontal page scroll |
+| Rendered control | borderless, transparent, centred, 26–30px box inside a 92–104px pill |
+
 ## Test specification
 
 | # | What is guaranteed | Test | Type | Result |
@@ -146,7 +177,7 @@ suites. The 80% target in the house rules cannot be measured with the tooling
 present, so claiming a number would be fabrication. What was actually run:
 
 ```
-npm run test:qty-typing      44 passed, 0 failed
+npm run test:qty-typing      45 passed, 0 failed
 npm run test:stock-gate      42 passed, 0 failed
 npx tsc --noEmit             exit 0
 npm run build                clean
@@ -160,12 +191,13 @@ Plus 12 further neighbouring suites, all PASS: `test:product-cta`,
 
 Gaps, stated rather than hidden:
 
-- **No DOM-level test of the typing interaction.** The helpers are covered
-  exhaustively as pure functions, and the wiring structurally, but there is no
-  renderer in this repo (no jsdom, no Testing Library), so "focus the box, type
-  1-2, blur, assert the cart holds 12" is not asserted end-to-end. The
-  `commit="live"` vs `commit="blur"` distinction in particular is verified by
-  reading, not by execution.
+- **No AUTOMATED DOM-level test of the typing interaction.** The helpers are
+  covered exhaustively as pure functions and the wiring structurally, but there
+  is no renderer in this repo (no jsdom, no Testing Library), so the end-to-end
+  interaction is not asserted by the suite. It was driven manually in a real
+  browser instead (§5) — which is how the §4 defect surfaced, and is exactly the
+  class of bug a structural test cannot see. A regression here would be caught
+  by a person, not by CI.
 - **`min={0}` on the three cart-backed surfaces** deliberately preserves the
   existing behaviour where "−" on the last unit clears the line. A consequence:
   emptying the box and clicking away also clears it there. On the pre-add
@@ -181,6 +213,7 @@ If these commits are squashed, the RED/GREEN pair is:
 
 - **RED** `d3ad941` — `npm run test:qty-typing` → `Cannot find module '../src/lib/storefront/qty-input'`
 - **GREEN** `be4810d` — `npm run test:qty-typing` → `44 passed, 0 failed`
+- **RED → GREEN** `b7f9e42` — the stale-draft defect above: `44 passed, 1 failed` → `45 passed, 0 failed`
 - **Refactor** — none needed as a separate step: the shared helper + shared
   component *are* the de-duplication, and the six copies of the old stepper
   markup were deleted as they were replaced.
