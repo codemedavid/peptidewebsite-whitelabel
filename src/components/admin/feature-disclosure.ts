@@ -47,3 +47,28 @@ export function groupBodyId(group: FeatureGroup): string {
     .replace(/^-+|-+$/g, "");
   return `ftr-grp-${slug}`;
 }
+
+/**
+ * The parent switch a row is waiting on, or null when the row is live.
+ *
+ * A child feature is ANDed with its master switch on the server
+ * (resellerCapsFrom, resolveGroupBuyCaps, the Sales Analytics module gate), so a
+ * child that is ON while its parent is OFF renders nothing at all. The Features
+ * screen used to show both as plain, independent toggles: Nova Lab had
+ * "Wholesale reseller page" switched on above a "Reseller" parent that was off,
+ * and the store had no reseller page with nothing on screen to explain why.
+ *
+ * Only an ON row can be inert — an off switch is simply off, not misleading — and
+ * an unknown parent counts as off so the badge fails closed. Reads the live
+ * toggle map rather than the server snapshot so the badge clears the moment the
+ * operator flips the parent, without a reload. Pure: `state` is never mutated.
+ */
+export function inertDependency(
+  item: { key: string; dependsOn: string | null },
+  state: Readonly<Record<string, boolean>>,
+): string | null {
+  if (!state[item.key]) return null;
+  const parent = item.dependsOn;
+  if (!parent) return null;
+  return state[parent] ? null : parent;
+}

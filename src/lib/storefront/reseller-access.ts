@@ -106,6 +106,31 @@ export function nextCredential(
 }
 
 /**
+ * Is the gated `#merchant` page a route this storefront has at all?
+ *
+ * Three conditions, all required, and they fail in different places, which is
+ * why they are collected here instead of being spelled out inline in the
+ * storefront render:
+ *
+ *   caps.enabled     — the operator granted the Reseller PARENT.
+ *   caps.resellerPage— the operator granted the reseller PAGE child.
+ *   hasCode          — the STORE OWNER set a reseller password. Without one the
+ *                      portal would be a public wholesale price list, so the
+ *                      route stays absent rather than opening unguarded.
+ *
+ * The first two are not one check: `resellerCapsFrom` already ANDs the child
+ * with the parent, but a tenant can hold the parent for wholesale pricing alone
+ * and never have the page. Nova Lab held BOTH children with the parent OFF and
+ * no password, so all three answers were no at once — the store simply had no
+ * reseller page, and nothing on either admin screen said which switch was
+ * missing. Keeping the rule in one named function is what lets the test suite
+ * pin that shape (scripts/test-reseller-feature-tree.ts).
+ */
+export function merchantPageVisible(caps: ResellerCapabilities, hasCode: boolean): boolean {
+  return caps.enabled && caps.resellerPage && hasCode;
+}
+
+/**
  * ── The visibility rule ─────────────────────────────────────────────────────
  * Whether THIS request may see wholesale pricing at all, and therefore whether
  * the catalog it renders from is allowed to carry `wholesale` / `reseller` legs.

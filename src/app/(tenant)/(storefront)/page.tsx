@@ -42,6 +42,7 @@ import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import {
   readResellerCredential,
   hasResellerCode,
+  merchantPageVisible,
   resolveWholesaleAccess,
 } from "@/lib/storefront/reseller-access";
 import { readResellerPageCopy } from "@/lib/storefront/reseller-page-copy";
@@ -90,15 +91,10 @@ export default async function HomePage() {
   // gate on the operator's toggle with no dead gate — and it overrides whatever
   // stale `showPageMerchant` may sit in config.
   const resellerCaps = await resolveResellerCaps(tenantId);
-  const resellerEntitled = resellerCaps.enabled;
   const resellerCred = readResellerCredential(config);
-  brand.showPageMerchant = resellerEntitled && hasResellerCode(resellerCred);
-  // The store-admin manager view gates on the entitlement alone — the owner
-  // sets the access code from inside it, so it can't require one to appear.
-  // The Reseller PAGE is its own child entitlement: a tenant can be granted
-  // wholesale pricing on the regular storefront without ever getting the gated
-  // #merchant page, so both surfaces AND its admin manager gate on that child.
-  brand.showPageMerchant = brand.showPageMerchant && resellerCaps.resellerPage;
+  // Parent AND page child AND an owner password — see merchantPageVisible for why
+  // all three are required and how they fail separately.
+  brand.showPageMerchant = merchantPageVisible(resellerCaps, hasResellerCode(resellerCred));
   // The manager view opens on the PARENT so an owner whose operator switched
   // "Reseller" on finds a screen that explains what is still missing, rather
   // than no screen at all. The price FIELDS it links to stay on the page child.

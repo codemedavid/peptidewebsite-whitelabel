@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode, getDemoContext, getDemoBranding, listDemoTenants } from "@/lib/demo/fixtures";
 import { getEntitlements } from "@/lib/features/entitlements";
-import { ALL_FEATURES, FEATURES, FEATURE_META, OPERATOR_GRANTABLE, planFeatureSet, type FeatureKey } from "@/lib/features/catalog";
+import { type FeatureKey } from "@/lib/features/catalog";
 import { normalizeGroupBuySettings } from "@/lib/storefront/group-buy";
+import { buildFeatureInventory } from "@/lib/tenant/feature-toggle";
 import { planMeta } from "@/lib/admin/plans";
 import { FeaturesEditor, type FeatureItem } from "@/components/admin/FeaturesEditor";
 import { GroupBuySettingsCard } from "@/components/admin/GroupBuySettingsCard";
@@ -42,25 +43,15 @@ export default async function TenantFeaturesPage({ params }: { params: Promise<{
     brandingConfig = (t.branding?.config ?? {}) as Record<string, unknown>;
   }
 
-  const ceiling = planFeatureSet(planKey);
-  // Lowest tier whose ceiling includes the feature — shown on locked rows.
-  const tiers = ["starter", "pro", "enterprise"].map((t) => [t, planFeatureSet(t)] as const);
-  const requiredPlan = (key: FeatureKey) => tiers.find(([, set]) => set.has(key))?.[0];
-  const items: FeatureItem[] = ALL_FEATURES.map((key) => {
-    const lockedByPlan = !ceiling.has(key) && !OPERATOR_GRANTABLE.has(key);
-    const req = lockedByPlan ? requiredPlan(key) : undefined;
-    return {
-      key,
-      label: FEATURE_META[key].label,
-      description: FEATURE_META[key].description,
-      group: FEATURE_META[key].group,
-      // Operator-grantable features sit outside every plan (default OFF) but are
-      // never plan-locked — the operator can switch them on for any tenant.
-      lockedByPlan,
-      requiredPlanLabel: req ? planMeta(req).label : null,
-      enabled: enabled.has(key),
-    };
-  });
+  // One builder, shared with the MCP connector's feature tool, so the two answers
+  // to "what's on for this tenant?" can never drift. It re-derives the same rows
+  // this page used to build inline AND carries `dependsOn` — the master switch a
+  // child is ANDed with — which the inline version dropped. Without it the screen
+  // showed a child switched on above an off parent with no sign it was inert:
+  // exactly how Nova Lab ended up with a reseller page that did not exist.
+  const items: FeatureItem[] = buildFeatureInventory({ planKey, current: enabled }).groups.flatMap(
+    (g) => g.features,
+  );
 
   return <FeaturesEditor slug={slug} name={name} planLabel={planMeta(planKey).label} items={items} />;
 }

@@ -89,14 +89,21 @@ check("Group Buy sub-capabilities are 'included-needs-addon' (inert until GB mod
   assert.equal(stateOf("starter", FEATURES.GB_SUPPLIER_REPORTS), "included-needs-addon");
 });
 
-check("operator-grantable features outside a plan ceiling show as 'addon'", () => {
+check("operator-grantable features show as 'addon' exactly where the plan doesn't grant them", () => {
+  // A feature can be BOTH in a ceiling and operator-grantable — Staff Accounts
+  // (Automated only) and the Reseller parent (Starter + Automated, grantable on
+  // Business) are the live examples. So the rule is per-plan, not "Starter has
+  // no dual features": addon iff outside THAT plan's ceiling, an included state
+  // otherwise. See the dual-feature check immediately below.
   for (const key of OPERATOR_GRANTABLE) {
-    // On Starter none of the grantables are in the ceiling, so all are add-ons.
-    assert.equal(stateOf("starter", key), "addon", `${key} should be addon on starter`);
-    // On any plan: addon iff outside that plan's ceiling, else an included state.
-    const inEnterprise = planFeatureSet("enterprise").has(key);
-    const expected: FeatureState = inEnterprise ? "included" : "addon";
-    assert.equal(stateOf("enterprise", key), expected, `${key} on enterprise`);
+    for (const plan of ["starter", "pro", "enterprise"]) {
+      const state = stateOf(plan, key);
+      if (planFeatureSet(plan).has(key)) {
+        assert.notEqual(state, "addon", `${key} is in the ${plan} ceiling, so it is not an add-on`);
+      } else {
+        assert.equal(state, "addon", `${key} should be addon on ${plan}`);
+      }
+    }
   }
 });
 
@@ -166,9 +173,14 @@ check("no groupbuy.* feature is ever plan-locked (grantable on every plan)", () 
   }
 });
 
-check("addonCount equals the operator-grantable set size", () => {
+check("addonCount equals the grantables the plan does not already include", () => {
+  // Not simply OPERATOR_GRANTABLE.size: a grantable that sits in the plan's own
+  // ceiling counts as included, not as an add-on to sell (the Reseller parent is
+  // in Starter's ceiling and grantable on Business).
   const scope = getPlanScope("starter");
-  assert.equal(scope.addonCount, OPERATOR_GRANTABLE.size);
+  const ceiling = planFeatureSet("starter");
+  const expected = [...OPERATOR_GRANTABLE].filter((k) => !ceiling.has(k)).length;
+  assert.equal(scope.addonCount, expected);
 });
 
 check("includedCount equals the plan ceiling size", () => {

@@ -277,6 +277,14 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_PROTOCOLS,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
+  // The Reseller PARENT. It sits in the Starter and Automated ceilings but NOT
+  // Business/Pro, and every child is ANDed with it (resellerCapsFrom) — so on a
+  // Pro tenant the two children rendered as live toggles above a parent the
+  // operator could not reach, and switching them on did nothing. Nova Lab shipped
+  // in exactly that state. Grantable per tenant fixes it without moving any plan
+  // ceiling: the parent still "exposes nothing" on its own (FEATURE_META), the
+  // children keep their own gates, and no existing tenant's storefront changes.
+  FEATURES.STORE_RESELLER_PORTAL,
   // Wholesale (MOQ) pricing — the Reseller feature's pricing child. Outside every
   // plan ceiling (default OFF) because granting it changes what customers pay:
   // products configured with an MOQ start charging the wholesale price once the

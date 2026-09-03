@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   Bell,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/features/catalog";
 import {
   groupBodyId,
+  inertDependency,
   isGroupOpen,
   toggleGroupOpen,
   type OpenGroups,
@@ -56,6 +58,10 @@ export type FeatureItem = {
   lockedByPlan: boolean; // not in the tenant's plan ceiling
   requiredPlanLabel: string | null; // lowest plan that unlocks a locked feature
   enabled: boolean; // currently resolved on/off
+  // The master switch this row is ANDed with on the server, or null for a
+  // top-level one. A row switched on beneath an OFF parent renders nothing, so
+  // the screen has to say so — see inertDependency.
+  dependsOn: FeatureKey | null;
 };
 
 type Props = {
@@ -154,6 +160,13 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
     });
     scheduleSave();
   }
+
+  // The parent's own row supplies the name, so the badge always matches the
+  // switch the operator has to find.
+  const labelOf = useMemo(() => {
+    const byKey = new Map(items.map((i) => [i.key as string, i.label]));
+    return (key: string) => byKey.get(key) ?? key;
+  }, [items]);
 
   const grouped = useMemo(() => {
     const by = new Map<FeatureGroup, FeatureItem[]>();
@@ -296,10 +309,20 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
             <div id={bodyId} role="region" aria-label={group} hidden={!open} className="ftr-gbody">
             {visible.map((item) => {
               const on = !item.lockedByPlan && state[item.key];
+              // A switched-on child whose parent is off does nothing at all.
+              const inertParent = item.lockedByPlan ? null : inertDependency(item, state);
               return (
                 <div key={item.key} className={`ftr-row${item.lockedByPlan ? " locked" : ""}`}>
                   <div className="ftr-fmain">
-                    <div className="ftr-fname">{item.label}</div>
+                    <div className="ftr-fname">
+                      {item.label}
+                      {inertParent && (
+                        <span className="ftr-inert" title={`Switch on "${labelOf(inertParent)}" to activate this`}>
+                          <AlertTriangle size={11} aria-hidden />
+                          Inert — needs {labelOf(inertParent)}
+                        </span>
+                      )}
+                    </div>
                     <div className="ftr-fdesc">{item.description}</div>
                   </div>
                   {item.lockedByPlan ? (
