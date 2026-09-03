@@ -206,6 +206,32 @@ export function isResellerPricingVisible(brand: Brand): boolean {
 }
 
 /**
+ * Whether the product editor shows the "🛒 Group Buy" card — the Group Buy Price
+ * field and the "Group Buy product" checkbox.
+ *
+ * Gated on the Group Buy MODULE (brand.groupBuyCaps.enabled), the same
+ * entitlement behind the Group Buys manager view (ADMIN_VIEW_TOGGLE.groupbuys).
+ * This card was the one surface in that stack with no gate at all: it sat
+ * between the two wholesale cards, both of which check theirs, and rendered for
+ * every tenant. Reported on nova-lab, whose module is off in every capability.
+ *
+ * It is not cosmetic. The checkbox writes `productType: "gb"`, which the Group
+ * Buy page, the on-hand shelf (gb-tagged products are EXCLUDED from it) and the
+ * on-hand gate all read — so an owner with no Group Buy feature could enter a
+ * price nothing would ever charge and tag products in a way that silently
+ * changes their catalog the moment the module or the two-ways home is granted.
+ *
+ * Undefined counts as OFF. The module is default-off for every tenant, so this
+ * must fail closed: a Brand assembled outside the storefront render (a demo
+ * fixture, a preview) shows nothing rather than exposing the field. Saved
+ * `gbPrice` / `productType` values are never touched — granting the module
+ * brings them back intact.
+ */
+export function isGroupBuyPricingVisible(brand: Brand): boolean {
+  return brand.groupBuyCaps?.enabled === true;
+}
+
+/**
  * Whether the Product Management screen shows the Wholesale (MOQ) section.
  *
  * Gated on the wholesale-pricing CHILD, not the reseller page: a tenant granted

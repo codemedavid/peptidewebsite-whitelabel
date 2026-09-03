@@ -33,7 +33,12 @@ import {
   productToDbWrite,
   type DbProductRow,
 } from "../src/lib/storefront/product-mapping";
-import type { Category } from "../src/storefront/types";
+import {
+  isGroupBuyPricingVisible,
+  isWholesalePricingVisible,
+  isResellerPricingVisible,
+} from "../src/storefront/visibility";
+import type { Brand, Category } from "../src/storefront/types";
 
 let passed = 0;
 let failed = 0;
@@ -225,6 +230,69 @@ check("the group-buy price + tag survive alongside the availability flags", () =
   assert.equal(out.product.productType, "gb");
   assert.equal(out.product.gbPrice, 1200);
   assert.equal(out.product.purchasable, false);
+});
+
+// ── The product editor's Group Buy card ──────────────────────────────────────
+// Reported on nova-lab: the editor showed a "🛒 Group Buy / Group Buy Price"
+// card on a tenant whose Group Buy module is off, sitting between two cards that
+// ARE gated (isWholesalePricingVisible at :913, isResellerPricingVisible at :987
+// in AdminAddProduct.tsx). The owner could enter a price nothing would ever
+// charge and tag a product `productType: "gb"` — a tag the Group Buy page, the
+// on-hand shelf and the on-hand gate all read, so it silently changes the
+// catalog the moment Group Buy or the two-ways home is switched on.
+
+const brandWith = (caps: Brand["groupBuyCaps"]): Brand =>
+  ({ groupBuyCaps: caps }) as Brand;
+
+const CAPS_OFF = {
+  enabled: false,
+  canCreate: false,
+  canEdit: false,
+  canDuplicate: false,
+  canArchive: false,
+  scheduled: false,
+  productAssignment: false,
+  supplierReports: false,
+  reports: {
+    excel: false,
+    csv: false,
+    pdf: false,
+    autoOnClose: false,
+    customerBreakdown: false,
+    productBreakdown: false,
+    supplierSummary: false,
+  },
+} as unknown as Brand["groupBuyCaps"];
+
+const CAPS_ON = { ...(CAPS_OFF as object), enabled: true } as Brand["groupBuyCaps"];
+
+check("the Group Buy price card is hidden when the module is off (nova-lab's shape)", () => {
+  assert.equal(isGroupBuyPricingVisible(brandWith(CAPS_OFF)), false);
+});
+
+check("granting the Group Buy module reveals the price card", () => {
+  assert.equal(isGroupBuyPricingVisible(brandWith(CAPS_ON)), true);
+});
+
+check("a brand with no groupBuyCaps at all fails closed", () => {
+  // The module is default-OFF for every tenant, so an absent flag — a demo
+  // fixture or a preview Brand assembled outside the storefront render — must
+  // hide the card rather than expose it.
+  assert.equal(isGroupBuyPricingVisible({} as Brand), false);
+});
+
+check("the Group Buy gate is independent of the two wholesale gates", () => {
+  // Same card stack, three separate entitlements: granting wholesale must not
+  // reveal Group Buy pricing, and vice versa.
+  const wholesaleOnly = { wholesalePricing: true, groupBuyCaps: CAPS_OFF } as unknown as Brand;
+  assert.equal(isWholesalePricingVisible(wholesaleOnly), true);
+  assert.equal(isGroupBuyPricingVisible(wholesaleOnly), false);
+
+  const gbOnly = { groupBuyCaps: CAPS_ON, wholesalePricing: false } as unknown as Brand;
+  assert.equal(isGroupBuyPricingVisible(gbOnly), true);
+  assert.equal(isWholesalePricingVisible(gbOnly), false);
+  // The legacy reseller card keeps its own default-ON gate, untouched by this.
+  assert.equal(isResellerPricingVisible(gbOnly), true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

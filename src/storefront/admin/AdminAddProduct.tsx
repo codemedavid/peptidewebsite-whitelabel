@@ -5,7 +5,11 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
 import { RESELLER_MIN_QTY } from "../checkout";
-import { isResellerPricingVisible, isWholesalePricingVisible } from "../visibility";
+import {
+  isGroupBuyPricingVisible,
+  isResellerPricingVisible,
+  isWholesalePricingVisible,
+} from "../visibility";
 import {
   VARIATION_PRESETS,
   applyVariationPreset,
@@ -884,6 +888,12 @@ export function AdminAddProduct({
         </div>
 
         {/* ---------- Group Buy ---------- */}
+        {/* Gated on the Group Buy MODULE (groupbuy.module), the same entitlement
+            behind the Group Buys manager view. The checkbox writes
+            productType:"gb", which the Group Buy page, the on-hand shelf and the
+            on-hand gate all read — so this must not render for a tenant without
+            the feature. See isGroupBuyPricingVisible. */}
+        {isGroupBuyPricingVisible(brand) && (
         <div className="admin-form__card">
           <h2 className="admin-form__section">🛒 Group Buy</h2>
           <div className="admin-form__row">
@@ -905,6 +915,7 @@ export function AdminAddProduct({
             </div>
           </div>
         </div>
+        )}
 
         {/* ---------- Wholesale (MOQ) Pricing ---------- */}
         {/* Gated on the wholesale-pricing entitlement (storefront.reseller.wholesale,
