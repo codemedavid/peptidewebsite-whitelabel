@@ -170,7 +170,8 @@
     "test:reseller-moq": "tsx scripts/test-reseller-moq.ts",
     "test:inline-media": "tsx scripts/test-inline-media.ts",
     "test:made-to-order": "tsx scripts/test-made-to-order.ts",
-    "test:qty-typing": "tsx scripts/test-qty-typing.ts"
+    "test:qty-typing": "tsx scripts/test-qty-typing.ts",
+    "test:nova-lab-catalog": "tsx scripts/test-nova-lab-catalog.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
