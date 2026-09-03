@@ -12,7 +12,10 @@
 import { Prisma } from "@prisma/client";
 import { withTenant } from "@/lib/db/tenant-client";
 import { encryptSecret, decryptSecret, type EncryptedBlob } from "@/lib/crypto/envelope";
-import type { LinkedRecipient } from "@/lib/integrations/telegram-authz";
+import {
+  recipientLinkDefaults,
+  type LinkedRecipient,
+} from "@/lib/integrations/telegram-authz";
 import { hashPairingCode, PAIRING_TTL_MS } from "@/lib/integrations/telegram-pairing";
 import { prisma } from "@/lib/db/prisma";
 
@@ -206,10 +209,11 @@ export async function listRecipientRows(tenantId: string) {
 }
 
 /**
- * Link a chat, or refresh an existing link. `showCustomerDetails` defaults OFF
- * for a group: a group is a room full of people the buyer never agreed to share
- * a home address with, so the safe default is the redacted alert and the owner
- * opts in afterwards.
+ * Link a chat, or refresh an existing link. Permissions come from the shared
+ * recipientLinkDefaults so the group rule has exactly one definition — including
+ * the part that matters: a group records the person who linked it, so they can
+ * confirm from it. Re-sending a code in an already-linked chat re-stamps that
+ * person, which is how a group linked before this fix is repaired.
  */
 export async function upsertRecipient(
   tenantId: string,
@@ -220,7 +224,7 @@ export async function upsertRecipient(
     label: string;
   },
 ): Promise<void> {
-  const isPrivate = input.chatType === "private";
+  const defaults = recipientLinkDefaults(input.chatType, input.telegramUserId);
   await withTenant(tenantId, async (db) => {
     const existing = await db.telegramRecipient.findFirst({ where: { chatId: input.chatId } });
     if (existing) {
@@ -228,9 +232,7 @@ export async function upsertRecipient(
         where: { chatId: input.chatId },
         data: {
           chatType: input.chatType,
-          // A group keeps its NULL user id: no single person speaks for a room,
-          // and findConfirmer refuses a null. Only a private chat names a user.
-          telegramUserId: isPrivate ? input.telegramUserId : null,
+          telegramUserId: defaults.telegramUserId,
           label: input.label,
           linkedAt: new Date(),
         },
@@ -242,10 +244,10 @@ export async function upsertRecipient(
         tenantId,
         chatId: input.chatId,
         chatType: input.chatType,
-        telegramUserId: isPrivate ? input.telegramUserId : null,
+        telegramUserId: defaults.telegramUserId,
         label: input.label,
-        canConfirm: true,
-        showCustomerDetails: isPrivate,
+        canConfirm: defaults.canConfirm,
+        showCustomerDetails: defaults.showCustomerDetails,
       },
     });
   });

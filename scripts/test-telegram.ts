@@ -42,6 +42,7 @@ import {
   findConfirmer,
   alertTargets,
   verifyWebhookSecret,
+  recipientLinkDefaults,
   type LinkedRecipient,
 } from "../src/lib/integrations/telegram-authz";
 import {
@@ -324,6 +325,59 @@ eq(
   null,
 );
 
+// A GROUP is a delivery target; authorization is a PERSON. Telegram reports
+// callback_query.from.id even in a group, so the person who linked the chat is
+// known and can be held responsible for a press. Discarding that id (the first
+// cut of this feature did) refused EVERYONE in the group — including the owner
+// who linked it — which is not "only specific users can confirm", it is "nobody
+// can". PII redaction is a separate question and still defaults off for groups.
+console.log("\nrecipientLinkDefaults — what a freshly linked chat is allowed to do");
+
+eq(
+  "a private chat records the person who linked it",
+  recipientLinkDefaults("private", "555").telegramUserId,
+  "555",
+);
+ok("a private chat sees customer details", recipientLinkDefaults("private", "555").showCustomerDetails);
+
+eq(
+  "a GROUP also records the person who linked it — they may confirm from it",
+  recipientLinkDefaults("group", "555").telegramUserId,
+  "555",
+);
+eq(
+  "a supergroup is treated the same as a group",
+  recipientLinkDefaults("supergroup", "555").telegramUserId,
+  "555",
+);
+ok(
+  "a group withholds customer details by default — PII is a separate concern",
+  !recipientLinkDefaults("group", "555").showCustomerDetails,
+);
+eq(
+  "a link with no identifiable user stores NULL, so nobody can confirm from it",
+  recipientLinkDefaults("channel", "").telegramUserId,
+  null,
+);
+
+// The end-to-end shape of the bug: the owner links the group, an order lands,
+// the owner presses Confirm. That must work.
+const linkedGroup: LinkedRecipient = {
+  chatId: "-5492326320",
+  ...recipientLinkDefaults("group", "555"),
+  label: "@codemedavid",
+};
+eq(
+  "the owner who linked a group CAN confirm from that group",
+  findConfirmer([linkedGroup], "555")?.chatId ?? null,
+  "-5492326320",
+);
+eq(
+  "another member of that same group still cannot",
+  findConfirmer([linkedGroup], "999"),
+  null,
+);
+
 console.log("\nalertTargets — who hears about a new order");
 eq("every linked chat is a target, confirm rights or not", alertTargets(ROSTER).sort(), ["-1009999", "111", "222"]);
 eq("no recipients means no targets", alertTargets([]), []);
@@ -496,6 +550,10 @@ ok(
 const store = src("src/lib/integrations/telegram-store.ts");
 ok("the bot token is sealed with the envelope, never stored plain", /encryptSecret/.test(store));
 ok("reads go through withTenant so tenant scoping applies", /withTenant/.test(store));
+ok(
+  "linking uses the shared defaults, so the group rule lives in one place",
+  /recipientLinkDefaults/.test(store),
+);
 ok(
   "the status shape returned to the panel carries no token field",
   !/botToken:\s*(row|token|creds)/.test(store),

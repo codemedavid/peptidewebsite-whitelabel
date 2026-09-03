@@ -88,3 +88,45 @@ export function verifyWebhookSecret(
   if (ab.length !== bb.length) return false;
   return timingSafeEqual(ab, bb);
 }
+
+/** What a chat is allowed to do the moment it completes the pairing handshake. */
+export interface RecipientLinkDefaults {
+  telegramUserId: string | null;
+  canConfirm: boolean;
+  showCustomerDetails: boolean;
+}
+
+/**
+ * Decide a newly linked chat's permissions from its type and whoever redeemed
+ * the code. Pure, and the single definition of the group rule.
+ *
+ * The important correction here: a GROUP records the linking user just as a
+ * private chat does. The first cut nulled it, reasoning that "a room is not a
+ * person" — but Telegram reports `callback_query.from.id` on every press,
+ * including in groups, so the presser is always identifiable and the linker is
+ * always accountable. Discarding the id did not implement "only specific people
+ * may confirm"; it implemented "nobody may", and locked the owner out of the
+ * group they had just linked.
+ *
+ * A chat is therefore a DELIVERY target, and authorization is a PERSON. Other
+ * members of the group are still refused (their ids match no row), and any
+ * additional staffer can be authorized by redeeming a code in their own DM.
+ *
+ * PII redaction stays a separate decision and still defaults OFF for a group: a
+ * group is a room full of people the buyer never agreed to share an address with,
+ * which is true regardless of who is allowed to press a button.
+ */
+export function recipientLinkDefaults(
+  chatType: string,
+  linkerUserId: string | null | undefined,
+): RecipientLinkDefaults {
+  const isPrivate = chatType === "private";
+  const linker = typeof linkerUserId === "string" ? linkerUserId.trim() : "";
+  return {
+    // Empty stays NULL — an unidentifiable link must authorize nobody, which
+    // findConfirmer enforces.
+    telegramUserId: linker || null,
+    canConfirm: true,
+    showCustomerDetails: isPrivate,
+  };
+}

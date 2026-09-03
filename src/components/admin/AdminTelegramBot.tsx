@@ -361,13 +361,13 @@ function RecipientRow({
         <input
           type="checkbox"
           checked={r.canConfirm}
-          disabled={pending || isGroup}
+          disabled={pending}
           onChange={(e) => onFlags({ canConfirm: e.target.checked })}
         />
         Can confirm orders
         {isGroup && (
           <span style={{ fontSize: 12, color: "var(--ink-500)" }}>
-            — a group can&apos;t confirm; there is nobody to hold responsible
+            — only the person who linked this group; other members are refused
           </span>
         )}
       </label>
