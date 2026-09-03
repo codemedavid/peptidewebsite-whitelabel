@@ -20,6 +20,7 @@ import { AdminLabResults } from "./AdminLabResults";
 import { AdminPromoCodes } from "./AdminPromoCodes";
 import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
+import { AdminTelegram } from "./AdminTelegram";
 import { AdminBilling } from "./AdminBilling";
 import { AdminNoticeModal } from "./AdminNoticeModal";
 import { AdminStoreStatus } from "./AdminStoreStatus";
@@ -85,6 +86,7 @@ type View =
   | "staff"
   | "staff-form"
   | "notify"
+  | "telegram"
   | "notice"
   | "store-status"
   | "tracknote"
@@ -276,6 +278,7 @@ export function AdminPage({
   if (activeView === "promo") return <AdminPromoCodes brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "pay") return <AdminPaymentMethods brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notify") return <AdminOrderNotifications brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "telegram") return <AdminTelegram onBack={() => setView("dashboard")} />;
   if (activeView === "billing") return <AdminBilling brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "notice") return <AdminNoticeModal brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "store-status") return <AdminStoreStatus brand={brand} onBack={() => setView("dashboard")} />;

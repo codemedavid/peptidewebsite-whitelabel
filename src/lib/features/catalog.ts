@@ -260,6 +260,13 @@ export const ALL_FEATURES = Object.values(FEATURES);
  * Grants persist as TenantFeatureOverride rows (DB) / features.json (demo).
  */
 export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
+  // Telegram order alerts. It rides the Automated/Enterprise plan ceilings, but
+  // a Starter or Business tenant who wants order pushes into a chat had no way to
+  // be given them — the admin Features row rendered "Locked · upgrade plan" for a
+  // feature that costs the platform nothing to grant. Same trap the Reseller
+  // parent was in. Granting it is inert on its own: the store owner still has to
+  // connect a bot and link a chat before a single message is sent.
+  FEATURES.NOTIFY_TELEGRAM,
   FEATURES.STORE_CARD_STUDIO,
   // Reviews / testimonials page. Outside every plan ceiling (default OFF) so no
   // tenant surfaces the Reviews page or its store-admin manager until the

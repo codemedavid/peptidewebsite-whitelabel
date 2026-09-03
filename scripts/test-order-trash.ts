@@ -276,7 +276,9 @@ check(
 // ── the actions themselves ───────────────────────────────────────────────────
 console.log("\ntrash / restore / purge");
 
-const ordersSrc = src("src/actions/orders.ts");
+// The row -> Order mapping moved to lib/orders/db-mapping.ts so the Telegram
+// webhook could share it; read both as one source.
+const ordersSrc = src("src/actions/orders.ts") + src("src/lib/orders/db-mapping.ts");
 
 check(
   "deleting an order now moves it to the trash",

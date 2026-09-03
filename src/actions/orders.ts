@@ -20,7 +20,7 @@ import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { prisma } from "@/lib/db/prisma";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
-import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
+import { withTenant } from "@/lib/db/tenant-client";
 import { generateStorefrontOrderNumber } from "@/lib/orders/order-number";
 import { normalizeCustomerNote } from "@/lib/orders/customer-note";
 import {
@@ -101,7 +101,6 @@ import {
 } from "@/lib/storefront/bulk-status";
 import {
   applyOrderStockMovesBatched,
-  type StockMoveDb,
 } from "@/lib/storefront/stock-move-db";
 import {
   findPromoCode,
@@ -127,12 +126,29 @@ import {
 import { after } from "next/server";
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { sendAdminOrderNotification } from "@/lib/analytics/admin-notify";
+import { sendTelegramOrderAlert } from "@/lib/integrations/telegram-notify";
 import {
   buildEmailBrand,
   buildOrderPlacedPayload,
   buildStatusChangedPayload,
 } from "@/lib/analytics/events";
 import { storefrontOrigin } from "@/lib/tenant/resolve";
+// The row -> Order mapping layer, shared with the Telegram webhook through
+// lib/orders/apply-status.ts. It used to live in this file, but a "use server"
+// module can only export async actions, so nothing inside it could be reused.
+import {
+  str,
+  num,
+  normalizeItems,
+  normalizeOrderFee,
+  normalizeOrderDiscount,
+  normalizeStatusHistory,
+  normalizeOrderInput,
+  dbOrderToStorefront,
+  type DbOrderRow,
+} from "@/lib/orders/db-mapping";
+import { applyOrderStatusChange } from "@/lib/orders/apply-status";
+import { stockMoveDb, applyOrderStockMove } from "@/lib/orders/stock-move-tx";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -145,16 +161,6 @@ const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10 MB
 
 // ── Input hardening ─────────────────────────────────────────────────────────
 
-function str(v: unknown, max: number): string {
-  if (typeof v === "string") return v.slice(0, max);
-  if (v == null) return "";
-  return String(v).slice(0, max);
-}
-function num(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
 /** Whether real ImageKit credentials are present (not blank / not placeholders). */
 function imageKitConfigured(): boolean {
   const bad = (v?: string) => !v || v.trim() === "" || v.toLowerCase().includes("placeholder");
@@ -163,21 +169,6 @@ function imageKitConfigured(): boolean {
     !bad(process.env.IMAGEKIT_PRIVATE_KEY) &&
     !bad(process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT)
   );
-}
-
-/** Coerce an untrusted client object into a clean storefront Order item. */
-function normalizeItems(input: unknown): OrderItem[] {
-  const arr = Array.isArray(input) ? input : [];
-  return arr.slice(0, 200).map((it) => {
-    const x = (it ?? {}) as Record<string, unknown>;
-    return {
-      name: str(x.name, 300),
-      qty: Math.max(1, Math.round(num(x.qty)) || 1),
-      price: Math.max(0, num(x.price)),
-      ...(x.productId ? { productId: str(x.productId, 64) } : {}),
-      ...(x.variation ? { variation: str(x.variation, 80) } : {}),
-    };
-  });
 }
 
 // Inventory sync on status change (deduct on confirm / restock on cancel, never
@@ -473,58 +464,6 @@ function adjustProductStock(
 }
 
 /**
- * Adapt the tenant transaction client to the narrow surface the batched stock
- * engine needs (lib/storefront/stock-move-db). Keeping that engine free of
- * Prisma types is what lets a test substitute a round-trip-counting fake.
- *
- * updateMany rather than update: the tenant extension scopes updateMany by
- * tenantId, while a bare-id update is not tenant-scoped (see lib/db/tenant-client).
- */
-function stockMoveDb(db: TenantTx): StockMoveDb {
-  return {
-    findProducts: ({ ids, names }) =>
-      db.product.findMany({
-        where: {
-          OR: [
-            ...(ids.length ? [{ id: { in: ids } }] : []),
-            ...(names.length ? [{ name: { in: names } }] : []),
-          ],
-        },
-        select: { id: true, name: true, stock: true, metadata: true },
-      }),
-    updateProduct: async (id, data) => {
-      await db.product.updateMany({
-        where: { id },
-        data: {
-          ...(data.stock !== undefined ? { stock: data.stock } : {}),
-          ...(data.metadata !== undefined
-            ? { metadata: data.metadata as unknown as Prisma.InputJsonValue }
-            : {}),
-        },
-      });
-    },
-  };
-}
-
-/**
- * Apply an order's line items to the tenant's DB inventory (− on deduct, + on
- * restock), clamping at zero. The DB analogue of adjustProductStock: lines match
- * by productId when present, by exact name for legacy orders. Shared by the
- * single-order update and the bulk status action so both move stock identically.
- * Runs inside a withTenant() transaction (the passed `db` is already scoped).
- *
- * One order's worth of the batched engine: 1 read + at most 1 write per product,
- * never per line item. That budget is the whole point — see stock-move-db.
- */
-async function applyOrderStockMove(
-  db: TenantTx,
-  items: OrderItem[],
-  move: Exclude<InventoryMove, null>,
-): Promise<void> {
-  await applyOrderStockMovesBatched(stockMoveDb(db), [{ items, move }]);
-}
-
-/**
  * Stamp the order with the group buy it belongs to (or null) — SERVER-SIDE,
  * from the tenant's live group buys at the moment of placement, never from the
  * client. The name is snapshotted alongside the id so supplier reports survive
@@ -621,30 +560,6 @@ function withProductTypes(items: OrderItem[], catalog: Product[]): OnHandGateIte
   });
 }
 
-/** Coerce a stored/untrusted fee blob into the order's fee, or undefined when
- *  none was charged. Used for DB rows and demo orders alike; checkout itself
- *  never trusts this — placeStorefrontOrderAction re-stamps it from config. */
-function normalizeOrderFee(input: unknown): Order["adminFee"] {
-  if (!input || typeof input !== "object") return undefined;
-  const x = input as Record<string, unknown>;
-  const amount = Math.max(0, num(x.amount));
-  if (amount <= 0) return undefined;
-  return { label: str(x.label, ADMIN_FEE_LABEL_MAX) || ADMIN_FEE_LABEL_DEFAULT, amount };
-}
-
-/** Coerce a stored/untrusted discount blob into the order's discount, or
- *  undefined when none applied. Used for DB rows and demo orders alike; checkout
- *  itself never trusts this — placeStorefrontOrderAction re-derives it from
- *  branding.config.promoCodes. */
-function normalizeOrderDiscount(input: unknown): Order["discount"] {
-  if (!input || typeof input !== "object") return undefined;
-  const x = input as Record<string, unknown>;
-  const amount = Math.max(0, num(x.amount));
-  const code = str(x.code, 64).toUpperCase();
-  if (amount <= 0 || !code) return undefined;
-  return { code, label: str(x.label, 120) || promoLabel(code), amount };
-}
-
 /**
  * Re-derive the SERVER-AUTHORITATIVE discount from the tenant's configured promo
  * codes, keyed by the `code` the checkout applied. Mirrors stampShipping/the
@@ -713,149 +628,6 @@ async function incrementPromoUsage(tenantId: string, slug: string, code: string 
   } catch {
     /* best-effort — never block a placed order on the usage counter */
   }
-}
-
-/** Coerce an untrusted status-history blob into clean, ordered journey events. */
-function normalizeStatusHistory(input: unknown): OrderStatusEvent[] {
-  const arr = Array.isArray(input) ? input : [];
-  return arr
-    .slice(0, 50)
-    .map((e) => {
-      const x = (e ?? {}) as Record<string, unknown>;
-      const status = isOrderStatus(x.status) ? x.status : null;
-      const at = str(x.at, 40);
-      return status && at ? { status, at } : null;
-    })
-    .filter((e): e is OrderStatusEvent => e !== null);
-}
-
-/** Coerce an untrusted checkout payload into a clean storefront Order. */
-function normalizeOrderInput(input: unknown): Order {
-  const o = (input ?? {}) as Record<string, unknown>;
-  const c = (o.customer ?? {}) as Record<string, unknown>;
-  const s = (o.shipping ?? {}) as Record<string, unknown>;
-  const status = isOrderStatus(o.status) ? o.status : "new";
-  return {
-    id: str(o.id, 64),
-    orderNumber: str(o.orderNumber, 64) || undefined,
-    status,
-    paymentStatus: o.paymentStatus === "paid" ? "paid" : "pending",
-    paymentMethod: str(o.paymentMethod, 120),
-    date: str(o.date, 40) || new Date().toISOString(),
-    customer: {
-      name: str(c.name, 200),
-      email: str(c.email, 200),
-      phone: str(c.phone, 60),
-      contactMethod: str(c.contactMethod, 60),
-    },
-    shipping: {
-      address: str(s.address, 400),
-      barangay: str(s.barangay, 120),
-      city: str(s.city, 120),
-      province: str(s.province, 120),
-      postal: str(s.postal, 40),
-      country: str(s.country, 120),
-      region: str(s.region, 120),
-      fee: Math.max(0, num(s.fee)),
-      // The location the customer picked — carried so the server can re-derive
-      // the authoritative fee (see stampShipping). The client `fee` above is
-      // only what was displayed.
-      ...(typeof s.locationId === "string" && s.locationId
-        ? { locationId: str(s.locationId, 64) }
-        : {}),
-    },
-    courier: str(o.courier, 120),
-    trackingNumber: str(o.trackingNumber, 120),
-    shippingNote: str(o.shippingNote, 500),
-    // The buyer's own note. Bounded by the SHARED helper rather than str() so
-    // there is one definition of what a stored note may be — this value comes
-    // straight off an anonymous checkout payload.
-    customerNote: normalizeCustomerNote(o.customerNote),
-    items: normalizeItems(o.items),
-    statusHistory: normalizeStatusHistory(o.statusHistory),
-    adminFee: normalizeOrderFee(o.adminFee),
-    paymentFee: normalizeOrderPaymentFee(o.paymentFee),
-    discount: normalizeOrderDiscount(o.discount),
-    // Carried for stored orders (admin list, demo file). Checkout never trusts
-    // these — placeStorefrontOrderAction re-stamps them server-side.
-    groupBuyId: typeof o.groupBuyId === "string" && o.groupBuyId ? str(o.groupBuyId, 64) : null,
-    groupBuyName:
-      typeof o.groupBuyName === "string" && o.groupBuyName ? str(o.groupBuyName, 200) : null,
-    // Only accept a hosted URL here — the proof is uploaded separately via
-    // uploadPaymentProofAction, which returns the ImageKit URL (or, when
-    // ImageKit isn't configured, a data URL fallback). Cap generously so a
-    // fallback data URL still survives.
-    paymentProof:
-      typeof o.paymentProof === "string" && o.paymentProof
-        ? o.paymentProof.slice(0, 12_000_000)
-        : null,
-  };
-}
-
-/** Map a storefront_orders DB row to the storefront Order type the UI renders. */
-type DbOrderRow = {
-  id: string;
-  orderNumber: string;
-  status: string;
-  paymentStatus: string;
-  paymentMethod: string;
-  paymentProofUrl: string | null;
-  customer: unknown;
-  shipping: unknown;
-  items: unknown;
-  statusHistory: unknown;
-  adminFee: unknown;
-  paymentFee: unknown;
-  discount: unknown;
-  courier: string;
-  trackingNumber: string;
-  shippingNote: string;
-  customerNote: string;
-  placedAt: Date;
-  groupBuyId?: string | null;
-  groupBuyName?: string | null;
-  orderType?: string | null;
-  imported?: boolean;
-  deletedAt?: Date | string | null;
-};
-
-function dbOrderToStorefront(row: DbOrderRow): Order {
-  const base = normalizeOrderInput({
-    id: row.id,
-    orderNumber: row.orderNumber,
-    status: row.status,
-    paymentStatus: row.paymentStatus,
-    paymentMethod: row.paymentMethod,
-    date: row.placedAt instanceof Date ? row.placedAt.toISOString() : String(row.placedAt),
-    customer: row.customer,
-    shipping: row.shipping,
-    items: row.items,
-    statusHistory: row.statusHistory,
-    adminFee: row.adminFee,
-    paymentFee: row.paymentFee,
-    discount: row.discount,
-    courier: row.courier,
-    trackingNumber: row.trackingNumber,
-    shippingNote: row.shippingNote,
-    customerNote: row.customerNote,
-    groupBuyId: row.groupBuyId,
-    groupBuyName: row.groupBuyName,
-    paymentProof: row.paymentProofUrl,
-  });
-  // Set from the ROW, never through normalizeOrderInput — that function also
-  // parses untrusted checkout payloads, and a buyer who could declare their own
-  // order "imported" would place orders that never deduct stock. `deletedAt`
-  // rides the same rule for the same reason: a buyer able to set it would place
-  // orders that land straight in the trash, invisible to the owner.
-  const withImported = row.imported ? { ...base, imported: true } : base;
-  // Set from the ROW for the same reason `imported` is (see above): orderType is
-  // server-stamped authority about how the order was priced, so it must never be
-  // rehydrated through normalizeOrderInput, which also parses untrusted payloads.
-  const withType: Order =
-    row.orderType === "reseller" ? { ...withImported, orderType: "reseller" } : withImported;
-  const deletedAt =
-    row.deletedAt instanceof Date ? row.deletedAt.toISOString() : row.deletedAt || null;
-  return deletedAt ? { ...withType, deletedAt } : withType;
 }
 
 /** Shape the normalized Order into the columns/JSON the DB row expects.
@@ -1305,6 +1077,10 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       // order" alert: entitlement + owner-toggle gated inside, delivered via the
       // same PostHog Messaging so the admin's email carries the store's branding.
       after(() => sendAdminOrderNotification(tenantId, placed, emailBrand, config));
+      // The chat sibling of that email: push the same order into the tenant's
+      // own Telegram bot, where a linked recipient can confirm it on the spot.
+      // Same total/silent contract — every gate lives inside.
+      after(() => sendTelegramOrderAlert(tenantId, placed, config.currency));
     }
     return { ok: true, order: placed };
   } catch (e) {
@@ -1571,80 +1347,20 @@ export async function updateStorefrontOrderAction(
   }
 
   try {
-    const result = await withTenant(tenantId, async (db) => {
-      // Read the current row first so we can append to the journey only when the
-      // status actually changes (and never lose earlier events).
-      // Scoped to live orders: a trashed one is out of the fulfilment flow, so
-      // it must not be confirmable (which would deduct stock for a deletion the
-      // owner believes they undid nothing of).
-      const current = await db.storefrontOrder.findFirst({
-        where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
-      });
-      if (!current) return null;
-      const next: Prisma.StorefrontOrderUpdateInput = { ...data };
-      const newStatus = data.status as Order["status"] | undefined;
-      // Same per-order decision the demo path and the bulk action use.
-      const plan = newStatus
-        ? planStatusChange(
-            {
-              status: current.status as Order["status"],
-              statusHistory: normalizeStatusHistory(current.statusHistory),
-              imported: current.imported,
-            },
-            newStatus,
-            new Date().toISOString(),
-          )
-        : null;
-      if (plan?.changed) {
-        next.statusHistory = plan.statusHistory as unknown as Prisma.InputJsonValue;
-      }
-      // updateMany is tenant-scoped by the extension; the bare-id update isn't.
-      await db.storefrontOrder.updateMany({
-        where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
-        data: next,
-      });
-
-      // Confirmed → deduct each line item from the tenant's inventory;
-      // cancelled after a deduction → put it back. Lines match by productId
-      // (stamped at checkout) or by exact name for legacy orders; quantities
-      // clamp at zero so stock never goes negative.
-      const move = plan?.move ?? null;
-      if (move) {
-        await applyOrderStockMove(db, normalizeItems(current.items), move);
-      }
-      return {
-        row: await db.storefrontOrder.findFirst({
-          where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
-        }),
-        moved: !!move,
-        prevStatus: current.status,
-        statusChanged: !!plan?.changed,
-      };
-    });
-    if (!result?.row) return { error: "Order not found." };
-    const updatedOrder = dbOrderToStorefront(result.row as DbOrderRow);
-    // Fulfillment moved (e.g. shipped/delivered) → emit order_status_changed so the
-    // tenant's PostHog workflow can email the customer. Fire-and-forget after the
-    // response; capture no-ops unless the tenant is entitled and connected.
-    // Branding is resolved BEFORE after() (getTenantContext is request-scoped)
-    // and stamped onto the event so the email renders this store's identity.
+    // One engine, two doors. The store admin arrives here with a cookie session;
+    // the tenant's Telegram bot arrives at the webhook route with a linked
+    // recipient's button press. Both then run the SAME transaction, so
+    // stock deduction, the journey event and the customer's status email can
+    // never drift between them. Authorization stays out there, where it differs.
     const slug = await getTenantSlug();
-    if (result.statusChanged) {
-      const { branding } = await getTenantContext(tenantId);
-      const emailBrand = buildEmailBrand(
-        (branding?.config ?? {}) as Record<string, unknown>,
-        storefrontOrigin(slug),
-      );
-      after(() =>
-        capturePostHogEvent(
-          tenantId,
-          buildStatusChangedPayload(updatedOrder, result.prevStatus, updatedOrder.status, emailBrand),
-        ),
-      );
-    }
-    // Stock changed → refresh the cached storefront so the catalog shows it.
-    if (result.moved) revalidateTenant(tenantId, slug);
-    return { ok: true, order: updatedOrder };
+    const res = await applyOrderStatusChange(
+      tenantId,
+      orderId,
+      data as Prisma.StorefrontOrderUpdateInput & { status?: Order["status"] },
+      slug,
+    );
+    if (!res.ok) return { error: res.error };
+    return { ok: true, order: res.order };
   } catch (e) {
     return { error: orderActionError(e, "Couldn't update the order.") };
   }

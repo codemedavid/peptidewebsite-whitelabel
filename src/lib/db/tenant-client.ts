@@ -34,6 +34,8 @@ const TENANT_MODELS = new Set<string>([
   "domain",
   "groupBuy",
   "tenantIntegration",
+  "telegramRecipient",
+  "telegramPairing",
   "tenantFeatureOverride",
   "contact",
   "product",

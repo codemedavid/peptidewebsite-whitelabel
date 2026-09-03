@@ -90,20 +90,22 @@ model Tenant {
   // for this tenant's Plan-fee display + MRR (effectivePlanFeeCents); null = plan.
   subscriptionPriceCents  Int?
 
-  domains           Domain[]
-  groupBuys         GroupBuy[]
-  authAudits        AuthAudit[]
-  integrations      TenantIntegration[]
-  featureOverrides  TenantFeatureOverride[]
-  contacts          Contact[]
-  products          Product[]
-  carts             Cart[]
-  orders            Order[]
-  storefrontOrders  StorefrontOrder[]
-  events            Event[]
-  emailLogs         EmailLog[]
-  automationRuns    AutomationRun[]
-  automationMetrics AutomationMetric[]
+  domains            Domain[]
+  groupBuys          GroupBuy[]
+  authAudits         AuthAudit[]
+  integrations       TenantIntegration[]
+  telegramRecipients TelegramRecipient[]
+  telegramPairings   TelegramPairing[]
+  featureOverrides   TenantFeatureOverride[]
+  contacts           Contact[]
+  products           Product[]
+  carts              Cart[]
+  orders             Order[]
+  storefrontOrders   StorefrontOrder[]
+  events             Event[]
+  emailLogs          EmailLog[]
+  automationRuns     AutomationRun[]
+  automationMetrics  AutomationMetric[]
 
   // ── Storefront / white-label layer (added) ──
   members  TenantUser[]
@@ -258,6 +260,69 @@ model TenantIntegration {
   @@unique([tenantId, provider])
   @@index([tenantId])
   @@map("tenant_integrations")
+}
+
+/// A Telegram chat that has completed the pairing handshake for a tenant, and so
+/// receives that store's order alerts.
+///
+/// A row here is a CREDENTIAL, not a preference: it is the only thing that makes
+/// a chat reachable, and `canConfirm` is the only thing that lets a press move a
+/// real order. Rows are created exclusively by the webhook redeeming a
+/// TelegramPairing code — never from a form field, because a chat id typed into a
+/// box proves nothing about who owns the chat.
+model TelegramRecipient {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Telegram chat id, as text: supergroup and channel ids exceed 2^53, so a
+  /// numeric column would silently corrupt them.
+  chatId              String
+  /// private | group | supergroup | channel. Drives PII redaction: a group is a
+  /// room full of people the buyer never agreed to share an address with.
+  chatType            String  @default("private")
+  /// The Telegram USER id that linked this chat, when there is exactly one.
+  /// NULL for a group — and a null here can never authorize a confirm (see
+  /// lib/integrations/telegram-authz.findConfirmer).
+  telegramUserId      String?
+  /// @username or chat title, for the owner's recipient list.
+  label               String  @default("")
+  /// Whether presses from this recipient may move an order to confirmed.
+  canConfirm          Boolean @default(true)
+  /// Whether alerts to this chat carry the buyer's identity and address.
+  /// Defaults OFF for groups when the row is created.
+  showCustomerDetails Boolean @default(true)
+
+  linkedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, chatId])
+  @@index([tenantId])
+  @@map("telegram_recipients")
+}
+
+/// A short-lived, single-use code that links one chat to one tenant.
+///
+/// Stored HASHED (sha256 of the normalized code) because this table is a
+/// credential table: a leaked row must not be redeemable. `usedAt` makes the code
+/// single-use, so a code screenshotted into a group cannot link a second chat.
+model TelegramPairing {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// sha256 of the normalized code. The plaintext is shown to the owner once and
+  /// never stored.
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([tenantId, codeHash])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("telegram_pairings")
 }
 
 // ──────────────────────────── People & commerce ────────────────────────────
@@ -451,7 +516,7 @@ model StorefrontOrder {
   //
   // Defaulted rather than nullable so every existing row reads as "retail" with
   // no data migration, and so the admin's filters never have to special-case NULL.
-  orderType    String   @default("retail")
+  orderType String @default("retail")
 
   // Carried over from the store's PREVIOUS system rather than placed through
   // this checkout (see lib/orders/legacy-import). Such an order is real history

@@ -111,6 +111,7 @@ const ORDER: Order = {
     { name: "Bacteriostatic Water", qty: 1, price: 250, productId: "p2" },
   ],
   statusHistory: [{ status: "new", at: "2026-09-04T02:15:00.000Z" }],
+  paymentProof: null,
 };
 
 console.log("telegram order bot — the store's own chat, and who is allowed to answer it\n");
@@ -184,7 +185,7 @@ ok("a Confirm button is still offered — redaction is about PII, not power",
 // ── 3. Callback data — Telegram's 64-byte wall ───────────────────────────────
 console.log("\ncallback_data — the 64-byte budget Telegram enforces");
 
-const cb = confirmCallbackData(ORDER.id);
+const cb = confirmCallbackData(ORDER.id) ?? "";
 ok("callback data round-trips to the order id", parseConfirmCallback(cb) === ORDER.id);
 ok(
   "callback data fits Telegram's 64-byte limit",

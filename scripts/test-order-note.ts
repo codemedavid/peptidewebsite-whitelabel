@@ -345,7 +345,10 @@ ok("the owner's customer workbook does carry it", /customerNote/.test(customerFn
 // column has to be threaded through, plus the one place it must NOT be.
 console.log("\nserver action — threaded through, and NOT admin-writable");
 
-const actions = src("src/actions/orders.ts");
+// The order mapping layer lives in lib/orders/db-mapping.ts and the checkout
+// action in actions/orders.ts; the note is threaded through both, so the
+// assertions below read them as one source.
+const actions = src("src/actions/orders.ts") + src("src/lib/orders/db-mapping.ts");
 ok(
   "checkout input runs through the shared normalizer",
   /customerNote:\s*normalizeCustomerNote\(/.test(actions),
@@ -358,9 +361,10 @@ ok("the DB row type declares the column", /customerNote:\s*string/.test(actions)
 ok("the column is written on create", /customerNote:\s*p\.customerNote/.test(actions));
 ok("the column is read back onto the storefront order", /customerNote:\s*row\.customerNote/.test(actions));
 
-const cleanPatch = actions.slice(
-  actions.indexOf("function cleanPatch"),
-  actions.indexOf("export async function updateStorefrontOrderAction"),
+const ordersOnly = src("src/actions/orders.ts");
+const cleanPatch = ordersOnly.slice(
+  ordersOnly.indexOf("function cleanPatch"),
+  ordersOnly.indexOf("export async function updateStorefrontOrderAction"),
 );
 ok(
   "the admin patch path REFUSES the note — it is the customer's record",
