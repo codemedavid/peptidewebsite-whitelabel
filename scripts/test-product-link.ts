@@ -304,6 +304,17 @@ check("the catalog accepts an openProductSlug prop", () => {
   );
 });
 
+check("the deep-linked product is seeded at first render, not in an effect", () => {
+  // An effect does not run during SSR: resolving there ships HTML of the bare
+  // catalog and pops the modal only after hydration — a visible flash of the
+  // wrong thing on exactly the arrival this feature exists for. Verified live:
+  // the lazy initializer puts sf-detail + the product name in the server HTML.
+  assert.ok(
+    /useState<Product \| null>\(\(\) =>/.test(catalogSrc),
+    "selected-product state is not seeded with a lazy initializer — the shared link will flash the catalog first",
+  );
+});
+
 check("the catalog resolves that link key to a product", () => {
   assert.ok(
     /findProductByLinkKey/.test(catalogSrc),
@@ -443,6 +454,23 @@ check("it is NOT gated behind the site.products entitlement", () => {
 
 // ───────────────────── legacy /products/[slug] retired ──────────────────────
 console.log("\nLegacy /products/[slug]");
+
+check("middleware 308s the legacy product URL before anything renders", () => {
+  // It cannot be done in the route: the (storefront) group has a loading.tsx,
+  // so every page under it streams behind a Suspense boundary — Next flushes a
+  // 200 shell and a redirect() thrown in the page body afterwards can no longer
+  // set the status. Verified live: route-level gave "200 + not-found body",
+  // middleware gives "308 → /p/<slug>".
+  const mw = src("src/middleware.ts");
+  assert.ok(
+    /\/\^\\\/products\\\//.test(mw) || /products\\\/\(\[\^\/\]\+\)/.test(mw),
+    "middleware does not match the legacy /products/<slug> URL",
+  );
+  assert.ok(
+    /status:\s*308/.test(mw),
+    "the legacy product redirect is not a permanent (308) one",
+  );
+});
 
 check("the legacy product page redirects instead of serving a rival design", () => {
   // Comments stripped for the same reason as the route's entitlement check: the

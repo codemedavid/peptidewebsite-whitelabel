@@ -69,6 +69,24 @@ export async function middleware(req: NextRequest) {
   // Gated on `!isAdmin` so `localhost` / `app.<root>` / `*.vercel.app` (all admin
   // hosts) are never mistaken for the apex.
   const isApex = !isAdmin && host === ROOT;
+
+  // Legacy product URL → the canonical share link, before anything renders.
+  //
+  // This has to happen HERE, not in the route. The (storefront) group has a
+  // loading.tsx, so every page under it renders behind a Suspense boundary:
+  // Next flushes a 200 shell and streams, and a redirect() thrown in the page
+  // body afterwards can no longer set a status — the visitor gets 200 plus a
+  // not-found body instead of a 308. Middleware runs before any of that.
+  //
+  // The page file stays as a backstop for anything this matcher misses.
+  if (!isAdmin && !isApex) {
+    const legacyProduct = /^\/products\/([^/]+)\/?$/.exec(url.pathname);
+    if (legacyProduct) {
+      const canonical = new URL(`/p/${legacyProduct[1]}`, req.url);
+      canonical.search = url.search;
+      return NextResponse.redirect(canonical, { status: 308 });
+    }
+  }
   const rebuild = () => {
     if (isAdmin) {
       const path = url.pathname;

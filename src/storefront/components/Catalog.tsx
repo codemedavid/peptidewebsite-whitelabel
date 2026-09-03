@@ -984,14 +984,20 @@ export function Catalog({
   // (products blocked by sort category, featured pinned above everything).
   const [sort, setSort] = useState("");
   // The product whose full-detail quick-view modal is open (null = closed).
-  const [selected, setSelected] = useState<Product | null>(null);
+  // Seeded on the FIRST render, not in an effect: effects don't run during SSR,
+  // so resolving the shared link there would ship HTML of the bare catalog and
+  // pop the modal open only after hydration — a visible flash of the wrong thing
+  // on exactly the arrival this feature exists for. With the lazy initializer
+  // the product is in the server HTML, which also means a JS-less client (and
+  // any crawler that runs none) still sees the product it was sent.
+  const [selected, setSelected] = useState<Product | null>(() =>
+    openProductSlug ? findProductByLinkKey(products, openProductSlug) : null,
+  );
 
-  // A shared link (/p/<slug>, or #p/<slug> from inside the SPA) opens straight
-  // into the quick-view modal. Re-runs when the key changes so navigating from
-  // one product link to another swaps the modal instead of leaving the first
-  // one up, and when `products` changes so a link that arrives before the
-  // catalog has hydrated still resolves. An unmatched key is deliberately a
-  // no-op: a link to a since-hidden product shows the catalog, not an error.
+  // Keeps the modal in step AFTER that first render: navigating from one product
+  // link to another inside the SPA swaps it rather than leaving the first up,
+  // and a `products` list that arrives later still resolves. An unmatched key is
+  // deliberately a no-op: a link to a since-hidden product shows the catalog.
   useEffect(() => {
     if (!openProductSlug) return;
     const target = findProductByLinkKey(products, openProductSlug);

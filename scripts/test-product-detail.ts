@@ -216,9 +216,17 @@ check("the catalog renders the ProductDetailModal", () => {
 });
 
 check("the modal is driven by a selected-product state, cleared on close", () => {
+  // The initializer may be a lazy one — a shared /p/<slug> link seeds the state
+  // on the first render so the modal is in the server HTML (see
+  // scripts/test-product-link.ts). What matters here is that the state exists
+  // and that closing clears it.
   assert.ok(
-    /useState<Product \| null>\(null\)/.test(catalogSrc),
+    /useState<Product \| null>\((null|\(\) =>)/.test(catalogSrc),
     "no selected-product state — the modal has nothing to open/close on",
+  );
+  assert.ok(
+    /setSelected\(null\)/.test(catalogSrc),
+    "closing the modal never clears the selected product",
   );
 });
 
