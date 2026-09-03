@@ -9312,12 +9312,31 @@
 .sf-root .sf-confirm__totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .sf-root .sf-confirm__totals .is-total { font-size: 1.15rem; font-weight: 700; opacity: 1; }
 
-.sf-root .sf-confirm__send {
+.sf-root .sf-confirm__send,
+.sf-root .sf-confirm__next {
   padding: 1.5rem 1.25rem;
   border: var(--brand-border-width) solid var(--brand-border);
   border-radius: 14px;
   text-align: center;
   background: color-mix(in oklab, var(--brand-main) 4%, var(--brand-surface));
+}
+
+/* The channel-less close: nothing to send, so this panel is a receipt. The lede
+   carries the reassurance ("we have it, wait for confirmation") at a size that
+   reads before the small print under it, and the one action left is the tracker. */
+.sf-root .sf-confirm__next-lede {
+  margin: 0.6rem auto 0;
+  max-width: 46ch;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.sf-root .sf-confirm__track {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+  text-decoration: none;
 }
 
 .sf-root .sf-confirm__channels {
