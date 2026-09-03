@@ -11,6 +11,7 @@ import { validatePublicMcpImageUrl } from "@/lib/mcp/image-assets";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
 import { checkMcpAuth } from "@/lib/mcp/auth";
 import { UPDATE_BRANDING_TOOL, callUpdateBranding } from "@/lib/mcp/update-branding-tool";
+import { LIST_TENANTS_TOOL, callListTenants } from "@/lib/mcp/tenant-lookup-tool";
 import {
   LIST_FEATURES_TOOL,
   SET_FEATURES_TOOL,
@@ -1383,7 +1384,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. To add, edit, or remove a product's size/dose/colorway variations, call manage_product_variations rather than update_products \u2014 it changes only the options you name, while an update_products patch replaces the whole option list and would silently delete the ones you did not mention. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Every tool here works on ANY store on the platform, not only ones you created. When the operator names a store rather than a slug, or a slug is not found, call list_whitelabel_tenants \u2014 it is read-only and returns the exact slugs. Tenant arguments also accept a store name or a storefront URL, so \"restyle HP Glow\" resolves without the operator digging up a slug; a name matching two stores is refused with both named, and you must ask the operator which one rather than guessing. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. To add, edit, or remove a product's size/dose/colorway variations, call manage_product_variations rather than update_products \u2014 it changes only the options you name, while an update_products patch replaces the whole option list and would silently delete the ones you did not mention. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1393,6 +1394,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
   if (method === "tools/list") {
     return jsonRpcResult(message.id, {
       tools: [
+        LIST_TENANTS_TOOL,
         CREATE_TENANT_TOOL,
         UPDATE_BRANDING_TOOL,
         BULK_ADD_PRODUCTS_TOOL,
@@ -1411,6 +1413,13 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     const args = paramsObject(params.arguments);
     if (name === CREATE_TENANT_TOOL.name) {
       return jsonRpcResult(message.id, await callCreateTenant(req, args));
+    }
+    if (name === LIST_TENANTS_TOOL.name) {
+      const authError = requireMcpAuth(req, args);
+      if (authError) {
+        return jsonRpcResult(message.id, { content: [{ type: "text", text: authError }], isError: true });
+      }
+      return jsonRpcResult(message.id, await callListTenants(args));
     }
     if (name === UPDATE_BRANDING_TOOL.name) {
       const authError = requireMcpAuth(req, args);

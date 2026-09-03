@@ -121,7 +121,8 @@ section("Journey 4 — two lookalike stores are refused, never guessed");
     { id: "a", slug: "glow-labs", name: "Glow Labs", status: "active" },
     { id: "b", slug: "glow-labs-ph", name: "Glow Labs PH", status: "active" },
   ];
-  const m = buildTenantMatch("glow labs p", twins);
+  // "glow" fits both and is nobody's exact slug or name — the real ambiguity.
+  const m = buildTenantMatch("glow", twins);
   check("an ambiguous name does not resolve", !m.ok, m);
   check("the reason is ambiguity", !m.ok && m.reason === "ambiguous", m);
   check("both candidates are named", !m.ok && m.candidates.length === 2, m);
@@ -130,6 +131,14 @@ section("Journey 4 — two lookalike stores are refused, never guessed");
     !m.ok && m.message.includes("glow-labs") && m.message.includes("glow-labs-ph"),
     !m.ok ? m.message : null,
   );
+
+  // A prefix that fits only one store is NOT ambiguous — refusing it would make
+  // the tool useless for the exact half-remembered names operators actually type.
+  const unique = buildTenantMatch("glow labs p", twins);
+  check("a prefix unique to one store still resolves", unique.ok && unique.tenant.slug === "glow-labs-ph", unique);
+  // The store literally named "Glow Labs" wins its own name outright.
+  const named = buildTenantMatch("Glow Labs", twins);
+  check("an exact name beats a longer sibling", named.ok && named.tenant.slug === "glow-labs", named);
 }
 
 section("Journey 5 — a typo teaches the next call");
@@ -150,15 +159,17 @@ section("Journey 5 — a typo teaches the next call");
 
 section("Journey 6 — an exact slug is never dragged into a false ambiguity");
 {
+  // Same display name, two slugs — the case where guessing restyles a live
+  // store the operator never meant to touch.
   const collide: TenantRow[] = [
-    { id: "a", slug: "kglow", name: "K Glow Original", status: "active" },
+    { id: "a", slug: "kglow", name: "K Glow", status: "active" },
     { id: "b", slug: "k-glow", name: "K Glow", status: "active" },
   ];
   const exact = buildTenantMatch("k-glow", collide);
   check("the exact slug wins outright", exact.ok && exact.tenant.slug === "k-glow", exact);
   const other = buildTenantMatch("kglow", collide);
   check("the other exact slug wins outright too", other.ok && other.tenant.slug === "kglow", other);
-  // Only the loose form is genuinely ambiguous between the two.
+  // Only the shared display name is genuinely undecidable between the two.
   const loose = buildTenantMatch("k glow", collide);
   check("a form matching both is refused", !loose.ok && loose.reason === "ambiguous", loose);
 }

@@ -26,6 +26,7 @@ import { THEME_PRESETS } from "@/lib/theme/presets";
 import { SPLASH_DESIGNS } from "@/lib/storefront/brand-splash";
 import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
+import { resolveTenantArg } from "@/lib/mcp/tenant-lookup-tool";
 
 const HEX_HINT = "Hex color, e.g. #1C1917.";
 
@@ -152,7 +153,11 @@ export const UPDATE_BRANDING_TOOL = {
         description:
           "Fallback token for connectors configured with No Authentication. Prefer an Authorization: Bearer header, or a ?token= parameter on the connector URL.",
       },
-      tenantSlug: { type: "string", description: "Existing tenant slug, e.g. skn-aesthetic-supply-co." },
+      tenantSlug: {
+        type: "string",
+        description:
+          "Which store to restyle. Its slug (e.g. skn-aesthetic-supply-co), its display name as the operator says it (\"HP Glow\"), or its storefront URL all work. Call list_whitelabel_tenants if you are unsure which stores exist.",
+      },
       themeId: {
         type: "string",
         description: `Theme preset id. One of: ${Object.keys(THEME_PRESETS).join(", ")}.`,
@@ -258,14 +263,12 @@ function ok(result: unknown, isError = false): ToolResult {
  * ImageKit folder — and the whole Branding row is then written once.
  */
 export async function callUpdateBranding(args: Record<string, unknown>): Promise<ToolResult> {
-  const tenantSlug = cleanString(args.tenantSlug ?? args.slug, 80).toLowerCase();
-  if (!tenantSlug) return fail("tenantSlug is required.");
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true, slug: true, name: true },
-  });
-  if (!tenant) return fail(`Tenant "${tenantSlug}" was not found.`);
+  // By slug, by the name the operator actually says, or by a storefront URL —
+  // a restyle must reach a store ChatGPT did not create. Ambiguity is refused
+  // with the candidates named rather than guessed at: a branding write is live.
+  const resolved = await resolveTenantArg(args.tenantSlug ?? args.slug);
+  if (!resolved.ok) return fail(resolved.error);
+  const tenant = resolved.tenant;
 
   const heroImage = plainObject(args.heroImage);
   const splashLogo = plainObject(args.splashLogo);

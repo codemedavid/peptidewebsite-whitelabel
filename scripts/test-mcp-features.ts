@@ -404,7 +404,7 @@ section("12. Schemas, core and route agree");
   check("the route dispatches the write tool", route.includes("callSetFeatures"), null);
   check(
     "the server instructions tell the model features can be toggled",
-    /feature/i.test(route.slice(route.indexOf("instructions:"), route.indexOf("instructions:") + 1400)),
+    /feature/i.test(route.slice(route.indexOf("instructions:"), route.indexOf("\n    });", route.indexOf("instructions:")))),
     null,
   );
 
