@@ -30,11 +30,47 @@ export type TelegramIntent =
       telegramUserId: string;
       label: string;
     }
+  | {
+      kind: "status";
+      updateId: number;
+      orderId: string;
+      status: OrderStatus;
+      chatId: string;
+      messageId: number;
+      callbackId: string;
+      telegramUserId: string;
+      label: string;
+    }
+  | {
+      kind: "track-prompt";
+      updateId: number;
+      orderId: string;
+      chatId: string;
+      messageId: number;
+      callbackId: string;
+      telegramUserId: string;
+      threadId?: number;
+    }
+  | {
+      kind: "track";
+      updateId: number;
+      orderNumber: string;
+      tracking: string;
+      chatId: string;
+      telegramUserId: string;
+      threadId?: number;
+    }
   | { kind: "unlink"; updateId: number; chatId: string; telegramUserId: string }
   | { kind: "ignore"; updateId: number; reason: string };
 
 import { normalizePairingCode } from "./telegram-pairing";
-import { parseConfirmCallback } from "./telegram-message";
+import {
+  parseConfirmCallback,
+  parseStatusCallback,
+  parseTrackCallback,
+} from "./telegram-message";
+import { parseTrackCommand, parseTrackReply } from "./telegram-commands";
+import type { OrderStatus } from "@/storefront/types";
 
 type Obj = Record<string, unknown>;
 
@@ -83,17 +119,53 @@ export function interpretTelegramUpdate(update: unknown): TelegramIntent {
     // than carrying an empty id into findConfirmer.
     if (!telegramUserId) return ignore("callback with no from-user");
 
+    const message = asObj(cbq.message);
+    const chat = asObj(message?.chat);
+    const messageId = typeof message?.message_id === "number" ? message.message_id : 0;
+    const chatId = idString(chat?.id);
+    const threadId =
+      typeof message?.message_thread_id === "number" ? message.message_thread_id : undefined;
+
+    // A status button: move the order to a named status.
+    const moved = parseStatusCallback(cbq.data);
+    if (moved) {
+      return {
+        kind: "status",
+        updateId,
+        orderId: moved.orderId,
+        status: moved.status,
+        chatId,
+        messageId,
+        callbackId: idString(cbq.id),
+        telegramUserId,
+        label: labelOf(from, chat),
+      };
+    }
+
+    // The tracking button: ask for a number, then read it off the reply.
+    const wantsTracking = parseTrackCallback(cbq.data);
+    if (wantsTracking) {
+      return {
+        kind: "track-prompt",
+        updateId,
+        orderId: wantsTracking,
+        chatId,
+        messageId,
+        callbackId: idString(cbq.id),
+        telegramUserId,
+        ...(threadId ? { threadId } : {}),
+      };
+    }
+
     const orderId = parseConfirmCallback(cbq.data);
     if (!orderId) return ignore("unknown callback action");
 
-    const message = asObj(cbq.message);
-    const chat = asObj(message?.chat);
     return {
       kind: "confirm",
       updateId,
       orderId,
-      chatId: idString(chat?.id),
-      messageId: typeof message?.message_id === "number" ? message.message_id : 0,
+      chatId,
+      messageId,
       callbackId: idString(cbq.id),
       telegramUserId,
       label: labelOf(from, chat),
@@ -105,13 +177,50 @@ export function interpretTelegramUpdate(update: unknown): TelegramIntent {
   if (!message) return ignore("no message or callback");
 
   const text = typeof message.text === "string" ? message.text : "";
-  if (!text.startsWith("/")) return ignore("not a command");
-
   const chat = asObj(message.chat);
   const from = asObj(message.from);
   const chatId = idString(chat?.id);
   const telegramUserId = idString(from?.id);
-  if (!chatId) return ignore("command with no chat");
+  const threadId =
+    typeof message.message_thread_id === "number" ? message.message_thread_id : undefined;
+  if (!chatId) return ignore("message with no chat");
+
+  // A reply to the bot's "send me the tracking number" prompt. Stateless: the
+  // order number is read back out of the prompt itself.
+  const repliedTo = asObj(message.reply_to_message);
+  if (repliedTo) {
+    const replied = parseTrackReply(
+      typeof repliedTo.text === "string" ? repliedTo.text : undefined,
+      text,
+    );
+    if (replied && telegramUserId) {
+      return {
+        kind: "track",
+        updateId,
+        orderNumber: replied.orderNumber,
+        tracking: replied.tracking,
+        chatId,
+        telegramUserId,
+        ...(threadId ? { threadId } : {}),
+      };
+    }
+  }
+
+  if (!text.startsWith("/")) return ignore("not a command");
+
+  // /track <orderNumber> <tracking>
+  const tracked = parseTrackCommand(text);
+  if (tracked && telegramUserId) {
+    return {
+      kind: "track",
+      updateId,
+      orderNumber: tracked.orderNumber,
+      tracking: tracked.tracking,
+      chatId,
+      telegramUserId,
+      ...(threadId ? { threadId } : {}),
+    };
+  }
 
   const { name, arg } = commandOf(text);
 

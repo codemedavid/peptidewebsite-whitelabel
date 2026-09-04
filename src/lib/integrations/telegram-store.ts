@@ -17,6 +17,7 @@ import {
   type LinkedRecipient,
 } from "@/lib/integrations/telegram-authz";
 import { hashPairingCode, PAIRING_TTL_MS } from "@/lib/integrations/telegram-pairing";
+import { normalizeStatusTopics } from "@/lib/integrations/telegram-topics";
 import { prisma } from "@/lib/db/prisma";
 
 export const TELEGRAM_PROVIDER = "telegram";
@@ -257,6 +258,18 @@ export async function removeRecipient(tenantId: string, chatId: string): Promise
   await withTenant(tenantId, (db) => db.telegramRecipient.deleteMany({ where: { chatId } }));
 }
 
+/** Save the operator's per-status topic map for one linked chat. */
+export async function setRecipientTopics(
+  tenantId: string,
+  chatId: string,
+  topics: Record<string, unknown>,
+): Promise<void> {
+  const normalized = normalizeStatusTopics(topics) as unknown as Prisma.InputJsonValue;
+  await withTenant(tenantId, (db) =>
+    db.telegramRecipient.updateMany({ where: { chatId }, data: { statusTopics: normalized } }),
+  );
+}
+
 export async function setRecipientFlags(
   tenantId: string,
   chatId: string,
@@ -308,4 +321,36 @@ export async function consumePairing(tenantId: string, code: string): Promise<bo
     });
     return spent.count === 1;
   });
+}
+
+/** Resolve one of the tenant's LIVE orders by its customer-facing code. */
+export async function findOrderByNumber(
+  tenantId: string,
+  orderNumber: string,
+): Promise<{ id: string; status: string; orderNumber: string } | null> {
+  const code = orderNumber.trim().toUpperCase().slice(0, 64);
+  if (!code) return null;
+  const row = await withTenant(tenantId, (db) =>
+    // Trash-scoped: a binned order is out of the fulfilment flow, so it must not
+    // be re-statused or given a tracking number from chat.
+    db.storefrontOrder.findFirst({
+      where: { orderNumber: code, deletedAt: null },
+      select: { id: true, status: true, orderNumber: true },
+    }),
+  );
+  return row ?? null;
+}
+
+/** The order behind an id, for rendering a chat message about it. */
+export async function findOrderById(
+  tenantId: string,
+  orderId: string,
+): Promise<{ id: string; status: string; orderNumber: string } | null> {
+  const row = await withTenant(tenantId, (db) =>
+    db.storefrontOrder.findFirst({
+      where: { id: orderId, deletedAt: null },
+      select: { id: true, status: true, orderNumber: true },
+    }),
+  );
+  return row ?? null;
 }

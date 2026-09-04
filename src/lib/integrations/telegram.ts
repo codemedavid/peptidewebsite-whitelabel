@@ -62,9 +62,12 @@ export function sendMessage(
   token: string,
   chatId: string,
   message: { text: string; parse_mode: "HTML"; reply_markup?: unknown },
+  /** Forum thread to post into. Omitted → the chat's General area. */
+  messageThreadId?: number,
 ): Promise<BotResult<SentMessage>> {
   return call<SentMessage>(token, "sendMessage", {
     chat_id: chatId,
+    ...(messageThreadId ? { message_thread_id: messageThreadId } : {}),
     text: message.text,
     parse_mode: message.parse_mode,
     // Order alerts are self-contained; a link preview would just add noise.

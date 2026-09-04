@@ -293,6 +293,14 @@ model TelegramRecipient {
   /// Defaults OFF for groups when the row is created.
   showCustomerDetails Boolean @default(true)
 
+  /// status -> forum thread id, for a supergroup with Topics enabled, so each
+  /// order status gets its own column. Set from pasted topic LINKS (nobody can
+  /// read a thread id off the Telegram UI) and normalized by
+  /// lib/integrations/telegram-topics. A status with no entry posts to the chat
+  /// itself; an unreadable link is dropped rather than stored as 0, which
+  /// Telegram would accept as "the General topic".
+  statusTopics Json @default("{}")
+
   linkedAt  DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -58,6 +58,22 @@ import {
   buildWebhookUrl,
   webhookHostIssue,
 } from "../src/lib/integrations/telegram-webhook-url";
+import {
+  parseTopicLink,
+  normalizeStatusTopics,
+  resolveTopicFor,
+} from "../src/lib/integrations/telegram-topics";
+import {
+  statusCallbackData,
+  parseStatusCallback,
+  parseTrackCallback,
+  buildStatusKeyboard,
+} from "../src/lib/integrations/telegram-message";
+import {
+  parseTrackCommand,
+  buildTrackPrompt,
+  parseTrackReply,
+} from "../src/lib/integrations/telegram-commands";
 import { planStatusChange } from "../src/lib/storefront/order-status";
 import { orderTotal } from "../src/lib/analytics/events";
 import type { Order } from "../src/storefront/types";
@@ -476,6 +492,139 @@ ok(
   /80|443|public/i.test(webhookHostIssue("app.lvh.me:3100") ?? ""),
 );
 
+// -- 7c. Topic routing -------------------------------------------------------
+// A forum supergroup gives each order status its own topic. The operator pastes
+// a topic LINK (nobody can read a thread id off the Telegram UI), so the parse
+// has to survive every shape those links come in - and refuse anything it cannot
+// read rather than guessing a thread and posting orders into the wrong one.
+console.log("\nparseTopicLink - a pasted topic link becomes a thread id");
+
+eq("a private supergroup topic link parses", parseTopicLink("https://t.me/c/2345678901/12"), 12);
+eq("a public group topic link parses", parseTopicLink("https://t.me/novalabs/7"), 7);
+eq(
+  "a link to a MESSAGE inside a topic still yields the topic, not the message",
+  parseTopicLink("https://t.me/c/2345678901/12/3456"),
+  12,
+);
+eq("a bare thread id is accepted", parseTopicLink("12"), 12);
+eq("surrounding whitespace survives", parseTopicLink("  https://t.me/c/234/9  "), 9);
+eq("query strings are ignored", parseTopicLink("https://t.me/c/234/9?single"), 9);
+eq("http is accepted as well as https", parseTopicLink("http://t.me/c/234/9"), 9);
+
+eq("an empty value is no topic, not topic zero", parseTopicLink(""), null);
+eq("undefined is no topic", parseTopicLink(undefined), null);
+eq("a group link with no topic is refused", parseTopicLink("https://t.me/c/2345678901"), null);
+eq("a non-telegram URL is refused", parseTopicLink("https://example.com/c/1/2"), null);
+eq("junk is refused rather than guessed", parseTopicLink("not a link"), null);
+eq("thread 0 is refused - 0 means the General topic, not unset", parseTopicLink("0"), null);
+eq("a negative id is refused", parseTopicLink("-5"), null);
+
+console.log("\nnormalizeStatusTopics - untrusted config becomes a clean status->topic map");
+
+eq(
+  "links are stored as thread ids, keyed by status",
+  normalizeStatusTopics({ new: "https://t.me/c/234/2", shipped: "9" }),
+  { new: 2, shipped: 9 },
+);
+eq("an unknown status key is dropped", normalizeStatusTopics({ bogus: "5" }), {});
+eq("an unparseable link is dropped, not stored as 0", normalizeStatusTopics({ new: "junk" }), {});
+eq("a blank clears that status", normalizeStatusTopics({ new: "" }), {});
+eq("a non-object is an empty map", normalizeStatusTopics("nope"), {});
+eq("null is an empty map", normalizeStatusTopics(null), {});
+
+console.log("\nresolveTopicFor - where an order of a given status is posted");
+
+const TOPICS = { new: 2, confirmed: 5, shipped: 9 };
+eq("a mapped status routes to its topic", resolveTopicFor("new", TOPICS), 2);
+eq("another mapped status routes to its own topic", resolveTopicFor("shipped", TOPICS), 9);
+eq(
+  "an unmapped status falls back to the chat itself, not to another status topic",
+  resolveTopicFor("cancelled", TOPICS),
+  undefined,
+);
+eq("an empty map always falls back", resolveTopicFor("new", {}), undefined);
+
+// -- 7d. Driving the order from chat -----------------------------------------
+console.log("\nstatus buttons - moving an order without leaving Telegram");
+
+const cbNew = statusCallbackData(ORDER.id, "processing");
+eq("status callback round-trips", parseStatusCallback(cbNew), {
+  orderId: ORDER.id,
+  status: "processing",
+});
+ok(
+  "status callback fits Telegram 64-byte budget",
+  Buffer.byteLength(cbNew ?? "", "utf8") <= CALLBACK_DATA_MAX,
+  `${Buffer.byteLength(cbNew ?? "", "utf8")} bytes`,
+);
+eq("an unknown status is refused, never coerced", statusCallbackData(ORDER.id, "banana"), null);
+eq("a bogus payload parses to null", parseStatusCallback("status:abc:banana"), null);
+eq("a truncated payload parses to null", parseStatusCallback("status:abc"), null);
+eq("an unrelated callback parses to null", parseStatusCallback("confirm:abc"), null);
+eq("a non-string parses to null", parseStatusCallback(null), null);
+
+const keys = buildStatusKeyboard(ORDER).flat().map((b) => b.callback_data);
+ok("a new order offers a way forward", keys.length > 0);
+ok(
+  "the order CURRENT status is not offered as a button",
+  !keys.some((k) => parseStatusCallback(k)?.status === "new"),
+  keys.join(","),
+);
+ok(
+  "cancelling is always available",
+  keys.some((k) => parseStatusCallback(k)?.status === "cancelled"),
+);
+// Every button is either a status move or the tracking prompt - never a payload
+// nothing can read, which would be a button that silently does nothing.
+ok(
+  "every button carries a parseable payload",
+  keys.every((k) => parseStatusCallback(k) !== null || parseTrackCallback(k) !== null),
+  keys.join(","),
+);
+ok(
+  "the keyboard offers the tracking prompt",
+  keys.some((k) => parseTrackCallback(k) !== null),
+);
+ok(
+  "a delivered order offers no further forward step",
+  !buildStatusKeyboard({ ...ORDER, status: "delivered" })
+    .flat()
+    .some((b) => parseStatusCallback(b.callback_data)?.status === "shipped"),
+);
+
+console.log("\ntracking number - captured in chat, shown on the buyer Track page");
+
+eq(
+  "a /track command yields the order and the number",
+  parseTrackCommand("/track HPG-1042 JT9876543210"),
+  { orderNumber: "HPG-1042", tracking: "JT9876543210" },
+);
+eq(
+  "a bot-suffixed command still parses",
+  parseTrackCommand("/track@novaleslabbot HPG-1042 JT9876543210"),
+  { orderNumber: "HPG-1042", tracking: "JT9876543210" },
+);
+eq("the order number is upper-cased for lookup", parseTrackCommand("/track hpg-1042 abc")?.orderNumber, "HPG-1042");
+eq("a tracking number with spaces is joined", parseTrackCommand("/track HPG-1042 JT 987 654")?.tracking, "JT 987 654");
+eq("a missing tracking number is refused", parseTrackCommand("/track HPG-1042"), null);
+eq("a bare /track is refused", parseTrackCommand("/track"), null);
+eq("another command is refused", parseTrackCommand("/start ABC"), null);
+eq("a non-string is refused", parseTrackCommand(undefined), null);
+
+// The reply route: the bot asks, the admin replies. Stateless - the order number
+// is read back out of the prompt the reply is attached to, so no conversation
+// state has to survive between two webhook invocations.
+const prompt = buildTrackPrompt("HPG-1042");
+ok("the prompt names the order so the reply can be correlated", prompt.includes("HPG-1042"));
+eq(
+  "a reply to that prompt yields the order and the number",
+  parseTrackReply(prompt, "JT9876543210"),
+  { orderNumber: "HPG-1042", tracking: "JT9876543210" },
+);
+eq("a reply to some other message is refused", parseTrackReply("hello", "JT123"), null);
+eq("an empty reply is refused", parseTrackReply(prompt, "   "), null);
+eq("a reply with no prompt is refused", parseTrackReply(undefined, "JT123"), null);
+
 // ── 8. Confirming twice moves stock once ─────────────────────────────────────
 // The Telegram door reuses planStatusChange through applyOrderStatusChange, so
 // the guarantee is the same one the admin has. Proven here on the shared core.
@@ -538,6 +687,30 @@ ok(
   /applyOrderStatusChange/.test(route) && !/storefrontOrder\.updateMany/.test(route),
 );
 ok("the webhook dedupes redelivered updates", /seen\(/.test(route));
+// Parsing lives in the interpreter; the route branches on the typed intent.
+const updateSrc = src("src/lib/integrations/telegram-update.ts");
+ok("status buttons are interpreted", /parseStatusCallback/.test(updateSrc));
+ok(
+  "a tracking number is interpreted from both a command and a reply",
+  /parseTrackCommand/.test(updateSrc) && /parseTrackReply/.test(updateSrc),
+);
+ok('the webhook acts on a status intent', /intent\.kind === "status"/.test(route));
+ok('the webhook asks for a tracking number', /"track-prompt"/.test(route));
+ok(
+  "an unauthorized presser cannot move an order by any route",
+  route.indexOf("findConfirmer") < route.indexOf('intent.kind === "status"'),
+);
+ok("a status move re-posts the order into its new topic", /resolveTopicFor/.test(route));
+ok(
+  "the tracking number is written through the shared engine, so the buyer Track page sees it",
+  /trackingNumber/.test(route),
+);
+
+const notifySrc = src("src/lib/integrations/telegram-notify.ts");
+ok("alerts are routed to the status topic", /resolveTopicFor/.test(notifySrc));
+
+const topicsPanel = src("src/components/admin/AdminTelegramBot.tsx");
+ok("the operator can enter a topic link per status", /statusTopics|Topic link/i.test(topicsPanel));
 
 const notify = src("src/lib/integrations/telegram-notify.ts");
 ok("dispatch is gated on the entitlement", /NOTIFY_TELEGRAM/.test(notify));

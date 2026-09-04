@@ -17,6 +17,7 @@ import { FEATURES } from "@/lib/features/catalog";
 import { getEnabledTelegramTarget, listRecipientRows } from "@/lib/integrations/telegram-store";
 import { buildOrderAlert } from "@/lib/integrations/telegram-message";
 import { sendMessage } from "@/lib/integrations/telegram";
+import { resolveTopicFor, normalizeStatusTopics } from "@/lib/integrations/telegram-topics";
 import type { Order } from "@/storefront/types";
 
 /**
@@ -51,6 +52,10 @@ export async function sendTelegramOrderAlert(
             currency,
             showCustomerDetails: r.showCustomerDetails,
           }),
+          // A forum supergroup files each status in its own topic. Undefined
+          // (no topic configured for this status) posts to the chat itself
+          // rather than guessing another status' column.
+          resolveTopicFor(order.status, normalizeStatusTopics(r.statusTopics)),
         ),
       ),
     );

@@ -30,10 +30,12 @@ import {
   listRecipientRows,
   removeRecipient,
   setRecipientFlags,
+  setRecipientTopics,
   createPairing,
   type TelegramStatus,
 } from "@/lib/integrations/telegram-store";
 import { generatePairingCode } from "@/lib/integrations/telegram-pairing";
+import { normalizeStatusTopics } from "@/lib/integrations/telegram-topics";
 import { getMe, setWebhook, deleteWebhook } from "@/lib/integrations/telegram";
 import { buildWebhookUrl, webhookHostIssue } from "@/lib/integrations/telegram-webhook-url";
 
@@ -62,6 +64,8 @@ export interface RecipientView {
   canConfirm: boolean;
   showCustomerDetails: boolean;
   linkedAt: string;
+  /** status -> forum thread id, for a Topics-enabled supergroup. */
+  statusTopics: Record<string, number>;
 }
 
 export interface TelegramPanelState {
@@ -89,6 +93,7 @@ export async function loadTelegramPanelAction(
         canConfirm: r.canConfirm,
         showCustomerDetails: r.showCustomerDetails,
         linkedAt: r.linkedAt.toISOString(),
+        statusTopics: normalizeStatusTopics(r.statusTopics) as Record<string, number>,
       })),
     };
   } catch (e) {
@@ -306,4 +311,25 @@ export async function getTelegramWebhookTargetAction(
   if ("error" in g) return g;
   const host = webhookHost();
   return { url: buildWebhookUrl(host || "<no host configured>", "…"), issue: webhookHostIssue(host) };
+}
+
+
+/**
+ * Save the per-status forum topics for one linked chat. Links are normalized to
+ * thread ids here; an unreadable one is DROPPED rather than stored, so a typo
+ * falls back to the group's main area instead of filing orders under a topic
+ * that isn't the one the operator meant.
+ */
+export async function setTelegramTopicsAction(
+  slug: string,
+  chatId: string,
+  topics: Record<string, unknown>,
+): Promise<TelegramActionResult> {
+  const g = await guard(slug);
+  if ("error" in g) return g;
+  const id = (chatId ?? "").trim().slice(0, 64);
+  if (!id) return { error: "Missing chat." };
+  await setRecipientTopics(g.tenantId, id, topics ?? {});
+  refresh(slug);
+  return { ok: true };
 }

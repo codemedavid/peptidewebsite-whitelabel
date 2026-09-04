@@ -28,14 +28,19 @@ import {
   upsertRecipient,
   removeRecipient,
   consumePairing,
+  findOrderByNumber,
+  findOrderById,
 } from "@/lib/integrations/telegram-store";
 import { interpretTelegramUpdate } from "@/lib/integrations/telegram-update";
 import { findConfirmer, verifyWebhookSecret } from "@/lib/integrations/telegram-authz";
 import { webhookDeduper } from "@/lib/integrations/telegram-dedupe";
 import { buildConfirmedText, buildOrderAlert } from "@/lib/integrations/telegram-message";
+import { resolveTopicFor, normalizeStatusTopics } from "@/lib/integrations/telegram-topics";
+import { buildTrackPrompt } from "@/lib/integrations/telegram-commands";
 import { answerCallbackQuery, editMessageText, sendMessage } from "@/lib/integrations/telegram";
 import { applyOrderStatusChange } from "@/lib/orders/apply-status";
 import { getTenantContext } from "@/lib/tenant/context";
+import type { OrderStatus } from "@/storefront/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,60 +118,133 @@ export async function POST(
       return ack();
     }
 
-    // ── A Confirm press ─────────────────────────────────────────────────────
+    // ── Everything below moves a real order, so authorize first ────────────
+    //
+    // Authorization is a ROW, not a chat: receiving a button press only proves
+    // someone can see a chat the bot posts in. findConfirmer requires a linked
+    // recipient naming this Telegram user id and carrying canConfirm.
     const recipients = await listRecipients(tenant.tenantId);
     const actor = findConfirmer(recipients, intent.telegramUserId);
     if (!actor) {
-      // Answered, not ignored: an unanswered callback leaves a spinner on the
-      // button and looks like the bot is broken.
+      if (intent.kind !== "track") {
+        // Answered, not ignored: an unanswered callback leaves a spinner on the
+        // button and looks like the bot is broken.
+        await answerCallbackQuery(
+          creds.botToken,
+          intent.callbackId,
+          "You're not authorized to manage orders for this store.",
+          true,
+        );
+      }
+      return ack();
+    }
+
+    const rows = await listRecipientRows(tenant.tenantId);
+    const row = rows.find((r) => r.chatId === intent.chatId);
+    const topics = normalizeStatusTopics(row?.statusTopics);
+    const { branding } = await getTenantContext(tenant.tenantId);
+    const currency = (branding?.config as { currency?: unknown } | null)?.currency;
+
+    /** Apply a status/tracking change and reflect it back into the chat. */
+    const applyAndReflect = async (
+      orderId: string,
+      patch: { status?: OrderStatus; trackingNumber?: string },
+      note: string,
+    ) => {
+      const res = await applyOrderStatusChange(tenant.tenantId, orderId, patch, tenant.slug);
+      if (!res.ok) return res.error;
+
+      const rendered = buildOrderAlert(res.order, {
+        currency,
+        showCustomerDetails: row?.showCustomerDetails ?? false,
+      });
+
+      // Retire the message that was pressed, so the old topic stops showing the
+      // order as if it were still at that status.
+      if (intent.kind !== "track" && intent.messageId) {
+        await editMessageText(
+          creds.botToken,
+          intent.chatId,
+          intent.messageId,
+          buildConfirmedText(rendered.text, `${actor.label} — ${note}`, new Date().toISOString()),
+        );
+      }
+
+      // Re-post into the topic that now owns this status. Only when the status
+      // actually moved AND that status has a topic of its own — otherwise the
+      // edit above is the whole update and a second copy would be noise.
+      const thread = resolveTopicFor(res.order.status, topics);
+      if (res.statusChanged && thread !== undefined) {
+        await sendMessage(creds.botToken, intent.chatId, rendered, thread);
+      }
+      return null;
+    };
+
+    if (intent.kind === "confirm" || intent.kind === "status") {
+      const target = intent.kind === "confirm" ? ("confirmed" as const) : intent.status;
+      const err = await applyAndReflect(intent.orderId, { status: target }, target);
       await answerCallbackQuery(
         creds.botToken,
         intent.callbackId,
-        "You're not authorized to confirm orders for this store.",
-        true,
+        err ?? `Order moved to ${target}.`,
+        !!err,
       );
       return ack();
     }
 
-    const res = await applyOrderStatusChange(
-      tenant.tenantId,
-      intent.orderId,
-      { status: "confirmed" },
-      tenant.slug,
-    );
-    if (!res.ok) {
-      await answerCallbackQuery(creds.botToken, intent.callbackId, res.error, true);
-      return ack();
-    }
-
-    await answerCallbackQuery(
-      creds.botToken,
-      intent.callbackId,
-      res.statusChanged ? "Order confirmed." : "That order was already confirmed.",
-    );
-
-    // Re-render the alert in place and retire the button, so the chat records who
-    // confirmed rather than silently losing the control. Rebuilt from the stored
-    // order (not the chat text) so the edit shows the order as it now IS — and
-    // with this recipient's own redaction setting, since the edit lands in their
-    // chat.
-    const row = (await listRecipientRows(tenant.tenantId)).find(
-      (r) => r.chatId === intent.chatId,
-    );
-    const { branding } = await getTenantContext(tenant.tenantId);
-    const currency = (branding?.config as { currency?: unknown } | null)?.currency;
-    const rendered = buildOrderAlert(res.order, {
-      currency,
-      showCustomerDetails: row?.showCustomerDetails ?? false,
-    });
-    if (intent.messageId) {
-      await editMessageText(
+    if (intent.kind === "track-prompt") {
+      const order = await findOrderById(tenant.tenantId, intent.orderId);
+      if (!order) {
+        await answerCallbackQuery(creds.botToken, intent.callbackId, "Order not found.", true);
+        return ack();
+      }
+      await answerCallbackQuery(creds.botToken, intent.callbackId, "Reply with the number.");
+      // force_reply so the admin's next message arrives as a reply we can
+      // correlate — no conversation state has to survive between invocations.
+      await sendMessage(
         creds.botToken,
         intent.chatId,
-        intent.messageId,
-        buildConfirmedText(rendered.text, actor.label, new Date().toISOString()),
+        {
+          text: buildTrackPrompt(order.orderNumber),
+          parse_mode: "HTML",
+          reply_markup: { force_reply: true, selective: true },
+        },
+        intent.threadId,
       );
+      return ack();
     }
+
+    // A tracking number, by command or by reply.
+    const order = await findOrderByNumber(tenant.tenantId, intent.orderNumber);
+    if (!order) {
+      await sendMessage(
+        creds.botToken,
+        intent.chatId,
+        { text: `No live order ${intent.orderNumber} in this store.`, parse_mode: "HTML" },
+        intent.threadId,
+      );
+      return ack();
+    }
+    // Recording a tracking number IS the shipment, so move the order to shipped
+    // unless it is already at or past that point — which is what puts the number
+    // on the buyer's public Track page.
+    const alreadyShipped = order.status === "shipped" || order.status === "delivered";
+    const err = await applyAndReflect(
+      order.id,
+      { trackingNumber: intent.tracking, ...(alreadyShipped ? {} : { status: "shipped" as const }) },
+      "tracking added",
+    );
+    await sendMessage(
+      creds.botToken,
+      intent.chatId,
+      {
+        text: err
+          ? `Couldn't save that: ${err}`
+          : `Tracking <b>${intent.tracking}</b> saved for ${order.orderNumber}. The customer can see it on the Track page.`,
+        parse_mode: "HTML",
+      },
+      intent.threadId,
+    );
     return ack();
   } catch (err) {
     // Swallowed on purpose. A thrown error here becomes a non-200, and a non-200

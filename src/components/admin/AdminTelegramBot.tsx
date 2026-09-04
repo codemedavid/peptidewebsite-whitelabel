@@ -20,6 +20,7 @@ import {
   createTelegramPairingAction,
   unlinkTelegramRecipientAction,
   setTelegramRecipientFlagsAction,
+  setTelegramTopicsAction,
   testTelegramConnectionAction,
   registerTelegramWebhookAction,
   getTelegramWebhookTargetAction,
@@ -289,6 +290,9 @@ export function AdminTelegramBot({
                             "Chat unlinked",
                           )
                         }
+                        onTopics={(t) =>
+                          run(() => setTelegramTopicsAction(slug, r.chatId, t), "Topics saved")
+                        }
                       />
                     ))
                   )}
@@ -325,18 +329,36 @@ export function AdminTelegramBot({
   );
 }
 
+/** The statuses an operator can file into their own forum topic. */
+const TOPIC_STATUSES = [
+  "new", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled",
+] as const;
+
+const countTopics = (t: Record<string, string>) =>
+  Object.values(t).filter((v) => v.trim()).length;
+
 function RecipientRow({
   r,
   pending,
   onFlags,
   onUnlink,
+  onTopics,
 }: {
   r: RecipientView;
   pending: boolean;
   onFlags: (flags: { canConfirm?: boolean; showCustomerDetails?: boolean }) => void;
   onUnlink: () => void;
+  onTopics: (topics: Record<string, string>) => void;
 }) {
   const isGroup = r.chatType !== "private";
+  const [topics, setTopics] = useState<Record<string, string>>(() => {
+    const seed: Record<string, string> = {};
+    for (const st of TOPIC_STATUSES) {
+      const v = (r.statusTopics ?? {})[st];
+      seed[st] = v ? String(v) : "";
+    }
+    return seed;
+  });
   return (
     <div
       style={{
@@ -386,6 +408,36 @@ function RecipientRow({
           </span>
         )}
       </label>
+
+      {isGroup && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ fontSize: 13, cursor: "pointer" }}>
+            Topic per order status{countTopics(topics) > 0 ? ` (${countTopics(topics)} set)` : ""}
+          </summary>
+          <div style={{ fontSize: 12, color: "var(--ink-500)", margin: "8px 0 10px", lineHeight: 1.6 }}>
+            If this group has Topics turned on, paste each topic&apos;s link and orders will be
+            filed under their status — and move between topics as the status changes. Open the
+            topic → tap its name → Copy Link. Leave a status blank to post it in the group&apos;s
+            main area.
+          </div>
+          {TOPIC_STATUSES.map((st) => (
+            <div key={st} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 12, width: 88, textTransform: "capitalize" }}>{st}</span>
+              <input
+                className="input"
+                style={{ flex: 1, fontSize: 12 }}
+                placeholder="https://t.me/c/…/12"
+                value={topics[st] ?? ""}
+                disabled={pending}
+                onChange={(e) => setTopics({ ...topics, [st]: e.target.value })}
+              />
+            </div>
+          ))}
+          <button className="btn" disabled={pending} style={{ marginTop: 6 }} onClick={() => onTopics(topics)}>
+            Save topics
+          </button>
+        </details>
+      )}
     </div>
   );
 }

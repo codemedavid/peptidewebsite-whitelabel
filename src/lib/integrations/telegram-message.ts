@@ -14,7 +14,8 @@
 
 import { formatMoney } from "@/lib/storefront/currency";
 import { orderTotal } from "@/lib/analytics/events";
-import type { Order } from "@/storefront/types";
+import { isOrderStatus } from "@/lib/storefront/order-status";
+import type { Order, OrderStatus } from "@/storefront/types";
 
 /** Telegram's hard limit on callback_data. Exceeding it makes sendMessage fail. */
 export const CALLBACK_DATA_MAX = 64;
@@ -134,4 +135,88 @@ export function buildConfirmedText(baseText: string, confirmedBy: string, atIso:
   const when = new Date(atIso);
   const stamp = Number.isNaN(when.getTime()) ? "" : ` · ${when.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   return `${baseText}\n\n✅ <b>Confirmed</b> by ${esc(confirmedBy)}${stamp}`;
+}
+
+// ── Driving the order from chat ──────────────────────────────────────────────
+
+const STATUS_PREFIX = "status:";
+
+/** How far an order can move, and what each step is called in the chat. */
+const STATUS_FLOW: readonly { status: OrderStatus; label: string }[] = [
+  { status: "confirmed", label: "✅ Confirm" },
+  { status: "processing", label: "📦 Processing" },
+  { status: "ready", label: "🏷 Ready" },
+  { status: "shipped", label: "🚚 Shipped" },
+  { status: "delivered", label: "🎉 Delivered" },
+];
+
+/**
+ * Payload for a status button, or null when the status isn't one we recognise.
+ * Null rather than a best guess: an unrecognised status reaching the DB would
+ * put an order into a state no surface knows how to render.
+ */
+export function statusCallbackData(orderId: string, status: string): string | null {
+  if (!orderId || !isOrderStatus(status)) return null;
+  const data = `${STATUS_PREFIX}${orderId}:${status}`;
+  return Buffer.byteLength(data, "utf8") > CALLBACK_DATA_MAX ? null : data;
+}
+
+/** The order and target status inside a status payload, or null. */
+export function parseStatusCallback(
+  data: unknown,
+): { orderId: string; status: OrderStatus } | null {
+  if (typeof data !== "string" || !data.startsWith(STATUS_PREFIX)) return null;
+  const rest = data.slice(STATUS_PREFIX.length);
+  const cut = rest.lastIndexOf(":");
+  if (cut <= 0) return null;
+  const orderId = rest.slice(0, cut).trim();
+  const status = rest.slice(cut + 1).trim();
+  if (!orderId || !isOrderStatus(status)) return null;
+  return { orderId, status };
+}
+
+/**
+ * The buttons offered on an order's message: the remaining forward steps, plus
+ * tracking once it is worth capturing, plus cancel.
+ *
+ * The order's CURRENT status is never offered — a button that does nothing reads
+ * as a broken bot — and neither are steps already behind it, so the keyboard
+ * shrinks as the order advances.
+ */
+export function buildStatusKeyboard(order: Pick<Order, "id" | "status">): TelegramButton[][] {
+  const current = STATUS_FLOW.findIndex((s) => s.status === order.status);
+  const forward = STATUS_FLOW.slice(current + 1)
+    .map((s) => {
+      const data = statusCallbackData(order.id, s.status);
+      return data ? { text: s.label, callback_data: data } : null;
+    })
+    .filter((b): b is TelegramButton => b !== null);
+
+  const rows: TelegramButton[][] = [];
+  // Two per row: Telegram renders wide buttons, and a single column of five
+  // pushes the order details off a phone screen.
+  for (let i = 0; i < forward.length; i += 2) rows.push(forward.slice(i, i + 2));
+
+  const track = trackCallbackData(order.id);
+  if (track) rows.push([{ text: "🔖 Add tracking number", callback_data: track }]);
+
+  const cancel = statusCallbackData(order.id, "cancelled");
+  if (cancel) rows.push([{ text: "✖️ Cancel order", callback_data: cancel }]);
+  return rows;
+}
+
+const TRACK_PREFIX = "track:";
+
+/** Payload for the "Add tracking number" button. */
+export function trackCallbackData(orderId: string): string | null {
+  const data = `${TRACK_PREFIX}${orderId}`;
+  if (!orderId || Buffer.byteLength(data, "utf8") > CALLBACK_DATA_MAX) return null;
+  return data;
+}
+
+/** The order id inside a tracking-button payload, or null. */
+export function parseTrackCallback(data: unknown): string | null {
+  if (typeof data !== "string" || !data.startsWith(TRACK_PREFIX)) return null;
+  const id = data.slice(TRACK_PREFIX.length).trim();
+  return id || null;
 }
