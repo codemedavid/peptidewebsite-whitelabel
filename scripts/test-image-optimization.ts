@@ -23,6 +23,10 @@
 //     render, so optimization never breaks the admin.
 //  4. As a developer, I want the transform to be idempotent and query-safe, so
 //     re-wrapping a URL can't corrupt it.
+//  5. As a customer reading a store's protocol guides, I want the gallery to load
+//     page thumbnails rather than full-resolution scans, so a page carrying dozens
+//     of guide images still opens quickly — and the full-size view still gets a
+//     larger render when I tap one.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +40,10 @@ import {
   HERO_WIDTHS,
   LOGO_WIDTH,
 } from "../src/lib/media/image-url";
+import {
+  PROTOCOL_THUMB_WIDTH,
+  PROTOCOL_VIEWER_WIDTH,
+} from "../src/lib/storefront/protocol-images";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -144,6 +152,17 @@ check("Header logo is transformed", /imageUrl\(/.test(header));
 const footer = read("src/storefront/components/Footer.tsx");
 check("Footer logo is transformed", /imageUrl\(/.test(footer));
 check("Footer logo lazy-loads (below the fold)", /loading="lazy"/.test(footer));
+
+const protocols = read("src/storefront/pages/ProtocolsPage.tsx");
+check("Protocols page imports the image layer", /from "@\/lib\/media\/image-url"/.test(protocols));
+check("Protocol gallery thumbnails are transformed", /imageUrl\(/.test(protocols));
+check("Protocol gallery thumbnails lazy-load", /loading="lazy"/.test(protocols));
+check("Protocol gallery thumbnails decode async", /decoding="async"/.test(protocols));
+check(
+  "Protocol full-size viewer requests a larger render than the thumbnail",
+  PROTOCOL_VIEWER_WIDTH > PROTOCOL_THUMB_WIDTH,
+  { PROTOCOL_THUMB_WIDTH, PROTOCOL_VIEWER_WIDTH },
+);
 
 console.log(failures === 0 ? "\nPASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
