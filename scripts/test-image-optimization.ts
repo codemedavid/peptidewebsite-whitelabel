@@ -27,6 +27,9 @@
 //     page thumbnails rather than full-resolution scans, so a page carrying dozens
 //     of guide images still opens quickly — and the full-size view still gets a
 //     larger render when I tap one.
+//  6. As a customer checking a store's lab reports, I want the certificate cards to
+//     paint quickly, so a page of dozens of scans is not a multi-megabyte download
+//     before I can read a single purity figure.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -44,6 +47,7 @@ import {
   PROTOCOL_THUMB_WIDTH,
   PROTOCOL_VIEWER_WIDTH,
 } from "../src/lib/storefront/protocol-images";
+import { COA_THUMB_WIDTH } from "../src/lib/storefront/coa";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -163,6 +167,13 @@ check(
   PROTOCOL_VIEWER_WIDTH > PROTOCOL_THUMB_WIDTH,
   { PROTOCOL_THUMB_WIDTH, PROTOCOL_VIEWER_WIDTH },
 );
+
+const coa = read("src/storefront/pages/COAPage.tsx");
+check("Lab Reports page imports the image layer", /from "@\/lib\/media\/image-url"/.test(coa));
+check("COA card thumbnails are transformed", /imageUrl\(/.test(coa));
+check("COA card thumbnails lazy-load", /loading="lazy"/.test(coa));
+check("COA card thumbnails decode async", /decoding="async"/.test(coa));
+check("COA_THUMB_WIDTH is a card-sized width", COA_THUMB_WIDTH > 0 && COA_THUMB_WIDTH <= 800, COA_THUMB_WIDTH);
 
 console.log(failures === 0 ? "\nPASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
