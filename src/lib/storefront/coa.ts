@@ -48,3 +48,11 @@ export function normalizeCoaReports(input: unknown): CoaReport[] {
   });
   return out;
 }
+
+/**
+ * Render width for a certificate thumbnail. The COA card crops the scan into a
+ * 4:3 box roughly 340 px wide, so 640 covers a 2x display while keeping a page
+ * of dozens of reports off the multi-megabyte path. Clicking a card still opens
+ * the full hosted certificate, untransformed, in a new tab.
+ */
+export const COA_THUMB_WIDTH = 640;
