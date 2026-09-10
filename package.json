@@ -94,6 +94,7 @@
     "test:coa": "tsx scripts/test-coa.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
     "test:coa-protocols-backfill": "tsx scripts/test-coa-protocols-backfill.ts",
+    "test:coa-import": "tsx scripts/test-coa-import.ts",
     "test:protocol-import": "tsx scripts/test-protocol-import.ts",
     "test:protocol-images": "tsx scripts/test-protocol-images.ts",
     "test:protocol-sort": "tsx scripts/test-protocol-sort.ts",
