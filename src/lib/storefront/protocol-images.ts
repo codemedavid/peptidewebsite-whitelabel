@@ -27,3 +27,14 @@ export function resolveProtocolImages(p: Protocol): string[] {
   }
   return isNonBlank(p.image) ? [p.image] : [];
 }
+
+/**
+ * Render widths for a protocol's images. Guide pages are documents, not
+ * photography: a tenant can carry dozens of them on one page, so the gallery
+ * asks ImageKit for a thumbnail sized to the grid cell (max ~380px wide at 2x
+ * DPR) instead of the full page scan, and only the full-size viewer requests a
+ * near-native render. Capped just under the ~1190px a 144dpi A4 page renders at
+ * so the viewer never pays for an upscale.
+ */
+export const PROTOCOL_THUMB_WIDTH = 640;
+export const PROTOCOL_VIEWER_WIDTH = 1200;

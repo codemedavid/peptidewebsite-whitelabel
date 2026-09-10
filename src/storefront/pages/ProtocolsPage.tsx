@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
-import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
+import {
+  resolveProtocolImages,
+  PROTOCOL_THUMB_WIDTH,
+  PROTOCOL_VIEWER_WIDTH,
+} from "@/lib/storefront/protocol-images";
+import { imageUrl } from "@/lib/media/image-url";
 import {
   PROTOCOL_SORT_OPTIONS,
   normalizeProtocolSort,
@@ -36,7 +41,13 @@ function ProtocolGallery({
             aria-label={`View ${alt} full size`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={alt} className="protocols__gallery-img" />
+            <img
+              src={imageUrl(src, { width: PROTOCOL_THUMB_WIDTH })}
+              alt={alt}
+              className="protocols__gallery-img"
+              loading="lazy"
+              decoding="async"
+            />
           </button>
         );
       })}
@@ -79,7 +90,7 @@ function ProtocolImageViewer({ image, onClose }: { image: ViewerImage; onClose: 
       </button>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={image.src}
+        src={imageUrl(image.src, { width: PROTOCOL_VIEWER_WIDTH })}
         alt={image.alt}
         className="protocols__viewer-img"
         onClick={(e) => e.stopPropagation()}
