@@ -206,7 +206,10 @@ function MemberProfile({ variant = "member" }: { variant?: "member" | "moderator
             {moderator ? (
               <ListRow icon="briefcase" tint={CHAT.inkSoft} label="Switch to business view" detail="Orders, products and store tools" onPress={() => switchView("business")} last />
             ) : (
-              <ListRow icon="log-out-outline" tint={CHAT.danger} label="Sign out" destructive onPress={confirmSignOut} last />
+              <>
+                <ListRow icon="log-out-outline" tint={CHAT.danger} label="Sign out" destructive onPress={confirmSignOut} />
+                <ListRow icon="trash-outline" tint={CHAT.danger} label="Delete account" detail="Removes your account and personal data" destructive onPress={() => router.push("/delete-account")} last />
+              </>
             )}
           </Section>
           <ChatText variant="caption" style={{ textAlign: "center" }}>

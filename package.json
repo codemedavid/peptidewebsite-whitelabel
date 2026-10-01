@@ -186,6 +186,7 @@
     "test:mobile-admin-bridge": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-mobile-admin-bridge.ts",
     "test:mobile-insights": "tsx scripts/test-mobile-insights.ts",
     "test:mobile-api": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-mobile-api.ts",
+    "test:account-delete": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-account-delete.ts",
     "test:community-core": "tsx scripts/test-community-core.ts",
     "test:order-bot": "tsx scripts/test-order-bot.ts",
     "test:community-api": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-community-api.ts",

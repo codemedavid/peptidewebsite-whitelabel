@@ -147,6 +147,16 @@ export default function More() {
         <Row icon="log-out-outline" label="Sign out" onPress={() => confirmSignOut(false)} />
       </Card>
 
+      <Card padded={false} style={styles.danger}>
+        <Row
+          icon="trash-outline"
+          label="Delete account"
+          detail={me.actor.kind === "owner" ? "Ask Pepweb to delete your login and store data" : "Ask for your staff login to be deleted"}
+          destructive
+          onPress={() => router.push("/delete-account")}
+        />
+      </Card>
+
       <AppText variant="caption" color="faint" style={styles.version}>
         {`${APP_NAME} ${Constants.expoConfig?.version ?? ""}`}
       </AppText>
@@ -279,4 +289,6 @@ const styles = StyleSheet.create({
   // The store's mark, tucked on the person's avatar: who you are, in which store.
   storeMark: { position: "absolute", right: -4, bottom: -4, borderRadius: 11, overflow: "hidden" },
   version: { textAlign: "center", marginTop: SPACE.xxl },
+  // Set apart from everyday rows so it's never hit by accident.
+  danger: { marginTop: SPACE.xl },
 });

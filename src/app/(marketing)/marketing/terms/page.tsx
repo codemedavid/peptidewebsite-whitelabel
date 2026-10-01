@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { TERMS_INTRO, TERMS_META, TERMS_SECTIONS, type TermsBlock } from "@/marketing/terms";
+import { PolicyBlock } from "@/marketing/PolicyBlock";
+import { TERMS_INTRO, TERMS_META, TERMS_SECTIONS } from "@/marketing/terms";
 
 // Host-dependent (the layout guards on x-tenant-host), so never statically cache.
 export const dynamic = "force-dynamic";
@@ -9,29 +10,6 @@ export const metadata: Metadata = {
   description:
     "The simple, friendly rules for working together with Pepweb.",
 };
-
-function Block({ block }: { block: TermsBlock }) {
-  if (block.type === "p") {
-    return <p className="mk-muted" style={{ margin: "0 0 14px", lineHeight: 1.7 }}>{block.text}</p>;
-  }
-  if (block.type === "ul") {
-    return (
-      <ul className="mk-muted" style={{ margin: "0 0 14px", paddingLeft: 22, lineHeight: 1.7 }}>
-        {block.items.map((item, i) => (
-          <li key={i} style={{ marginBottom: 6 }}>{item}</li>
-        ))}
-      </ul>
-    );
-  }
-  return (
-    <div
-      className="mk-card"
-      style={{ background: "var(--rose-50)", borderColor: "var(--rose-200)", margin: "4px 0 14px" }}
-    >
-      <p style={{ margin: 0, lineHeight: 1.7 }}>{block.text}</p>
-    </div>
-  );
-}
 
 export default function TermsPage() {
   return (
@@ -54,7 +32,7 @@ export default function TermsPage() {
               {s.n}. {s.title}
             </h2>
             {s.blocks.map((b, i) => (
-              <Block key={i} block={b} />
+              <PolicyBlock key={i} block={b} />
             ))}
           </div>
         ))}

@@ -188,6 +188,7 @@ export function Row({
   onPress,
   trailing,
   accessibilityHint,
+  destructive = false,
 }: {
   icon?: IconName;
   label: string;
@@ -195,8 +196,11 @@ export function Row({
   onPress?: () => void;
   trailing?: ReactNode;
   accessibilityHint?: string;
+  /** A destructive action (Delete account): danger-toned icon + label. */
+  destructive?: boolean;
 }) {
   const t = useTheme();
+  const danger = t.tone("danger");
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
@@ -207,12 +211,12 @@ export function Row({
       style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.colors.surfaceAlt } : null]}
     >
       {icon ? (
-        <View style={[styles.rowIcon, { backgroundColor: t.colors.surfaceAlt }]}>
-          <Ionicons name={icon} size={18} color={t.colors.textMuted} />
+        <View style={[styles.rowIcon, { backgroundColor: destructive ? danger.bg : t.colors.surfaceAlt }]}>
+          <Ionicons name={icon} size={18} color={destructive ? danger.fg : t.colors.textMuted} />
         </View>
       ) : null}
       <View style={{ flex: 1 }}>
-        <AppText variant="bodyStrong">{label}</AppText>
+        <AppText variant="bodyStrong" color={destructive ? danger.fg : "text"}>{label}</AppText>
         {detail ? (
           <AppText variant="caption" color="muted" numberOfLines={2}>
             {detail}

@@ -117,6 +117,9 @@ export default function AppLayout() {
         <Stack.Screen name="storefront-product/[id]" options={{ title: "" }} />
       </Stack.Protected>
 
+      {/* Every account — owner, staff and customer (Apple 5.1.1(v)). */}
+      <Stack.Screen name="delete-account" options={{ title: "Delete account" }} />
+
       {/* The customer app (docs/mobile-admin/COMMUNITY.md). */}
       <Stack.Protected guard={!admin}>
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />

@@ -37,6 +37,7 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   MeResponse,
   AccountProfileView,
   AccountProfileUpdateRequest,
+  DeleteAccountResponse,
   OrderDetail,
   OrderFilterKey,
   OrderListResponse,
@@ -89,6 +90,12 @@ export const meApi = {
   updateProfile: (body: AccountProfileUpdateRequest) => api<AccountProfileView>("/account/profile", { method: "PATCH", body }),
   uploadPhoto: (file: UploadFile) => apiUpload<AccountProfileView>("/account/profile/photo", "file", file),
   removePhoto: () => api<AccountProfileView>("/account/profile/photo", { method: "DELETE" }),
+  /**
+   * Start deleting this account (Apple 5.1.1(v)). Never retried: a resend
+   * after a lost answer would only meet an already-revoked session.
+   */
+  deleteAccount: (password: string) =>
+    api<DeleteAccountResponse>("/account/delete", { method: "POST", body: { password }, retryable: false }),
 };
 
 export const dashboardApi = {

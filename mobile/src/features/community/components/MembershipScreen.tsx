@@ -3,6 +3,7 @@ import { Alert, RefreshControl, ScrollView, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { router } from "expo-router";
 import { useSession, useSignedIn } from "@/auth/SessionProvider";
 import { useReapply } from "../hooks/useCommunityData";
 import type { MembershipCard } from "../lib/access";
@@ -33,7 +34,12 @@ function SignOutButton() {
       { text: "Cancel", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: () => void signOut() },
     ]);
-  return <ChatButton label="Sign out" tone="ghost" onPress={confirm} />;
+  return (
+    <>
+      <ChatButton label="Sign out" tone="ghost" onPress={confirm} />
+      <ChatButton label="Delete account" tone="danger" icon="trash-outline" onPress={() => router.push("/delete-account")} />
+    </>
+  );
 }
 
 function PendingCard({ store }: { store: string }) {

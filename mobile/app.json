@@ -48,8 +48,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to use your photos so you can share them in chats.",
-          "cameraPermission": "Allow $(PRODUCT_NAME) to use your camera so you can take a photo to share in chats.",
+          "photosPermission": "Allow $(PRODUCT_NAME) to use your photos so you can attach product pictures, payment receipts, and images in chats.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use your camera so you can photograph products, payment receipts, and images to share in chats.",
           "microphonePermission": false
         }
       ],

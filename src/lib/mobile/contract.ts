@@ -14,6 +14,7 @@ export type ApiErrorCode =
   | "conflict" // the record changed since the client last read it
   | "invalid_input"
   | "rate_limited"
+  | "wrong_password" // a re-entered password was wrong (401) — NOT a session problem: never refresh or sign out
   | "server_error";
 
 export type ApiError = { ok: false; error: { code: ApiErrorCode; message: string } };
@@ -301,6 +302,17 @@ export type ProductUpdateRequest = {
 export type StoreStatusRequest = { open: boolean };
 
 export type ChangePasswordRequest = { currentPassword: string; newPassword: string };
+
+/** POST /account/delete — start deleting your own account (Apple 5.1.1(v)). */
+export type DeleteAccountRequest = { password: string };
+
+/**
+ * `deleted`   — a customer account: personal data removed now, every phone signed out.
+ * `requested` — an owner/staff login: request recorded for the platform, every
+ *               phone signed out; the account and data go within 30 days.
+ * `message` is safe to show as-is.
+ */
+export type DeleteAccountResponse = { outcome: "deleted" | "requested"; message: string };
 
 export type RegisterDeviceRequest = {
   expoPushToken: string;

@@ -136,6 +136,8 @@ model Tenant {
   // Self-serve onboarding submissions that provisioned (or will provision) this tenant.
   onboardingSubmissions OnboardingSubmission[]
   upgradeRequests       UpgradeRequest[]
+  // Owner/staff "Delete account" requests from the mobile app (Apple 5.1.1(v)).
+  accountDeletionRequests AccountDeletionRequest[]
 
   // Proof-of-payment ledger the tenant submits against their subscription term;
   // the operator confirms/rejects each on the platform Billing tab.
@@ -1148,6 +1150,28 @@ model AccountProfile {
 
   @@unique([tenantId, subject])
   @@map("account_profiles")
+}
+
+// A store owner or staff member asked to delete their account from the app
+// (Apple guideline 5.1.1(v): deletion must be STARTABLE in-app). The store is
+// never destroyed automatically — the request is recorded here, every phone on
+// that login is signed out, and the platform operator completes it within 30
+// days (lib/mobile/account-delete.ts). Customer accounts are deleted on the
+// spot instead and never land here. status: pending | completed | cancelled.
+model AccountDeletionRequest {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subject   String // owner | staff:<id> (the session subject)
+  role      String // owner | staff
+  email     String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([tenantId, subject])
+  @@index([status, createdAt])
+  @@map("account_deletion_requests")
 }
 
 // ──────────────────────────── Pepweb app community ────────────────────────────

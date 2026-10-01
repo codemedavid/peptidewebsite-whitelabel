@@ -32,6 +32,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   conflict: 409,
   invalid_input: 400,
   rate_limited: 429,
+  wrong_password: 401,
   server_error: 500,
 };
 
