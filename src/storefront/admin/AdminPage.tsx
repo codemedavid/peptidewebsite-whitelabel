@@ -47,49 +47,69 @@ import { TrialBanner } from "./TrialBanner";
 import { SubscriptionBanner } from "./SubscriptionBanner";
 import { TrialPlansScreen } from "./TrialPlansScreen";
 import { AdminStaffList } from "./AdminStaffList";
+import { AdminCustomers } from "./AdminCustomers";
 import { AdminStaffForm } from "./AdminStaffForm";
 import { isViewAllowed, type StaffActor } from "./staff-permissions";
 import { getStorefrontAdminSessionAction, type StaffListItem } from "@/actions/storefront-staff";
+import { appInitialView } from "../app-embed";
 
-type View =
-  | "dashboard"
-  | "currency"
-  | "add-product"
-  | "products"
-  | "categories"
-  | "sort-categories"
-  | "orders"
-  | "order-detail"
-  | "shipping"
-  | "couriers"
-  | "inv"
-  | "lab"
-  | "promo"
-  | "pay"
-  | "faq"
-  | "proto"
-  | "reviews"
-  | "reseller"
-  | "access-code"
-  | "analytics"
-  | "design"
-  | "checkout"
-  | "fee"
-  | "groupbuys"
-  | "groupbuy-detail"
-  | "groupbuy"
-  | "hero"
-  | "banner"
-  | "account"
-  | "export"
-  | "staff"
-  | "staff-form"
-  | "notify"
-  | "notice"
-  | "store-status"
-  | "tracknote"
-  | "billing"
-  | "upgrade";
+const VIEWS = [
+  "dashboard",
+  "currency",
+  "add-product",
+  "products",
+  "categories",
+  "sort-categories",
+  "orders",
+  "order-detail",
+  "shipping",
+  "couriers",
+  "inv",
+  "lab",
+  "promo",
+  "pay",
+  "faq",
+  "proto",
+  "reviews",
+  "reseller",
+  "access-code",
+  "analytics",
+  "design",
+  "checkout",
+  "fee",
+  "groupbuys",
+  "groupbuy-detail",
+  "groupbuy",
+  "hero",
+  "banner",
+  "account",
+  "export",
+  "staff",
+  "staff-form",
+  "customers",
+  "notify",
+  "notice",
+  "store-status",
+  "tracknote",
+  "billing",
+  "upgrade",
+] as const;
+
+type View = (typeof VIEWS)[number];
+
+/** Detail views that need a row handed over by their list — never an entry point. */
+const DETAIL_VIEWS: ReadonlySet<string> = new Set(["order-detail", "groupbuy-detail", "staff-form"]);
+
+/**
+ * The first view: the one the Pepweb app asked for (app-embed.ts), if it names a
+ * real entry view. It still goes through the activeView guard below.
+ */
+function initialView(): View {
+  const asked = appInitialView();
+  return asked && !DETAIL_VIEWS.has(asked) && (VIEWS as readonly string[]).includes(asked)
+    ? (asked as View)
+    : "dashboard";
+}
 
 export function AdminPage({
   brand,
@@ -101,7 +121,7 @@ export function AdminPage({
   onExitToSite: () => void;
 }) {
   const { toast, toastMsg } = useStore();
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<View>(initialView);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   // The round whose dedicated dashboard is open. Same master-detail shape as
@@ -314,6 +334,7 @@ export function AdminPage({
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings onBack={() => setView("dashboard")} />;
+  if (activeView === "customers") return <AdminCustomers brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "export") return <AdminDataExport onBack={() => setView("dashboard")} />;
   if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {

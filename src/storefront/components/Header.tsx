@@ -104,6 +104,14 @@ export function Header({
 
         {/* Right cluster */}
         <div className="site-header__actions">
+          {brand.customerAccountsEnabled && (
+            <a href="#account" className="site-header__cart site-header__account" aria-label="My account">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={22} height={22} aria-hidden>
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21a8 8 0 0 1 16 0" />
+              </svg>
+            </a>
+          )}
           {brand.headerShowCart !== false && (
             <button className="site-header__cart" aria-label="Cart" onClick={onCartClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={22} height={22}>

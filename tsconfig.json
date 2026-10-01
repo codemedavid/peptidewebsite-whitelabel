@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@contract": [
+        "./src/lib/mobile/contract.ts"
+      ],
+      "@shop-contract": [
+        "./src/lib/mobile/shop-contract.ts"
       ]
     }
   },
@@ -37,6 +43,10 @@
     "next-env.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "mobile",
+    "inspiration",
+    "scripts/test-mobile-admin-bridge.ts",
+    "scripts/test-multi-image.ts"
   ]
 }

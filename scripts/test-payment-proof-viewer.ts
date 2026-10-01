@@ -21,6 +21,8 @@
  */
 
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { hasPaymentProof } from "../src/storefront/admin/order-detail";
 
@@ -64,6 +66,36 @@ check("false for an empty string", () => {
 
 check("false for a whitespace-only string (no broken <img>, no empty lightbox)", () => {
   assert.strictEqual(hasPaymentProof("   "), false);
+});
+
+console.log("\nViewer layout — the close control must stay reachable");
+
+const ROOT = join(__dirname, "..");
+const css = readFileSync(join(ROOT, "src/storefront/storefront.css"), "utf8");
+const rule = (sel: string) => {
+  const m = new RegExp(`\\.sf-root \\.${sel} \\{([^}]*)\\}`).exec(css);
+  if (!m) throw new Error(`missing .${sel} rule`);
+  return m[1];
+};
+
+check("close button is in the toolbar flow, not floated over the receipt", () => {
+  // An absolutely-positioned close landed on the image (invisible on white
+  // receipts) and in the corner under phone browser chrome.
+  assert.ok(!/position:\s*absolute/.test(rule("od-proof-viewer__close")));
+});
+
+check("viewer padding respects the device safe area", () => {
+  assert.ok(/safe-area-inset-top/.test(rule("od-proof-viewer")));
+});
+
+check("close button is at least 44px tall (touch target)", () => {
+  assert.ok(/min-height:\s*44px/.test(rule("od-proof-viewer__close")));
+});
+
+check("order detail and group buys share the one ProofLightbox", () => {
+  const detail = readFileSync(join(ROOT, "src/storefront/admin/AdminOrderDetail.tsx"), "utf8");
+  assert.ok(detail.includes("<ProofLightbox"));
+  assert.ok(!detail.includes("od-proof-viewer__close"));
 });
 
 // ─────────────────────────────────── summary ────────────────────────────────

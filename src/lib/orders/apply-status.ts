@@ -35,11 +35,34 @@ import { buildEmailBrand, buildStatusChangedPayload } from "@/lib/analytics/even
 import { capturePostHogEvent } from "@/lib/analytics/capture";
 import { storefrontOrigin } from "@/lib/tenant/resolve";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { sendOrderUpdate } from "@/lib/community/order-bot.server";
 import type { Order } from "@/storefront/types";
 
 export type ApplyStatusResult =
-  | { ok: true; order: Order; statusChanged: boolean; moved: boolean; prevStatus: string }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      order: Order;
+      statusChanged: boolean;
+      moved: boolean;
+      prevStatus: string;
+      /** The row's new updatedAt (ISO) — the next optimistic-concurrency token. */
+      updatedAt: string;
+      /** The signed-in customer account that placed the order, if any. */
+      customerAccountId: string | null;
+    }
+  | { ok: false; error: string; conflict?: false }
+  /** `expectedUpdatedAt` no longer matched: someone else changed the order first. */
+  | { ok: false; error: string; conflict: true; current: Order; updatedAt: string; customerAccountId: string | null };
+
+export type ApplyStatusOptions = {
+  /**
+   * Optimistic-concurrency precondition (mobile app). When set, the write only
+   * lands if the row's updatedAt still equals it — checked in the SAME
+   * UPDATE … WHERE as the write, so a concurrent edit can't slip in between.
+   * Omitted by the web admin and the Telegram bot, whose behaviour is unchanged.
+   */
+  expectedUpdatedAt?: Date;
+};
 
 /**
  * Write `patch` (which may carry a status, courier, tracking number, …) onto one
@@ -55,6 +78,7 @@ export async function applyOrderStatusChange(
   orderId: string,
   patch: Prisma.StorefrontOrderUpdateInput & { status?: Order["status"] },
   slug: string | null,
+  opts: ApplyStatusOptions = {},
 ): Promise<ApplyStatusResult> {
   const result = await withTenant(tenantId, async (db) => {
     // Read the current row first so we can append to the journey only when the
@@ -66,6 +90,9 @@ export async function applyOrderStatusChange(
       where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
     });
     if (!current) return null;
+    if (opts.expectedUpdatedAt && current.updatedAt.getTime() !== opts.expectedUpdatedAt.getTime()) {
+      return { conflict: true as const, row: current };
+    }
 
     const next: Prisma.StorefrontOrderUpdateInput = { ...patch };
     const newStatus = patch.status as Order["status"] | undefined;
@@ -85,10 +112,20 @@ export async function applyOrderStatusChange(
       next.statusHistory = plan.statusHistory as unknown as Prisma.InputJsonValue;
     }
     // updateMany is tenant-scoped by the extension; the bare-id update isn't.
-    await db.storefrontOrder.updateMany({
-      where: { ...ACTIVE_ORDERS_WHERE, id: orderId },
+    // With a precondition, updatedAt joins the WHERE so the check and the write
+    // are one statement; zero rows written means a concurrent edit won.
+    const written = await db.storefrontOrder.updateMany({
+      where: {
+        ...ACTIVE_ORDERS_WHERE,
+        id: orderId,
+        ...(opts.expectedUpdatedAt ? { updatedAt: current.updatedAt } : {}),
+      },
       data: next,
     });
+    if (written.count === 0) {
+      const latest = await db.storefrontOrder.findFirst({ where: { ...ACTIVE_ORDERS_WHERE, id: orderId } });
+      return latest ? { conflict: true as const, row: latest } : null;
+    }
 
     // Confirmed → deduct each line item from the tenant's inventory; cancelled
     // after a deduction → put it back. Lines match by productId (stamped at
@@ -104,10 +141,23 @@ export async function applyOrderStatusChange(
       }),
       moved: !!move,
       prevStatus: current.status,
+      prevTracking: current.trackingNumber,
       statusChanged: !!plan?.changed,
     };
   });
 
+  if (result && "conflict" in result) {
+    const latest = result.row;
+    if (!latest) return { ok: false, error: "Order not found." };
+    return {
+      ok: false,
+      conflict: true,
+      error: "This order was changed by someone else.",
+      current: dbOrderToStorefront(latest as DbOrderRow),
+      updatedAt: latest.updatedAt.toISOString(),
+      customerAccountId: latest.customerAccountId,
+    };
+  }
   if (!result?.row) return { ok: false, error: "Order not found." };
   const order = dbOrderToStorefront(result.row as DbOrderRow);
 
@@ -129,6 +179,13 @@ export async function applyOrderStatusChange(
       ),
     );
   }
+  // Status moved or a tracking number was added → the order bot DMs the buyer
+  // in the store chat and pushes their phone (no-op for guest orders and
+  // stores without the app community). After the response, like the email.
+  if (result.statusChanged || result.row.trackingNumber.trim() !== result.prevTracking.trim()) {
+    const update = { tenantId, orderId, statusChanged: result.statusChanged, prevTracking: result.prevTracking };
+    after(() => sendOrderUpdate(update));
+  }
   // Stock changed → refresh the cached storefront so the catalog shows it.
   if (result.moved) revalidateTenant(tenantId, slug);
 
@@ -138,5 +195,7 @@ export async function applyOrderStatusChange(
     statusChanged: result.statusChanged,
     moved: result.moved,
     prevStatus: result.prevStatus,
+    updatedAt: result.row.updatedAt.toISOString(),
+    customerAccountId: result.row.customerAccountId,
   };
 }

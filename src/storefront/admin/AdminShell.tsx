@@ -5,6 +5,7 @@ import type { Brand } from "../types";
 import { AdminIcon, tintStyle } from "./shared";
 import { searchNavItems, visibleNavGroups } from "./admin-nav";
 import type { StaffActor } from "./staff-permissions";
+import { isAppEmbedded } from "../app-embed";
 
 /**
  * The store-admin workspace chrome (Tenant Admin Redesign → 1A): a grouped
@@ -33,6 +34,8 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Inside the Pepweb app the app owns sign-out and leaving the admin.
+  const [embedded] = useState(isAppEmbedded);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -110,11 +113,13 @@ export function AdminShell({
           ))}
         </nav>
 
-        <div className="adm-side__foot">
-          <button type="button" className="adm-side__logout" onClick={onLogout}>
-            Log out
-          </button>
-        </div>
+        {!embedded && (
+          <div className="adm-side__foot">
+            <button type="button" className="adm-side__logout" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
+        )}
       </aside>
 
       <div className="adm-main">
@@ -169,10 +174,14 @@ export function AdminShell({
 
           <div className="adm-top__spacer" />
 
-          <button type="button" className="adm-top__link" onClick={onExitToSite}>
-            View website ↗
-          </button>
-          <span className="adm-top__rule" aria-hidden="true" />
+          {!embedded && (
+            <>
+              <button type="button" className="adm-top__link" onClick={onExitToSite}>
+                View website ↗
+              </button>
+              <span className="adm-top__rule" aria-hidden="true" />
+            </>
+          )}
           <span className="adm-top__who">
             <span className="adm-top__avatar">{initials}</span>
             <span className="adm-top__name">

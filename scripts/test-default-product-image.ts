@@ -123,7 +123,7 @@ check("Brand type declares defaultProductImage", () => {
   assert.ok(read("src/storefront/types.ts").includes("defaultProductImage"));
 });
 check("storefront page.tsx normalizes config.defaultProductImage server-side", () => {
-  assert.ok(read("src/app/(tenant)/(storefront)/storefront-home.tsx").includes("normalizeDefaultProductImage"));
+  assert.ok(read("src/lib/storefront/storefront-brand.ts").includes("normalizeDefaultProductImage"));
 });
 check("shared product link page falls back to the brand default", () => {
   // The old /products/[slug] page now permanently redirects here (see

@@ -234,6 +234,9 @@ function ProductGallery({
   // Picking a pill brings its photo back into view.
   useEffect(() => {
     if (selectedIndex < 0) return;
+    // Already looking at a photo of the selected option (e.g. its 2nd angle,
+    // which is what just selected it) — don't yank the track back to its 1st.
+    if (slides[activeRef.current]?.optionIndex === selectedIndex) return;
     const target = slides.findIndex((s) => s.optionIndex === selectedIndex);
     if (target < 0 || target === activeRef.current) return;
     const el = slideRefs.current[target];

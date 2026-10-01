@@ -351,7 +351,7 @@ check("placeStorefrontOrderAction strips the flag before its stock guard", () =>
 });
 
 check("the storefront resolves the entitlement server-side", () => {
-  const s = src("src/app/(tenant)/(storefront)/storefront-home.tsx");
+  const s = src("src/lib/storefront/storefront-brand.ts");
   assert.match(s, /STORE_MADE_TO_ORDER/);
   assert.match(s, /stripMadeToOrder\s*\(/);
 });

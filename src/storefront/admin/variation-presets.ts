@@ -21,6 +21,8 @@ export type VariationDraft = {
   price: number | string;
   stock?: number | string;
   image?: string;
+  /** Further photos after `image` — see lib/storefront/product-photos.ts. */
+  extraImages?: string[];
 };
 
 /**

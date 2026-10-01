@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
+import { currentAppActorScope } from "./app-actor-scope";
 import {
   encodeSessionToken,
   decodeSessionToken,
@@ -28,7 +29,12 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days — storefront admin ses
 
 export type { SessionSubject };
 
-function sessionSecret(): string {
+/**
+ * The storefront-admin signing secret. Exported for the Pepweb app handoff
+ * (lib/mobile/handoff-token.ts), whose tokens are domain-separated from these
+ * cookies by their own HMAC context string.
+ */
+export function sessionSecret(): string {
   // Same secret resolution as tenant-admin so a single env var configures both.
   const raw =
     process.env.TENANT_ADMIN_SECRET ??
@@ -73,6 +79,10 @@ export async function readStorefrontAdminSession(): Promise<{
   tenantId: string;
   subject: SessionSubject;
 } | null> {
+  // Pepweb app bridge: identity comes from the authenticated app session, never
+  // from a cookie the app request doesn't carry (lib/auth/app-actor-scope.ts).
+  const scope = currentAppActorScope();
+  if (scope) return { tenantId: scope.tenantId, subject: scope.subject };
   const jar = await cookies();
   const token = jar.get(COOKIE_NAME)?.value;
   if (!token) return null;

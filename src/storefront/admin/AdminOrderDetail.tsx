@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
+import { ProofLightbox } from "./gb-proof-lightbox";
 import {
   formatOrderMoney,
   formatOrderDate,
@@ -137,15 +138,8 @@ export function AdminOrderDetail({
   const [isProofOpen, setIsProofOpen] = useState<boolean>(false);
   const proofUrl = hasPaymentProof(o.paymentProof) ? (o.paymentProof as string) : "";
 
-  // Close the proof viewer on Escape while it is open.
-  useEffect(() => {
-    if (!isProofOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsProofOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isProofOpen]);
+  // Stable so ProofLightbox's Escape listener isn't re-bound every render.
+  const closeProof = useCallback(() => setIsProofOpen(false), []);
 
   /** Every figure on this screen is the STORE's money, so it prints in the
    *  store's currency — not the peso this screen used to assume. */
@@ -572,32 +566,14 @@ export function AdminOrderDetail({
       </main>
 
       {/* Full-screen payment-proof viewer — the thumbnail crops the receipt,
-          so this shows the whole uploaded image. Click the backdrop, the close
-          button, or press Escape to dismiss. */}
+          so this shows the whole uploaded image. Shared with the Group Buy
+          screens so there is one viewer to fix. */}
       {isProofOpen && proofUrl ? (
-        <div
-          className="od-proof-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Payment proof"
-          onClick={() => setIsProofOpen(false)}
-        >
-          <button
-            type="button"
-            className="od-proof-viewer__close"
-            aria-label="Close payment proof"
-            onClick={() => setIsProofOpen(false)}
-          >
-            ✕
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="od-proof-viewer__img"
-            src={proofUrl}
-            alt="Payment proof"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ProofLightbox
+          url={proofUrl}
+          label={o.orderNumber || `#${o.id.slice(0, 8)}`}
+          onClose={closeProof}
+        />
       ) : null}
     </div>
   );

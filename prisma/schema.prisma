@@ -110,6 +110,22 @@ model Tenant {
   // ── Storefront / white-label layer (added) ──
   members  TenantUser[]
   staff    StorefrontStaff[]
+  // Shoppers who signed up on this tenant's storefront (customer accounts).
+  customers StorefrontCustomer[]
+  // Pepweb Admin mobile app (docs/mobile-admin/ARCHITECTURE.md)
+  mobileSessions    MobileSession[]
+  mobilePushDevices MobilePushDevice[]
+  mobileOrderAlerts MobileOrderAlert[]
+  // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
+  communityMembers       CommunityMember[]
+  accountProfiles        AccountProfile[]
+  communityChannels      CommunityChannel[]
+  communityTopics        CommunityTopic[]
+  communityConversations CommunityConversation[]
+  communityMessages      CommunityMessage[]
+  communityDrops         CommunityDrop[]
+  communityReads         CommunityRead[]
+  communityUploads       CommunityUpload[]
   branding Branding?
   settings TenantSettings?
   pages    Page[]
@@ -543,6 +559,16 @@ model StorefrontOrder {
   // which is what every existing row reads as.
   deletedAt DateTime?
 
+  // The storefront customer ACCOUNT that placed this order, when the buyer was
+  // signed in. Stamped SERVER-SIDE at placement from the httpOnly `sf.customer`
+  // session — never from the client, or anyone could file an order into (or
+  // read one out of) somebody else's account. NULL = guest checkout, which is
+  // every order before accounts existed. Past guest orders are NOT back-linked
+  // by email: emails aren't verified, so matching on one would hand a stranger
+  // another buyer's addresses.
+  customerAccountId String?
+  customerAccount   StorefrontCustomer? @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
@@ -550,7 +576,37 @@ model StorefrontOrder {
   // The Orders screen and every aggregate filter on deletedAt now, so keep them
   // off a scan of the tenant's trash.
   @@index([tenantId, deletedAt])
+  @@index([tenantId, customerAccountId])
   @@map("storefront_orders")
+}
+
+// A shopper's account on ONE tenant's storefront (sign up / sign in / My
+// Account). Per tenant by construction: the same email on two stores is two
+// unrelated rows, and the session cookie is tenant-bound. Server-only — the
+// passwordHash never leaves the actions in actions/customer-accounts.ts.
+model StorefrontCustomer {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email          String // trimmed + lower-cased (normalizeCustomerEmail)
+  name           String
+  phone          String    @default("")
+  passwordHash   String // scrypt$salt$hash (lib/auth/password-hash.ts)
+  status         String    @default("active") // active | disabled
+  // Bumped on password change or disable: every live session carries the old
+  // value and stops resolving on its next request (resolveCustomerSession).
+  sessionVersion Int       @default(1)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  orders StorefrontOrder[]
+  // Back-relation Prisma requires for CommunityMember.customer (mobile app community).
+  communityMember CommunityMember?
+
+  @@unique([tenantId, email])
+  @@index([tenantId, createdAt])
+  @@map("storefront_customers")
 }
 
 // A buying window the store owner opens for customers to order together —
@@ -1007,4 +1063,284 @@ model UpgradeRequest {
 
   @@index([tenantId])
   @@index([status])
+}
+
+// ──────────────────────────── Pepweb Admin mobile app ────────────────────────────
+// docs/mobile-admin/ARCHITECTURE.md. Additive only; nothing existing reads these.
+
+// One signed-in phone. Tokens are opaque; only SHA-256 hashes are stored.
+// `subject` mirrors the web session subject: "owner" | "staff:<id>".
+// `credentialStamp` fingerprints the password hash at login — a password change
+// (operator reset or self-service) invalidates every session minted under the old one.
+model MobileSession {
+  id                       String    @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subject                  String
+  credentialStamp          String
+  accessTokenHash          String    @unique
+  accessExpiresAt          DateTime
+  refreshTokenHash         String    @unique
+  previousRefreshTokenHash String?   @unique
+  refreshExpiresAt         DateTime
+  revokedAt                DateTime?
+  deviceLabel              String?
+  lastUsedAt               DateTime  @default(now())
+  createdAt                DateTime  @default(now())
+
+  devices MobilePushDevice[]
+
+  @@index([tenantId, subject])
+  @@map("mobile_sessions")
+}
+
+// An Expo push token, bound to exactly ONE session. The token is unique, so a
+// phone that signs into another store MOVES its registration (never receives
+// two stores' alerts). Deleted on logout / session revocation.
+model MobilePushDevice {
+  id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId     String
+  session       MobileSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  expoPushToken String        @unique
+  platform      String // ios | android
+  newOrders     Boolean       @default(true)
+  // Community DMs + drops (opt-out per phone).
+  messages      Boolean       @default(true)
+  lastError     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@map("mobile_push_devices")
+}
+
+// Idempotency claim for the new-order push: at most one alert fan-out per order,
+// however many times the placement side effects are replayed.
+model MobileOrderAlert {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId   String   @unique
+  sent      Int      @default(0)
+  failed    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("mobile_order_alerts")
+}
+
+// A personal profile for ONE app account — the store owner, a staff member or a
+// customer — so each can set their own name, nickname and photo. `subject`
+// mirrors the session subject: "owner" | "staff:<id>" | "customer:<id>"
+// (lib/mobile/account-profile.ts). No row = the account's existing name, no photo.
+model AccountProfile {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subject   String
+  name      String
+  nickname  String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, subject])
+  @@map("account_profiles")
+}
+
+// ──────────────────────────── Pepweb app community ────────────────────────────
+// docs/mobile-admin/COMMUNITY.md. Every row is tenant-scoped. Participant keys:
+// `c:<StorefrontCustomer.id>` for a customer, `store` for the store team.
+
+// One per customer who signed in to the app. Approval gates the community only
+// (shopping is unaffected). status: pending | approved | rejected | revoked.
+model CommunityMember {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId  String             @unique
+  customer    StorefrontCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  displayName String
+  bio         String             @default("")
+  avatarHue   Int                @default(0)
+  status      String             @default("pending")
+  reason      String?
+  submittedAt DateTime           @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String? // owner | s:<staffId>
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([tenantId, customerId])
+  @@index([tenantId, status])
+  @@map("community_members")
+}
+
+model CommunityChannel {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  emoji       String   @default("💬")
+  imageUrl    String?
+  postRole    String   @default("everyone") // everyone | admins
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topics CommunityTopic[]
+  drops  CommunityDrop[]
+
+  @@index([tenantId, sortOrder])
+  @@map("community_channels")
+}
+
+// Exactly one isGeneral topic per channel (never deleted).
+model CommunityTopic {
+  id            String           @id @default(cuid())
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelId     String
+  channel       CommunityChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  name          String
+  emoji         String           @default("💬")
+  imageUrl      String?
+  isGeneral     Boolean          @default(false)
+  isPinned      Boolean          @default(false)
+  lastMessageAt DateTime?
+  messageCount  Int              @default(0)
+  createdByKey  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  messages CommunityMessage[]
+  drops    CommunityDrop[]
+
+  @@index([tenantId, channelId])
+  @@map("community_topics")
+}
+
+// A DM between two participant keys, stored ordered (lowKey < highKey).
+model CommunityConversation {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lowKey        String
+  highKey       String
+  lastMessageAt DateTime?
+  messageCount  Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  messages CommunityMessage[]
+
+  @@unique([tenantId, lowKey, highKey])
+  @@index([tenantId, lowKey])
+  @@index([tenantId, highKey])
+  @@map("community_conversations")
+}
+
+// One table for topic messages AND DMs (topicId xor conversationId).
+// kind: text | image | file | product | protocol | drop | system.
+// (tenantId, senderKey, clientId) makes a re-sent message idempotent.
+model CommunityMessage {
+  id             String                 @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  topicId        String?
+  topic          CommunityTopic?        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   CommunityConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderKey      String
+  authorKey      String? // team messages: owner | s:<staffId>
+  kind           String
+  body           String?
+  productId      String?
+  variationId    String?
+  protocolId     String?
+  imageUrl       String?
+  imageWidth     Int?
+  imageHeight    Int?
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  fileMime       String?
+  dropId         String?
+  replyToId      String?
+  clientId       String?
+  createdAt      DateTime               @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+
+  @@unique([tenantId, senderKey, clientId])
+  @@index([topicId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("community_messages")
+}
+
+// A product broadcast; posting one writes a `drop` message into the channel's
+// General topic (topicId).
+model CommunityDrop {
+  id           String           @id @default(cuid())
+  tenantId     String
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelId    String
+  channel      CommunityChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  topicId      String
+  topic        CommunityTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  productId    String
+  variationId  String?
+  headline     String
+  note         String?
+  expiresAt    DateTime?
+  isActive     Boolean          @default(true)
+  createdByKey String
+  createdAt    DateTime         @default(now())
+  endedAt      DateTime?
+
+  @@index([tenantId, isActive])
+  @@map("community_drops")
+}
+
+// Server-side read marker per participant per thread (threadType topic | dm).
+model CommunityRead {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  participantKey String
+  threadType     String
+  threadId       String
+  lastReadAt     DateTime
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, participantKey, threadType, threadId])
+  @@map("community_reads")
+}
+
+// Every file uploaded through POST /community/uploads. A message attachment or
+// a channel/topic picture is accepted only when its URL matches a row of THIS
+// tenant uploaded by THIS participant — and its name/size/mime/dimensions are
+// taken from here, never from the client. urlHash = sha256(url), so inline
+// (data:) URLs in demo mode don't blow the index.
+model CommunityUpload {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploaderKey String // c:<customerId> | store
+  authorKey   String? // team uploads: owner | s:<staffId>
+  kind        String // image | file
+  url         String
+  urlHash     String
+  name        String
+  size        Int
+  mime        String
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, urlHash])
+  @@map("community_uploads")
 }

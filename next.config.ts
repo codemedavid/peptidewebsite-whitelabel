@@ -21,7 +21,16 @@ const nextConfig: NextConfig = {
     // Prisma works in Node runtime; keep middleware on edge but DB lookups cached.
     // Must stay in sync with the per-file maxes in src/lib/upload/limits.ts —
     // Next enforces this before any action code runs. See test:upload-limits.
-    serverActions: { bodySizeLimit: SERVER_ACTION_BODY_LIMIT },
+    serverActions: {
+      bodySizeLimit: SERVER_ACTION_BODY_LIMIT,
+      // Dev only: the Pepweb app opens the storefront through a tunnel
+      // (lib/mobile/storefront-origin.ts) whose Host is rewritten to the
+      // tenant's lvh.me address, so the browser's Origin no longer matches and
+      // Next would refuse every server action (checkout, admin handoff).
+      ...(process.env.NODE_ENV !== "production" && process.env.MOBILE_DEV_STOREFRONT_ORIGIN
+        ? { allowedOrigins: [new URL(process.env.MOBILE_DEV_STOREFRONT_ORIGIN).host] }
+        : {}),
+    },
     // Tree-shake heavy icon / animation / SDK barrels — huge first-load JS win.
     optimizePackageImports: [
       "lucide-react",

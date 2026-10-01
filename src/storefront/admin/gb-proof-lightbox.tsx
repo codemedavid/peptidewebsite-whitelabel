@@ -8,7 +8,7 @@
 // viewer with its own inline styles — one look, one Escape behaviour, one place
 // to fix. See AdminOrderDetail.tsx and storefront.css (.od-proof-viewer).
 
-import { useEffect } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 
 import { hasPaymentProof } from "./order-detail";
 import type { PaymentDisplayStatus } from "@/lib/storefront/group-buy-orders";
@@ -62,7 +62,12 @@ export function ProofThumb({
 /**
  * Full-screen proof viewer. The thumbnail crops the receipt, so this shows the
  * whole upload — the owner reads the reference number without downloading it.
- * Backdrop click, the close button, or Escape dismisses it.
+ *
+ * The close control sits in a toolbar ABOVE the image, never floating on it:
+ * receipts are mostly white, so a light button laid over one vanished, and the
+ * old 16px corner slot sat under phone browser chrome. Phones also get a
+ * full-width Close in thumb reach. Backdrop click, either button, or Escape
+ * dismisses it.
  */
 export function ProofLightbox({
   url,
@@ -73,6 +78,8 @@ export function ProofLightbox({
   label: string;
   onClose: () => void;
 }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -86,35 +93,58 @@ export function ProofLightbox({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
+  // Focus the close button on open and keep the page behind from scrolling.
+  useEffect(() => {
+    closeRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const close = (e: MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+  };
+
   return (
     <div
       className="od-proof-viewer"
       role="dialog"
       aria-modal="true"
       aria-label={`Payment proof — ${label}`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
+      onClick={close}
     >
-      <button
-        type="button"
-        className="od-proof-viewer__close"
-        aria-label="Close payment proof"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        ✕
+      <div className="od-proof-viewer__bar" onClick={(e) => e.stopPropagation()}>
+        <span className="od-proof-viewer__title">
+          Payment proof <span className="od-proof-viewer__label">{label}</span>
+        </span>
+        <button
+          ref={closeRef}
+          type="button"
+          className="od-proof-viewer__close"
+          aria-label="Close payment proof"
+          onClick={close}
+        >
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+          <span>Close</span>
+        </button>
+      </div>
+      <div className="od-proof-viewer__stage">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="od-proof-viewer__img"
+          src={url}
+          alt={`Payment proof for ${label}`}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+      <button type="button" className="od-proof-viewer__done" onClick={close}>
+        Close
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        className="od-proof-viewer__img"
-        src={url}
-        alt={`Payment proof for ${label}`}
-        onClick={(e) => e.stopPropagation()}
-      />
     </div>
   );
 }

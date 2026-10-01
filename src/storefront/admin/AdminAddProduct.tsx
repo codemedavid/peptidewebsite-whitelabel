@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { Fragment, useState, useRef } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
@@ -19,6 +19,8 @@ import {
 import { unpricedVariationNames } from "@/lib/storefront/variations";
 import { resolveSelectableCategories } from "@/lib/storefront/categories";
 import { assignableSortCategories } from "@/lib/storefront/sort-categories";
+import { MAX_PHOTOS_PER_ITEM } from "@/lib/storefront/product-photos";
+import { PhotoStrip } from "./PhotoStrip";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -137,7 +139,13 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
   const add = () => onChange([...items, { name: "", price: "" }]);
   const upd = (i: number, patch: Partial<Variation>) =>
     onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
-  const rm = (i: number) => onChange(items.filter((_, j) => j !== i));
+  const rm = (i: number) => {
+    setOpenRow(null); // indexes shift under a removal
+    onChange(items.filter((_, j) => j !== i));
+  };
+  // Which row's "more photos" strip is expanded (one at a time keeps an
+  // 81-colorway list scannable).
+  const [openRow, setOpenRow] = useState<number | null>(null);
 
   // Which row is mid-upload (so its thumb can show a spinner), and the last
   // failure. One message rather than one per row: uploads are sequential, and a
@@ -199,11 +207,11 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {items.map((it, i) => (
+        <Fragment key={i}>
         <div
-          key={i}
           style={{
             display: "grid",
-            gridTemplateColumns: "48px 1fr 130px 110px 36px",
+            gridTemplateColumns: "48px 1fr 130px 110px 44px 36px",
             gap: 10,
             alignItems: "center",
           }}
@@ -260,6 +268,17 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
               upd(i, { stock: e.target.value })
             }
           />
+          {/* More photos of this option — its angles all swipe on the card. */}
+          <button
+            type="button"
+            className="admin-image-btn admin-image-btn--secondary admin-photo-strip__toggle"
+            aria-expanded={openRow === i}
+            aria-label={`More photos of ${it.name || "this option"}`}
+            title="More photos of this option"
+            onClick={() => setOpenRow(openRow === i ? null : i)}
+          >
+            {it.extraImages?.length ? `+${it.extraImages.length}` : "📷"}
+          </button>
           <button
             className="admin-image-btn admin-image-btn--secondary"
             style={{ padding: 0, width: 36, justifyContent: "center" }}
@@ -269,6 +288,32 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
             ×
           </button>
         </div>
+        {openRow === i && (
+          <div className="admin-photo-strip__row">
+            <div className="admin-field__hint">
+              {it.image
+                ? `Extra photos of ${it.name || "this option"} — shown after its main photo.`
+                : "Add photos — the first becomes this option's main photo."}
+            </div>
+            <PhotoStrip
+              photos={it.extraImages ?? []}
+              max={MAX_PHOTOS_PER_ITEM - 1}
+              label={it.name || "this option"}
+              onUpload={onUpload}
+              onChange={(extraImages) => upd(i, { extraImages })}
+              onMakeMain={(url) =>
+                upd(i, {
+                  image: url,
+                  extraImages: [
+                    ...(it.image ? [it.image] : []),
+                    ...(it.extraImages ?? []).filter((u) => u !== url),
+                  ],
+                })
+              }
+            />
+          </div>
+        )}
+        </Fragment>
       ))}
       {/* One picker reused by every row — 81 mounted <input type="file"> elements
           would be 81 nodes for a control only one row uses at a time. */}
@@ -366,13 +411,14 @@ export function AdminAddProduct({
   // (it lists after the grouped ones), so this never blocks Save.
   const [sortCategory, setSortCategory] = useState<string>(initial?.sortCategory || "");
   const [price, setPrice]           = useState<number | string>(initial?.price ?? 0);
-  const [purity, setPurity]         = useState<number | string>(
-    initial?.purity?.replace("%", "") || "99",
-  );
-  const [molWeight, setMolWeight]   = useState<string>(initial?.molecularWeight || "");
-  const [cas, setCas]               = useState<string>(initial?.cas || "");
-  const [storage, setStorage]       = useState<string>(initial?.storage || "Store at -20°C");
-  const [sequence, setSequence]     = useState<string>(initial?.sequence || "");
+  // Scientific details (purity, molecular weight, CAS, storage, sequence) are no
+  // longer editable here; whatever a product already carries is passed through
+  // untouched on save, and new products start without them.
+  const purity    = initial?.purity?.replace("%", "") || "";
+  const molWeight = initial?.molecularWeight || "";
+  const cas       = initial?.cas || "";
+  const storage   = initial?.storage || "";
+  const sequence  = initial?.sequence || "";
   // Order Ratio Control classification. "" = auto (the ratio engine's name
   // heuristic decides); peptide / bacWater / other override it explicitly.
   const [productClass, setProductClass] = useState<"" | "peptide" | "bacWater" | "other">(
@@ -407,6 +453,8 @@ export function AdminAddProduct({
   const [wholesaleMoq, setWholesaleMoq] = useState<number | string>(initial?.wholesale?.moq ?? "");
   const [wholesalePrice, setWholesalePrice] = useState<number | string>(initial?.wholesale?.price ?? "");
   const [image, setImage]           = useState<string>(initial?.image || "");
+  // Further product photos after the main one (see lib/storefront/product-photos).
+  const [productExtras, setProductExtras] = useState<string[]>(initial?.extraImages ?? []);
   const [imageDrag, setImageDrag]   = useState<boolean>(false);
   const [uploading, setUploading]   = useState<boolean>(false);
   const [uploadErr, setUploadErr]   = useState<string>("");
@@ -481,14 +529,15 @@ export function AdminAddProduct({
   // store the returned hosted URL. No more base64 in the DB — and if ImageKit
   // isn't configured the action returns a clear message we surface inline.
   /**
-   * Upload one per-variation photo and hand back its hosted URL.
+   * Upload one photo (a variation's, or an extra product photo) and hand back
+   * its hosted URL.
    *
    * Shares the product image action (and so its 10 MB cap, ImageKit folder and
    * media-library bookkeeping) but returns the result instead of setting state:
    * the variations editor owns its own busy/error display, and the bulk path
    * needs to await each file in turn.
    */
-  const uploadVariationImage = async (
+  const uploadPhoto = async (
     file: File,
   ): Promise<{ url?: string; error?: string }> => {
     const fd = new FormData();
@@ -563,7 +612,10 @@ export function AdminAddProduct({
           // one. The server re-validates it to http(s) (cleanVariations), so a
           // pasted junk value is dropped rather than stored.
           const image = (v.image ?? "").trim();
-          return image ? { ...withStock, image } : withStock;
+          const withImage = image ? { ...withStock, image } : withStock;
+          return v.extraImages?.length
+            ? { ...withImage, extraImages: v.extraImages }
+            : withImage;
         })
         .filter((v) => v.name),
       stock: Number(stock) || 0,
@@ -594,6 +646,7 @@ export function AdminAddProduct({
         price: wholesalePriceNum,
       },
       image: image || null,
+      extraImages: productExtras,
     };
 
     setSaving(true);
@@ -736,47 +789,6 @@ export function AdminAddProduct({
           </div>
         </div>
 
-        {/* ---------- Scientific Details ---------- */}
-        <div className="admin-form__card">
-          <h2 className="admin-form__section">🧪 Scientific Details</h2>
-
-          <div className="admin-form__row">
-            <div className="admin-field">
-              <label className="admin-field__label">Purity (%)</label>
-              <NumberField value={purity} onChange={setPurity} min={0} max={100} />
-            </div>
-            <div className="admin-field">
-              <label className="admin-field__label">Molecular Weight</label>
-              <input className="admin-input" value={molWeight}
-                placeholder="e.g., 1419.55 g/mol"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMolWeight(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="admin-form__row">
-            <div className="admin-field">
-              <label className="admin-field__label">CAS Number</label>
-              <input className="admin-input" value={cas}
-                placeholder="e.g., 137525-51-0"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCas(e.target.value)} />
-            </div>
-            <div className="admin-field">
-              <label className="admin-field__label">Storage Conditions</label>
-              <input className="admin-input" value={storage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStorage(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="admin-form__row admin-form__row--single">
-            <div className="admin-field">
-              <label className="admin-field__label">Sequence</label>
-              <input className="admin-input" value={sequence}
-                placeholder="e.g., GEPPPGKPADDAGLV"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSequence(e.target.value)} />
-            </div>
-          </div>
-        </div>
-
         {/* ---------- Variations ---------- */}
         <div className="admin-form__card">
           <h2 className="admin-form__section">🧬 Variations</h2>
@@ -791,7 +803,7 @@ export function AdminAddProduct({
             items={variations}
             currency={currency}
             onChange={setVariations}
-            onUpload={uploadVariationImage}
+            onUpload={uploadPhoto}
           />
           {unpriced.length > 0 && (
             <div
@@ -1027,9 +1039,9 @@ export function AdminAddProduct({
 
         {/* ---------- Product Image ---------- */}
         <div className="admin-form__card">
-          <h2 className="admin-form__section">🖼️ Product Image</h2>
+          <h2 className="admin-form__section">🖼️ Product Photos</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Upload a product image (optional). This will appear on the customer-facing site.
+            Upload the main product photo (optional) — the one the card leads with. Add more photos below.
           </div>
 
           <div
@@ -1121,6 +1133,28 @@ export function AdminAddProduct({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImage(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="admin-field" style={{ marginTop: 16 }}>
+            <label className="admin-field__label">More photos</label>
+            <div className="admin-field__hint" style={{ marginBottom: 10 }}>
+              Extra angles, the label, the box — customers swipe through them on the
+              product card. ★ makes one the main photo.
+            </div>
+            <PhotoStrip
+              photos={productExtras}
+              max={MAX_PHOTOS_PER_ITEM - 1}
+              label="the product"
+              onUpload={uploadPhoto}
+              onChange={setProductExtras}
+              onMakeMain={(url) => {
+                setProductExtras((prev) => [
+                  ...(image && !image.startsWith("data:") ? [image] : []),
+                  ...prev.filter((u) => u !== url),
+                ]);
+                setImage(url);
+              }}
+            />
           </div>
         </div>
       </div>

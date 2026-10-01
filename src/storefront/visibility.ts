@@ -17,6 +17,7 @@ export const MODULE_FEATURE: Record<string, FeatureKey> = {
   "access-code": FEATURES.STORE_ACCESS_CODE,
   groupbuys: FEATURES.GB_MODULE,
   staff: FEATURES.STORE_STAFF_ACCOUNTS,
+  customers: FEATURES.STORE_CUSTOMER_ACCOUNTS,
   notify: FEATURES.NOTIFY_ADMIN_ORDER,
   reviews: FEATURES.STORE_REVIEWS,
   lab: FEATURES.STORE_COA,
@@ -71,6 +72,9 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // tenant that never touched the setting is untouched, and "closed" (paused,
   // still shown) deliberately keeps the link.
   catalog: (b) => normalizeTwoWaysMode(b.twoWaysMode).onHand !== "hidden",
+  // Sign in / sign up / My Account. Default OFF — exists only while the
+  // operator has granted customer accounts.
+  account: (b) => b.customerAccountsEnabled === true,
 };
 
 // Each store-admin sub-view that exists to manage a storefront page. When the
@@ -132,6 +136,8 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // server actions enforce requireStoreOwner).
   staff: (b) => b.showAdminStaff === true,
   "staff-form": (b) => b.showAdminStaff === true,
+  // Customers list (customer accounts). Same grant as the storefront #account page.
+  customers: (b) => b.customerAccountsEnabled === true,
 
   // Order-alert email view — owner-only, gated on FEATURES.NOTIFY_ADMIN_ORDER
   // (projected to showAdminOrderNotify in page.tsx). Default OFF.

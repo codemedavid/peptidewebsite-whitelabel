@@ -60,6 +60,7 @@ import {
   type CheckoutCustomer,
 } from "../checkout";
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
+import { useCustomerAccount } from "../customer-account-client";
 
 type Step = "cart" | "details" | "payment";
 
@@ -78,6 +79,20 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
+  // A signed-in shopper (customer accounts) gets their contact fields prefilled.
+  // Only EMPTY fields are filled, so nothing the buyer typed is ever overwritten.
+  // The order is linked to the account server-side from the session cookie —
+  // nothing here decides that.
+  const account = useCustomerAccount(brand.customerAccountsEnabled === true);
+  useEffect(() => {
+    if (!account) return;
+    setCustomer((c) => ({
+      ...c,
+      name: c.name || account.name,
+      email: c.email || account.email,
+      phone: c.phone || account.phone,
+    }));
+  }, [account]);
   // The buyer's own note. Never required, never a checkout blocker — an empty
   // one simply stores "" and prints nothing anywhere downstream.
   const [customerNote, setCustomerNote] = useState("");
@@ -768,6 +783,21 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             <form className="sf-cart__form" onSubmit={(e) => e.preventDefault()}>
               {brand.checkoutNote && <p className="sf-cart__note">{brand.checkoutNote}</p>}
               {rules.checkoutNotice && <p className="sf-cart__note">{rules.checkoutNotice}</p>}
+              {brand.customerAccountsEnabled && (
+                <p className="sf-cart__account">
+                  {account ? (
+                    <>Signed in as <strong>{account.email}</strong>. This order will be saved to your account.</>
+                  ) : (
+                    <>
+                      Have an account?{" "}
+                      <a href="#account" onClick={onClose}>
+                        Sign in
+                      </a>{" "}
+                      to keep this order in your order history, or continue as a guest.
+                    </>
+                  )}
+                </p>
+              )}
               <div className="sf-cart__fields">
                 {FIELDS.map((f) => (
                   <label key={f.key} className="sf-cart__field">

@@ -12,6 +12,7 @@
 import type { Product } from "@/storefront/types";
 import { toProductClass, type ProductClass } from "./product-class";
 import { normalizeHostedImageUrl } from "./product-image";
+import { cleanExtraImages, photoList } from "./product-photos";
 
 /** The subset of the Prisma `Product` row this layer reads. */
 export type DbProductRow = {
@@ -58,14 +59,9 @@ export type ProductMetadata = {
    *  price; absent = no group price for that option (it sells at its own
    *  `price`, NOT at the product-level `gbPrice`). */
   /** `image` is the option's own hosted photo, present only when the seller
-   *  uploaded one. Persisted only as a valid http(s) URL — see cleanVariations. */
-  variations?: {
-    name: string;
-    price: number;
-    stock?: number;
-    gbPrice?: number;
-    image?: string;
-  }[];
+   *  uploaded one. Persisted only as a valid http(s) URL — see cleanVariations.
+   *  `extraImages` are the option's further photos, present only when non-empty. */
+  variations?: VariationMeta[];
   /** Order Ratio Control classification (peptide / bacWater / other) set by the
    *  storefront admin. Absent → the ratio engine's name heuristic decides. */
   productClass?: ProductClass;
@@ -102,6 +98,16 @@ export type ProductMetadata = {
   /** Manufactured per order, so never stock-gated — see Product.madeToOrder.
    *  Persisted only as `true` (absent = an ordinary stocked product). */
   madeToOrder?: true;
+};
+
+/** One persisted variation. See ProductMetadata.variations. */
+type VariationMeta = {
+  name: string;
+  price: number;
+  stock?: number;
+  gbPrice?: number;
+  image?: string;
+  extraImages?: string[];
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -188,6 +194,7 @@ function asStringArray(v: unknown): string[] {
 export function dbProductToStorefront(row: DbProductRow, displaySymbol: string): Product {
   const meta = (row.metadata ?? {}) as ProductMetadata;
   const images = asStringArray(row.images);
+  const extraImages = cleanExtraImages(images.slice(1), images[0]);
   return {
     id: row.id,
     // Carried through so the card can build its share link (/p/<slug>). Null on
@@ -212,7 +219,10 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
         : typeof row.createdAt === "string"
           ? row.createdAt
           : undefined,
+    // images[0] is the main photo; the rest are the gallery extras. A legacy
+    // single-image row yields no extras, so its card renders as it always has.
     image: images[0] ?? null,
+    ...(extraImages.length ? { extraImages } : {}),
     stock: row.stock ?? 0,
     available: row.status !== "draft" && row.status !== "archived",
     discountPrice: typeof meta.discountPrice === "number" ? meta.discountPrice : 0,
@@ -291,11 +301,9 @@ function cleanWholesale(
  * price no storefront surface would honour.
  */
 function cleanVariations(
-  v:
-    | { name?: string; price?: number; stock?: number; gbPrice?: number; image?: string }[]
-    | undefined,
+  v: Partial<VariationMeta>[] | undefined,
   keepGbPrice = false,
-): { name: string; price: number; stock?: number; gbPrice?: number; image?: string }[] | undefined {
+): VariationMeta[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out = v
     .map((x) => {
@@ -315,13 +323,19 @@ function cleanVariations(
       // the brand default image, because this string is tenant-editable and ends
       // up in an <img src>; anything else (a data: URL, a bare path, a cleared
       // field) is dropped rather than stored as an unusable value.
-      const image = normalizeHostedImageUrl(x?.image);
+      // Further photos go through the same rule. photoList promotes the first
+      // extra when the main photo was removed, so the option keeps a lead photo.
+      const [image, ...extraImages] = photoList(
+        normalizeHostedImageUrl(x?.image),
+        x?.extraImages,
+      );
       return {
         name,
         price,
         ...(hasStock ? { stock: Math.max(0, Math.round(x!.stock as number)) } : {}),
         ...(hasGb ? { gbPrice: gb } : {}),
         ...(image ? { image } : {}),
+        ...(extraImages.length ? { extraImages } : {}),
       };
     })
     .filter((x) => x.name);
@@ -362,7 +376,10 @@ export function productToDbWrite(
     stock: Math.max(0, Math.round(Number(p.stock) || 0)),
     status: available ? "active" : "draft",
     active: available,
-    images: p.image ? [p.image] : [],
+    // Main photo first, then the extras. The main is NOT re-normalized here: a
+    // demo-mode data URL is legitimate for it (actions/products.ts rejects one
+    // on the real DB path), while extras are http(s)-only.
+    images: photoList(p.image, p.extraImages),
     metadata: compactMetadata({
       purity: p.purity || undefined,
       category: p.category || undefined,

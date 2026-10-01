@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { deleteProductsAction, listProductsAction } from "@/actions/products";
+import { saveProductOrderAction } from "@/actions/storefront-admin";
+import { applyProductOrder, moveProduct } from "@/lib/storefront/product-order";
 
 export function AdminProductsList({
   brand,
@@ -19,6 +21,57 @@ export function AdminProductsList({
   const { products, setProducts, categories, toast } = useStore();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  // Drag-to-arrange: the row is only draggable while its grip is held, so
+  // selecting text in the table still works. ↑/↓ buttons cover touch screens,
+  // where native drag-and-drop does not fire.
+  const [armedId, setArmedId] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  // Saves are chained so a quick run of ↑ clicks lands in click order — two
+  // overlapping writes could otherwise finish out of order and store the older
+  // arrangement.
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const isArranged = products.some((p) => p.position !== undefined);
+
+  // The list on screen IS the arrangement: every reorder saves the full id list
+  // in display order, so products added since the last arrangement get a slot
+  // too. Local state updates first (the storefront behind the admin follows
+  // immediately); a failed save is reported, not silently dropped.
+  const saveOrder = (order: string[]) => {
+    setProducts((prev) => applyProductOrder(prev, order));
+    saveChain.current = saveChain.current
+      .then(() => saveProductOrderAction(order))
+      .then((res) => {
+        if (res && "error" in res) toast(`Couldn't save the product order: ${res.error}`);
+      })
+      .catch(() => toast("Couldn't save the product order — please sign in again and retry."));
+  };
+
+  const currentOrder = () => products.map((p) => p.id);
+  const move = (id: string, delta: number) => saveOrder(moveProduct(currentOrder(), id, delta));
+
+  const dropOn = (targetId: string) => {
+    const from = dragId;
+    setDragId(null);
+    setOverId(null);
+    setArmedId(null);
+    if (!from || from === targetId) return;
+    const order = currentOrder();
+    saveOrder(moveProduct(order, from, order.indexOf(targetId) - order.indexOf(from)));
+  };
+
+  const resetOrder = () => {
+    if (!confirm("Reset the product order back to A–Z?")) return;
+    setProducts((prev) => applyProductOrder([...prev].sort((a, b) => a.name.localeCompare(b.name)), []));
+    saveChain.current = saveChain.current
+      .then(() => saveProductOrderAction([]))
+      .then((res) => {
+        if (res && "error" in res) toast(`Couldn't reset the product order: ${res.error}`);
+        else toast("Product order reset");
+      })
+      .catch(() => toast("Couldn't reset the product order — please sign in again and retry."));
+  };
 
   const toggle = (id: string) => {
     const next = new Set(selected);
@@ -117,6 +170,11 @@ export function AdminProductsList({
             <span>Products</span>
           </h1>
           <div style={{ display: "flex", gap: 10 }}>
+            {isArranged && (
+              <button className="admin-btn admin-btn--ghost" onClick={resetOrder} disabled={busy}>
+                Reset order
+              </button>
+            )}
             <button className="admin-btn admin-btn--ghost" onClick={refresh} disabled={busy}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round">
@@ -169,25 +227,99 @@ export function AdminProductsList({
                     onChange={toggleAll}
                   />
                 </th>
+                <th title="Drag or use the arrows to set the storefront order">Order</th>
                 <th>Product</th>
                 <th>Category</th>
                 <th>Price</th>
                 <th>Sizes</th>
-                <th>Purity</th>
                 <th>Stock</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => (
-                <tr key={p.id}>
+              {products.map((p, i) => (
+                <tr
+                  key={p.id}
+                  draggable={armedId === p.id}
+                  className={[
+                    dragId === p.id ? "is-dragging" : "",
+                    overId === p.id && dragId && dragId !== p.id
+                      ? products.findIndex((x) => x.id === dragId) < i
+                        ? "is-drop-below"
+                        : "is-drop-above"
+                      : "",
+                  ].join(" ").trim() || undefined}
+                  onDragStart={(e) => {
+                    setDragId(p.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", p.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragId) return;
+                    e.preventDefault();
+                    if (overId !== p.id) setOverId(p.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    dropOn(p.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setOverId(null);
+                    setArmedId(null);
+                  }}
+                >
                   <td>
                     <input
                       type="checkbox"
                       checked={selected.has(p.id)}
                       onChange={() => toggle(p.id)}
                     />
+                  </td>
+                  <td className="admin-cell-order" data-label="Order">
+                    <div className="admin-order">
+                      <span
+                        className="admin-order__grip"
+                        title="Drag to reorder"
+                        aria-hidden="true"
+                        onPointerDown={() => setArmedId(p.id)}
+                        onPointerUp={() => setArmedId(null)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+                          <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+                          <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+                        </svg>
+                      </span>
+                      <span className="admin-order__num">{i + 1}</span>
+                      <button
+                        type="button"
+                        className="admin-icon-btn admin-order__btn"
+                        aria-label={`Move ${p.name} up`}
+                        title="Move up"
+                        disabled={i === 0}
+                        onClick={() => move(p.id, -1)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                             strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="18 15 12 9 6 15"/>
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-icon-btn admin-order__btn"
+                        aria-label={`Move ${p.name} down`}
+                        title="Move down"
+                        disabled={i === products.length - 1}
+                        onClick={() => move(p.id, 1)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                             strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                   <td className="admin-cell-product">
                     <button
@@ -206,7 +338,6 @@ export function AdminProductsList({
                       ? p.variations.map((v) => v.name).join(", ")
                       : p.sizes || "No sizes"}
                   </td>
-                  <td data-label="Purity"><span className="admin-pill admin-pill--dark">{p.purity || "—"}</span></td>
                   <td className="admin-cell-price" data-label="Stock">{p.stock ?? 0}</td>
                   <td data-label="Status">
                     <div className="admin-status-stack">

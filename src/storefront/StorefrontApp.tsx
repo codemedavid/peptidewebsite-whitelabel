@@ -37,6 +37,8 @@ import {
   hasStorefrontAdminSessionAction,
   signOutStorefrontAdminAction,
 } from "@/actions/storefront-admin";
+import { redeemAppHandoffAction } from "@/actions/app-handoff";
+import { takeAppHandoff } from "./app-embed";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
@@ -50,6 +52,7 @@ const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => 
 const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").then((m) => m.ReconstitutionPage), { ssr: false, loading: BrandPageLoader });
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: BrandPageLoader });
 const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: BrandPageLoader });
+const AccountPage = dynamic(() => import("./pages/AccountPage").then((m) => m.AccountPage), { ssr: false, loading: BrandPageLoader });
 const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: BrandPageLoader });
 // Opt-in "two ways to order" home (brand.homeLayout === "two-ways"). Code-split so
 // the classic-home tenants never download it.
@@ -67,7 +70,7 @@ const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: BrandPageLoader });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: BrandPageLoader });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -137,7 +140,11 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
     // could only flash the admin UI for a session the server had already ended.
     const verifyAdmin = () => {
       setAdminAuth("checking");
-      void hasStorefrontAdminSessionAction()
+      // Inside the Pepweb app, a one-time handoff token signs this WebView in
+      // first (app-embed.ts); a failed redeem just falls through to the login.
+      const handoff = takeAppHandoff();
+      void (handoff ? redeemAppHandoffAction(handoff).catch(() => null) : Promise.resolve(null))
+        .then(() => hasStorefrontAdminSessionAction())
         .then((ok) => setAdminAuth(ok ? "in" : "out"))
         .catch(() => setAdminAuth("out"));
     };
@@ -342,6 +349,7 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
       {activePage === "calculator" && <ReconstitutionPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
+      {activePage === "account" && <AccountPage brand={brand} onBack={goHome} />}
       {/* A store that HID the group-buy way doesn't serve the page, even by
           direct #groupbuy link — the way state, not the banner, is the gate
           (the banner has to stay so the round's pre-orders keep off the

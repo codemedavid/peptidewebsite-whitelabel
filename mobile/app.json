@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "PepWorld",
+    "slug": "pepweb-admin",
+    "scheme": "pepwebadmin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "store.pepweb.admin",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "store.pepweb.admin",
+      "adaptiveIcon": {
+        "backgroundColor": "#1D1B16",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-image",
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "backgroundColor": "#FAF8F3"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2E5C46",
+          "defaultChannel": "orders"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to use your photos so you can share them in chats.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use your camera so you can take a photo to share in chats.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker",
+      "expo-sharing"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "79a88431-d97b-4e07-a6f6-0aca161ad9f0"
+      },
+      "router": {}
+    },
+    "owner": "codemeyna"
+  }
+}

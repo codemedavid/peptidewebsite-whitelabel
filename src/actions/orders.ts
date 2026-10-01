@@ -148,10 +148,28 @@ import {
   type DbOrderRow,
 } from "@/lib/orders/db-mapping";
 import { applyOrderStatusChange } from "@/lib/orders/apply-status";
+import { sendOrderUpdate } from "@/lib/community/order-bot.server";
+import { notifyNewOrder } from "@/lib/mobile/push";
+import { computeOrderTotals, itemCount } from "@/storefront/admin/order-detail";
+import { toTrackedOrder, type TrackedOrder } from "@/lib/orders/tracked-order";
+import { getSignedInCustomer } from "@/lib/auth/customer-session";
+import { currentAppShopperScope } from "@/lib/auth/app-shopper-scope";
 import { stockMoveDb, applyOrderStockMove } from "@/lib/orders/stock-move-tx";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
+/** What placement WOULD charge — see quoteStorefrontOrderAction. */
+export type OrderQuote = {
+  items: OrderItem[];
+  subtotal: number;
+  shippingFee: number;
+  courier: string;
+  adminFee: { label: string; amount: number } | null;
+  paymentFee: { label: string; amount: number } | null;
+  discount: { code: string; label: string; amount: number } | null;
+  total: number;
+};
+export type QuoteResult = { ok: true; quote: OrderQuote } | { error: string };
 export type ListOrdersResult = { ok: true; orders: Order[] } | { error: string };
 export type UpdateOrderResult = { ok: true; order: Order } | { error: string };
 export type DeleteOrdersResult = { ok: true } | { error: string };
@@ -753,6 +771,177 @@ function demoDisplaySymbol(slug: string): string {
   return String(config.currency ?? "");
 }
 
+/**
+ * The live (DB) placement path's every read, re-derive and blocking rule, in
+ * order: trial pause → store closed → catalog → group-buy attribution →
+ * reseller/MOQ → re-price → admin fee → shipping → discount → QR PH fee →
+ * purchasable → stock → two-ways mix → Smart Checkout → Group Buy rules →
+ * on-hand gate. Stamps `p` in place and returns the first customer-facing
+ * error, or the config + slug placement goes on to use.
+ *
+ * Shared by placeStorefrontOrderAction and quoteStorefrontOrderAction so the
+ * app's quoted total is, by construction, what placement would charge. NOT
+ * exported: every export of a "use server" module is a public endpoint.
+ */
+type LiveOrderCheck = { ok: true; config: Record<string, unknown>; slug: string } | { error: string };
+
+async function validateLiveOrder(
+  tenantId: string,
+  p: Order,
+  clientFee: unknown,
+  clientPaymentFee: unknown,
+): Promise<LiveOrderCheck> {
+  // Trial expiry (trial system): a paused store takes no orders — the same
+  // server-side rule that swaps the public storefront for the pause card, so
+  // a stale/forged client can't check out around it.
+  if (isTrialPaused(await getTrialState(tenantId))) {
+    return { error: "This store is currently on pause and isn't accepting orders right now." };
+  }
+
+  // Same server-authoritative fee stamp as the demo path — read through the
+  // tag-invalidated tenant cache, so checkout charges exactly what the
+  // storefront (which renders from the same cache) displayed.
+  const { branding } = await getTenantContext(tenantId);
+  const config = (branding?.config ?? {}) as Record<string, unknown>;
+
+  // The owner closed the shop (store admin → Store Status). Checked here,
+  // before the catalog load and any write, for the same reason the trial-pause
+  // guard above it is: the client's refusal is UX, this is the rule. Read from
+  // the same tag-invalidated cache the storefront rendered from, so the two
+  // cannot disagree about whether the shop was open.
+  if (isStoreClosed(config.storeStatus)) {
+    return { error: STORE_CLOSED_BLOCK_MESSAGE };
+  }
+
+  // Load the live catalog FIRST (full rows — the stock guard, Smart Checkout
+  // rules and re-pricing below all key off it). Reading through the same
+  // tag-invalidated tenant cache the storefront renders from.
+  const rows = await withTenant(tenantId, (db) =>
+    db.product.findMany({ where: { status: { not: "archived" } } }),
+  );
+  const catalogRaw = rows.map((r) =>
+    dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
+  );
+  // The SAME wholesale decision the storefront render and the price refresh
+  // make (resolveWholesaleAccess), from the same inputs. Reading the bare
+  // `wholesalePricing` cap here instead is what charged an unlocked reseller
+  // on a page-only tenant ₱10/unit for a cart the page quoted at ₱7: the page
+  // honoured their verified session and placement did not.
+  const resellerCaps = await resolveResellerCaps(tenantId);
+  const resellerUnlocked = await isResellerUnlocked(
+    tenantId,
+    readResellerCredential(config).version,
+  );
+  const wholesaleAccess = resolveWholesaleAccess(resellerCaps, resellerUnlocked);
+  const catalogResold = stripResellerPricing(
+    catalogRaw,
+    wholesaleAccess.visible,
+    wholesaleAccess.visible,
+  );
+  // Made-to-order, same fail-closed shape and for the same reason: the flag
+  // lives in product metadata and outlives a revoked grant, so an unentitled
+  // tenant's placement catalog must not carry it. This is the boundary a stale
+  // tab or a hand-rolled request has to clear — the storefront's strip is UX.
+  const catalog = stripMadeToOrder(
+    catalogResold,
+    await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER),
+  );
+  // Tenant slug (used for group-buy attribution + the on-hand gate below).
+  const slug = (await getTenantSlug()) ?? tenantId;
+  // Group-buy attribution FIRST — it decides whether this order is in a live
+  // round AND returns that round's pricing scope, which drives whether GB
+  // products re-price at their gbPrice below.
+  const gbScope = await stampGroupBuy(p, tenantId, slug);
+  // Server-authoritative item prices: re-read each line from the live catalog
+  // so a price the owner changed (or a tampered client) can't be stored. When
+  // the order belongs to a live round, that round's group-buy products charge
+  // their gbPrice (the single price the group-buy page advertised). Runs before
+  // the fee/discount stamps below so they charge the current subtotal.
+  // Same combined-quantity scope as the demo path above (and as the cart).
+  const wholesaleScope = orderWholesaleScope(p.items, catalog, wholesaleAccess.visible);
+  // Reseller attribution, then the gated page's MOQ rule — before the re-price
+  // so a rejected order never reaches the stock guard or the promo counter.
+  // `moqEnforced` is narrower than "is a reseller": the minimum belongs to the
+  // gated price list, so a reseller shopping the ORDINARY storefront of a
+  // public-wholesale tenant buys one unit at retail like anybody else.
+  p.orderType = resellerOrderType(resellerCaps, resellerUnlocked);
+  if (wholesaleAccess.moqEnforced) {
+    const violation = resellerMoqViolation(p.items, catalog);
+    if (violation) return { error: violation };
+  }
+  repriceItems(p.items, catalog, gbScope, wholesaleScope);
+
+  // Admin fee is operator-revocable per tenant (admin → Features) AND
+  // Business-exclusive under the trial system: when the tenant isn't entitled
+  // or the trial lock is engaged it's neither stamped nor validated, matching
+  // the storefront which drops the line. (For non-trial tenants the lock is
+  // exactly !hasFeature, so this preserves the old behavior.)
+  const adminFeeEntitled = !(await isBusinessExclusiveLocked(
+    tenantId,
+    FEATURES.STORE_ADMIN_FEE,
+  ));
+  p.adminFee = adminFeeEntitled
+    ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
+    : undefined;
+  // Shipping fee + courier — re-derived from the tenant's shipping locations,
+  // never trusted from the client (same authority as the admin fee).
+  stampShipping(config, p, catalog);
+  // Discount — re-derived from the tenant's promo codes by the applied code,
+  // never trusted from the client. Rejected (not silently dropped) when the
+  // code is no longer valid, so the customer never pays a higher total than
+  // the one they saw.
+  const discountError = stampDiscount(config, p);
+  if (discountError) return { error: discountError };
+  // QR PH processing fee — re-derived from the tenant's tagged payment method,
+  // after the fees/discount above because it is charged on their sum. Same
+  // entitlement gate the storefront used to decide whether to SHOW the line,
+  // re-checked here so a stale or hand-rolled request can't skip the charge.
+  const paymentFeeError = stampPaymentFee(
+    config,
+    p,
+    await hasFeature(tenantId, FEATURES.STORE_QRPH_FEE),
+    clientPaymentFee,
+  );
+  if (paymentFeeError) return { error: paymentFeeError };
+
+  // Inventory guard: reject the order outright when any line asks for more
+  // than the product has in stock, so the admin never has to confirm an
+  // order the inventory can't cover. Live-round group-buy lines are
+  // pre-orders and exempt (gbScope).
+  const paused = purchasableViolation(catalog, p.items);
+  if (paused) return { error: paused };
+  const violation = stockViolation(catalog, p.items, gbScope);
+  if (violation) return { error: violation };
+
+  // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
+  // lines — the cart blocks it, and this re-check (against the SAME scope the
+  // re-price used) stops a stale/tampered client from sneaking a mix through.
+  const mixViolation = twoWaysOrderViolation(matchedProductIds(catalog, p.items), gbScope);
+  if (mixViolation) return { error: mixViolation };
+
+  // Smart Checkout rules — reject the order when it violates a blocking rule.
+  // Entitlement-gated, same as the demo path above.
+  const ruleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
+    ? checkoutRulesViolation(config, catalog, p.items, clientFee, adminFeeEntitled)
+    : null;
+  if (ruleError) return { error: ruleError };
+
+  // Group Buy Rules (incl. Order Ratio Control) — entitlement-gated on
+  // GB_RULES, re-applied server-side so a stale/tampered client can't bypass a
+  // blocking (strict / auto_add) ratio floor. Warn mode never rejects here.
+  const gbRuleError = (await hasFeature(tenantId, FEATURES.GB_RULES))
+    ? groupBuyViolation(config, p.items, catalog)
+    : null;
+  if (gbRuleError) return { error: gbRuleError };
+
+  // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
+  // (`slug` + group-buy attribution already ran above, before re-pricing.)
+  const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, catalog);
+  if (gbOnHand) return { error: gbOnHand };
+
+  return { ok: true, config, slug };
+}
+
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
@@ -911,155 +1100,21 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   }
 
   try {
-    // Trial expiry (trial system): a paused store takes no orders — the same
-    // server-side rule that swaps the public storefront for the pause card, so
-    // a stale/forged client can't check out around it.
-    if (isTrialPaused(await getTrialState(tenantId))) {
-      return { error: "This store is currently on pause and isn't accepting orders right now." };
-    }
+    const checked = await validateLiveOrder(tenantId, p, clientFee, clientPaymentFee);
+    if ("error" in checked) return checked;
+    const { config, slug } = checked;
 
-    // Same server-authoritative fee stamp as the demo path — read through the
-    // tag-invalidated tenant cache, so checkout charges exactly what the
-    // storefront (which renders from the same cache) displayed.
-    const { branding } = await getTenantContext(tenantId);
-    const config = (branding?.config ?? {}) as Record<string, unknown>;
-
-    // The owner closed the shop (store admin → Store Status). Checked here,
-    // before the catalog load and any write, for the same reason the trial-pause
-    // guard above it is: the client's refusal is UX, this is the rule. Read from
-    // the same tag-invalidated cache the storefront rendered from, so the two
-    // cannot disagree about whether the shop was open.
-    if (isStoreClosed(config.storeStatus)) {
-      return { error: STORE_CLOSED_BLOCK_MESSAGE };
-    }
-
-    // Load the live catalog FIRST (full rows — the stock guard, Smart Checkout
-    // rules and re-pricing below all key off it). Reading through the same
-    // tag-invalidated tenant cache the storefront renders from.
-    const rows = await withTenant(tenantId, (db) =>
-      db.product.findMany({ where: { status: { not: "archived" } } }),
-    );
-    const catalogRaw = rows.map((r) =>
-      dbProductToStorefront(r as unknown as DbProductRowMap, String(config.currency ?? "")),
-    );
-    // The SAME wholesale decision the storefront render and the price refresh
-    // make (resolveWholesaleAccess), from the same inputs. Reading the bare
-    // `wholesalePricing` cap here instead is what charged an unlocked reseller
-    // on a page-only tenant ₱10/unit for a cart the page quoted at ₱7: the page
-    // honoured their verified session and placement did not.
-    const resellerCaps = await resolveResellerCaps(tenantId);
-    const resellerUnlocked = await isResellerUnlocked(
-      tenantId,
-      readResellerCredential(config).version,
-    );
-    const wholesaleAccess = resolveWholesaleAccess(resellerCaps, resellerUnlocked);
-    const catalogResold = stripResellerPricing(
-      catalogRaw,
-      wholesaleAccess.visible,
-      wholesaleAccess.visible,
-    );
-    // Made-to-order, same fail-closed shape and for the same reason: the flag
-    // lives in product metadata and outlives a revoked grant, so an unentitled
-    // tenant's placement catalog must not carry it. This is the boundary a stale
-    // tab or a hand-rolled request has to clear — the storefront's strip is UX.
-    const catalog = stripMadeToOrder(
-      catalogResold,
-      await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER),
-    );
-    // Tenant slug (used for group-buy attribution + the on-hand gate below).
-    const slug = (await getTenantSlug()) ?? tenantId;
-    // Group-buy attribution FIRST — it decides whether this order is in a live
-    // round AND returns that round's pricing scope, which drives whether GB
-    // products re-price at their gbPrice below.
-    const gbScope = await stampGroupBuy(p, tenantId, slug);
-    // Server-authoritative item prices: re-read each line from the live catalog
-    // so a price the owner changed (or a tampered client) can't be stored. When
-    // the order belongs to a live round, that round's group-buy products charge
-    // their gbPrice (the single price the group-buy page advertised). Runs before
-    // the fee/discount stamps below so they charge the current subtotal.
-    // Same combined-quantity scope as the demo path above (and as the cart).
-    const wholesaleScope = orderWholesaleScope(p.items, catalog, wholesaleAccess.visible);
-    // Reseller attribution, then the gated page's MOQ rule — before the re-price
-    // so a rejected order never reaches the stock guard or the promo counter.
-    // `moqEnforced` is narrower than "is a reseller": the minimum belongs to the
-    // gated price list, so a reseller shopping the ORDINARY storefront of a
-    // public-wholesale tenant buys one unit at retail like anybody else.
-    p.orderType = resellerOrderType(resellerCaps, resellerUnlocked);
-    if (wholesaleAccess.moqEnforced) {
-      const violation = resellerMoqViolation(p.items, catalog);
-      if (violation) return { error: violation };
-    }
-    repriceItems(p.items, catalog, gbScope, wholesaleScope);
-
-    // Admin fee is operator-revocable per tenant (admin → Features) AND
-    // Business-exclusive under the trial system: when the tenant isn't entitled
-    // or the trial lock is engaged it's neither stamped nor validated, matching
-    // the storefront which drops the line. (For non-trial tenants the lock is
-    // exactly !hasFeature, so this preserves the old behavior.)
-    const adminFeeEntitled = !(await isBusinessExclusiveLocked(
-      tenantId,
-      FEATURES.STORE_ADMIN_FEE,
-    ));
-    p.adminFee = adminFeeEntitled
-      ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
-      : undefined;
-    // Shipping fee + courier — re-derived from the tenant's shipping locations,
-    // never trusted from the client (same authority as the admin fee).
-    stampShipping(config, p, catalog);
-    // Discount — re-derived from the tenant's promo codes by the applied code,
-    // never trusted from the client. Rejected (not silently dropped) when the
-    // code is no longer valid, so the customer never pays a higher total than
-    // the one they saw.
-    const discountError = stampDiscount(config, p);
-    if (discountError) return { error: discountError };
-    // QR PH processing fee — re-derived from the tenant's tagged payment method,
-    // after the fees/discount above because it is charged on their sum. Same
-    // entitlement gate the storefront used to decide whether to SHOW the line,
-    // re-checked here so a stale or hand-rolled request can't skip the charge.
-    const paymentFeeError = stampPaymentFee(
-      config,
-      p,
-      await hasFeature(tenantId, FEATURES.STORE_QRPH_FEE),
-      clientPaymentFee,
-    );
-    if (paymentFeeError) return { error: paymentFeeError };
-
-    // Inventory guard: reject the order outright when any line asks for more
-    // than the product has in stock, so the admin never has to confirm an
-    // order the inventory can't cover. Live-round group-buy lines are
-    // pre-orders and exempt (gbScope).
-    const paused = purchasableViolation(catalog, p.items);
-    if (paused) return { error: paused };
-    const violation = stockViolation(catalog, p.items, gbScope);
-    if (violation) return { error: violation };
-
-    // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
-    // lines — the cart blocks it, and this re-check (against the SAME scope the
-    // re-price used) stops a stale/tampered client from sneaking a mix through.
-    const mixViolation = twoWaysOrderViolation(matchedProductIds(catalog, p.items), gbScope);
-    if (mixViolation) return { error: mixViolation };
-
-    // Smart Checkout rules — reject the order when it violates a blocking rule.
-    // Entitlement-gated, same as the demo path above.
-    const ruleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
-      ? checkoutRulesViolation(config, catalog, p.items, clientFee, adminFeeEntitled)
-      : null;
-    if (ruleError) return { error: ruleError };
-
-    // Group Buy Rules (incl. Order Ratio Control) — entitlement-gated on
-    // GB_RULES, re-applied server-side so a stale/tampered client can't bypass a
-    // blocking (strict / auto_add) ratio floor. Warn mode never rejects here.
-    const gbRuleError = (await hasFeature(tenantId, FEATURES.GB_RULES))
-      ? groupBuyViolation(config, p.items, catalog)
-      : null;
-    if (gbRuleError) return { error: gbRuleError };
-
-    // Group-buy on-hand gate — reject paused on-hand products, matching the cart.
-    // (`slug` + group-buy attribution already ran above, before re-pricing.)
-    const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, catalog);
-    if (gbOnHand) return { error: gbOnHand };
-
-    const { row, created } = await createStorefrontOrder(tenantId, p);
+    // A signed-in shopper's order lands in their account (My Account). Read
+    // from the httpOnly session only — never from the payload — and only while
+    // the feature is granted. Fails closed to a guest order, never to an error.
+    // An app shopper (lib/auth/app-shopper-scope.ts) IS an account, so their
+    // order links whether or not the website feature is on.
+    const account =
+      currentAppShopperScope() !== null ||
+      (await hasFeature(tenantId, FEATURES.STORE_CUSTOMER_ACCOUNTS))
+        ? await getSignedInCustomer(tenantId)
+        : null;
+    const { row, created } = await createStorefrontOrder(tenantId, p, account?.id ?? null);
     const placed = dbOrderToStorefront(row as DbOrderRow);
     // Only count the code on a genuinely-new row — an idempotent retry that
     // returned the already-stored order must not double-count.
@@ -1081,10 +1136,63 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       // own Telegram bot, where a linked recipient can confirm it on the spot.
       // Same total/silent contract — every gate lives inside.
       after(() => sendTelegramOrderAlert(tenantId, placed, config.currency));
+      // And the phone: the Pepweb Admin app's new-order push. Idempotent per
+      // order and re-authorises every recipient inside; never throws.
+      const storeName = typeof config.name === "string" && config.name.trim() ? config.name : (slug ?? "");
+      const pushOrder = {
+        id: placed.id,
+        orderNumber: placed.orderNumber,
+        total: computeOrderTotals(placed).total,
+        itemCount: itemCount(placed),
+      };
+      after(() => notifyNewOrder(tenantId, pushOrder, storeName, config.currency));
     }
     return { ok: true, order: placed };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't place the order." };
+  }
+}
+
+// ── Quote — PUBLIC (the Pepweb app's checkout total) ─────────────────────────
+
+/**
+ * Price an order exactly as placeStorefrontOrderAction would — the same live
+ * path (validateLiveOrder): re-price, shipping, admin fee, promo, QR PH fee and
+ * every blocking rule — WITHOUT writing it, counting the promo code or firing
+ * any hook. The app never computes a total itself; its checkout shows this.
+ * PUBLIC like placement (it reveals nothing the storefront doesn't already
+ * show); the tenant comes from the host or the app shopper scope.
+ */
+export async function quoteStorefrontOrderAction(input: unknown): Promise<QuoteResult> {
+  const tenantId = await getTenantIdOrNull();
+  if (!tenantId) return { error: "Store not found." };
+  if (isDemoMode()) return { error: "Quotes aren't available in demo mode." };
+
+  const p = normalizeOrderInput(input);
+  if (!p.items.length) return { error: "Your cart is empty." };
+  const raw = (input ?? {}) as Record<string, unknown>;
+
+  try {
+    const checked = await validateLiveOrder(tenantId, p, raw.adminFee, raw.paymentFee);
+    if ("error" in checked) return checked;
+    const totals = computeOrderTotals(p);
+    return {
+      ok: true,
+      quote: {
+        items: p.items,
+        subtotal: totals.subtotal,
+        shippingFee: totals.shipping,
+        courier: p.courier,
+        adminFee: p.adminFee ?? null,
+        paymentFee: p.paymentFee ?? null,
+        discount: p.discount ?? null,
+        total: totals.total,
+      },
+    };
+  } catch {
+    // Generic on purpose: this answers anonymous callers, and a DB error's
+    // message can echo query arguments.
+    return { error: "Couldn't price the order. Please try again." };
   }
 }
 
@@ -1108,7 +1216,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
  * instead of creating a duplicate (the "await + keep cart on failure" flow would
  * otherwise turn an ambiguous timeout into a second order).
  */
-async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
+async function createStorefrontOrder(
+  tenantId: string,
+  p: Order,
+  customerAccountId: string | null,
+  attempts = 8,
+) {
   const clientId = p.id || undefined;
 
   // Fast path: this exact submission is already stored (a retry) → return it.
@@ -1131,7 +1244,9 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
     );
     try {
       const row = await withTenant(tenantId, (db) =>
-        db.storefrontOrder.create({ data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId } }),
+        db.storefrontOrder.create({
+          data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId, customerAccountId },
+        }),
       );
       return { row, created: true };
     } catch (e) {
@@ -1159,22 +1274,7 @@ async function createStorefrontOrder(tenantId: string, p: Order, attempts = 8) {
 
 // ── Track order — PUBLIC (lookup by order number) ────────────────────────────
 
-export type TrackedOrder = {
-  orderNumber: string;
-  status: Order["status"];
-  date: string;
-  courier: string;
-  trackingNumber: string;
-  shippingNote: string;
-  // Order summary (no customer PII) + the fulfillment journey, so the Track page
-  // can show what was ordered, the total, and the timestamped status timeline.
-  items: OrderItem[];
-  shippingFee: number;
-  adminFee: { label: string; amount: number } | null;
-  paymentFee: { label: string; amount: number } | null;
-  discount: { code: string; label: string; amount: number } | null;
-  statusHistory: OrderStatusEvent[];
-};
+export type { TrackedOrder };
 export type TrackOrderResult =
   | { ok: true; order: TrackedOrder }
   | { ok: true; order: null }
@@ -1192,20 +1292,7 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
   const code = str(orderNumber, 64).trim();
   if (!code) return { ok: true, order: null };
 
-  const pick = (o: Order): TrackedOrder => ({
-    orderNumber: o.orderNumber || o.id,
-    status: o.status,
-    date: o.date,
-    courier: o.courier,
-    trackingNumber: o.trackingNumber,
-    shippingNote: o.shippingNote,
-    items: o.items,
-    shippingFee: o.shipping?.fee ?? 0,
-    adminFee: o.adminFee ?? null,
-    paymentFee: o.paymentFee ?? null,
-    discount: o.discount ?? null,
-    statusHistory: o.statusHistory ?? [],
-  });
+  const pick = toTrackedOrder;
   const matches = (o: Order) =>
     (o.orderNumber || "").toUpperCase() === code.toUpperCase() ||
     o.id.toUpperCase() === code.toUpperCase();
@@ -1690,6 +1777,9 @@ export async function bulkUpdateStorefrontOrderStatusAction(
             buildStatusChangedPayload(order, ch.prevStatus, order.status, emailBrand),
           ),
         );
+        // Same order-bot DM + push the single-order update sends.
+        const update = { tenantId, orderId: ch.id, statusChanged: true, prevTracking: row.trackingNumber };
+        after(() => sendOrderUpdate(update));
       }
     }
     // Any stock movement → refresh the cached storefront so the catalog shows it.

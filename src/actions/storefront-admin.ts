@@ -26,6 +26,7 @@ import { normalizeReviews } from "@/lib/storefront/reviews";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
+import { normalizeProductOrder } from "@/lib/storefront/product-order";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import { normalizeCurrency } from "@/lib/storefront/currency";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
@@ -296,6 +297,38 @@ export async function saveSortCategoriesAction(categories: unknown): Promise<Act
   );
   const current = await readConfig(tenantId);
   const config = { ...current, sortCategories: normalized };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the owner's hand-arranged product order into
+ * `branding.config.productOrder` (read-modify-write, same shape as
+ * saveSortCategoriesAction). Gated on "products" — arranging the shelf is part
+ * of managing products. The id list is re-normalized here, not trusted; ids
+ * that are not (or no longer) products are harmless — applyProductOrder skips
+ * them — so no product lookup is needed.
+ */
+export async function saveProductOrderAction(order: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("products");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const normalized = normalizeProductOrder(order);
+  const current = await readConfig(tenantId);
+  const config = { ...current, productOrder: normalized };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

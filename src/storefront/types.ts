@@ -49,10 +49,18 @@ export type Product = {
   sortCategory?: string;
   /** Pins the product to the very top of the catalog (and badges it). */
   featured: boolean;
+  /** Slot in the owner's arrangement (branding.config.productOrder), stamped
+   *  at load by applyProductOrder. Absent = not arranged. Never persisted on
+   *  the row. */
+  position?: number;
   /** ISO timestamp of the catalog row, so the "New Arrivals" sort has real data
    *  to rank by. Absent on demo/seed products → those sort last. */
   createdAt?: string;
+  /** The MAIN photo — what the card, cart and share preview show. */
   image: string | null;
+  /** Further photos after the main one (angles, label, box). Absent/empty = a
+   *  single-photo product. Persisted as `images[1..]`; see product-photos.ts. */
+  extraImages?: string[];
   stock?: number;
   available?: boolean;
   discountPrice?: number | null;
@@ -86,13 +94,16 @@ export type Product = {
    *  exists because variations are not always doses — a seller may list 81
    *  colorways, where a bare name says nothing about the product. The card turns
    *  these into a swipeable gallery (see lib/storefront/product-gallery.ts); a
-   *  product whose options carry none renders exactly as it always has. */
+   *  product whose options carry none renders exactly as it always has.
+   *  `extraImages` are that option's further photos after `image`; every one of
+   *  them selects the option when swiped to. */
   variations?: {
     name: string;
     price: number;
     stock?: number;
     gbPrice?: number;
     image?: string;
+    extraImages?: string[];
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -623,6 +634,10 @@ export type Brand = {
   // Business/Automated plan ceilings (default ON there) and operator-grantable on
   // Starter — so OFF for Starter until the operator turns it on.
   showAdminStaff?: boolean;
+  // Customer accounts (FEATURES.STORE_CUSTOMER_ACCOUNTS, operator-grantable,
+  // default OFF). Server-projected: drives the #account page, the header's
+  // Account link and the store-admin Customers view together.
+  customerAccountsEnabled?: boolean;
   // Server-projected from FEATURES.NOTIFY_ADMIN_ORDER: shows the store-admin
   // "Order Notifications" view (owner-only). Off → the view and its dashboard
   // tile are hidden and the order-alert email is never sent (admin-notify.ts
@@ -988,6 +1003,10 @@ export type Brand = {
   // live store's menu is unchanged on deploy day. See lib/storefront/
   // sort-categories.ts.
   sortCategories?: SortCategory[];
+  // The owner's hand-arranged product order (Admin → Products ↑/↓): product ids,
+  // first = top. Products not listed follow after. See lib/storefront/
+  // product-order.ts.
+  productOrder?: string[];
 
   // Product card design chosen in the store admin's Card Studio. Persisted in
   // branding.config (same mechanism as paymentMethods). Absent → the catalog

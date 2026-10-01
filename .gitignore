@@ -18,3 +18,6 @@ next-env.d.ts
 
 # Stale build output kept aside during a broken-build recovery. Never commit.
 .next-stale-backup/
+
+# Design reference screenshots (large, local only)
+inspiration/

@@ -65,6 +65,9 @@ interface SortableProduct {
   sortCategory?: string;
   /** ISO timestamp from the Product row, used by the "newest" built-in. */
   createdAt?: string;
+  /** The owner's hand-arranged slot (branding.config.productOrder, see
+   *  product-order.ts). Absent = never arranged. */
+  position?: number;
 }
 
 const KINDS: readonly SortCategoryKind[] = [
@@ -164,6 +167,17 @@ export function assignableSortCategories(categories: readonly SortCategory[]): S
 
 const byName = (a: SortableProduct, b: SortableProduct) => a.name.localeCompare(b.name);
 
+/** The owner's arrangement first (arranged products lead, in their slots), then
+ *  name — so a store that never arranged anything sorts exactly as before. Used
+ *  for the owner-curated views (default / Featured / group), never for an
+ *  explicit Name / Price / Best-Sellers pick. */
+const byArrangement = (a: SortableProduct, b: SortableProduct) => {
+  const pa = a.position ?? Number.POSITIVE_INFINITY;
+  const pb = b.position ?? Number.POSITIVE_INFINITY;
+  if (pa !== pb) return pa < pb ? -1 : 1;
+  return byName(a, b);
+};
+
 /** Milliseconds for the "newest" built-in; an unparseable/absent date sorts last. */
 function createdAtMs(p: SortableProduct): number {
   const t = p.createdAt ? Date.parse(p.createdAt) : Number.NaN;
@@ -225,7 +239,7 @@ export function sortByCategory<T extends SortableProduct>(
   const members: T[] = [];
   const rest: T[] = [];
   for (const p of products) (p.sortCategory === category.id ? members : rest).push(p);
-  return [...members.sort(byName), ...rest.sort(byName)];
+  return [...members.sort(byArrangement), ...rest.sort(byArrangement)];
 }
 
 /**
@@ -251,8 +265,8 @@ export function orderCatalogByCategories<T extends SortableProduct>(
   }
 
   return [
-    ...blocks.flatMap((c) => (byCategory.get(c.id) ?? []).sort(byName)),
-    ...unassigned.sort(byName),
+    ...blocks.flatMap((c) => (byCategory.get(c.id) ?? []).sort(byArrangement)),
+    ...unassigned.sort(byArrangement),
   ];
 }
 

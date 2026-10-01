@@ -48,6 +48,7 @@ const TENANT_MODELS = new Set<string>([
   "automationMetric",
   "tenantUser",
   "storefrontStaff",
+  "storefrontCustomer",
   "branding",
   "tenantSettings",
   "page",
@@ -55,6 +56,17 @@ const TENANT_MODELS = new Set<string>([
   "coupon",
   "mediaAsset",
   "subscriptionPayment",
+  // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
+  "communityMember",
+  "communityChannel",
+  "communityTopic",
+  "communityConversation",
+  "communityMessage",
+  "communityDrop",
+  "communityRead",
+  "communityUpload",
+  // Personal app-account profiles (lib/mobile/account-profile.ts)
+  "accountProfile",
 ]);
 
 const SCOPED_READS = new Set([

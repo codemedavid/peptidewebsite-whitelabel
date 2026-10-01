@@ -13,6 +13,7 @@
 
 import { buildProductOptions, type Variation } from "./variations";
 import { normalizeHostedImageUrl, resolveProductImage } from "./product-image";
+import { cleanExtraImages, photoList } from "./product-photos";
 
 /** One image in the card's gallery. */
 export type GallerySlide = {
@@ -37,6 +38,7 @@ export type GallerySlide = {
 type GallerySource = {
   name: string;
   image?: string | null;
+  extraImages?: string[];
   price: number;
   variations?: Variation[];
 };
@@ -49,10 +51,12 @@ type GallerySource = {
  * reveal a price the customer never asked for — the rule that
  * scripts/test-variation-price-reveal.ts guards.
  *
- * Then one slide per variation that actually HAS a usable photo. Variations
- * without one are skipped rather than given a blank slide, and skipping them
- * does not renumber the ones after: each slide keeps the option index it really
- * belongs to. A product whose variations carry no photos therefore yields at
+ * The product's own extra photos follow it, also selecting nothing. Then one
+ * slide per photo of each variation that actually HAS photos (its main, then
+ * its extras — all carrying its option index). Variations without one are
+ * skipped rather than given a blank slide, and skipping them does not renumber
+ * the ones after: each slide keeps the option index it really belongs to. A
+ * single-photo product whose variations carry no photos therefore yields at
  * most one slide, and the card renders as it always has — no track, no dots.
  *
  * Only http(s) URLs survive. These come from tenant-editable JSON and land in an
@@ -63,16 +67,21 @@ export function buildProductGallery(
   defaultImage?: string | null,
 ): GallerySlide[] {
   const base = resolveProductImage(product.image, defaultImage);
+  // The product's own further photos select nothing either, same as the base.
+  const baseSlides = [
+    ...(base ? [base] : []),
+    ...cleanExtraImages(product.extraImages, base),
+  ].map((src) => ({ src, optionIndex: null, label: product.name }));
 
-  const variationSlides = buildProductOptions(product).flatMap((option, index) => {
-    const src = normalizeHostedImageUrl(option.variation?.image);
-    return src ? [{ src, optionIndex: index, label: option.name }] : [];
-  });
+  // EVERY photo of a variation carries that variation's option index, so
+  // swiping to its second angle still selects it.
+  const variationSlides = buildProductOptions(product).flatMap((option, index) =>
+    photoList(normalizeHostedImageUrl(option.variation?.image), option.variation?.extraImages).map(
+      (src) => ({ src, optionIndex: index, label: option.name }),
+    ),
+  );
 
-  return [
-    ...(base ? [{ src: base, optionIndex: null, label: product.name }] : []),
-    ...variationSlides,
-  ];
+  return [...baseSlides, ...variationSlides];
 }
 
 /**

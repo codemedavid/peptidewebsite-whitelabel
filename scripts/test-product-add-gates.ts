@@ -295,5 +295,24 @@ check("the Group Buy gate is independent of the two wholesale gates", () => {
   assert.equal(isResellerPricingVisible(gbOnly), true);
 });
 
+check("normalizeProductInput keeps the sort group and the wholesale (MOQ) rule", () => {
+  // Every admin save (web and app) funnels through this normalizer. Dropping
+  // either key wiped a product's sort group and its MOQ pricing on each edit.
+  const out = normalizeProductInput({
+    name: "X",
+    sortCategory: "best",
+    wholesale: { enabled: true, moq: 10, price: 850 },
+  });
+  assert.equal(out.sortCategory, "best");
+  assert.deepEqual(out.wholesale, { enabled: true, moq: 10, price: 850 });
+  // Disabled keeps its numbers (toggling back restores them); junk is dropped.
+  assert.deepEqual(
+    normalizeProductInput({ name: "X", wholesale: { enabled: false, moq: "5", price: 100 } }).wholesale,
+    { enabled: false, moq: 5, price: 100 },
+  );
+  assert.equal(normalizeProductInput({ name: "X", wholesale: "nope" }).wholesale, undefined);
+  assert.equal(normalizeProductInput({ name: "X" }).sortCategory, undefined);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -35,6 +35,7 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "hero", label: "Hero Section" },
   { key: "banner", label: "Announcement Banner" },
   { key: "orders", label: "Orders" },
+  { key: "customers", label: "Customers" },
   { key: "inv", label: "Inventory" },
   { key: "shipping", label: "Shipping" },
   { key: "fee", label: "Checkout Fee" },
@@ -53,6 +54,9 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "checkout", label: "Smart Checkout" },
   { key: "groupbuys", label: "Group Buys" },
   { key: "groupbuy", label: "Order Ratio Control" },
+  // Pepweb app community moderation (member approvals, channels, drops, the
+  // store inbox). App-only — there is no website view for it.
+  { key: "community", label: "Community" },
 ] as const;
 
 export const STAFF_MODULE_KEYS: string[] = STAFF_MODULES.map((m) => m.key);

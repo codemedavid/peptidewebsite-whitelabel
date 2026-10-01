@@ -146,6 +146,12 @@ export function EditorialRail({
             />
           </label>
 
+          {brand.customerAccountsEnabled && (
+            <a href="#account" className="ed-rail__util">
+              <span>Account</span>
+            </a>
+          )}
+
           {brand.headerShowCart !== false && (
             <button type="button" className="ed-rail__util" onClick={onCartClick}>
               <span>Cart</span>

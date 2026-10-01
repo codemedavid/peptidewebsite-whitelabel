@@ -10,6 +10,7 @@
 
 import { toProductClass } from "@/lib/storefront/product-class";
 import { normalizeHostedImageUrl } from "@/lib/storefront/product-image";
+import { cleanExtraImages } from "@/lib/storefront/product-photos";
 import type { Product } from "@/storefront/types";
 
 /** Coerce to a string and cap its length. */
@@ -59,11 +60,14 @@ export function normalizeProductInput(input: unknown): Product {
       // and the MCP connector's alike. Normalized through the shared http(s)
       // rule so a data:/javascript: value is dropped rather than stored.
       const image = normalizeHostedImageUrl(x.image);
+      // The option's further photos — same trap, same rule.
+      const extraImages = cleanExtraImages(x.extraImages, image);
       return {
         ...base,
         ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
         ...(gb > 0 ? { gbPrice: gb } : {}),
         ...(image ? { image } : {}),
+        ...(extraImages.length ? { extraImages } : {}),
       };
     })
     .filter((v) => v.name);
@@ -79,6 +83,9 @@ export function normalizeProductInput(input: unknown): Product {
     featured: o.featured === true,
     // Hosted URLs are short; allow a large cap so demo data URLs survive too.
     image: typeof o.image === "string" && o.image ? o.image.slice(0, 12_000_000) : null,
+    // Further product photos (http(s)-only, deduped, capped). Dropping this key
+    // would make every save from an editor that sends it erase the gallery.
+    extraImages: cleanExtraImages(o.extraImages, typeof o.image === "string" ? o.image : null),
     stock: Math.max(0, Math.round(num(o.stock))),
     available: o.available !== false,
     discountPrice: Math.max(0, num(o.discountPrice)),
@@ -118,6 +125,21 @@ export function normalizeProductInput(input: unknown): Product {
     storage: str(o.storage, 200),
     sequence: str(o.sequence, 1000),
     sizes: str(o.sizes, 200),
+    // The editor's sort-menu group and MOQ wholesale rule. Same round-trip
+    // contract as productClass above: omitting them here wiped both on every
+    // save. Whether wholesale is persisted at all is still decided by
+    // preserveResellerMetadata (entitlement) and cleanWholesale (shape).
+    sortCategory: str(o.sortCategory, 64) || undefined,
+    wholesale: ((): Product["wholesale"] => {
+      const w = o.wholesale;
+      if (!w || typeof w !== "object" || Array.isArray(w)) return undefined;
+      const r = w as Record<string, unknown>;
+      return {
+        enabled: r.enabled === true,
+        moq: Math.max(0, Math.round(num(r.moq))),
+        price: Math.max(0, num(r.price)),
+      };
+    })(),
     variations,
     reseller: ((): Product["reseller"] => {
       const r = (o.reseller ?? {}) as Record<string, unknown>;

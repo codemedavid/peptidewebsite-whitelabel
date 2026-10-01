@@ -47,6 +47,7 @@ export type Variation = {
   stock?: number;
   gbPrice?: number;
   image?: string;
+  extraImages?: string[];
 };
 
 /** An option offered on the product card. `variation` is absent on the product's

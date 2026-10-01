@@ -1,0 +1,281 @@
+import { useMemo, useState } from "react";
+import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { router, Stack, type Href } from "expo-router";
+import { useTheme } from "@/theme/ThemeProvider";
+import { SPACE } from "@/theme/tokens";
+import type { AdminBrand } from "@/features/admin/bridge";
+import { useCatalogProducts } from "@/features/admin/catalog/hooks";
+import { useAdminBrand } from "@/features/admin/setup/data";
+import { Loadable } from "@/features/admin/setup/ui";
+import { useGroupBuyList, useRoundAction } from "@/features/admin/group-buys/hooks";
+import {
+  effectiveGroupBuyStatus,
+  moneyOf,
+  normalizeGroupBuyContent,
+  normalizeTwoWaysMode,
+  roundsAwaitingReport,
+  type GroupBuy,
+  type GroupBuyContent,
+  type ListResult,
+} from "@/features/admin/group-buys/model";
+import { PricingTab } from "@/features/admin/group-buys/PricingTab";
+import { ReportSheet } from "@/features/admin/group-buys/ReportSheet";
+import { RoundCard } from "@/features/admin/group-buys/RoundCard";
+import { RoundEditor } from "@/features/admin/group-buys/RoundEditor";
+import { AllowOnHandCard, ContentEditor, CopyCard, WaysCard } from "@/features/admin/group-buys/StoreSettings";
+import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
+import { Segmented } from "@/ui/inputs";
+import { AppText, Button } from "@/ui/primitives";
+
+/**
+ * The website's Group Buys admin (AdminGroupBuys + AdminGroupBuyPricing), native.
+ * Rounds: ways to order, the on-hand toggle, storefront copy, and the rounds
+ * list with create / edit / duplicate / archive / report. Pricing: per-product
+ * group-buy prices. Tapping a round opens its dashboard. Every write is the
+ * website's own action; buttons follow the plan's groupbuy.* capabilities.
+ */
+export default function GroupBuysScreen() {
+  const brand = useAdminBrand();
+  return (
+    <>
+      <Stack.Screen options={{ title: "Group buys" }} />
+      <Loadable query={brand}>{(b) => <GroupBuys brand={b} />}</Loadable>
+    </>
+  );
+}
+
+const dashboardRoute = (gb: GroupBuy): Href =>
+  `/manage/group-buys-detail?id=${encodeURIComponent(gb.id)}&name=${encodeURIComponent(gb.name)}` as Href;
+
+function GroupBuys({ brand }: { brand: AdminBrand }) {
+  const t = useTheme();
+  const online = useOnline();
+  const list = useGroupBuyList();
+  const products = useCatalogProducts(brand);
+  const currency = typeof brand.currency === "string" && brand.currency ? brand.currency : "₱";
+  const money = moneyOf(currency);
+
+  const [tab, setTab] = useState<"rounds" | "pricing">("rounds");
+  const [ways, setWays] = useState(() => normalizeTwoWaysMode(brand.twoWaysMode));
+  const [contentOverride, setContentOverride] = useState<GroupBuyContent | null>(null);
+  const [editingContent, setEditingContent] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [editor, setEditor] = useState<{ round: GroupBuy | null } | null>(null);
+  const [reporting, setReporting] = useState<GroupBuy | null>(null);
+
+  const save = useRoundAction("saveGroupBuyAction");
+  const duplicate = useRoundAction("duplicateGroupBuyAction");
+  const archive = useRoundAction("setGroupBuyArchivedAction");
+  const busy = duplicate.isPending || archive.isPending;
+
+  const data = list.data;
+  const caps = data?.caps;
+  const content = contentOverride ?? data?.content ?? normalizeGroupBuyContent(brand.groupBuyContent);
+  const rowsById = useMemo(() => new Map((data?.rows ?? []).map((r) => [r.id, r])), [data?.rows]);
+
+  // Auto report on close (groupbuy.reports.auto_on_close): pop the first finished
+  // round's report once per visit. The "Reports ready" badge stays regardless.
+  const [autoHandled, setAutoHandled] = useState(false);
+  const autoRound =
+    !autoHandled && data && data.caps.reports.autoOnClose && data.caps.supplierReports
+      ? (roundsAwaitingReport(data.groupBuys, data.caps.scheduled)[0] ?? null)
+      : null;
+  const shownReport = reporting ?? autoRound;
+  const closeReport = () => {
+    setAutoHandled(true);
+    setReporting(null);
+  };
+
+  const fail = (title: string) => (e: Error) => Alert.alert(title, e.message);
+
+  const confirmArchive = (gb: GroupBuy) => {
+    const archived = gb.status === "archived";
+    const run = () => archive.mutate([gb.id, !archived], { onError: fail(archived ? "Couldn't restore" : "Couldn't archive") });
+    if (archived) return run();
+    Alert.alert(`Archive "${gb.name}"?`, "Its orders and reports are kept.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Archive", style: "destructive", onPress: run },
+    ]);
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <OfflineBanner />
+      <ScrollView
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={list.isRefetching}
+            onRefresh={() => {
+              void list.refetch();
+              void products.refetch();
+            }}
+            tintColor={t.brand.link}
+          />
+        }
+      >
+        <Segmented
+          segments={[
+            { key: "rounds", label: "Rounds" },
+            { key: "pricing", label: "Pricing" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+
+        {list.isError ? (
+          <ErrorState message={list.error?.message ?? "Please try again."} onRetry={() => void list.refetch()} />
+        ) : !data || !caps ? (
+          <SkeletonList rows={4} />
+        ) : tab === "pricing" ? (
+          products.data ? (
+            <PricingTab brand={brand} caps={caps} groupBuys={data.groupBuys} products={products.data} />
+          ) : products.isError ? (
+            <ErrorState message={products.error?.message ?? "Couldn't load products."} onRetry={() => void products.refetch()} />
+          ) : (
+            <SkeletonList rows={4} />
+          )
+        ) : (
+          <>
+            <WaysCard ways={ways} setWays={setWays} />
+            {caps.productAssignment && ways.onHand === "open" ? <AllowOnHandCard initial={brand.groupBuyAllowOnHand !== false} /> : null}
+            <CopyCard content={content} onEdit={() => setEditingContent(true)} />
+            <RoundsList
+              data={data}
+              showArchived={showArchived}
+              onToggleArchived={() => setShowArchived((v) => !v)}
+              online={online}
+              busy={busy}
+              money={money}
+              rowsById={rowsById}
+              onCreate={() => setEditor({ round: null })}
+              onOpen={(gb) => router.push(dashboardRoute(gb))}
+              onReport={(gb) => {
+                setAutoHandled(true);
+                setReporting(gb);
+              }}
+              onDuplicate={(gb) => duplicate.mutate([gb.id], { onError: fail("Couldn't duplicate") })}
+              onEdit={(gb) => setEditor({ round: gb })}
+              onArchive={confirmArchive}
+            />
+          </>
+        )}
+      </ScrollView>
+
+      {editor && data ? (
+        <RoundEditor
+          key={editor.round?.id ?? "new"}
+          initial={editor.round}
+          caps={data.caps}
+          settings={data.settings}
+          products={(products.data ?? []).map((p) => ({ id: p.id, name: p.name }))}
+          saving={save.isPending}
+          onCancel={() => setEditor(null)}
+          onSave={(patch) => save.mutate([patch], { onSuccess: () => setEditor(null), onError: fail("Couldn't save the group buy") })}
+        />
+      ) : null}
+      {editingContent ? (
+        <ContentEditor
+          initial={content}
+          onClose={() => setEditingContent(false)}
+          onSaved={(c) => {
+            setContentOverride(c);
+            setEditingContent(false);
+          }}
+        />
+      ) : null}
+      {shownReport && data ? <ReportSheet groupBuy={shownReport} caps={data.caps} currency={currency} onClose={closeReport} /> : null}
+    </View>
+  );
+}
+
+function RoundsList({
+  data,
+  showArchived,
+  onToggleArchived,
+  online,
+  busy,
+  money,
+  rowsById,
+  onCreate,
+  onOpen,
+  onReport,
+  onDuplicate,
+  onEdit,
+  onArchive,
+}: {
+  data: ListResult;
+  showArchived: boolean;
+  onToggleArchived: () => void;
+  online: boolean;
+  busy: boolean;
+  money: (n: number) => string;
+  rowsById: Map<string, ListResult["rows"][number]>;
+  onCreate: () => void;
+  onOpen: (gb: GroupBuy) => void;
+  onReport: (gb: GroupBuy) => void;
+  onDuplicate: (gb: GroupBuy) => void;
+  onEdit: (gb: GroupBuy) => void;
+  onArchive: (gb: GroupBuy) => void;
+}) {
+  const { caps, groupBuys } = data;
+  const visible = groupBuys.filter((gb) => (showArchived ? gb.status === "archived" : gb.status !== "archived"));
+  const archivedCount = groupBuys.filter((gb) => gb.status === "archived").length;
+  const awaiting = new Set(caps.supplierReports ? roundsAwaitingReport(groupBuys, caps.scheduled).map((gb) => gb.id) : []);
+  const canCreate = caps.canCreate && !showArchived;
+
+  return (
+    <View style={{ gap: SPACE.md }}>
+      <View style={styles.head}>
+        <AppText variant="heading" accessibilityRole="header" style={{ flex: 1 }}>
+          {showArchived ? "Archived rounds" : "Rounds"}
+        </AppText>
+        {archivedCount > 0 ? (
+          <Button
+            label={showArchived ? "Back to list" : `Archived (${archivedCount})`}
+            variant="ghost"
+            icon={showArchived ? "arrow-back" : "archive-outline"}
+            onPress={onToggleArchived}
+          />
+        ) : null}
+      </View>
+      {canCreate ? <Button label="New Group Buy" icon="add" disabled={!online} onPress={onCreate} /> : null}
+      {awaiting.size > 0 && !showArchived ? (
+        <AppText variant="caption" color="muted">
+          {`${awaiting.size} finished round${awaiting.size === 1 ? " has" : "s have"} reports ready — archive a round once you're done with it.`}
+        </AppText>
+      ) : null}
+      {visible.length === 0 ? (
+        <EmptyState
+          icon="people-outline"
+          title={showArchived ? "Nothing archived." : "No group buys yet."}
+          action={canCreate && online ? { label: "Open your first group buy", onPress: onCreate } : undefined}
+        />
+      ) : (
+        visible.map((gb) => (
+          <RoundCard
+            key={gb.id}
+            gb={gb}
+            row={rowsById.get(gb.id)}
+            effective={effectiveGroupBuyStatus(gb, caps.scheduled)}
+            caps={caps}
+            awaitingReport={awaiting.has(gb.id)}
+            busy={busy || !online}
+            money={money}
+            onOpen={() => onOpen(gb)}
+            onReport={() => onReport(gb)}
+            onDuplicate={() => onDuplicate(gb)}
+            onEdit={() => onEdit(gb)}
+            onArchive={() => onArchive(gb)}
+          />
+        ))
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { padding: SPACE.lg, gap: SPACE.lg, paddingBottom: SPACE.xxxl },
+  head: { flexDirection: "row", alignItems: "center", gap: SPACE.md },
+});

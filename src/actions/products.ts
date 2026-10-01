@@ -28,6 +28,7 @@ import {
   getDemoBranding,
 } from "@/lib/demo/fixtures";
 import { str, normalizeProductInput } from "@/lib/storefront/product-input";
+import { applyProductOrder, normalizeProductOrder } from "@/lib/storefront/product-order";
 import {
   currencySymbolToIso,
   dbProductToStorefront,
@@ -77,17 +78,28 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    return { ok: true, products: demoEffectiveProducts(slug, symbol) };
+    const order = normalizeProductOrder(getDemoBranding(tenantId).config?.productOrder);
+    return { ok: true, products: applyProductOrder(demoEffectiveProducts(slug, symbol), order) };
   }
 
   try {
-    const rows = await withTenant(tenantId, (db) =>
-      db.product.findMany({
-        where: { status: { not: "archived" } },
-        orderBy: { createdAt: "asc" },
-      }),
-    );
-    return { ok: true, products: rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)) };
+    const [rows, { branding }] = await Promise.all([
+      withTenant(tenantId, (db) =>
+        db.product.findMany({
+          where: { status: { not: "archived" } },
+          orderBy: { createdAt: "asc" },
+        }),
+      ),
+      getTenantContext(tenantId),
+    ]);
+    const order = normalizeProductOrder((branding?.config as Record<string, unknown> | null)?.productOrder);
+    return {
+      ok: true,
+      products: applyProductOrder(
+        rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
+        order,
+      ),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load products." };
   }
@@ -151,7 +163,10 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
     return {
       ok: true,
       products: stripResellerPricing(
-        rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
+        applyProductOrder(
+          rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
+          normalizeProductOrder(config.productOrder),
+        ),
         ...stripArgs,
       ),
     };

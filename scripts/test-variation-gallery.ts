@@ -425,7 +425,7 @@ check("each variation row can upload its own photo", () => {
   );
   assert.match(
     admin,
-    /uploadVariationImage/,
+    /onUpload=\{upload\w+\}/,
     "no per-variation upload handler exists",
   );
   assert.match(
