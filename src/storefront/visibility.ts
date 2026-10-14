@@ -22,6 +22,8 @@ export const MODULE_FEATURE: Record<string, FeatureKey> = {
   reviews: FEATURES.STORE_REVIEWS,
   lab: FEATURES.STORE_COA,
   proto: FEATURES.STORE_PROTOCOLS,
+  articles: FEATURES.SITE_BLOG,
+  assessments: FEATURES.STORE_ASSESSMENT,
 };
 
 // Store-admin module ids whose gating feature is currently flagged "New". The
@@ -75,6 +77,11 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Sign in / sign up / My Account. Default OFF — exists only while the
   // operator has granted customer accounts.
   account: (b) => b.customerAccountsEnabled === true,
+  // Articles (+ #articles/<slug>). Server-derived: blog entitlement AND owner
+  // toggle AND at least one published post. Undefined → hidden (fail closed).
+  articles: (b) => b.showPageArticles === true,
+  // Assessment quiz. Server-derived: operator grant AND owner switch.
+  assessment: (b) => b.showPageAssessment === true,
 };
 
 // Each store-admin sub-view that exists to manage a storefront page. When the
@@ -138,6 +145,14 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   "staff-form": (b) => b.showAdminStaff === true,
   // Customers list (customer accounts). Same grant as the storefront #account page.
   customers: (b) => b.customerAccountsEnabled === true,
+
+  // Articles manager — the blog ENTITLEMENT alone (not the page flag, which also
+  // needs a published post: the owner must be able to write the first one).
+  articles: (b) => b.articlesEntitled === true,
+  // Assessments manager (submissions + quiz settings) — the operator grant.
+  // Stays visible while the owner has the quiz switched off so they can turn it
+  // back on and still read past submissions.
+  assessments: (b) => b.assessmentEntitled === true,
 
   // Order-alert email view — owner-only, gated on FEATURES.NOTIFY_ADMIN_ORDER
   // (projected to showAdminOrderNotify in page.tsx). Default OFF.

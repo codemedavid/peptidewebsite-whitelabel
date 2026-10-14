@@ -44,6 +44,9 @@ export interface LegacyOrderItem {
   product_id?: string | null;
   variation_id?: string | null;
   total?: number | null;
+  /** The old card's "Complete Set" toggle (The Peppy Lab's template); a set
+   *  line resolves to the "Complete Set" option, a plain one to "Vial Only". */
+  is_complete_set?: boolean | null;
 }
 
 /** One row of the old flat `public.orders` table, typed and null-normalized. */
@@ -75,6 +78,10 @@ export interface LegacyOrderRow {
   shippingBarangay: string;
   voucherCode: string | null;
   voucherDiscount: number;
+  /** Only REST rows carry these (the COPY dump format predates them). */
+  legacyOrderNumber?: string | null;
+  courierName?: string | null;
+  trackingNumber?: string | null;
 }
 
 // ── COPY text-format parsing ─────────────────────────────────────────────────
@@ -130,9 +137,7 @@ function toIso(raw: string): string {
   return d.toISOString();
 }
 
-function parseItems(raw: string | null): LegacyOrderItem[] {
-  if (!raw) return [];
-  const parsed: unknown = JSON.parse(raw);
+function itemsFrom(parsed: unknown): LegacyOrderItem[] {
   if (!Array.isArray(parsed)) return [];
   return parsed.map((entry) => {
     const x = (entry ?? {}) as Record<string, unknown>;
@@ -143,8 +148,14 @@ function parseItems(raw: string | null): LegacyOrderItem[] {
       price: Number(x.price) || 0,
       product_id: typeof x.product_id === "string" ? x.product_id : null,
       variation_id: typeof x.variation_id === "string" ? x.variation_id : null,
+      ...(typeof x.is_complete_set === "boolean" ? { is_complete_set: x.is_complete_set } : {}),
     };
   });
+}
+
+function parseItems(raw: string | null): LegacyOrderItem[] {
+  if (!raw) return [];
+  return itemsFrom(JSON.parse(raw));
 }
 
 /**
@@ -195,6 +206,54 @@ export function parseLegacyOrders(dump: string): LegacyOrderRow[] {
   return rows;
 }
 
+// ── REST (JSON) rows ─────────────────────────────────────────────────────────
+
+const jsonText = (v: unknown): string => (typeof v === "string" ? v : "");
+const jsonNullable = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const jsonNumber = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Decode one row of the old `orders` table as served by its PostgREST API — the
+ * route for a legacy project that is still live (no dump needed). Yields the
+ * same shape `parseLegacyOrders` does, plus the columns the newer template has.
+ */
+export function legacyOrderRowFromJson(raw: Record<string, unknown>): LegacyOrderRow {
+  const discount = jsonNumber(raw.discount_amount) || jsonNumber(raw.discount_applied);
+  return {
+    id: jsonText(raw.id),
+    customerName: jsonText(raw.customer_name),
+    customerEmail: jsonText(raw.customer_email),
+    customerPhone: jsonText(raw.customer_phone),
+    shippingAddress: jsonText(raw.shipping_address),
+    shippingCity: jsonText(raw.shipping_city),
+    shippingState: jsonText(raw.shipping_state),
+    shippingZipCode: jsonText(raw.shipping_zip_code),
+    shippingCountry: jsonNullable(raw.shipping_country),
+    shippingLocation: jsonNullable(raw.shipping_location),
+    shippingFee: jsonNumber(raw.shipping_fee),
+    orderItems: itemsFrom(raw.order_items),
+    totalPrice: jsonNumber(raw.total_price),
+    paymentMethodId: jsonNullable(raw.payment_method_id),
+    paymentMethodName: jsonNullable(raw.payment_method_name),
+    paymentProofUrl: jsonNullable(raw.payment_proof_url),
+    paymentStatus: jsonNullable(raw.payment_status),
+    contactMethod: jsonNullable(raw.contact_method),
+    orderStatus: jsonNullable(raw.order_status),
+    notes: jsonNullable(raw.notes),
+    createdAt: jsonText(raw.created_at),
+    updatedAt: jsonText(raw.updated_at),
+    shippingBarangay: jsonText(raw.shipping_barangay),
+    voucherCode: jsonNullable(raw.voucher_code) ?? jsonNullable(raw.promo_code),
+    voucherDiscount: discount,
+    legacyOrderNumber: jsonNullable(raw.order_number),
+    courierName: jsonNullable(raw.courier_name),
+    trackingNumber: jsonNullable(raw.tracking_number),
+  };
+}
+
 // ── Resolving a legacy line against the live catalog ─────────────────────────
 
 /** The minimal live-catalog shape the resolver needs. */
@@ -202,9 +261,14 @@ export interface LegacyCatalogProduct {
   id: string;
   name: string;
   variations?: { name: string }[];
+  /** The product's uuid on the OLD system, when the catalog was imported from
+   *  it (scripts/import-legacy-store.ts). Lets a line link by id, rename-proof. */
+  legacyId?: string;
 }
 
 export interface CatalogIndex {
+  /** Legacy uuid → the product (only for catalogs imported off the old app). */
+  byLegacyId: Map<string, LegacyCatalogProduct>;
   /** Normalized product name → the product. */
   byName: Map<string, LegacyCatalogProduct>;
   /** Normalized "product name + dose" → the product and the dose it belongs to. */
@@ -222,9 +286,13 @@ function key(s: string): string {
  * others bake the dose into the name ("Glutathione 1500mg").
  */
 export function buildCatalogIndex(products: readonly LegacyCatalogProduct[]): CatalogIndex {
+  const byLegacyId = new Map<string, LegacyCatalogProduct>();
   const byName = new Map<string, LegacyCatalogProduct>();
   const byNameAndDose = new Map<string, { product: LegacyCatalogProduct; variation: string }>();
   for (const product of products) {
+    if (product.legacyId && !byLegacyId.has(product.legacyId)) {
+      byLegacyId.set(product.legacyId, product);
+    }
     const name = key(product.name);
     // First write wins: a catalog with duplicate rows (a known hazard — see the
     // group-buy assignment drift) resolves deterministically instead of by order.
@@ -236,7 +304,20 @@ export function buildCatalogIndex(products: readonly LegacyCatalogProduct[]): Ca
       }
     }
   }
-  return { byName, byNameAndDose };
+  return { byLegacyId, byName, byNameAndDose };
+}
+
+const COMPLETE_SET_OPTION = "Complete Set";
+const VIAL_ONLY_OPTION = "Vial Only";
+
+/** The option a line bought: its own variation name, else the set toggle mapped
+ *  onto the product's "Complete Set" / "Vial Only" options when it has them. */
+function lineDose(product: LegacyCatalogProduct | undefined, item: LegacyOrderItem): string {
+  const named = (item.variation_name || "").trim();
+  if (named || typeof item.is_complete_set !== "boolean") return named;
+  const options = new Set((product?.variations ?? []).map((v) => v.name));
+  const wanted = item.is_complete_set ? COMPLETE_SET_OPTION : VIAL_ONLY_OPTION;
+  return options.has(wanted) ? wanted : "";
 }
 
 /** The whitelabel names a variation line "Product — Dose" (see makeVariationEntry),
@@ -252,9 +333,17 @@ function variationLabel(productName: string, variation: string): string {
  */
 export function resolveLegacyLine(index: CatalogIndex, item: LegacyOrderItem): OrderItem {
   const rawName = (item.product_name || "").trim();
-  const dose = (item.variation_name || "").trim();
   const qty = Math.max(1, Math.round(item.quantity) || 1);
   const price = Math.max(0, Number(item.price) || 0);
+
+  // The legacy id is rename-proof, so it wins whenever the catalog carries it.
+  const byId = item.product_id ? index.byLegacyId.get(item.product_id) : undefined;
+  const dose = lineDose(byId ?? index.byName.get(key(rawName)), item);
+  if (byId) {
+    return dose
+      ? { name: variationLabel(byId.name, dose), qty, price, productId: byId.id, variation: dose }
+      : { name: byId.name, qty, price, productId: byId.id };
+  }
 
   if (dose) {
     const product = index.byName.get(key(rawName));
@@ -298,9 +387,10 @@ export interface ImportedOrder {
   status: OrderStatus;
   paymentStatus: "pending" | "paid";
   paymentMethod: string;
-  /** Always null — the old proof images are unrecoverable, so the admin shows
-   *  "no proof on file" rather than a permanently broken image. */
-  paymentProofUrl: null;
+  /** Null unless the caller re-hosted the proof (`proofUrl` option). A dead
+   *  legacy URL is never stored: the admin shows "no proof on file" instead of
+   *  a permanently broken image. */
+  paymentProofUrl: string | null;
   customer: { name: string; email: string; phone: string; contactMethod: string };
   shipping: {
     address: string;
@@ -318,6 +408,9 @@ export interface ImportedOrder {
   courier: string;
   trackingNumber: string;
   shippingNote: string;
+  /** The buyer's own words. Kept off `shippingNote`, which is the owner's
+   *  outbound note and renders on the public Track page. */
+  customerNote: string;
   placedAt: string;
   updatedAt: string;
   imported: true;
@@ -326,6 +419,11 @@ export interface ImportedOrder {
 export interface MapLegacyOrderOptions {
   index: CatalogIndex;
   orderNumber: string;
+  /** The proof image already re-hosted onto the tenant's own storage. */
+  proofUrl?: string | null;
+  /** Where the old `notes` column lands. "shipping" is what the HP GLOW import
+   *  did; "customer" is correct for a buyer-written note (keeps it private). */
+  notesAs?: "shipping" | "customer";
 }
 
 /** `importOrderNumber("HPG-IMP", 7)` → "HPG-IMP-0007". A namespace of its own,
@@ -364,7 +462,7 @@ export function mapLegacyOrder(row: LegacyOrderRow, opts: MapLegacyOrderOptions)
     status,
     paymentStatus: row.paymentStatus === "paid" ? "paid" : "pending",
     paymentMethod: row.paymentMethodName ?? "",
-    paymentProofUrl: null,
+    paymentProofUrl: opts.proofUrl || null,
     customer: {
       name: row.customerName,
       email: row.customerEmail,
@@ -388,11 +486,13 @@ export function mapLegacyOrder(row: LegacyOrderRow, opts: MapLegacyOrderOptions)
     ...(row.voucherCode && discountAmount > 0
       ? { discount: { code: row.voucherCode, label: row.voucherCode, amount: discountAmount } }
       : {}),
-    courier: "",
-    trackingNumber: "",
-    // The old `notes` column is the customer's delivery instruction, which is
-    // exactly what shippingNote carries (and shows on the Track page).
-    shippingNote: row.notes ?? "",
+    courier: row.courierName ?? "",
+    trackingNumber: row.trackingNumber ?? "",
+    // The old `notes` column is the customer's delivery instruction. The HP GLOW
+    // import carried it as the shipping note (shown on the Track page); newer
+    // imports keep it as the private customer note instead.
+    shippingNote: opts.notesAs === "customer" ? "" : (row.notes ?? ""),
+    customerNote: opts.notesAs === "customer" ? (row.notes ?? "") : "",
     placedAt,
     updatedAt,
     imported: true,

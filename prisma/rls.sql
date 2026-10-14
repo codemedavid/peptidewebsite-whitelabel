@@ -37,7 +37,8 @@ DECLARE
     'domains', 'group_buys', 'tenant_integrations', 'tenant_feature_overrides', 'contacts',
     'products', 'carts', 'orders', 'storefront_orders', 'events', 'email_logs',
     'automation_runs', 'automation_metrics', 'tenant_users', 'branding',
-    'tenant_settings', 'pages', 'blog_posts', 'coupons', 'media_assets'
+    'tenant_settings', 'pages', 'blog_posts', 'coupons', 'media_assets',
+    'assessment_responses'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

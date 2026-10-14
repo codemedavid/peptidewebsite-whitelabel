@@ -45,6 +45,9 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "pay", label: "Payments" },
   { key: "faq", label: "FAQ" },
   { key: "proto", label: "Protocols" },
+  { key: "articles", label: "Articles" },
+  // Quiz submissions hold self-reported medical history — grant deliberately.
+  { key: "assessments", label: "Assessments" },
   { key: "reseller", label: "Reseller Portal" },
   // Entitlement-gated extras — present so staff can't see them without a grant.
   { key: "design", label: "Card Studio" },

@@ -20,6 +20,8 @@ import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeReviews, normalizeReviewDescStyle } from "@/lib/storefront/reviews";
+import { ARTICLE_LIMITS, articleFromRow, summarizeArticle } from "@/lib/storefront/articles";
+import { normalizeAssessmentConfig } from "@/lib/storefront/assessment";
 import { getTrialState } from "@/lib/trial/trial-info";
 import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
 import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription/subscription-info";
@@ -91,8 +93,20 @@ export async function loadStorefrontBrand(
       );
   // Awaited further down; a failure here must not surface as an unhandled
   // rejection if an earlier await throws first.
+  // Published article SUMMARY rows, read in parallel with the catalog. Bodies
+  // stay out of the storefront payload — a post is fetched when it is opened.
+  const articleRowsP = isDemoMode()
+    ? Promise.resolve([])
+    : withTenant(tenantId, (db) =>
+        db.blogPost.findMany({
+          where: { status: "published" },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          take: ARTICLE_LIMITS.listed,
+        }),
+      );
   groupBuysP.catch(() => undefined);
   productRowsP.catch(() => undefined);
+  articleRowsP.catch(() => undefined);
   const [{ tenant, branding, settings }, entitlements, trialState, subscriptionState, subscriptionBilling, registry] =
     await Promise.all([
       getTenantContext(tenantId),
@@ -235,6 +249,25 @@ export async function loadStorefrontBrand(
   const protocolsEntitled = has(FEATURES.STORE_PROTOCOLS);
   brand.protocolsEntitled = protocolsEntitled;
   brand.showPageProtocols = resolveEntitledPage(protocolsEntitled, config.showPageProtocols);
+
+  // Articles page: the blog entitlement (FEATURES.SITE_BLOG) AND the owner's
+  // toggle AND at least one published post, so the nav never links to an empty
+  // page. A failed read degrades to "no articles" rather than failing the store.
+  const articlesEntitled = has(FEATURES.SITE_BLOG);
+  brand.articlesEntitled = articlesEntitled;
+  const articleRows = articlesEntitled ? await articleRowsP.catch(() => []) : [];
+  brand.articles = articleRows.map((row) => summarizeArticle(articleFromRow(row)));
+  brand.showPageArticles =
+    resolveEntitledPage(articlesEntitled, config.showPageArticles) && brand.articles.length > 0;
+
+  // Assessment quiz: operator grant (FEATURES.STORE_ASSESSMENT, default OFF) AND
+  // the owner's on/off inside the normalized config. The config always ships so
+  // the store admin can edit it once granted.
+  const assessmentEntitled = has(FEATURES.STORE_ASSESSMENT);
+  const assessment = normalizeAssessmentConfig(config.assessment);
+  brand.assessmentEntitled = assessmentEntitled;
+  brand.assessment = assessment;
+  brand.showPageAssessment = assessmentEntitled && assessment.enabled;
 
   // Group Buy Rules engine: the store-admin view AND rule enforcement are gated
   // on the platform entitlement alone. Revoking the feature both hides the

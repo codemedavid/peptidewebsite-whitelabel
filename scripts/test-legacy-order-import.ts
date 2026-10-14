@@ -53,6 +53,7 @@ import {
   resolveLegacyLine,
   mapLegacyOrder,
   importOrderNumber,
+  legacyOrderRowFromJson,
   type LegacyCatalogProduct,
 } from "../src/lib/orders/legacy-import";
 import { planStatusChange, inventoryMove } from "../src/lib/storefront/order-status";
@@ -550,6 +551,153 @@ if (existsSync(DUMP_PATH)) {
 } else {
   console.log("\nAgainst the real HP GLOW dump — SKIPPED (dump not at repo root)");
 }
+
+// ──────────────────────────── REST (JSON) rows ──────────────────────────────
+// The Peppy Lab's old project is still live, so its orders come off the REST
+// API as JSON rather than out of a pg dump. Same table, same template.
+console.log("\nREST JSON rows (The Peppy Lab)");
+
+const JSON_ROW = {
+  id: "d88bfeb9-5b4a-4de7-b8fc-0e453e03f129",
+  customer_name: "Test Buyer",
+  customer_email: "buyer@example.com",
+  customer_phone: "09170000000",
+  contact_method: "telegram",
+  shipping_address: "1 Sample St",
+  shipping_city: "Quezon City",
+  shipping_state: "Metro Manila",
+  shipping_zip_code: "1100",
+  shipping_country: "Philippines",
+  shipping_barangay: "Brgy Commonwealth ",
+  shipping_location: "NCR",
+  shipping_fee: 80,
+  order_items: [
+    { price: 2699, total: 2699, quantity: 1, product_id: "96e00970-7175-4d44-b9df-05ad73927040", product_name: "AOD+Tesamorelin+Motsc Blend", variation_id: null, variation_name: null, is_complete_set: true },
+    { price: 2099, total: 2099, quantity: 1, product_id: "96e00970-7175-4d44-b9df-05ad73927040", product_name: "AOD+Tesamorelin+Motsc Blend", variation_id: null, variation_name: null, is_complete_set: false },
+    { price: 1299, total: 1299, quantity: 1, product_id: "4bf668ad-0521-4be0-b7cd-7844eab67479", product_name: "Reusable Peppy Pen", variation_id: "v-orange", variation_name: "Orange", is_complete_set: false },
+  ],
+  total_price: 6097,
+  payment_method_id: "bank-transfer-bpi",
+  payment_method_name: "Bank Transfer BPI",
+  payment_status: "paid",
+  payment_proof_url: "https://old.supabase.co/storage/v1/object/public/payment-proofs/p.jpg",
+  order_status: "shipped",
+  notes: "Leave at the guard house",
+  created_at: "2026-05-01T13:27:12.950588+00:00",
+  updated_at: "2026-05-02T13:08:43.49016+00:00",
+  order_number: "TPL#001",
+  voucher_code: "LABOR5",
+  discount_amount: 134.95,
+  discount_applied: 0,
+  courier_name: "LALAMOVE",
+  tracking_number: null,
+};
+
+const J = legacyOrderRowFromJson(JSON_ROW);
+
+check("a REST row decodes into the same row shape the COPY parser yields", () => {
+  assert.equal(J.id, JSON_ROW.id);
+  assert.equal(J.customerName, "Test Buyer");
+  assert.equal(J.shippingFee, 80);
+  assert.equal(J.totalPrice, 6097);
+  assert.equal(J.orderItems.length, 3);
+  assert.equal(J.createdAt, "2026-05-01T13:27:12.950588+00:00");
+});
+
+check("the voucher discount reads discount_amount, falling back to discount_applied", () => {
+  assert.equal(J.voucherDiscount, 134.95);
+  assert.equal(legacyOrderRowFromJson({ ...JSON_ROW, discount_amount: null, discount_applied: 50 }).voucherDiscount, 50);
+});
+
+check("REST rows keep the legacy order number, courier and tracking", () => {
+  assert.equal(J.legacyOrderNumber, "TPL#001");
+  assert.equal(J.courierName, "LALAMOVE");
+  assert.equal(J.trackingNumber, null);
+});
+
+check("missing/odd fields decode safely instead of throwing", () => {
+  const sparse = legacyOrderRowFromJson({ id: "x", created_at: JSON_ROW.created_at, updated_at: JSON_ROW.updated_at });
+  assert.equal(sparse.customerName, "");
+  assert.equal(sparse.shippingFee, 0);
+  assert.deepEqual(sparse.orderItems, []);
+  assert.equal(sparse.voucherDiscount, 0);
+});
+
+const PEPPY_CATALOG: LegacyCatalogProduct[] = [
+  {
+    id: "cuid-aod",
+    legacyId: "96e00970-7175-4d44-b9df-05ad73927040",
+    name: "AOD+Tesamorelin+Motsc Blend",
+    variations: [{ name: "Vial Only" }, { name: "Complete Set" }],
+  },
+  {
+    id: "cuid-pen",
+    legacyId: "4bf668ad-0521-4be0-b7cd-7844eab67479",
+    name: "Reusable Peppy Pen",
+    variations: [{ name: "Orange" }, { name: "Purple" }],
+  },
+];
+const PEPPY_INDEX = buildCatalogIndex(PEPPY_CATALOG);
+
+check("a line links by its legacy product id, even after a rename", () => {
+  const line = resolveLegacyLine(PEPPY_INDEX, { ...J.orderItems[2], product_name: "Old Pen Name" });
+  assert.equal(line.productId, "cuid-pen");
+  assert.equal(line.variation, "Orange");
+  assert.equal(line.name, "Reusable Peppy Pen — Orange");
+});
+
+check("a complete-set line becomes the Complete Set option", () => {
+  const line = resolveLegacyLine(PEPPY_INDEX, J.orderItems[0]);
+  assert.equal(line.productId, "cuid-aod");
+  assert.equal(line.variation, "Complete Set");
+  assert.equal(line.price, 2699);
+});
+
+check("a vial-only line of a set product becomes the Vial Only option", () => {
+  const line = resolveLegacyLine(PEPPY_INDEX, J.orderItems[1]);
+  assert.equal(line.variation, "Vial Only");
+  assert.equal(line.name, "AOD+Tesamorelin+Motsc Blend — Vial Only");
+});
+
+check("an unknown legacy id still falls back to name matching", () => {
+  const line = resolveLegacyLine(PEPPY_INDEX, {
+    ...J.orderItems[2],
+    product_id: "00000000-0000-0000-0000-000000000000",
+  });
+  assert.equal(line.productId, "cuid-pen");
+});
+
+const P = mapLegacyOrder(J, {
+  index: PEPPY_INDEX,
+  orderNumber: J.legacyOrderNumber ?? importOrderNumber("TPL-IMP", 1),
+  proofUrl: "https://ik.imagekit.io/x/tenant/thepeppylab/proof.jpg",
+  notesAs: "customer",
+});
+
+check("a re-hosted proof URL is stored when the caller supplies one", () => {
+  assert.equal(P.paymentProofUrl, "https://ik.imagekit.io/x/tenant/thepeppylab/proof.jpg");
+});
+
+check("notesAs 'customer' keeps the buyer's words OFF the public shipping note", () => {
+  assert.equal(P.customerNote, "Leave at the guard house");
+  assert.equal(P.shippingNote, "");
+});
+
+check("courier and tracking carry across from the REST row", () => {
+  assert.equal(P.courier, "LALAMOVE");
+  assert.equal(P.trackingNumber, "");
+});
+
+check("the legacy order number is kept so customers can still track it", () => {
+  assert.equal(P.orderNumber, "TPL#001");
+});
+
+check("defaults are unchanged for dump imports: no proof, note → shipping", () => {
+  const legacy = mapLegacyOrder(J, { index: PEPPY_INDEX, orderNumber: "X-1" });
+  assert.equal(legacy.paymentProofUrl, null);
+  assert.equal(legacy.shippingNote, "Leave at the guard house");
+  assert.equal(legacy.customerNote, "");
+});
 
 // ──────────────────────────── summary ───────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);

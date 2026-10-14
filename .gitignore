@@ -21,3 +21,6 @@ next-env.d.ts
 
 # Design reference screenshots (large, local only)
 inspiration/
+
+# Legacy-store migration exports (may hold customer PII)
+.migration/

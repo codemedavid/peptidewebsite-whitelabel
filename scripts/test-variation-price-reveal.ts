@@ -21,7 +21,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveSelectedPrice } from "../src/lib/storefront/variations";
+import { initialOptionIndex, resolveSelectedPrice } from "../src/lib/storefront/variations";
 
 // ──────────────────────────── tiny assertion harness ────────────────────────
 let passed = 0;
@@ -100,12 +100,25 @@ check("the card + modal consume the reveal-on-click price rule", () => {
   );
 });
 
-check("both option pickers start with nothing selected (useState(-1))", () => {
-  const inits = catalog.match(/useState\(\s*-1\s*\)/g) ?? [];
+check("both option pickers start from initialOptionIndex (nothing selected by default)", () => {
+  const inits = catalog.match(/useState\(\s*\(\)\s*=>\s*initialOptionIndex\(/g) ?? [];
   assert.ok(
     inits.length >= 2,
-    `expected the card AND modal to init optIdx to -1 (found ${inits.length})`,
+    `expected the card AND modal to init optIdx via initialOptionIndex (found ${inits.length})`,
   );
+});
+
+check("initialOptionIndex: reveal-on-click stays the default (-1)", () => {
+  assert.strictEqual(initialOptionIndex(3, undefined), -1);
+  assert.strictEqual(initialOptionIndex(3, false), -1);
+});
+
+check("initialOptionIndex: a store that opts in starts on the first option", () => {
+  assert.strictEqual(initialOptionIndex(2, true), 0);
+});
+
+check("initialOptionIndex: no options → nothing to preselect", () => {
+  assert.strictEqual(initialOptionIndex(0, true), -1);
 });
 
 check("option pills no longer render optionLabel (name · price)", () => {

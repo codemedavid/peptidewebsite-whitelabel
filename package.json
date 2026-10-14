@@ -194,7 +194,11 @@
     "test:mobile-shop-core": "tsx scripts/test-mobile-shop-core.ts",
     "test:customer-accounts-db": "tsx scripts/test-customer-accounts-db.ts",
     "test:db-pool-config": "tsx scripts/test-db-pool-config.ts",
-    "test:mobile-shop-couriers": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-mobile-shop-couriers.ts"
+    "test:mobile-shop-couriers": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-mobile-shop-couriers.ts",
+    "test:legacy-store": "tsx scripts/test-legacy-store.ts",
+    "test:articles": "tsx scripts/test-articles.ts",
+    "test:assessment": "tsx scripts/test-assessment.ts",
+    "test:trust-strip": "tsx scripts/test-trust-strip.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -27,6 +27,8 @@ import { AdminCurrency } from "./AdminCurrency";
 import { AdminTrackNote } from "./AdminTrackNote";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
+import { AdminArticles } from "./AdminArticles";
+import { AdminAssessments } from "./AdminAssessments";
 import { AdminReviewsManager } from "./AdminReviewsManager";
 import { AdminResellerSettings } from "./AdminResellerSettings";
 import { AdminAccessCode } from "./AdminAccessCode";
@@ -70,6 +72,8 @@ const VIEWS = [
   "pay",
   "faq",
   "proto",
+  "articles",
+  "assessments",
   "reviews",
   "reseller",
   "access-code",
@@ -303,6 +307,8 @@ export function AdminPage({
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "articles") return <AdminArticles brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "assessments") return <AdminAssessments brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reviews") return <AdminReviewsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "checkout") return <AdminCheckoutRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "fee") return <AdminFeeSettings brand={brand} onBack={() => setView("dashboard")} />;

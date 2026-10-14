@@ -42,6 +42,8 @@ const PAGE_OPTIONS: { route: string; label: string; alwaysOn?: boolean }[] = [
   { route: "calculator", label: "Reconstitution Calculator" },
   { route: "track", label: "Track Order" },
   { route: "merchant", label: "Wholesale" },
+  { route: "articles", label: "Articles" },
+  { route: "assessment", label: "Assessment Quiz" },
 ];
 
 const MODE_LABEL: Record<BannerMode, { title: string; hint: string }> = {

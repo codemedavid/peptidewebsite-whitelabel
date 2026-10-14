@@ -28,6 +28,7 @@ import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
 import { buildCategoryTiles } from "@/lib/storefront/boutique-home";
 import { isBoutiqueLayout, isEditorialLayout } from "@/lib/storefront/home-layout";
 import { Footer } from "./components/Footer";
+import { TrustStrip } from "./components/TrustStrip";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
 import { parseProductHash } from "@/lib/storefront/product-link";
@@ -53,6 +54,8 @@ const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").th
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: BrandPageLoader });
 const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: BrandPageLoader });
 const AccountPage = dynamic(() => import("./pages/AccountPage").then((m) => m.AccountPage), { ssr: false, loading: BrandPageLoader });
+const ArticlesPage = dynamic(() => import("./pages/ArticlesPage").then((m) => m.ArticlesPage), { ssr: false, loading: BrandPageLoader });
+const AssessmentPage = dynamic(() => import("./pages/AssessmentPage").then((m) => m.AssessmentPage), { ssr: false, loading: BrandPageLoader });
 const GroupBuyPage = dynamic(() => import("./pages/GroupBuyPage").then((m) => m.GroupBuyPage), { ssr: false, loading: BrandPageLoader });
 // Opt-in "two ways to order" home (brand.homeLayout === "two-ways"). Code-split so
 // the classic-home tenants never download it.
@@ -70,7 +73,7 @@ const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: BrandPageLoader });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: BrandPageLoader });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account", "articles", "assessment"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -79,6 +82,9 @@ function pageFromHash(): string {
   // view with one product's quick-view open. Resolving it to "home" keeps it out
   // of the flat exact-match list above, so it can never shadow a real route.
   if (parseProductHash(h)) return "home";
+  // One article (#articles/<slug>) is the Articles page showing that post; the
+  // page reads the slug from the hash itself.
+  if (h.startsWith("articles/")) return "articles";
   return ROUTES.includes(h) ? h : "home";
 }
 
@@ -350,6 +356,10 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
       {activePage === "account" && <AccountPage brand={brand} onBack={goHome} />}
+      {activePage === "articles" && <ArticlesPage brand={brand} onBack={goHome} />}
+      {activePage === "assessment" && (
+        <AssessmentPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
+      )}
       {/* A store that HID the group-buy way doesn't serve the page, even by
           direct #groupbuy link — the way state, not the banner, is the gate
           (the banner has to stay so the round's pre-orders keep off the
@@ -446,6 +456,8 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
               openProductSlug={productKey}
             />
           )}
+          {/* Opt-in (Brand.showTrustStrip); renders nothing otherwise. */}
+          <TrustStrip brand={brand} />
         </>
       )}
 
