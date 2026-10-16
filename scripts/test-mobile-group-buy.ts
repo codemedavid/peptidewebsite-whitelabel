@@ -146,7 +146,7 @@ test("no round → empty", () => {
 console.log("\nshareTargets");
 const peer: Participant = { key: "c:1", name: "Ana Cruz", avatarHue: 10, imageUrl: null, isTeam: false };
 const channel = (id: string, canPost: boolean, last: string | null): CommunityChannel => ({
-  id, name: `#${id}`, description: null, emoji: "💬", imageUrl: null, postRole: "everyone", sortOrder: 0, topicCount: 1,
+  id, name: `#${id}`, description: null, emoji: "💬", imageUrl: null, postRole: "everyone", audience: "everyone", sortOrder: 0, topicCount: 1,
   generalTopicId: `g-${id}`, lastMessageAt: last, preview: null, previewTopic: null, unread: 0, canPost, canManage: false,
 });
 const dm = (id: string, last: string | null): CommunityConversation => ({ id, peer, lastMessageAt: last, messageCount: 1, preview: null, unread: 0 });
