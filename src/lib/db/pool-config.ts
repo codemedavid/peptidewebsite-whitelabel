@@ -67,3 +67,15 @@ export function pgPoolConfig(env: DbEnv): PoolConfig {
     connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
   };
 }
+
+/**
+ * The Postgres schema Prisma should query, from DATABASE_URL's `?schema=`.
+ * pg ignores that param (it is stripped above), so it must reach the adapter
+ * instead — otherwise every query silently runs against `public`. Used by a
+ * second instance that shares a database under its own schema (Mamamica).
+ */
+export function pgAdapterSchema(env: DbEnv): string | undefined {
+  const raw = env.DATABASE_URL;
+  if (!raw) return undefined;
+  return new URL(raw).searchParams.get("schema") || undefined;
+}

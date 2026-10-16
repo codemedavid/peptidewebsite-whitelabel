@@ -438,6 +438,26 @@ async function main() {
     assert.ok(list.every((o) => typeof o.total === "number" && o.paymentStatus && o.placedAt));
     assert.ok(!JSON.stringify(list).includes("proof.jpg"), "no proof URL in the list");
   });
+  await test("my orders carry their group-buy round, and the rounds come with them", async () => {
+    const round = await db.groupBuy.create({
+      data: { tenantId: A.id, name: "Round 3", status: "closed", deliveryEta: "2 weeks after close", closedAt: new Date("2026-09-20T00:00:00Z") },
+    });
+    const row = await db.storefrontOrder.findFirst({ where: { tenantId: A.id, orderNumber: placedNumber } });
+    await db.storefrontOrder.update({ where: { id: row!.id }, data: { groupBuyId: round.id, groupBuyName: "Round 3" } });
+    try {
+      const r = await call(ordersGet, req("GET", "/shop/orders", annTok));
+      const gb = (r.json.data.orders as Json[]).find((o) => o.orderNumber === placedNumber)!;
+      assert.equal(gb.groupBuyId, round.id);
+      assert.equal(gb.groupBuyName, "Round 3");
+      assert.ok((r.json.data.orders as Json[]).some((o) => o.groupBuyId === null), "on-hand orders stay unfiled");
+      assert.deepEqual(r.json.data.rounds, [
+        { id: round.id, name: "Round 3", batch: "", state: "closed", deliveryEta: "2 weeks after close", endsAt: null, closedAt: "2026-09-20T00:00:00.000Z" },
+      ]);
+    } finally {
+      await db.storefrontOrder.update({ where: { id: row!.id }, data: { groupBuyId: null, groupBuyName: null } });
+      await db.groupBuy.delete({ where: { id: round.id } });
+    }
+  });
   await test("another customer, or another store's customer, sees none of them", async () => {
     assert.equal((await call(ordersGet, req("GET", "/shop/orders", bobTok))).json.data.orders.length, 0);
     assert.equal((await call(ordersGet, req("GET", "/shop/orders", carlTok))).json.data.orders.length, 0);

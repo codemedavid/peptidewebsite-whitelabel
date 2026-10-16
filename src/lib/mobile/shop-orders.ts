@@ -9,7 +9,9 @@ import { toTrackedOrder } from "@/lib/orders/tracked-order";
 import { computeOrderTotals } from "@/storefront/admin/order-detail";
 import { cartDisplayName, makeVariationEntry, unitPrice } from "@/storefront/checkout";
 import type { Order, OrderItem, Product } from "@/storefront/types";
-import type { ShopCheckoutConfig, ShopOrder } from "./shop-contract";
+import { loadRoundRows, scheduledRoundsOn } from "./order-rounds.server";
+import { sortRounds, toShopOrderRound } from "./order-rounds";
+import type { ShopCheckoutConfig, ShopOrder, ShopOrdersResponse } from "./shop-contract";
 
 /**
  * Turn the app's cart ({ productId, variation?, qty }) into the SAME Order
@@ -199,17 +201,32 @@ export function buildOrderDraft(d: DraftInput): Record<string, unknown> {
 
 export function toShopOrder(o: Order): ShopOrder {
   const { date, ...tracked } = toTrackedOrder(o);
-  return { ...tracked, placedAt: date, paymentStatus: o.paymentStatus, total: computeOrderTotals(o).total };
+  return {
+    ...tracked,
+    placedAt: date,
+    paymentStatus: o.paymentStatus,
+    total: computeOrderTotals(o).total,
+    groupBuyId: o.groupBuyId ?? null,
+    groupBuyName: o.groupBuyName ?? null,
+  };
 }
 
-/** The customer's own orders, newest first — listMyOrdersAction's query. */
-export async function listShopOrders(tenantId: string, customerId: string): Promise<ShopOrder[]> {
-  const rows = await withTenant(tenantId, (db) =>
-    db.storefrontOrder.findMany({
+/**
+ * The customer's own orders, newest first — listMyOrdersAction's query — plus
+ * the group-buy rounds they were placed in (live first), so the app can file
+ * them per round.
+ */
+export async function listShopOrders(tenantId: string, customerId: string): Promise<ShopOrdersResponse> {
+  const { orders, roundRows } = await withTenant(tenantId, async (db) => {
+    const rows = await db.storefrontOrder.findMany({
       where: { ...ACTIVE_ORDERS_WHERE, customerAccountId: customerId },
       orderBy: { placedAt: "desc" },
       take: 100,
-    }),
-  );
-  return rows.map((r) => toShopOrder(dbOrderToStorefront(r as DbOrderRow)));
+    });
+    const list = rows.map((r) => toShopOrder(dbOrderToStorefront(r as DbOrderRow)));
+    return { orders: list, roundRows: await loadRoundRows(db, list.flatMap((o) => (o.groupBuyId ? [o.groupBuyId] : []))) };
+  });
+  const scheduled = await scheduledRoundsOn(tenantId, roundRows);
+  const now = new Date();
+  return { orders, rounds: sortRounds(roundRows, scheduled, now).map((r) => toShopOrderRound(r, scheduled, now)) };
 }

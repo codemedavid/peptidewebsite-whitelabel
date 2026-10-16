@@ -33,8 +33,25 @@ import {
   isOwnMessage,
   dmBlockedReason,
   postBlockedReason,
+  canSeeChannel,
+  canPostInTopic,
+  canAddTopic,
+  topicPostBlockedReason,
+  canListChannel,
+  isChannelLocked,
+  dmPostBlockedReason as dmPostBlocked,
   type RuleActor,
 } from "../src/lib/community/rules";
+import {
+  channelPreviewAccess,
+  parsePreviewPolicyUpdate,
+  previewCanOrder,
+  previewFor,
+  previewOrderBlocked,
+  previewPolicyOf,
+} from "../src/lib/community/preview";
+import { DEFAULT_PREVIEW_POLICY, PREVIEW_LOCKED_MESSAGE } from "../src/lib/mobile/contract";
+import { HUB_TOPICS, hubComposerHint } from "../src/lib/community/hub";
 import {
   parseChannelInput,
   parseTopicInput,
@@ -66,6 +83,7 @@ import {
   nextReadMarker,
   countUnreadChats,
 } from "../src/lib/community/unread";
+import { buildTopicPush, parseMuteRequest, topicPushAudience } from "../src/lib/community/topic-push";
 import {
   classifyUpload,
   imageSize,
@@ -73,8 +91,11 @@ import {
   IMAGE_MAX_BYTES,
   FILE_MAX_BYTES,
   INLINE_MAX_BYTES,
+  VIDEO_MAX_BYTES,
+  checkDirectVideo,
 } from "../src/lib/community/upload-kind";
-import { communityJoinMode, isJoinMode, membershipFor } from "../src/lib/community/membership";
+import { communityJoinMode, isActiveAdmin, isJoinMode, membershipFor } from "../src/lib/community/membership";
+import { WELCOME_MAX, WELCOME_MAX_MESSAGES, communityWelcome, finalizeWelcome, parseWelcomeInput, videoPosterUrl, welcomeRows } from "../src/lib/community/welcome";
 
 let passed = 0;
 let failed = 0;
@@ -136,6 +157,14 @@ test("author keys name the person behind the store", () => {
 
 // ── rules ────────────────────────────────────────────────────────────────────
 console.log("\nrules");
+test("community admins hold their powers only while approved and unmuted", () => {
+  const admin = { isAdmin: true, status: "approved", mutedAt: null };
+  assert.equal(isActiveAdmin(admin), true);
+  assert.equal(isActiveAdmin({ ...admin, isAdmin: false }), false);
+  assert.equal(isActiveAdmin({ ...admin, mutedAt: new Date() }), false);
+  for (const status of ["pending", "rejected", "revoked", "junk"]) assert.equal(isActiveAdmin({ ...admin, status }), false, status);
+});
+
 test("posting: everyone channels open to members, admin channels to moderators only", () => {
   assert.equal(canPostInChannel(member, "everyone"), true);
   assert.equal(canPostInChannel(member, "admins"), false);
@@ -198,6 +227,13 @@ test("delete: the team shares the store's DM voice", () => {
   assert.equal(canDeleteMessage(owner, msg({ kind: "drop", senderKey: STORE_KEY, authorKey: "owner" }), "topic"), true);
   assert.equal(canDeleteMessage(owner, msg({ kind: "system", senderKey: STORE_KEY }), "topic"), false);
 });
+test("delete: a community admin clears members' posts in topics, never the store's", () => {
+  const admin = { key: "c:ada", isModerator: true, isTeam: false, authorKey: null };
+  assert.equal(canDeleteMessage(admin, msg(), "topic"), true);
+  assert.equal(canDeleteMessage(admin, msg(), "dm"), false);
+  assert.equal(canDeleteMessage(admin, msg({ kind: "drop", senderKey: STORE_KEY, authorKey: "owner" }), "topic"), false, "would end a drop");
+  assert.equal(canDeleteMessage(admin, msg({ senderKey: STORE_KEY, authorKey: "owner" }), "topic"), false);
+});
 test("DMs: customers reach the store and approved members; the store reaches approved members", () => {
   assert.equal(dmBlockedReason(member, { key: STORE_KEY, approved: true }), null);
   assert.equal(dmBlockedReason(member, { key: "c:bob", approved: true }), null);
@@ -212,9 +248,16 @@ test("DMs: customers reach the store and approved members; the store reaches app
 console.log("\nvalidate");
 test("channel input: trimmed, bounded, defaults", () => {
   const r = parseChannelInput({ name: "  Deals  ", description: " hot ", emoji: "🔥", imageUrl: null, postRole: "admins" });
-  assert.deepEqual(r, { ok: true, value: { name: "Deals", description: "hot", emoji: "🔥", imageUrl: null, postRole: "admins" } });
+  assert.deepEqual(r, { ok: true, value: { name: "Deals", description: "hot", emoji: "🔥", imageUrl: null, postRole: "admins", audience: "everyone" } });
   const d = parseChannelInput({ name: "Chat" });
   assert.ok(d.ok && d.value.postRole === "everyone" && d.value.emoji === "💬" && d.value.description === null);
+  assert.ok(d.ok && d.value.audience === "everyone", "a channel is for everyone unless told otherwise");
+  const r2 = parseChannelInput({ name: "Resellers Hub", audience: "hub" });
+  assert.ok(r2.ok && r2.value.audience === "hub");
+  assert.equal(parseChannelInput({ name: "Resellers", audience: "vip" }).ok, false);
+  assert.equal(parseChannelInput({ name: "Resellers", audience: "resellers" }).ok, false, "the old resellers-only audience is gone");
+  const r3 = parseChannelInput({ name: "Resellers Hub", audience: "hub", postRole: "admins" });
+  assert.ok(r3.ok && r3.value.postRole === "everyone", "a hub is always open for posting (its topics decide who posts)");
 });
 test("channel input: bad names, long descriptions, bad roles and URLs refused", () => {
   assert.equal(parseChannelInput({ name: "a" }).ok, false);
@@ -344,6 +387,8 @@ test("previews describe attachments without leaking file contents", () => {
   assert.equal(previewText({ kind: "text", body: "hello\nworld", deleted: false }), "hello world");
   assert.equal(previewText({ kind: "image", body: null, deleted: false }), "📷 Photo");
   assert.equal(previewText({ kind: "image", body: "look", deleted: false }), "📷 look");
+  assert.equal(previewText({ kind: "video", body: null, deleted: false }), "🎬 Video");
+  assert.equal(previewText({ kind: "video", body: "how to dose", deleted: false }), "🎬 how to dose");
   assert.equal(previewText({ kind: "file", body: null, fileName: "coa.pdf", deleted: false }), "📎 coa.pdf");
   assert.equal(previewText({ kind: "product", body: null, productName: "BPC-157", deleted: false }), "🛍 BPC-157");
   assert.equal(previewText({ kind: "drop", body: "Restock!", deleted: false }), "🔥 Restock!");
@@ -453,6 +498,260 @@ test("a community is open unless the store asks to review members", () => {
   assert.equal(communityJoinMode({ communityJoin: "approval" }), "approval");
   assert.equal(isJoinMode("approval"), true);
   assert.equal(isJoinMode("anyone"), false);
+});
+
+// ── resellers hub + welcome message ──────────────────────────────────────
+console.log("\nresellers hub + welcome");
+test("a hub is seen by every member; unknown or retired audiences fail closed", () => {
+  const team: RuleActor = { key: STORE_KEY, isModerator: true, authorKey: "owner" };
+  const plain: RuleActor = { key: "c:ann", isModerator: false, authorKey: null };
+  const reseller: RuleActor = { ...plain, key: "c:rita", isVerifiedReseller: true };
+  assert.equal(canSeeChannel(team, { audience: "hub" }), true);
+  assert.equal(canSeeChannel(reseller, { audience: "hub" }), true);
+  assert.equal(canSeeChannel(plain, { audience: "hub" }), true);
+  assert.equal(canSeeChannel(plain, { audience: "everyone" }), true);
+  assert.equal(canSeeChannel(plain, { audience: "resellers" }), false, "a leftover resellers-only channel stays hidden");
+  assert.equal(canSeeChannel(reseller, { audience: "resellers" }), false);
+  assert.equal(canSeeChannel(team, { audience: "resellers" }), true, "the team can still find and convert it");
+  assert.equal(canSeeChannel(plain, { audience: "something-new" }), false, "an unknown audience fails closed");
+});
+test("hub: verified resellers post On hand, every member posts Looking for", () => {
+  const team: RuleActor = { key: STORE_KEY, isModerator: true, isTeam: true, authorKey: "owner" };
+  const admin: RuleActor = { key: "c:ada", isModerator: true, authorKey: null };
+  const plain: RuleActor = { key: "c:ann", isModerator: false, authorKey: null };
+  const reseller: RuleActor = { ...plain, key: "c:rita", isVerifiedReseller: true };
+  const mutedReseller: RuleActor = { ...reseller, isMuted: true };
+  const hub = { postRole: "everyone", audience: "hub" };
+  const onHand = { isGeneral: true };
+  const lookingFor = { isGeneral: false };
+  assert.equal(canPostInTopic(reseller, hub, onHand), true);
+  assert.equal(canPostInTopic(team, hub, onHand), true);
+  assert.equal(canPostInTopic(admin, hub, onHand), true);
+  assert.equal(canPostInTopic(plain, hub, onHand), false);
+  assert.match(topicPostBlockedReason(plain, hub, onHand) ?? "", /verified resellers/i);
+  assert.equal(canPostInTopic(plain, hub, lookingFor), true);
+  assert.equal(canPostInTopic(reseller, hub, lookingFor), true);
+  assert.equal(topicPostBlockedReason(plain, hub, lookingFor), null);
+  assert.equal(canPostInTopic(mutedReseller, hub, onHand), false, "muted posts nothing, hub or not");
+  assert.equal(canPostInTopic({ ...plain, isMuted: true }, hub, lookingFor), false);
+  // Other channels keep the channel-wide rule.
+  assert.equal(canPostInTopic(plain, { postRole: "admins", audience: "everyone" }, onHand), false);
+  assert.equal(canPostInTopic(plain, { postRole: "everyone", audience: "everyone" }, onHand), true);
+});
+test("hub: only moderators add topics", () => {
+  const team: RuleActor = { key: STORE_KEY, isModerator: true, isTeam: true, authorKey: "owner" };
+  const plain: RuleActor = { key: "c:ann", isModerator: false, authorKey: null };
+  const reseller: RuleActor = { ...plain, key: "c:rita", isVerifiedReseller: true };
+  assert.equal(canAddTopic(team, { postRole: "everyone", audience: "hub" }), true);
+  assert.equal(canAddTopic(reseller, { postRole: "everyone", audience: "hub" }), false);
+  assert.equal(canAddTopic(plain, { postRole: "everyone", audience: "hub" }), false);
+  assert.equal(canAddTopic(plain, { postRole: "everyone", audience: "everyone" }), true);
+  assert.equal(canAddTopic(plain, { postRole: "admins", audience: "everyone" }), false);
+});
+test("hub: the two starter topics and their composer hints", () => {
+  assert.equal(HUB_TOPICS.onHand.name, "On hand");
+  assert.equal(HUB_TOPICS.lookingFor.name, "Looking for");
+  assert.match(hubComposerHint({ audience: "hub" }, { isGeneral: true }) ?? "", /on hand/i);
+  assert.match(hubComposerHint({ audience: "hub" }, { isGeneral: false }) ?? "", /looking for/i);
+  assert.equal(hubComposerHint({ audience: "everyone" }, { isGeneral: true }), null);
+});
+const PHOTO = { kind: "image" as const, url: "https://ik.imagekit.io/x/tenant/a/p.jpg", name: "p.jpg", size: 900, mime: "image/jpeg", width: 800, height: 600, posterUrl: null };
+const CLIP = { kind: "video" as const, url: "https://ik.imagekit.io/x/tenant/a/v.mp4", name: "v.mp4", size: 5000, mime: "video/mp4", width: 720, height: 1280, posterUrl: "https://ik.imagekit.io/x/tenant/a/v.mp4/ik-thumbnail.jpg" };
+
+test("welcome config: off unless enabled with at least one message", () => {
+  assert.deepEqual(communityWelcome(undefined), { enabled: false, messages: [], message: "" });
+  assert.deepEqual(communityWelcome({ communityWelcome: { enabled: true, messages: [] } }), { enabled: false, messages: [], message: "" });
+  const w = communityWelcome({ communityWelcome: { enabled: true, messages: [{ id: "a", text: " Hi! ", media: null }, { id: "b", text: "", media: PHOTO }] } });
+  assert.equal(w.enabled, true);
+  assert.deepEqual(w.messages, [{ id: "a", text: "Hi!", media: null }, { id: "b", text: "", media: PHOTO }]);
+  assert.equal(w.message, "Hi!", "older app builds read the first text");
+  assert.equal(communityWelcome({ communityWelcome: { enabled: "yes", messages: [{ id: "a", text: "Hi" }] } }).enabled, false);
+});
+test("welcome config: a store saved before lists reads as one text message", () => {
+  assert.deepEqual(communityWelcome({ communityWelcome: { enabled: true, message: "  Hi!  " } }), {
+    enabled: true,
+    messages: [{ id: "w1", text: "Hi!", media: null }],
+    message: "Hi!",
+  });
+  assert.deepEqual(communityWelcome({ communityWelcome: { enabled: true, message: "   " } }), { enabled: false, messages: [], message: "" });
+});
+test("welcome config: broken entries are dropped, never sent", () => {
+  const w = communityWelcome({
+    communityWelcome: {
+      enabled: true,
+      messages: [null, { text: "" }, { text: "", media: { kind: "audio", url: "x" } }, { id: "bad id!", text: "ok", media: { kind: "video", url: CLIP.url } }],
+    },
+  });
+  assert.equal(w.messages.length, 1);
+  assert.equal(w.messages[0].id, "w4", "an unusable id is replaced");
+  assert.equal(w.messages[0].media?.kind, "video");
+});
+test("welcome input: list form — order kept, each needs text or media, bounded", () => {
+  const r = parseWelcomeInput({ enabled: true, messages: [{ id: "a", text: " one ", media: null }, { text: "", media: { kind: "video", url: CLIP.url } }] });
+  assert.deepEqual(r, { ok: true, value: { enabled: true, messages: [{ id: "a", text: "one", media: null }, { id: null, text: "", media: { kind: "video", url: CLIP.url } }] } });
+  assert.equal(parseWelcomeInput({ enabled: true, messages: [] }).ok, false, "on with nothing to send");
+  assert.equal(parseWelcomeInput({ enabled: false, messages: [] }).ok, true);
+  assert.equal(parseWelcomeInput({ enabled: true, messages: [{ text: "  ", media: null }] }).ok, false);
+  assert.equal(parseWelcomeInput({ enabled: true, messages: [{ text: "x".repeat(WELCOME_MAX + 1) }] }).ok, false);
+  assert.equal(parseWelcomeInput({ enabled: true, messages: [{ text: "hi", media: { kind: "audio", url: "u" } }] }).ok, false);
+  assert.equal(parseWelcomeInput({ enabled: true, messages: Array.from({ length: WELCOME_MAX_MESSAGES + 1 }, () => ({ text: "hi" })) }).ok, false);
+  assert.equal(parseWelcomeInput({ enabled: "true", messages: [] }).ok, false);
+  assert.equal(parseWelcomeInput(null).ok, false);
+});
+test("welcome input: an older build's { enabled, message } edits only the first message", () => {
+  const current = communityWelcome({ communityWelcome: { enabled: true, messages: [{ id: "a", text: "old", media: PHOTO }, { id: "b", text: "second", media: null }] } });
+  const r = parseWelcomeInput({ enabled: true, message: "new caption" }, current);
+  assert.ok(r.ok);
+  assert.deepEqual(r.value.messages, [
+    { id: "a", text: "new caption", media: { kind: "image", url: PHOTO.url } },
+    { id: "b", text: "second", media: null },
+  ]);
+  assert.deepEqual(parseWelcomeInput({ enabled: true, message: " Welcome 💜 " }), { ok: true, value: { enabled: true, messages: [{ id: null, text: "Welcome 💜", media: null }] } });
+  assert.equal(parseWelcomeInput({ enabled: true, message: "  " }).ok, false);
+});
+test("welcome save: ids are made unique", () => {
+  let n = 0;
+  const saved = finalizeWelcome(true, [{ id: "a", text: "1", media: null }, { id: "a", text: "2", media: null }, { id: null, text: "3", media: null }], () => `n${++n}`);
+  assert.deepEqual(saved.messages.map((m) => m.id), ["a", "n1", "n2"]);
+  assert.equal(finalizeWelcome(true, [], () => "x").enabled, false);
+});
+test("welcome rows: one chat row per message, in order, with photo/video fields", () => {
+  const w = communityWelcome({ communityWelcome: { enabled: true, messages: [{ id: "a", text: "Hi", media: null }, { id: "b", text: "Our shop", media: PHOTO }, { id: "c", text: "", media: CLIP }] } });
+  const rows = welcomeRows(w, "cus1");
+  assert.deepEqual(rows.map((r) => [r.kind, r.body, r.clientId]), [
+    ["text", "Hi", "welcome:cus1"],
+    ["image", "Our shop", "welcome:cus1:2"],
+    ["video", null, "welcome:cus1:3"],
+  ]);
+  assert.equal(rows[1].imageUrl, PHOTO.url);
+  assert.equal(rows[1].fileUrl, null);
+  assert.deepEqual([rows[2].fileUrl, rows[2].fileMime, rows[2].imageWidth, rows[2].imageUrl], [CLIP.url, "video/mp4", 720, null]);
+  assert.deepEqual(welcomeRows({ ...w, enabled: false }, "cus1"), []);
+});
+test("video poster: ImageKit makes a still frame, anything else has none", () => {
+  assert.equal(videoPosterUrl("https://ik.imagekit.io/x/tenant/a/v.mp4"), "https://ik.imagekit.io/x/tenant/a/v.mp4/ik-thumbnail.jpg");
+  assert.equal(videoPosterUrl("https://ik.imagekit.io/x/v.mp4?updatedAt=1"), "https://ik.imagekit.io/x/v.mp4/ik-thumbnail.jpg?updatedAt=1");
+  assert.equal(videoPosterUrl("data:video/mp4;base64,AAAA"), null);
+  assert.equal(videoPosterUrl("https://evil.example/ik.imagekit.io/v.mp4"), null);
+  assert.equal(videoPosterUrl("http://ik.imagekit.io/x/v.mp4"), null);
+});
+
+const ftyp = (brand: string) => new Uint8Array([0, 0, 0, 0x20, ...Array.from("ftyp" + brand, (c) => c.charCodeAt(0)), 0, 0, 0, 0]);
+test("uploads: videos are sniffed from the bytes, and only the store team may send them", () => {
+  assert.deepEqual(classifyUpload({ name: "clip.bin", declaredMime: "", head: ftyp("isom"), size: 1000, allowVideo: true }), { ok: true, kind: "video", mime: "video/mp4", ext: "mp4" });
+  assert.deepEqual(classifyUpload({ name: "IMG_1.MOV", declaredMime: "", head: ftyp("qt  "), size: 1000, allowVideo: true }), { ok: true, kind: "video", mime: "video/quicktime", ext: "mov" });
+  assert.equal(classifyUpload({ name: "x.webm", declaredMime: "", head: new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0]), size: 10, allowVideo: true }).ok, true);
+  assert.equal(classifyUpload({ name: "clip.mp4", declaredMime: "video/mp4", head: ftyp("isom"), size: 1000 }).ok, false, "members can't upload video");
+  assert.equal(classifyUpload({ name: "big.mp4", declaredMime: "", head: ftyp("mp42"), size: VIDEO_MAX_BYTES + 1, allowVideo: true }).ok, false);
+  const heic = classifyUpload({ name: "a.heic", declaredMime: "", head: ftyp("heic"), size: 1000, allowVideo: true });
+  assert.ok(heic.ok && heic.kind === "image", "HEIC stays a photo");
+  assert.equal(classifyUpload({ name: "song.m4a", declaredMime: "", head: ftyp("M4A "), size: 1000, allowVideo: true }).ok, false, "audio is not video");
+});
+test("direct video uploads: must be ours, in size, and really a video", () => {
+  const ok = checkDirectVideo({ filePath: "/tenant/acme/community-v_x.mp4", folder: "/tenant/acme", size: 1000, head: ftyp("isom") });
+  assert.deepEqual(ok, { ok: true, mime: "video/mp4", ext: "mp4" });
+  const other = checkDirectVideo({ filePath: "/tenant/acme-2/v.mp4", folder: "/tenant/acme", size: 1000, head: ftyp("isom") });
+  assert.deepEqual([other.ok, !other.ok && other.inFolder], [false, false], "another store's file is refused and never deleted");
+  assert.equal(checkDirectVideo({ filePath: "/tenant/acme/../b/v.mp4", folder: "/tenant/acme", size: 1000, head: ftyp("isom") }).ok, false);
+  const fake = checkDirectVideo({ filePath: "/tenant/acme/v.mp4", folder: "/tenant/acme", size: 1000, head: new Uint8Array([0x4d, 0x5a]) });
+  assert.deepEqual([fake.ok, !fake.ok && fake.inFolder], [false, true], "ours but not a video → deleted");
+  assert.equal(checkDirectVideo({ filePath: "/tenant/acme/v.mp4", folder: "/tenant/acme", size: VIDEO_MAX_BYTES + 1, head: ftyp("isom") }).ok, false);
+});
+
+// ── channel (topic) pushes + per-member channel mutes ──
+const announcements = { name: "Announcements", emoji: "📣" };
+test("topic push: names the channel and the sender, never the message", () => {
+  const general = buildTopicPush({ storeName: "Mama Mica", channel: announcements, topic: { id: "t1", name: "General", isGeneral: true }, senderName: "Ana Reyes", fromStore: false });
+  assert.deepEqual(general, { title: "📣 Announcements", body: "New message from Ana", data: { type: "topic", threadId: "t1" } });
+  const sub = buildTopicPush({ storeName: "Mama Mica", channel: announcements, topic: { id: "t2", name: "Restocks", isGeneral: false }, senderName: "", fromStore: true });
+  assert.equal(sub.body, "Mama Mica posted in Restocks", "the team posts as the store");
+  assert.equal(sub.data.threadId, "t2");
+  const bare = buildTopicPush({ storeName: "S", channel: { name: "Chat", emoji: "" }, topic: { id: "t3", name: "General", isGeneral: true }, senderName: "  ", fromStore: false });
+  assert.equal(bare.title, "Chat");
+  assert.equal(bare.body, "New message from Member");
+});
+test("topic push audience: everyone who can see it, minus the sender and anyone who muted the channel", () => {
+  const ids = ["a", "b", "c", "d", "b"];
+  assert.deepEqual(topicPushAudience(ids, { senderKey: "c:a", mutedKeys: new Set(["c:c"]) }), ["b", "d"]);
+  assert.deepEqual(topicPushAudience(ids, { senderKey: "store", mutedKeys: new Set() }), ["a", "b", "c", "d"], "a store post reaches every member once");
+  assert.deepEqual(topicPushAudience([], { senderKey: "store", mutedKeys: new Set() }), []);
+});
+test("mute request: only an explicit boolean is accepted", () => {
+  assert.equal(parseMuteRequest({ muted: true }), true);
+  assert.equal(parseMuteRequest({ muted: false }), false);
+  assert.equal(parseMuteRequest({ muted: "true" }), null);
+  assert.equal(parseMuteRequest({}), null);
+  assert.equal(parseMuteRequest(null), null);
+});
+
+// ── preview access (not approved yet, the store's preview on) ──
+console.log("\npreview access");
+const POLICY = { ...DEFAULT_PREVIEW_POLICY, enabled: true };
+const viewer: RuleActor = { key: "c:new", isModerator: false, authorKey: null, preview: POLICY };
+const fullMember: RuleActor = { key: "c:ann", isModerator: false, authorKey: null };
+const ch = (previewAccess: string | null, extra: Record<string, string> = {}) => ({ audience: "everyone", postRole: "everyone", previewAccess, ...extra });
+test("preview: the policy reads leniently and defaults to browse only, off", () => {
+  assert.deepEqual(previewPolicyOf(null), DEFAULT_PREVIEW_POLICY);
+  assert.equal(DEFAULT_PREVIEW_POLICY.enabled, false, "other stores are unchanged until they switch it on");
+  assert.deepEqual(previewPolicyOf({ previewAccess: { enabled: true, placeOrders: "yes" } }), { ...DEFAULT_PREVIEW_POLICY, enabled: true });
+  assert.equal(channelPreviewAccess(undefined), "locked");
+  assert.equal(channelPreviewAccess("chat"), "chat");
+  assert.equal(channelPreviewAccess("everything"), "locked", "an unknown setting fails closed");
+});
+test("preview: updates merge booleans only, and refuse unknown settings", () => {
+  const r = parsePreviewPolicyUpdate({ placeOrders: true }, POLICY);
+  assert.equal(r.ok && r.value.placeOrders, true);
+  assert.equal(r.ok && r.value.enabled, true, "untouched settings stay");
+  assert.equal(parsePreviewPolicyUpdate({ placeOrders: "true" }, POLICY).ok, false);
+  assert.equal(parsePreviewPolicyUpdate({ isAdmin: true }, POLICY).ok, false);
+  assert.equal(parsePreviewPolicyUpdate(null, POLICY).ok, false);
+});
+test("preview: only non-approved customers of a store with preview on are in it", () => {
+  assert.equal(previewFor(POLICY, "pending"), POLICY);
+  assert.equal(previewFor(POLICY, "rejected"), POLICY);
+  assert.equal(previewFor(POLICY, "approved"), null);
+  assert.equal(previewFor(DEFAULT_PREVIEW_POLICY, "pending"), null, "preview off: as before");
+});
+test("preview: channels are hidden, locked (listed only), read or chat", () => {
+  assert.equal(canListChannel(viewer, ch("hidden")), false);
+  assert.equal(canSeeChannel(viewer, ch("hidden")), false);
+  assert.equal(canListChannel(viewer, ch("locked")), true);
+  assert.equal(canSeeChannel(viewer, ch("locked")), false, "locked never opens");
+  assert.equal(isChannelLocked(viewer, ch("locked")), true);
+  assert.equal(canSeeChannel(viewer, ch(null)), false, "unset = locked");
+  assert.equal(canSeeChannel(viewer, ch("read")), true);
+  assert.equal(canSeeChannel(viewer, ch("chat")), true);
+  assert.equal(canSeeChannel(viewer, { audience: "resellers", previewAccess: "chat" }), false, "an unknown audience still fails closed");
+  assert.equal(canListChannel(viewer, { audience: "resellers", previewAccess: "locked" }), false);
+  assert.equal(canSeeChannel(fullMember, ch("hidden")), true, "members ignore the preview setting");
+  assert.equal(isChannelLocked(fullMember, ch("locked")), false);
+});
+test("preview: post only in chat channels, never start topics, channel rules still apply", () => {
+  assert.equal(topicPostBlockedReason(viewer, ch("read"), { isGeneral: true }), PREVIEW_LOCKED_MESSAGE);
+  assert.equal(topicPostBlockedReason(viewer, ch("chat"), { isGeneral: true }), null);
+  assert.equal(canPostInTopic(viewer, ch("chat", { postRole: "admins" }), { isGeneral: true }), false, "an announcements channel stays team-only");
+  assert.equal(canPostInTopic(viewer, ch("chat", { audience: "hub" }), { isGeneral: true }), false, "hub On hand stays resellers-only");
+  assert.equal(canPostInTopic({ ...viewer, isMuted: true }, ch("chat"), { isGeneral: true }), false);
+  assert.equal(canAddTopic(viewer, ch("chat")), false);
+});
+test("preview: DMs reach the store only, and only when the store allows it", () => {
+  assert.equal(dmBlockedReason(viewer, { key: STORE_KEY, approved: true }), PREVIEW_LOCKED_MESSAGE);
+  const canDm: RuleActor = { ...viewer, preview: { ...POLICY, messageStore: true } };
+  assert.equal(dmBlockedReason(canDm, { key: STORE_KEY, approved: true }), null);
+  assert.equal(dmBlockedReason(canDm, { key: "c:ann", approved: true }), PREVIEW_LOCKED_MESSAGE, "never other members");
+  assert.equal(dmPostBlocked(viewer, { key: STORE_KEY, open: true }), PREVIEW_LOCKED_MESSAGE);
+  assert.equal(dmPostBlocked(canDm, { key: STORE_KEY, open: true }), null);
+  assert.equal(dmPostBlocked(canDm, { key: "c:ann", open: true }), PREVIEW_LOCKED_MESSAGE);
+});
+test("preview: orders need the switch for each kind of line", () => {
+  assert.equal(previewOrderBlocked(POLICY, false, true), true, "browse only: no on-hand order");
+  assert.equal(previewOrderBlocked(POLICY, true, false), true, "browse only: no group buy");
+  const gbOnly = { ...POLICY, joinGroupBuys: true };
+  assert.equal(previewOrderBlocked(gbOnly, true, false), false);
+  assert.equal(previewOrderBlocked(gbOnly, true, true), true, "a mixed cart needs both");
+  assert.equal(previewOrderBlocked({ ...POLICY, placeOrders: true }, false, true), false);
+  assert.equal(previewCanOrder(POLICY), false);
+  assert.equal(previewCanOrder(gbOnly), true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

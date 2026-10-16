@@ -17,8 +17,10 @@ import type { SessionSubject } from "./storefront-session-token";
  * demo mode and cache busting all stay exactly the website's.
  *
  * Only server code can enter a scope (AsyncLocalStorage is per async call
- * chain, never shared between requests), and the only caller is the
- * authenticated app bridge in src/app/api/mobile/v1/admin/.
+ * chain, never shared between requests). Two callers, both authenticated first:
+ * the app bridge in src/app/api/mobile/v1/admin/ (bearer session), and the MCP
+ * connector (src/lib/mcp/owner-scope.ts, after the operator's MCP admin token),
+ * which acts as the store OWNER on the tenant the operator named.
  */
 
 export type AppActorScope = {

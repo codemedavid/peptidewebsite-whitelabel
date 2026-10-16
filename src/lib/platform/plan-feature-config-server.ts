@@ -3,7 +3,7 @@
 // to the hardcoded catalog PLAN_FEATURES defaults when nothing has been saved yet
 // (or the table hasn't been pushed), so entitlement resolution never breaks.
 
-import { prisma } from "@/lib/db/prisma";
+import { loadPlatformSettingValue } from "./platform-setting-cache";
 import { isDemoMode, getDemoPlatformSetting } from "@/lib/demo/fixtures";
 import {
   PLAN_FEATURES_CONFIG_KEY,
@@ -18,8 +18,8 @@ export async function getPlanFeatureConfig(): Promise<PlanFeatureConfig> {
     return saved ? normalizePlanFeatureConfig(saved) : defaultPlanFeatureConfig();
   }
   try {
-    const row = await prisma.platformSetting.findUnique({ where: { key: PLAN_FEATURES_CONFIG_KEY } });
-    return row ? normalizePlanFeatureConfig(row.value) : defaultPlanFeatureConfig();
+    const value = await loadPlatformSettingValue(PLAN_FEATURES_CONFIG_KEY);
+    return value !== null ? normalizePlanFeatureConfig(value) : defaultPlanFeatureConfig();
   } catch {
     // Table missing (db push not run yet) or DB hiccup — keep entitlements resolving.
     return defaultPlanFeatureConfig();

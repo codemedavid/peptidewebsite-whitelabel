@@ -6,7 +6,8 @@ import type { ThreadInfo, ThreadType } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
 import { dmPeerOf } from "./keys";
 import { loadParticipants, publicParticipant, type MemberCard } from "./participants.server";
-import { canManageChannel, canManageTopic, canPostInChannel, postBlockedReason } from "./rules";
+import { hubComposerHint, isHub } from "./hub";
+import { canManageChannel, canManageTopic, canSeeChannel, dmPostBlockedReason, topicPostBlockedReason } from "./rules";
 
 /**
  * Can this actor see this thread? Every thread read or write starts here.
@@ -47,46 +48,36 @@ export async function resolveThread(
   if (!ID_RE.test(id)) return null;
   if (type === "topic") {
     const topic = await db.communityTopic.findFirst({ where: { id }, include: { channel: true } });
-    if (!topic) return null;
+    if (!topic || !canSeeChannel(actor, topic.channel)) return null;
     const { channel, ...rest } = topic;
-    return {
-      type,
-      id,
-      topic: rest,
-      channel,
-      canPost: canPostInChannel(actor, channel.postRole),
-      postBlockedReason: postBlockedReason(actor, channel.postRole),
-    };
+    const blocked = topicPostBlockedReason(actor, channel, rest);
+    return { type, id, topic: rest, channel, canPost: blocked === null, postBlockedReason: blocked };
   }
   const conversation = await db.communityConversation.findFirst({ where: { id } });
   const peerKey = conversation ? dmPeerOf(conversation, actor.key) : null;
   if (!conversation || !peerKey) return null;
   const peer = (await loadParticipants(db, actor.tenant, [peerKey])).get(peerKey)!;
-  const open = peer.isTeam || peer.status === "approved";
-  return {
-    type,
-    id,
-    conversation,
-    peer,
-    canPost: open,
-    postBlockedReason: open ? null : "This member isn't in the community any more.",
-  };
+  const blocked = dmPostBlockedReason(actor, { key: peerKey, open: peer.isTeam || peer.status === "approved" });
+  return { type, id, conversation, peer, canPost: blocked === null, postBlockedReason: blocked };
 }
 
 export function threadInfo(actor: CommunityActor, access: ThreadAccess): ThreadInfo {
   if (access.type === "topic") {
     const { topic, channel } = access;
+    // A General topic stands in for its channel — except in a hub, where it's "On hand".
+    const asChannel = topic.isGeneral && !isHub(channel);
     return {
       type: "topic",
       id: topic.id,
-      title: topic.isGeneral ? channel.name : topic.name,
-      subtitle: topic.isGeneral ? (channel.description ?? "General") : channel.name,
-      emoji: topic.isGeneral ? channel.emoji : topic.emoji,
-      imageUrl: topic.isGeneral ? channel.imageUrl : topic.imageUrl,
+      title: asChannel ? channel.name : topic.name,
+      subtitle: asChannel ? (channel.description ?? "General") : channel.name,
+      emoji: asChannel ? channel.emoji : topic.emoji,
+      imageUrl: asChannel ? channel.imageUrl : topic.imageUrl,
       peer: null,
       channelId: channel.id,
       canPost: access.canPost,
       postBlockedReason: access.postBlockedReason,
+      composerHint: hubComposerHint(channel, topic),
       canManage: canManageTopic(actor) || canManageChannel(actor),
     };
   }

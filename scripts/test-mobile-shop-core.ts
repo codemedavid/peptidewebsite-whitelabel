@@ -41,6 +41,7 @@ import {
 } from "../mobile/src/features/shop/lib/cart";
 import {
   checkoutError,
+  isPayLater,
   emptyForm,
   locationsFor,
   newAttemptId,
@@ -354,6 +355,24 @@ test("order request sends the shown fees, trimmed fields, and no location for CO
   assert.equal(req.customerNote, undefined, "a blank note isn't sent");
   assert.equal(req.promoCode, undefined);
 });
+test("pay-after-close group buy: no payment step, nothing paid sent", () => {
+  const f = { ...emptyForm({ name: "Ana" }), courierId: "jnt", locationId: "luzon", address: "1 Main", city: "Cebu", paymentMethodId: "gcash", proofUrl: "https://x/p.jpg" };
+  assert.equal(checkoutError({ ...f, paymentMethodId: "", proofUrl: "" }, CHECKOUT, true), null, "no method or proof needed");
+  assert.equal(checkoutError({ ...f, address: "" }, CHECKOUT, true), "Please enter your delivery address.", "delivery still required");
+  const req = orderRequest("app-2", [{ productId: "p1", qty: 1 }], f, CHECKOUT, QUOTE, true);
+  assert.equal(req.paymentMethod, "");
+  assert.equal(req.paymentProof, undefined);
+});
+test("pay later: the quote decides; before it lands, the live round's products do", () => {
+  const gb = { invoice: { shippingFee: 250 }, ordering: "open" as const, productIds: ["p1", "p2"] };
+  assert.equal(isPayLater({ invoice: { addOn: false, roundName: "GB" } }, gb, [{ productId: "p9" }]), true, "quote wins");
+  assert.equal(isPayLater({ invoice: null }, gb, [{ productId: "p1" }]), false, "quote wins");
+  assert.equal(isPayLater(undefined, gb, [{ productId: "p1" }, { productId: "p2" }]), true);
+  assert.equal(isPayLater(undefined, gb, [{ productId: "p1" }, { productId: "p9" }]), false, "an on-hand line pays now");
+  assert.equal(isPayLater(undefined, { ...gb, invoice: null }, [{ productId: "p1" }]), false, "switch off");
+  assert.equal(isPayLater(undefined, { ...gb, ordering: "closed" }, [{ productId: "p1" }]), false, "ordering paused");
+  assert.equal(isPayLater(undefined, null, [{ productId: "p1" }]), false, "no round");
+});
 test("attempt ids are short, prefixed and differ", () => {
   const a = newAttemptId();
   const b = newAttemptId();
@@ -385,6 +404,8 @@ const ORDER: ShopOrder = {
   ],
   paymentStatus: "paid",
   total: 250,
+  groupBuyId: null,
+  groupBuyName: null,
 };
 test("timeline: done, current, upcoming along the happy path", () => {
   const steps = orderTimeline(ORDER);

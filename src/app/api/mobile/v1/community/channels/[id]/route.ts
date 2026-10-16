@@ -7,7 +7,7 @@ const GONE = "This channel isn't available.";
 
 // GET /api/mobile/v1/community/channels/:id → { channel, topics }
 export async function GET(req: Request, { params }: Params) {
-  return withCommunity(req, { route: "community/channels/:id" }, async (actor) =>
+  return withCommunity(req, { route: "community/channels/:id", preview: true }, async (actor) =>
     respond(await getChannel(actor, (await params).id), GONE),
   );
 }

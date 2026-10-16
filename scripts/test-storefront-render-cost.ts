@@ -24,9 +24,11 @@
 // Both are now unstable_cache-wrapped and tag-busted on write, matching how
 // tenant context and entitlements already work in this codebase.
 //
-// products.findMany is deliberately NOT cached here: product rows carry stock,
-// and serving stale stock risks overselling. That is a product decision, not a
-// perf one.
+// products.findMany for DISPLAY is now cached too (2026-10-07): it was the
+// single largest source of Supabase egress (~7GB — every row re-pulled on every
+// view). Overselling is prevented where it matters: order placement re-reads
+// live stock inside its own transaction (actions/orders.ts), and every product
+// and stock writer busts `tenant:<id>` so the catalog refreshes immediately.
 //
 // Journeys:
 //  1. As a shopper, I want the store to render without waiting on data nobody
@@ -86,8 +88,13 @@ const page = read("src/lib/storefront/storefront-brand.ts");
 check("home page imports the best-seller loader", /from "@\/lib\/storefront\/best-sellers"/.test(page));
 check("home page no longer inlines the order scan", !/db\.storefrontOrder\.findMany/.test(page));
 
-console.log("the stock read stays live on purpose");
-check("products are still read directly (fresh stock)", /db\.product\.findMany/.test(page));
+console.log("catalog rows — cached for display, live at checkout");
+check("catalog rows read through unstable_cache", /loadCatalogRows[\s\S]*?unstable_cache/.test(page));
+check("catalog cache tagged on the tenant tag writers bust", /tags:\s*\[`tenant:\$\{tenantId\}`/.test(page.slice(page.indexOf("loadCatalogRows"))));
+check("catalog cache sets a revalidate window", /storefront-catalog-rows[\s\S]{0,200}revalidate:\s*\d+/.test(page));
+const ordersAction = read("src/actions/orders.ts");
+check("checkout still reads products live (stock guard)", /db\.product\.findMany\(\{ where: \{ status: \{ not: "archived" \} \} \}\)/.test(ordersAction));
+check("checkout does not use the cached catalog", !/loadCatalogRows|loadStorefrontBrand/.test(ordersAction));
 
 // Behavioural: DEMO_MODE bypasses both unstable_cache and the DB, so the
 // exported loader can actually be called here rather than only grepped.

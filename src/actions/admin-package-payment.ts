@@ -6,7 +6,8 @@
 // .demo-data/platform-settings.json, DB mode to the platform_settings row.
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { platformSettingTag } from "@/lib/platform/platform-setting-cache";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode, saveDemoPlatformSetting } from "@/lib/demo/fixtures";
@@ -52,6 +53,7 @@ export async function savePackagePaymentAction(
     return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
   }
 
+  revalidateTag(platformSettingTag(PACKAGE_PAYMENT_KEY));
   bust();
   return { ok: true };
 }

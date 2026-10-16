@@ -2,7 +2,8 @@
 // Each parser takes untrusted JSON and returns a clean value or a message that
 // is safe to show on the phone.
 
-import type { PostRole } from "./rules";
+import { isChannelPreviewAccess, type ChannelPreviewAccess } from "./preview";
+import { isAudience, type Audience, type PostRole } from "./rules";
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -74,6 +75,9 @@ export type ChannelFields = {
   emoji: string;
   imageUrl: string | null;
   postRole: PostRole;
+  audience: Audience;
+  /** Only when the request sets it — an edit from an older app leaves the channel's setting alone. */
+  previewAccess?: ChannelPreviewAccess;
 };
 
 export function parseChannelInput(input: unknown): Parsed<ChannelFields> {
@@ -85,11 +89,23 @@ export function parseChannelInput(input: unknown): Parsed<ChannelFields> {
   if (description.length > CHANNEL_DESCRIPTION_MAX) return bad("Keep the description under 200 characters.");
   const postRole = o.postRole === undefined ? "everyone" : o.postRole;
   if (postRole !== "everyone" && postRole !== "admins") return bad("Choose who can post.");
+  const audience = o.audience === undefined ? "everyone" : o.audience;
+  if (!isAudience(audience)) return bad("Choose who can see the channel.");
   const emoji = parseEmoji(o.emoji);
   if (!emoji.ok) return emoji;
   const imageUrl = parseImageUrl(o.imageUrl);
   if (!imageUrl.ok) return imageUrl;
-  return ok({ name, description: description || null, emoji: emoji.value, imageUrl: imageUrl.value, postRole });
+  if (o.previewAccess !== undefined && !isChannelPreviewAccess(o.previewAccess)) return bad("Choose what people in preview get here.");
+  // A hub is open for posting; its topics decide who posts (rules.ts canPostInTopic).
+  return ok({
+    name,
+    description: description || null,
+    emoji: emoji.value,
+    imageUrl: imageUrl.value,
+    postRole: audience === "hub" ? "everyone" : postRole,
+    audience,
+    ...(o.previewAccess !== undefined ? { previewAccess: o.previewAccess as ChannelPreviewAccess } : {}),
+  });
 }
 
 export type TopicFields = { name: string; emoji: string; imageUrl: string | null };
@@ -181,4 +197,29 @@ export function parseDropInput(input: unknown): Parsed<DropFields> {
     durationMinutes = n;
   }
   return ok({ productId, variationId, headline, note: note || null, durationMinutes, channelId });
+}
+
+const BROADCAST_CHANNELS_MAX = 20;
+const BROADCAST_NOTE_MAX = 500;
+const CLIENT_ID_RE = /^[A-Za-z0-9_.:-]{1,40}$/;
+
+export type GroupBuyBroadcastFields = { clientId: string; channelIds: string[]; note: string | null };
+
+/**
+ * "Send the group buy to everyone": 1–20 channels, an optional caption, and a
+ * client id that makes a retry post nothing twice (it is suffixed per topic, so
+ * it stays short enough for the message's 64-character clientId).
+ */
+export function parseGroupBuyBroadcast(input: unknown): Parsed<GroupBuyBroadcastFields> {
+  const o = obj(input);
+  if (!o) return bad("Pick where to send it.");
+  const clientId = str(o.clientId);
+  if (!CLIENT_ID_RE.test(clientId)) return bad("Couldn't send that. Try again.");
+  if (!Array.isArray(o.channelIds) || o.channelIds.some((c) => typeof c !== "string")) return bad("Pick where to send it.");
+  const channelIds = [...new Set((o.channelIds as string[]).map((c) => parseId(c)).filter((c): c is string => !!c))];
+  if (channelIds.length === 0) return bad("Pick at least one channel.");
+  if (channelIds.length > BROADCAST_CHANNELS_MAX) return bad(`Pick up to ${BROADCAST_CHANNELS_MAX} channels.`);
+  const note = str(o.note);
+  if (note.length > BROADCAST_NOTE_MAX) return bad("Keep the note under 500 characters.");
+  return ok({ clientId, channelIds, note: note || null });
 }

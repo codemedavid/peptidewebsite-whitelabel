@@ -7,7 +7,7 @@ type Params = { params: Promise<{ type: string; id: string }> };
 
 // GET /api/mobile/v1/community/threads/:type/:id/shared?tab=media|docs|links|listings
 export async function GET(req: Request, { params }: Params) {
-  return withCommunity(req, { route: "community/threads/shared" }, async (actor) => {
+  return withCommunity(req, { route: "community/threads/shared", preview: true }, async (actor) => {
     const { type: rawType, id } = await params;
     const type = parseThreadType(rawType);
     if (!type) return fail("not_found", "This chat isn't available.");

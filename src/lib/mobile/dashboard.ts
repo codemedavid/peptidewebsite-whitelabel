@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { withTenant } from "@/lib/db/tenant-client";
 import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
@@ -24,6 +25,33 @@ import { listProducts } from "./products";
 const STORE_UTC_OFFSET_MS = 8 * 60 * 60 * 1000; // Asia/Manila, no DST
 const RECENT = 5;
 const LOW_STOCK_ROWS = 5;
+/** The Home screen polls every 20s for new orders; low stock does not need to
+ *  move that fast, and every stock writer busts `tenant:<id>` anyway. */
+const LOW_STOCK_REVALIDATE_SECONDS = 300;
+
+type LowStock = Pick<DashboardResponse, "lowStockCount" | "lowStock">;
+
+/**
+ * Low-stock summary, cached per tenant. Computing it needs every product row
+ * (variation stock lives in metadata), and re-pulling the whole catalog on each
+ * 20s poll was a steady source of Supabase egress. Only the reduced summary is
+ * cached — plain data, so no Date→string surprises on a cache hit.
+ */
+const loadLowStock = (ctx: MobileContext) =>
+  unstable_cache(
+    async (): Promise<LowStock> => {
+      const low = (await listProducts(ctx)).filter((p) => p.stockTone === "out" || p.stockTone === "low");
+      return {
+        lowStockCount: low.length,
+        lowStock: [...low]
+          .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
+          .slice(0, LOW_STOCK_ROWS)
+          .map((p) => ({ id: p.id, name: p.name, units: p.stock ?? 0, tone: p.stockTone as "out" | "low" })),
+      };
+    },
+    ["mobile-dashboard-low-stock", ctx.tenantId],
+    { tags: [`tenant:${ctx.tenantId}`, `tenant:${ctx.tenantId}:products`], revalidate: LOW_STOCK_REVALIDATE_SECONDS },
+  )();
 
 export function startOfStoreDay(now: Date): Date {
   const local = new Date(now.getTime() + STORE_UTC_OFFSET_MS);
@@ -55,12 +83,11 @@ export async function buildDashboard(ctx: MobileContext): Promise<DashboardRespo
   const can = mobileCan(ctx);
   const summarize = (r: unknown) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), config.currency);
 
-  const [orders, products] = await Promise.all([
+  const [orders, low] = await Promise.all([
     can.orders ? orderStats(ctx, can.analytics) : Promise.resolve(null),
-    can.products || can.inventory ? listProducts(ctx) : Promise.resolve([]),
+    can.products || can.inventory ? loadLowStock(ctx) : Promise.resolve<LowStock>({ lowStockCount: 0, lowStock: [] }),
   ]);
   const todays = orders?.today?.map(summarize) ?? null;
-  const low = products.filter((p) => p.stockTone === "out" || p.stockTone === "low");
 
   return {
     store: { open: normalizeStoreStatus(config.storeStatus).open },
@@ -69,10 +96,7 @@ export async function buildDashboard(ctx: MobileContext): Promise<DashboardRespo
       ? { orders: todays.length, revenueLabel: formatMoney(todays.reduce((s, o) => s + o.total, 0), config.currency) }
       : null,
     recent: (orders?.recent ?? []).map(summarize),
-    lowStockCount: low.length,
-    lowStock: [...low]
-      .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
-      .slice(0, LOW_STOCK_ROWS)
-      .map((p) => ({ id: p.id, name: p.name, units: p.stock ?? 0, tone: p.stockTone as "out" | "low" })),
+    lowStockCount: low.lowStockCount,
+    lowStock: low.lowStock,
   };
 }

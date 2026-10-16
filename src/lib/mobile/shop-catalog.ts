@@ -4,6 +4,7 @@ import { loadStorefrontBrand } from "@/lib/storefront/storefront-brand";
 import { isGroupBuyProduct, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder } from "@/lib/storefront/two-ways-cart";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import { isGroupBuyBuyable, TWO_WAYS_MODE_DEFAULT, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import { effectiveStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
 import { percentOff, saleBadgeLabel } from "@/lib/storefront/sale";
@@ -12,8 +13,10 @@ import { normalizeStoreStatus, STORE_CLOSED_BLOCK_MESSAGE } from "@/lib/storefro
 import { makeVariationEntry, unitPrice } from "@/storefront/checkout";
 import { SEED_CATEGORIES } from "@/storefront/data";
 import type { Brand, Category, Product } from "@/storefront/types";
+import { buildShopGroupBuy } from "./group-buy-share";
 import type { ShopCatalog, ShopCategory, ShopProduct, ShopVariation } from "./shop-contract";
 import { readCheckoutConfig } from "./shop-checkout";
+import { getTenantContext } from "@/lib/tenant/context";
 import type { ShopStore } from "./shop";
 
 /**
@@ -32,6 +35,8 @@ type MapContext = {
   scope: GroupBuyPriceScope | null;
   gate: Brand["groupBuyGate"];
   open: boolean;
+  /** The owner's per-way switches: a paused group buy sells nothing. */
+  ways: TwoWaysMode;
 };
 
 /** Units left for a pool, or null when the item isn't stock-limited. */
@@ -58,7 +63,8 @@ function toVariation(p: Product, v: NonNullable<Product["variations"]>[number], 
 function isBuyable(p: Product, ctx: MapContext): boolean {
   if (!ctx.open || p.priceOnRequest === true || p.purchasable === false) return false;
   if (isOnHandBlocked(p.id, ctx.gate)) return false;
-  return isGroupBuyPreorder(p, ctx.scope) || !productOutOfStock(p);
+  if (isGroupBuyPreorder(p, ctx.scope)) return isGroupBuyBuyable(ctx.ways);
+  return !productOutOfStock(p);
 }
 
 function badgeOf(p: Product, price: number, compareAt: number | null, ctx: MapContext): string | undefined {
@@ -117,12 +123,14 @@ export async function loadShopCatalog(store: ShopStore): Promise<ShopCatalog> {
     // The app never holds a reseller session: public price list only.
     isResellerUnlocked: async () => false,
   });
+  const { branding } = await getTenantContext(store.tenantId);
   const { open, closedMessage } = closedCopy(brand);
   const banner = brand.groupBuyBanner ?? null;
   const ctx: MapContext = {
     scope: banner ? { coversAll: banner.coversAll, productIds: banner.productIds } : null,
     gate: brand.groupBuyGate,
     open,
+    ways: brand.twoWaysMode ?? TWO_WAYS_MODE_DEFAULT,
   };
   // The storefront grid's own filter (StorefrontApp → visibleProducts).
   const listed = products.filter((p) => p.available !== false).map((p) => toShopProduct(p, ctx));
@@ -139,5 +147,13 @@ export async function loadShopCatalog(store: ShopStore): Promise<ShopCatalog> {
     categories: categoriesFor(brand, listed),
     products: listed,
     checkout: readCheckoutConfig(brand as unknown as Record<string, unknown>, brand.qrphFeeEntitled === true),
+    groupBuy: buildShopGroupBuy({
+      banner,
+      content: brand.groupBuyContent,
+      liveBanner: brand.groupBuyLiveBanner,
+      invoice: ((branding?.config ?? {}) as Record<string, unknown>).groupBuyInvoice,
+      ways: ctx.ways,
+      products: listed,
+    }),
   };
 }

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode, getDemoEntitlements } from "@/lib/demo/fixtures";
 import type { FeatureKey } from "./catalog";
+import { resolveEntitlementSet } from "./entitlement-set";
 
 export class FeatureLockedError extends Error {
   constructor(public readonly feature: FeatureKey) {
@@ -11,6 +12,9 @@ export class FeatureLockedError extends Error {
     this.name = "FeatureLockedError";
   }
 }
+
+/** Platform-wide tag: busted when a plan save re-syncs every plan's features. */
+export const ENTITLEMENTS_TAG = "platform:entitlements";
 
 // Cross-request cache for the plan-feature joins. Same tag as the tenant row
 // so any branding/settings/plan mutation invalidates the entitlement set too.
@@ -27,12 +31,13 @@ const loadEntitlements = (tenantId: string) =>
         },
       }),
     ["tenant-entitlements", tenantId],
-    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:entitlements`], revalidate: 300 },
+    // 1h: every entitlement writer busts a tag, so the timer is only a backstop.
+    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:entitlements`, ENTITLEMENTS_TAG], revalidate: 3600 },
   )();
 
 /**
  * Resolved feature set for a tenant = plan features ∪ enabled overrides − revocations.
- * Outer `cache()` dedupes within a render; inner `unstable_cache` (5 min) dedupes
+ * Outer `cache()` dedupes within a render; inner `unstable_cache` (1h) dedupes
  * across requests and is tag-busted by entitlement-mutating actions.
  */
 export const getEntitlements = cache(
@@ -40,22 +45,8 @@ export const getEntitlements = cache(
     // Demo mode: resolve from file-backed plan + override map (no DB).
     if (isDemoMode()) return getDemoEntitlements(tenantId);
 
-    const tenant = await loadEntitlements(tenantId);
-    if (!tenant) return new Set();
-
-    const set = new Set<FeatureKey>(
-      tenant.plan.features.map((pf) => pf.feature.key as FeatureKey),
-    );
-
-    const now = Date.now();
-    for (const o of tenant.featureOverrides) {
-      const expired = o.expiresAt ? o.expiresAt.getTime() < now : false;
-      if (expired) continue;
-      const key = o.feature.key as FeatureKey;
-      if (o.enabled) set.add(key);
-      else set.delete(key);
-    }
-    return set;
+    // On a cache HIT expiresAt comes back as a string — the resolver handles both.
+    return resolveEntitlementSet(await loadEntitlements(tenantId), Date.now());
   },
 );
 

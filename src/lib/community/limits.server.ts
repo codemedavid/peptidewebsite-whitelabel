@@ -22,6 +22,12 @@ export const COMMUNITY_LIMITS = {
   search: { max: 10, windowMs: MINUTE },
   profileEdit: { max: 10, windowMs: HOUR },
   reapply: { max: 3, windowMs: DAY },
+  /** "Send the group buy to everyone" — each one pushes every member. */
+  broadcast: { max: 6, windowMs: HOUR },
+  /** Muting / unmuting a channel's notifications. */
+  mute: { max: 30, windowMs: MINUTE },
+  /** The safety bot's "try a message" box — each one is a Jev call. */
+  moderationTest: { max: 20, windowMs: MINUTE },
 } as const;
 
 export type LimitAction = keyof typeof COMMUNITY_LIMITS;

@@ -108,34 +108,37 @@ model Tenant {
   automationMetrics  AutomationMetric[]
 
   // ── Storefront / white-label layer (added) ──
-  members  TenantUser[]
-  staff    StorefrontStaff[]
+  members                  TenantUser[]
+  staff                    StorefrontStaff[]
   // Shoppers who signed up on this tenant's storefront (customer accounts).
-  customers StorefrontCustomer[]
+  customers                StorefrontCustomer[]
   // Pepweb Admin mobile app (docs/mobile-admin/ARCHITECTURE.md)
-  mobileSessions    MobileSession[]
-  mobilePushDevices MobilePushDevice[]
-  mobileOrderAlerts MobileOrderAlert[]
+  mobileSessions           MobileSession[]
+  mobilePushDevices        MobilePushDevice[]
+  mobileOrderAlerts        MobileOrderAlert[]
   // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
-  communityMembers       CommunityMember[]
-  accountProfiles        AccountProfile[]
-  communityChannels      CommunityChannel[]
-  communityTopics        CommunityTopic[]
-  communityConversations CommunityConversation[]
-  communityMessages      CommunityMessage[]
-  communityDrops         CommunityDrop[]
-  communityReads         CommunityRead[]
-  communityUploads       CommunityUpload[]
-  branding Branding?
-  settings TenantSettings?
-  pages    Page[]
-  blogs    BlogPost[]
-  coupons  Coupon[]
-  media    MediaAsset[]
+  communityMembers         CommunityMember[]
+  accountProfiles          AccountProfile[]
+  communityChannels        CommunityChannel[]
+  communityTopics          CommunityTopic[]
+  communityConversations   CommunityConversation[]
+  communityMessages        CommunityMessage[]
+  communityFlags           CommunityFlag[]
+  communityModerationRules CommunityModerationRule[]
+  communityDrops           CommunityDrop[]
+  communityReads           CommunityRead[]
+  communityChannelMutes    CommunityChannelMute[]
+  communityUploads         CommunityUpload[]
+  branding                 Branding?
+  settings                 TenantSettings?
+  pages                    Page[]
+  blogs                    BlogPost[]
+  coupons                  Coupon[]
+  media                    MediaAsset[]
 
   // Self-serve onboarding submissions that provisioned (or will provision) this tenant.
-  onboardingSubmissions OnboardingSubmission[]
-  upgradeRequests       UpgradeRequest[]
+  onboardingSubmissions   OnboardingSubmission[]
+  upgradeRequests         UpgradeRequest[]
   // Owner/staff "Delete account" requests from the mobile app (Apple 5.1.1(v)).
   accountDeletionRequests AccountDeletionRequest[]
 
@@ -593,6 +596,10 @@ model StorefrontCustomer {
   email          String // trimmed + lower-cased (normalizeCustomerEmail)
   name           String
   phone          String    @default("")
+  // Asked by the app's create-account screen (lib/mobile/sign-up-details.ts);
+  // null for website sign-ups. age = as stated at sign-up (see createdAt).
+  age            Int?
+  gender         String? // female | male | other; null = not said
   passwordHash   String // scrypt$salt$hash (lib/auth/password-hash.ts)
   status         String    @default("active") // active | disabled
   // Bumped on password change or disable: every live session carries the old
@@ -602,7 +609,7 @@ model StorefrontCustomer {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  orders StorefrontOrder[]
+  orders          StorefrontOrder[]
   // Back-relation Prisma requires for CommunityMember.customer (mobile app community).
   communityMember CommunityMember?
 
@@ -1181,21 +1188,38 @@ model AccountDeletionRequest {
 // One per customer who signed in to the app. Approval gates the community only
 // (shopping is unaffected). status: pending | approved | rejected | revoked.
 model CommunityMember {
-  id          String             @id @default(cuid())
-  tenantId    String
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerId  String             @unique
-  customer    StorefrontCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  displayName String
-  bio         String             @default("")
-  avatarHue   Int                @default(0)
-  status      String             @default("pending")
-  reason      String?
-  submittedAt DateTime           @default(now())
-  reviewedAt  DateTime?
-  reviewedBy  String? // owner | s:<staffId>
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  tenantId         String
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId       String             @unique
+  customer         StorefrontCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  displayName      String
+  bio              String             @default("")
+  avatarHue        Int                @default(0)
+  status           String             @default("pending")
+  reason           String?
+  submittedAt      DateTime           @default(now())
+  reviewedAt       DateTime?
+  reviewedBy       String? // owner | s:<staffId>
+  // Set by the team; posts on-hand stock in a resellers hub (audience "hub").
+  verifiedReseller Boolean            @default(false)
+  // Community admin: set by the store team. Moderates channels and members
+  // while approved and not muted; still posts as themselves (`c:<id>`).
+  isAdmin          Boolean            @default(false)
+  // When the store's welcome DM was sent (once per member).
+  welcomedAt       DateTime?
+  // Safety bot (moderation.server.ts): a muted member reads but can't post;
+  // mutedBy = "bot" (auto, after repeat offenses) | owner | s:<staffId>.
+  mutedAt          DateTime?
+  mutedBy          String?
+  // Banned: membership revoked AND the customer account disabled, so the same
+  // login is refused everywhere (password sign-in and the Supabase exchange).
+  bannedAt         DateTime?
+  // True when the ban itself disabled the account — unban only re-enables those
+  // (an account the operator disabled for other reasons stays disabled).
+  banLockedAccount Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@unique([tenantId, customerId])
   @@index([tenantId, status])
@@ -1203,23 +1227,44 @@ model CommunityMember {
 }
 
 model CommunityChannel {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  emoji       String   @default("💬")
-  imageUrl    String?
-  postRole    String   @default("everyone") // everyone | admins
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  emoji         String   @default("💬")
+  imageUrl      String?
+  postRole      String   @default("everyone") // everyone | admins
+  audience      String   @default("everyone") // everyone | hub (Verified Resellers Hub: all see it, VRs post On hand)
+  // What customers in preview (not approved yet) get: hidden | locked | read | chat (lib/community/preview.ts).
+  previewAccess String   @default("locked")
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   topics CommunityTopic[]
   drops  CommunityDrop[]
+  mutes  CommunityChannelMute[]
 
   @@index([tenantId, sortOrder])
   @@map("community_channels")
+}
+
+// A participant who muted a channel: its chat messages stop pushing their
+// phones (product drops and group buys the store broadcasts still come
+// through). Unread counts are unaffected. participantKey = c:<customerId>.
+model CommunityChannelMute {
+  id             String           @id @default(cuid())
+  tenantId       String
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelId      String
+  channel        CommunityChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  participantKey String
+  createdAt      DateTime         @default(now())
+
+  @@unique([tenantId, participantKey, channelId])
+  @@index([channelId])
+  @@map("community_channel_mutes")
 }
 
 // Exactly one isGeneral topic per channel (never deleted).
@@ -1292,17 +1337,75 @@ model CommunityMessage {
   fileSize       Int?
   fileMime       String?
   dropId         String?
+  // kind "groupbuy": the GroupBuy round the card points at. No FK — a deleted
+  // round leaves the card reading "ended" rather than deleting chat history.
+  groupBuyId     String?
   replyToId      String?
   clientId       String?
   createdAt      DateTime               @default(now())
   editedAt       DateTime?
   deletedAt      DateTime?
+  // Last safety-bot change. Hidden by the bot = deletedAt AND moderatedAt set;
+  // a restore clears deletedAt and bumps this so polls pick the change up.
+  moderatedAt    DateTime?
 
   @@unique([tenantId, senderKey, clientId])
   @@index([topicId, createdAt])
   @@index([conversationId, createdAt])
   @@index([tenantId, createdAt])
+  // Every open chat polls for "edited / deleted / hidden since my last poll"
+  // (messages.server.ts). These let Postgres find just the few rows changed in
+  // the last seconds instead of scanning every message in the thread.
+  @@index([editedAt])
+  @@index([deletedAt])
+  @@index([moderatedAt])
   @@map("community_messages")
+}
+
+// A message the safety bot (Jev) judged to be poaching — inviting members to
+// another group / group buy. The message itself is hidden (deletedAt +
+// moderatedAt); this row is the moderators' review queue. Offense counts are
+// derived: a sender's flags that are not dismissed.
+model CommunityFlag {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messageId  String    @unique
+  senderKey  String
+  threadType String // topic | dm
+  threadId   String
+  score      Float // Jev's probability that the message is poaching
+  // hide = hidden at once (counts as an offense) · review = borderline: still
+  // visible, waiting for a moderator (counts only once confirmed).
+  action     String    @default("hide")
+  reason     String? // the owner's Not allowed rule Jev matched, as worded then
+  status     String    @default("pending") // pending | confirmed | dismissed
+  reviewedAt DateTime?
+  reviewedBy String? // owner | s:<staffId>
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, senderKey])
+  @@map("community_flags")
+}
+
+// The safety bot's policy, per store: the owner's plain-language rules
+// (type rule) and messages labelled while reviewing (type example) — sent to
+// Jev with every check. Kept out of branding.config: storefront pages read
+// that, and an example can be a private message.
+model CommunityModerationRule {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type      String // rule | example
+  kind      String // block (not allowed) | allow (allowed)
+  text      String
+  source    String   @default("owner") // owner (typed in) | review (a flag decision)
+  createdBy String? // owner | s:<staffId>
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, type, createdAt])
+  @@map("community_moderation_rules")
 }
 
 // A product broadcast; posting one writes a `drop` message into the channel's

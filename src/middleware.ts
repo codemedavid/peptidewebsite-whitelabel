@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { refreshSupabaseSession } from "@/lib/auth/middleware-session";
 import { rollGateCookie } from "@/lib/auth/gate-roll";
 import { clearStoreAdminSessionOnDocumentLoad } from "@/lib/auth/admin-session-reset";
+import { mobileCorsHeaders } from "@/lib/mobile/cors";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(
   /:\d+$/,
@@ -26,6 +27,11 @@ export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const rawHost = (req.headers.get("host") ?? "").toLowerCase();
   const host = rawHost.replace(/:\d+$/, "");
+
+  // The Expo web build (localhost) calls the mobile API cross-origin; answer
+  // its preflight here and stamp the headers on the final response below.
+  const cors = mobileCorsHeaders(url.pathname, req.headers.get("origin"));
+  if (cors && req.method === "OPTIONS") return new NextResponse(null, { status: 204, headers: cors });
 
   // Canonicalize www → apex. Redirect www.anything to the bare hostname so both
   // variants always resolve and there's one canonical URL for SEO / cookies.
@@ -143,6 +149,8 @@ export async function middleware(req: NextRequest) {
   // fetches (so saves never sign you out) and for visitors with no admin
   // cookie (so anonymous storefront responses stay Set-Cookie-free).
   clearStoreAdminSessionOnDocumentLoad(req, res, !isAdmin && !isApex);
+
+  if (cors) for (const [name, value] of Object.entries(cors)) res.headers.set(name, value);
 
   return res;
 }

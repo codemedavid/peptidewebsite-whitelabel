@@ -4,6 +4,7 @@ import { Prisma, type CommunityChannel as ChannelRow, type CommunityMessage as M
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import type {
   ChannelDetailResponse,
+  ChannelMuteResponse,
   CommunityChannel,
   CommunityConversation,
   CommunityTopic,
@@ -15,12 +16,17 @@ import type { CommunityActor } from "./actor.server";
 import { listActiveDrops } from "./drops.server";
 import { STORE_KEY, dmPeerOf } from "./keys";
 import { loadParticipants, publicParticipant, type MemberCard } from "./participants.server";
-import { canDeleteTopic, canManageChannel, canManageTopic, canPostInChannel } from "./rules";
+import { MUTED_REASON } from "./moderation";
+import { HUB_TOPICS, isHub } from "./hub";
+import { canAddTopic, canDeleteTopic, canListChannel, canManageChannel, canManageTopic, canPostInTopic, canSeeChannel } from "./rules";
+import { channelPreviewAccess } from "./preview";
 import { countUnreadChats, readBaseline } from "./unread";
 import { parseChannelInput, parseTopicInput } from "./validate";
 import { findOwnUpload } from "./uploads.server";
 import { messagePreview } from "./view.server";
+import { parseMuteRequest } from "./topic-push";
 import type { Outcome } from "./messages.server";
+import { welcomeIfNew } from "./welcome.server";
 
 /**
  * Channels, topics and the inbox. The inbox is built in a fixed number of
@@ -59,13 +65,34 @@ const DEFAULT_CHANNELS = [
 async function createChannelWithGeneral(
   db: TenantTx,
   actor: CommunityActor,
-  data: { name: string; description: string | null; emoji: string; imageUrl?: string | null; postRole: string; sortOrder: number },
+  data: { name: string; description: string | null; emoji: string; imageUrl?: string | null; postRole: string; audience?: string; sortOrder: number },
 ): Promise<ChannelRow> {
   const channel = await db.communityChannel.create({ data: { ...data, tenantId: actor.tenantId } });
+  const general = isHub(channel) ? HUB_TOPICS.onHand : { name: "General", emoji: data.emoji };
   await db.communityTopic.create({
-    data: { tenantId: actor.tenantId, channelId: channel.id, name: "General", emoji: data.emoji, isGeneral: true, createdByKey: actor.key },
+    data: { tenantId: actor.tenantId, channelId: channel.id, ...general, isGeneral: true, createdByKey: actor.key },
   });
+  if (isHub(channel)) await ensureHubTopics(db, actor, channel.id);
   return channel;
+}
+
+/**
+ * A hub's General topic is "On hand" and it always has a "Looking for" topic.
+ * Run when a channel becomes a hub; safe to repeat (never duplicates, never
+ * renames a General topic the team already renamed).
+ */
+async function ensureHubTopics(db: TenantTx, actor: CommunityActor, channelId: string): Promise<void> {
+  const topics = await db.communityTopic.findMany({ where: { channelId }, select: { id: true, name: true, isGeneral: true } });
+  const general = topics.find((t) => t.isGeneral);
+  if (general && general.name === "General") {
+    await db.communityTopic.updateMany({ where: { id: general.id }, data: { ...HUB_TOPICS.onHand } });
+  }
+  const wanted = HUB_TOPICS.lookingFor.name.toLowerCase();
+  if (!topics.some((t) => !t.isGeneral && t.name.toLowerCase() === wanted)) {
+    await db.communityTopic.create({
+      data: { tenantId: actor.tenantId, channelId, ...HUB_TOPICS.lookingFor, createdByKey: actor.key },
+    });
+  }
 }
 
 /**
@@ -141,13 +168,29 @@ function topicView(actor: CommunityActor, t: TopicRow, channel: ChannelRow, stat
     messageCount: t.messageCount,
     preview: preview(actor, stats.latest.get(t.id), stats),
     unread: stats.unread.get(t.id) ?? 0,
-    canPost: canPostInChannel(actor, channel.postRole),
+    canPost: canPostInTopic(actor, channel, t),
     canManage: canManageTopic(actor),
     canDelete: canDeleteTopic(actor, t),
   };
 }
 
-function channelView(actor: CommunityActor, c: ChannelRow, topics: TopicRow[], stats: TopicStats): CommunityChannel | null {
+/**
+ * The channels this reader muted — only full members, the only ones a channel
+ * message pushes (null for the store team and for people in preview).
+ */
+async function mutedChannels(db: TenantTx, actor: CommunityActor): Promise<ReadonlySet<string> | null> {
+  if (!actor.customerId || actor.preview) return null;
+  const rows = await db.communityChannelMute.findMany({ where: { participantKey: actor.key }, select: { channelId: true } });
+  return new Set(rows.map((r) => r.channelId));
+}
+
+function channelView(
+  actor: CommunityActor,
+  c: ChannelRow,
+  topics: TopicRow[],
+  stats: TopicStats,
+  muted: ReadonlySet<string> | null = null,
+): CommunityChannel | null {
   const general = topics.find((t) => t.isGeneral);
   if (!general) return null;
   const newest = topics
@@ -162,6 +205,7 @@ function channelView(actor: CommunityActor, c: ChannelRow, topics: TopicRow[], s
     emoji: c.emoji,
     imageUrl: c.imageUrl,
     postRole: c.postRole === "admins" ? "admins" : "everyone",
+    audience: isHub(c) ? "hub" : "everyone",
     sortOrder: c.sortOrder,
     topicCount: topics.length,
     generalTopicId: general.id,
@@ -169,8 +213,37 @@ function channelView(actor: CommunityActor, c: ChannelRow, topics: TopicRow[], s
     preview: preview(actor, newest, stats),
     previewTopic: newest ? (topics.find((t) => t.id === newest.topicId)?.name ?? null) : null,
     unread: topics.reduce((n, t) => n + (stats.unread.get(t.id) ?? 0), 0),
-    canPost: canPostInChannel(actor, c.postRole),
+    // A channel-level "post" is starting a topic (the New topic button).
+    canPost: canAddTopic(actor, c),
     canManage: canManageChannel(actor),
+    ...(actor.isModerator ? { previewAccess: channelPreviewAccess(c.previewAccess) } : {}),
+    ...(muted ? { muted: muted.has(c.id) } : {}),
+  };
+}
+
+/**
+ * A channel someone in preview may see listed but not open: its name, emoji
+ * and description only — no topics, previews or unread counts.
+ */
+function lockedChannelView(c: ChannelRow): CommunityChannel {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    emoji: c.emoji,
+    imageUrl: c.imageUrl,
+    postRole: c.postRole === "admins" ? "admins" : "everyone",
+    audience: isHub(c) ? "hub" : "everyone",
+    sortOrder: c.sortOrder,
+    topicCount: 0,
+    generalTopicId: "",
+    lastMessageAt: null,
+    preview: null,
+    previewTopic: null,
+    unread: 0,
+    canPost: false,
+    canManage: false,
+    locked: true,
   };
 }
 
@@ -196,7 +269,8 @@ export async function buildInbox(actor: CommunityActor): Promise<InboxResponse> 
   const now = new Date();
   return withTenant(actor.tenantId, async (db) => {
     await bootstrapIfEmpty(db, actor);
-    const [channels, topics, conversations] = await Promise.all([
+    await welcomeIfNew(db, actor, now);
+    const [allChannels, allTopics, conversations] = await Promise.all([
       db.communityChannel.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], take: MAX_CHANNELS }),
       db.communityTopic.findMany({}),
       db.communityConversation.findMany({
@@ -205,20 +279,27 @@ export async function buildInbox(actor: CommunityActor): Promise<InboxResponse> 
         take: MAX_CONVERSATIONS,
       }),
     ]);
+    // Channels this reader can't see are left out entirely — topics, unread and previews too.
+    // (In preview a "locked" channel is still listed, as its name alone.)
+    const listed = allChannels.filter((c) => canListChannel(actor, c));
+    const channels = listed.filter((c) => canSeeChannel(actor, c));
+    const visible = new Set(channels.map((c) => c.id));
+    const topics = allTopics.filter((t) => visible.has(t.channelId));
     const convIds = conversations.map((c) => c.id);
     const peerKeys = conversations.map((c) => dmPeerOf(c, actor.key)!);
-    const [stats, convUnread, convLatest] = await Promise.all([
+    const [stats, convUnread, convLatest, muted] = await Promise.all([
       topicStats(db, actor, topics.map((t) => t.id), peerKeys),
       unreadByThread(db, actor, "dm", convIds),
       latestByThread(db, "dm", actor.tenantId, convIds),
+      mutedChannels(db, actor),
     ]);
     const extra = [...convLatest.values()].map((m) => m.senderKey).filter((k) => !stats.participants.has(k));
     if (extra.length) for (const [k, v] of await loadParticipants(db, actor.tenant, extra)) stats.participants.set(k, v);
 
     const byChannel = new Map<string, TopicRow[]>();
     for (const t of topics) byChannel.set(t.channelId, [...(byChannel.get(t.channelId) ?? []), t]);
-    const channelViews = channels
-      .map((c) => channelView(actor, c, byChannel.get(c.id) ?? [], stats))
+    const channelViews = listed
+      .map((c) => (visible.has(c.id) ? channelView(actor, c, byChannel.get(c.id) ?? [], stats, muted) : lockedChannelView(c)))
       .filter((c): c is CommunityChannel => !!c);
     const conversationViews: CommunityConversation[] = conversations.map((c, i) => ({
       id: c.id,
@@ -241,10 +322,10 @@ export async function buildInbox(actor: CommunityActor): Promise<InboxResponse> 
 
 async function detail(db: TenantTx, actor: CommunityActor, channelId: string): Promise<ChannelDetailResponse | null> {
   const channel = await db.communityChannel.findFirst({ where: { id: channelId } });
-  if (!channel) return null;
+  if (!channel || !canSeeChannel(actor, channel)) return null;
   const topics = sortTopics(await db.communityTopic.findMany({ where: { channelId } }));
-  const stats = await topicStats(db, actor, topics.map((t) => t.id));
-  const view = channelView(actor, channel, topics, stats);
+  const [stats, muted] = await Promise.all([topicStats(db, actor, topics.map((t) => t.id)), mutedChannels(db, actor)]);
+  const view = channelView(actor, channel, topics, stats, muted);
   return view ? { channel: view, topics: topics.map((t) => topicView(actor, t, channel, stats)) } : null;
 }
 
@@ -252,6 +333,29 @@ export async function getChannel(actor: CommunityActor, channelId: string): Prom
   if (!ID_RE.test(channelId)) return NOT_FOUND;
   const res = await withTenant(actor.tenantId, (db) => detail(db, actor, channelId));
   return res ? { kind: "ok", value: res } : NOT_FOUND;
+}
+
+/**
+ * Mute / unmute a channel's chat messages on this member's phones. Members
+ * only — the store team and people in preview get no channel pushes. Safe to
+ * repeat (muting twice is one row; unmuting what isn't muted is a no-op).
+ */
+export async function setChannelMute(actor: CommunityActor, channelId: string, body: unknown): Promise<Outcome<ChannelMuteResponse>> {
+  if (!ID_RE.test(channelId)) return NOT_FOUND;
+  const muted = parseMuteRequest(body);
+  if (muted === null) return invalid("Choose whether to mute this channel.");
+  if (!actor.customerId || actor.preview) return forbidden("Only community members can mute a channel.");
+  return withTenant(actor.tenantId, async (db): Promise<Outcome<ChannelMuteResponse>> => {
+    const channel = await db.communityChannel.findFirst({ where: { id: channelId } });
+    if (!channel || !canSeeChannel(actor, channel)) return NOT_FOUND;
+    const where = { tenantId: actor.tenantId, participantKey: actor.key, channelId };
+    if (muted) {
+      await db.communityChannelMute.upsert({ where: { tenantId_participantKey_channelId: where }, create: where, update: {} });
+    } else {
+      await db.communityChannelMute.deleteMany({ where: { participantKey: actor.key, channelId } });
+    }
+    return { kind: "ok", value: { channelId, muted } };
+  });
 }
 
 export async function createChannel(actor: CommunityActor, body: unknown): Promise<Outcome<CommunityChannel>> {
@@ -276,6 +380,7 @@ export async function updateChannel(actor: CommunityActor, channelId: string, bo
     if (!(await pictureOk(db, actor, input.value.imageUrl))) return invalid(BAD_PICTURE);
     const updated = await db.communityChannel.updateMany({ where: { id: channelId }, data: input.value });
     if (updated.count !== 1) return NOT_FOUND;
+    if (input.value.audience === "hub") await ensureHubTopics(db, actor, channelId);
     const res = await detail(db, actor, channelId);
     return res ? { kind: "ok", value: res.channel } : NOT_FOUND;
   });
@@ -310,8 +415,10 @@ export async function createTopic(actor: CommunityActor, channelId: string, body
   const input = parseTopicInput(body);
   return withTenant(actor.tenantId, async (db): Promise<Outcome<CommunityTopic>> => {
     const channel = await db.communityChannel.findFirst({ where: { id: channelId } });
-    if (!channel) return NOT_FOUND;
-    if (!canPostInChannel(actor, channel.postRole)) return forbidden("Only the store team can add topics here.");
+    if (!channel || !canSeeChannel(actor, channel)) return NOT_FOUND;
+    if (!canAddTopic(actor, channel)) {
+      return forbidden(actor.isMuted ? MUTED_REASON : "Only the store team can add topics here.");
+    }
     if (!input.ok) return invalid(input.error);
     if (!(await pictureOk(db, actor, input.value.imageUrl))) return invalid(BAD_PICTURE);
     const topic = await db.communityTopic.create({

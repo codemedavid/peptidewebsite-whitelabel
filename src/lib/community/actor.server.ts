@@ -8,6 +8,8 @@ import type { AuthFailure, Principal } from "@/lib/mobile/auth";
 import type { LiveSession } from "@/lib/mobile/sessions";
 import { storeDisplayName } from "@/lib/mobile/store-name";
 import { admitCustomer } from "./admission.server";
+import { isActiveAdmin } from "./membership";
+import { previewPolicyOf } from "./preview";
 import { STORE_KEY, authorKeyFor, customerKey } from "./keys";
 import type { RuleActor } from "./rules";
 
@@ -17,6 +19,11 @@ import type { RuleActor } from "./rules";
  *     every signed-in customer is admitted here on their first request, or
  *   - the store team — the owner, or staff holding the `community` module —
  *     posting as `store`, each write stamped with its author (`owner | s:<id>`).
+ * A customer the team made a community admin is a moderator but not the team:
+ * they still post as `c:<id>`, and lose the powers while revoked or muted.
+ * A PENDING customer, while the store's preview is on, acts in preview
+ * (`actor.preview`): only routes that opt in (withCommunity `preview: true`)
+ * serve them, and rules.ts limits what they see and post.
  * The store must hold MOBILE_COMMUNITY. Everyone else gets `forbidden`.
  */
 
@@ -31,6 +38,8 @@ export type CommunityActor = RuleActor & {
   storeName: string;
   /** When this customer was approved — the unread baseline for threads never opened. */
   joinedAt: Date | null;
+  /** Customers: whether the store's welcome DM has gone out. */
+  welcomed: boolean;
 };
 
 export const COMMUNITY_OFF: AuthFailure = {
@@ -80,25 +89,50 @@ export async function resolveCommunityActor(
         ...base,
         key: STORE_KEY,
         isModerator: true,
+        isTeam: true,
         authorKey: authorKeyFor(principal.ctx.actor),
         customerId: null,
         joinedAt: null,
+        welcomed: true,
       },
     };
   }
 
   const customerId = principal.ctx.customer.id;
   const member = await admitCustomer(ctx.tenant, ctx.tenantId, principal.ctx.customer);
+  const policy = previewPolicyOf(ctx.tenant.branding?.config);
+  if (member.status === "pending" && policy.enabled) {
+    return {
+      ok: true,
+      actor: {
+        ...base,
+        key: customerKey(customerId),
+        isModerator: false,
+        isTeam: false,
+        authorKey: null,
+        customerId,
+        // No unread backlog while previewing, and the welcome DM waits for approval.
+        joinedAt: new Date(),
+        welcomed: true,
+        isMuted: member.mutedAt !== null,
+        preview: policy,
+      },
+    };
+  }
   if (member.status !== "approved") return { ok: false, failure: memberBlocked(member.status) };
   return {
     ok: true,
     actor: {
       ...base,
       key: customerKey(customerId),
-      isModerator: false,
+      isModerator: isActiveAdmin(member),
+      isTeam: false,
       authorKey: null,
       customerId,
       joinedAt: member.reviewedAt,
+      isVerifiedReseller: member.verifiedReseller,
+      isMuted: member.mutedAt !== null,
+      welcomed: member.welcomedAt !== null,
     },
   };
 }

@@ -17,6 +17,7 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { getPlatformUser } from "@/lib/auth/session";
 import { getTenantSlug } from "@/lib/tenant/headers";
@@ -50,6 +51,12 @@ import {
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import {
+  mergeGroupBuyInvoiceSave,
+  normalizeGroupBuyInvoice,
+  type GroupBuyInvoiceConfig,
+} from "@/lib/storefront/gb-invoice";
+import { sendGroupBuyInvoices, type InvoiceSendResult } from "@/lib/community/gb-invoice.server";
+import {
   detectAssignmentDrift,
   productsToAssign,
   type AssignmentDrift,
@@ -77,6 +84,7 @@ import {
 import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
+import { normalizeGroupBuyLiveBanner, type GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
 import { normalizeTwoWaysMode, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import {
   buildCustomerLines,
@@ -114,6 +122,10 @@ export type ListGroupBuysResult =
       caps: GroupBuyCapabilities;
       settings: GroupBuySettings;
       content: GroupBuyContent;
+      /** The app's live strip settings (blank text = automatic). */
+      liveBanner: GroupBuyLiveBannerConfig;
+      /** Pay-after-close invoices: fee, template, payment options. */
+      invoice: GroupBuyInvoiceConfig;
     }
   | { error: string };
 
@@ -193,6 +205,8 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
     const config = await readTenantConfig(tenantId);
     const settings = normalizeGroupBuySettings(config.groupBuySettings);
     const content = normalizeGroupBuyContent(config.groupBuyContent);
+    const liveBanner = normalizeGroupBuyLiveBanner(config.groupBuyLiveBanner);
+    const invoice = normalizeGroupBuyInvoice(config.groupBuyInvoice);
 
     // One query for every candidate order, then resolve per round in memory —
     // never one query per round, which would be an N+1 on the list page.
@@ -207,7 +221,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
       ),
     );
 
-    return { ok: true, groupBuys, rows, caps, settings, content };
+    return { ok: true, groupBuys, rows, caps, settings, content, liveBanner, invoice };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load group buys." };
   }
@@ -423,7 +437,9 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     // widens this. Still a read-then-write, so it races under concurrent saves;
     // the DB partial unique index group_buys_one_active_per_tenant is the real
     // enforcement and this check exists to return a readable error first.
-    const others = (await loadGroupBuys(tenantId, slug)).filter((x) => x.id !== gb.id);
+    const all = await loadGroupBuys(tenantId, slug);
+    const others = all.filter((x) => x.id !== gb.id);
+    const before = all.find((x) => x.id === gb.id) ?? null;
     const wouldBeLive = effectiveGroupBuyStatus(gb, caps.scheduled) === "active";
     const otherLive = others.some((x) => effectiveGroupBuyStatus(x, caps.scheduled) === "active");
     if (wouldBeLive && otherLive) {
@@ -466,7 +482,15 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
         return n.count ? db.groupBuy.findFirst({ where: { id: gb.id } }) : null;
       });
       if (!row) return { error: "Group buy not found." };
-      return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
+      const saved = dbGroupBuyToStorefront(row as DbGroupBuyRow);
+      // The owner just closed the round → its invoices go out (pay-after-close
+      // stores only; every gate is inside, and it never throws).
+      const closedNow =
+        before !== null &&
+        effectiveGroupBuyStatus(before, caps.scheduled) !== "closed" &&
+        effectiveGroupBuyStatus(saved, caps.scheduled) === "closed";
+      if (closedNow) after(() => sendGroupBuyInvoices(tenantId, saved.id, "close"));
+      return { ok: true, groupBuy: saved };
     }
     const row = await withTenant(tenantId, async (db) => {
       if (staleIds.length) {
@@ -668,6 +692,101 @@ export async function saveGroupBuyContentAction(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't save the storefront copy." };
   }
+}
+
+// ── Live strip (the Pepweb app) ──────────────────────────────────────────────
+
+/**
+ * Persist the app's live group-buy strip — on/off + headline, message and
+ * button label — into branding.config.groupBuyLiveBanner (read-modify-write,
+ * the rest of the config untouched). Same gate as the storefront copy
+ * (store admin + Group Buy module). Normalized server-side, so blank fields
+ * stay blank = "automatic text from the round". Revalidates the tenant so the
+ * shop catalog the app reads picks it up.
+ */
+export async function saveGroupBuyLiveBannerAction(
+  input: unknown,
+): Promise<{ ok: true; liveBanner: GroupBuyLiveBannerConfig } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const liveBanner = normalizeGroupBuyLiveBanner(input);
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: { ...current, groupBuyLiveBanner: liveBanner } });
+    } else {
+      const current = await readTenantConfig(tenantId);
+      const config = { ...current, groupBuyLiveBanner: liveBanner } as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId },
+        update: { config },
+        create: { tenantId, config },
+      });
+    }
+    revalidateTenant(tenantId, slug);
+    return { ok: true, liveBanner };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the live banner." };
+  }
+}
+
+// ── Invoices (pay after close) ──────────────────────────────────────────────
+
+/**
+ * Save the pay-after-close invoice settings (branding.config.groupBuyInvoice):
+ * on/off, the flat once-per-round shipping fee, the message template and the
+ * payment options with their images. Normalized server-side; enabledAt is the
+ * server's own stamp (mergeGroupBuyInvoiceSave), never the client's.
+ */
+export async function saveGroupBuyInvoiceAction(
+  input: unknown,
+): Promise<{ ok: true; invoice: GroupBuyInvoiceConfig } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      const invoice = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
+      saveDemoBranding(slug, { config: { ...current, groupBuyInvoice: invoice } });
+      return { ok: true, invoice };
+    }
+    // Row-locked read-modify-write: enabledAt is merged from what is stored,
+    // and a concurrent config save elsewhere must not be overwritten.
+    const invoice = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
+      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
+      const current = (row?.config ?? {}) as Record<string, unknown>;
+      const merged = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
+      const config = { ...current, groupBuyInvoice: merged } as Prisma.InputJsonValue;
+      await tx.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
+      return merged;
+    });
+    revalidateTenant(tenantId, slug);
+    return { ok: true, invoice };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the invoice settings." };
+  }
+}
+
+/**
+ * The owner's "Send invoices" button for a closed round: sends every app
+ * customer's invoice now, and re-sends one whose text changed since (an order
+ * edited after close). An unchanged invoice is never sent twice.
+ */
+export async function sendGroupBuyInvoicesAction(
+  id: unknown,
+): Promise<({ ok: true } & InvoiceSendResult) | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const gbId = typeof id === "string" ? id : "";
+  if (!gbId) return { error: "Missing group buy id." };
+  if (isDemoMode()) return { error: "Invoices aren't sent in demo mode." };
+  const result = await sendGroupBuyInvoices(gate.tenantId, gbId, "manual");
+  return "error" in result ? result : { ok: true, ...result };
 }
 
 // ── Duplicate ─────────────────────────────────────────────────────────────────

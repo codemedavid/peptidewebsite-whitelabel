@@ -3,7 +3,7 @@
 // to the hardcoded marketing-config default when nothing has been saved yet (or
 // the table hasn't been pushed), so /get-started never breaks.
 
-import { prisma } from "@/lib/db/prisma";
+import { loadPlatformSettingValue } from "./platform-setting-cache";
 import { isDemoMode, getDemoPlatformSetting } from "@/lib/demo/fixtures";
 import {
   PACKAGE_PAYMENT_KEY,
@@ -18,8 +18,8 @@ export async function getPackagePayment(): Promise<PackagePaymentConfig> {
     return saved ? normalizePackagePayment(saved) : defaultPackagePayment();
   }
   try {
-    const row = await prisma.platformSetting.findUnique({ where: { key: PACKAGE_PAYMENT_KEY } });
-    return row ? normalizePackagePayment(row.value) : defaultPackagePayment();
+    const value = await loadPlatformSettingValue(PACKAGE_PAYMENT_KEY);
+    return value !== null ? normalizePackagePayment(value) : defaultPackagePayment();
   } catch {
     // Table missing (db push not run yet) or DB hiccup — keep checkout working.
     return defaultPackagePayment();

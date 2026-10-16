@@ -3,7 +3,7 @@
 // to the hardcoded PLAN_CARDS defaults when nothing has been saved yet (or the
 // table hasn't been pushed), so pricing surfaces never break.
 
-import { prisma } from "@/lib/db/prisma";
+import { loadPlatformSettingValue } from "./platform-setting-cache";
 import { isDemoMode, getDemoPlatformSetting } from "@/lib/demo/fixtures";
 import {
   PLAN_CONFIG_KEY,
@@ -18,8 +18,8 @@ export async function getPlanConfig(): Promise<PlanConfig> {
     return saved ? normalizePlanConfig(saved) : defaultPlanConfig();
   }
   try {
-    const row = await prisma.platformSetting.findUnique({ where: { key: PLAN_CONFIG_KEY } });
-    return row ? normalizePlanConfig(row.value) : defaultPlanConfig();
+    const value = await loadPlatformSettingValue(PLAN_CONFIG_KEY);
+    return value !== null ? normalizePlanConfig(value) : defaultPlanConfig();
   } catch {
     // Table missing (db push not run yet) or DB hiccup — keep pricing rendering.
     return defaultPlanConfig();

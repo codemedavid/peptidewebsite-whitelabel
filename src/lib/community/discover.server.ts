@@ -8,8 +8,10 @@ import { dmPeerOf } from "./keys";
 import type { Outcome } from "./messages.server";
 import { loadParticipants } from "./participants.server";
 import { extractLinks, likePattern, normaliseSearchQuery } from "./text";
+import { AUDIENCES } from "./rules";
 import { parseThreadType, resolveThread, threadWhere } from "./thread-access.server";
 import { buildMessageViews } from "./view.server";
+import { withLiveRounds } from "./group-buy-cards.server";
 
 /**
  * Search (everywhere the reader can see, or one thread) and a thread's Shared
@@ -39,7 +41,7 @@ export async function searchMessages(actor: CommunityActor, params: URLSearchPar
   const q = normaliseSearchQuery(params.get("q"));
   if (!q) return { kind: "invalid", message: "Type at least 2 characters." };
   const scope = params.get("scope") === "thread" ? "thread" : "everywhere";
-  return withTenant(actor.tenantId, async (db): Promise<Outcome<SearchResponse>> => {
+  const res = await withTenant(actor.tenantId, async (db): Promise<Outcome<SearchResponse>> => {
     let where: Prisma.Sql;
     if (scope === "thread") {
       const type = parseThreadType(params.get("type") ?? "");
@@ -47,8 +49,16 @@ export async function searchMessages(actor: CommunityActor, params: URLSearchPar
       if (!access) return { kind: "not_found" };
       where = access.type === "topic" ? Prisma.sql`"topicId" = ${access.id}` : Prisma.sql`"conversationId" = ${access.id}`;
     } else {
-      // Every topic, plus only the DMs this reader is part of.
-      where = Prisma.sql`("topicId" IS NOT NULL OR "conversationId" IN (
+      // Every topic in a channel this reader can see, plus only their own DMs.
+      // (Mirrors canSeeChannel: moderators see every channel, members the open
+      // audiences — and people in preview only the channels set to read or chat.)
+      const previewOnly = actor.preview ? Prisma.sql`AND c."previewAccess" IN ('read', 'chat')` : Prisma.empty;
+      const topics = actor.isModerator
+        ? Prisma.sql`"topicId" IS NOT NULL`
+        : Prisma.sql`"topicId" IN (
+            SELECT t.id FROM community_topics t JOIN community_channels c ON c.id = t."channelId"
+            WHERE t."tenantId" = ${actor.tenantId} AND c.audience IN (${Prisma.join(AUDIENCES)}) ${previewOnly})`;
+      where = Prisma.sql`(${topics} OR "conversationId" IN (
         SELECT id FROM community_conversations
         WHERE "tenantId" = ${actor.tenantId} AND (${actor.key} = "lowKey" OR ${actor.key} = "highKey")))`;
     }
@@ -79,6 +89,9 @@ export async function searchMessages(actor: CommunityActor, params: URLSearchPar
     }));
     return { kind: "ok", value: { hits } };
   });
+  if (res.kind !== "ok") return res;
+  const live = await withLiveRounds(actor, res.value.hits.map((h) => h.message));
+  return { kind: "ok", value: { hits: res.value.hits.map((h, i) => ({ ...h, message: live[i] })) } };
 }
 
 function tabWhere(tab: SharedTab): Prisma.CommunityMessageWhereInput {
@@ -90,7 +103,7 @@ function tabWhere(tab: SharedTab): Prisma.CommunityMessageWhereInput {
     case "links":
       return { body: { contains: "http" } };
     case "listings":
-      return { kind: { in: ["product", "protocol", "drop"] } };
+      return { kind: { in: ["product", "protocol", "drop", "groupbuy"] } };
   }
 }
 
@@ -101,7 +114,7 @@ export async function sharedItems(
   tabRaw: string | null,
 ): Promise<Outcome<SharedResponse>> {
   const tab = (SHARED_TABS.has(tabRaw as SharedTab) ? tabRaw : "media") as SharedTab;
-  return withTenant(actor.tenantId, async (db): Promise<Outcome<SharedResponse>> => {
+  const res = await withTenant(actor.tenantId, async (db): Promise<Outcome<SharedResponse>> => {
     const access = await resolveThread(db, actor, type, id);
     if (!access) return { kind: "not_found" };
     const rows = await db.communityMessage.findMany({
@@ -112,4 +125,5 @@ export async function sharedItems(
     const kept = tab === "links" ? rows.filter((r) => extractLinks(r.body).length > 0) : rows;
     return { kind: "ok", value: { items: await buildMessageViews(db, actor, kept) } };
   });
+  return res.kind === "ok" ? { kind: "ok", value: { items: await withLiveRounds(actor, res.value.items) } } : res;
 }

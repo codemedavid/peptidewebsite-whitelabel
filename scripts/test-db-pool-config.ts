@@ -6,7 +6,7 @@
  */
 import assert from "node:assert";
 
-import { DEFAULT_POOL_MAX, pgPoolConfig } from "../src/lib/db/pool-config";
+import { DEFAULT_POOL_MAX, pgAdapterSchema, pgPoolConfig } from "../src/lib/db/pool-config";
 
 const POOLER = "postgresql://u:p@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres";
 
@@ -57,6 +57,16 @@ test("a nonsense pool size falls back to the default", () => {
   for (const bad of ["0", "-2", "abc", ""]) {
     assert.strictEqual(pgPoolConfig({ DATABASE_URL: POOLER, DB_POOL_MAX: bad }).max, DEFAULT_POOL_MAX, bad);
   }
+});
+
+test("?schema= reaches the adapter (pg ignores it), so a second instance can live in its own schema", () => {
+  assert.strictEqual(pgAdapterSchema({ DATABASE_URL: `${POOLER}?pgbouncer=true&schema=pepweb` }), "pepweb");
+});
+
+test("no ?schema= leaves the adapter on its default (public)", () => {
+  assert.strictEqual(pgAdapterSchema({ DATABASE_URL: POOLER }), undefined);
+  assert.strictEqual(pgAdapterSchema({ DATABASE_URL: `${POOLER}?schema=` }), undefined);
+  assert.strictEqual(pgAdapterSchema({}), undefined);
 });
 
 test("a missing DATABASE_URL fails loudly", () => {

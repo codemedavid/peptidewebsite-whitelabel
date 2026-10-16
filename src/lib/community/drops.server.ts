@@ -5,6 +5,7 @@ import type { CommunityDrop, DropsResponse, EndDropResponse } from "@/lib/mobile
 import type { CommunityActor } from "./actor.server";
 import { loadProductCards, refKey } from "./cards.server";
 import { insertMessage, type Outcome } from "./messages.server";
+import { canSeeChannel } from "./rules";
 import { parseDropInput } from "./validate";
 import { dropView } from "./view.server";
 
@@ -18,11 +19,13 @@ import { dropView } from "./view.server";
 const MAX_LIVE = 20;
 
 export async function listActiveDrops(db: TenantTx, actor: CommunityActor, now: Date): Promise<CommunityDrop[]> {
-  const rows = await db.communityDrop.findMany({
+  const all = await db.communityDrop.findMany({
     where: { isActive: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
     orderBy: { createdAt: "desc" },
     take: MAX_LIVE,
+    include: { channel: { select: { audience: true, previewAccess: true } } },
   });
+  const rows = all.filter((d) => canSeeChannel(actor, d.channel));
   const cards = await loadProductCards(db, actor.tenant, rows.map((d) => ({ productId: d.productId, variationId: d.variationId })));
   return rows.flatMap((d) => {
     const card = cards.get(refKey({ productId: d.productId, variationId: d.variationId }));
@@ -35,7 +38,7 @@ export async function listDrops(actor: CommunityActor): Promise<DropsResponse> {
 }
 
 export async function createDrop(actor: CommunityActor, body: unknown): Promise<Outcome<CommunityDrop>> {
-  if (!actor.isModerator) return { kind: "forbidden", message: "Only the store team can post drops." };
+  if (!actor.isTeam) return { kind: "forbidden", message: "Only the store team can post drops." };
   const input = parseDropInput(body);
   if (!input.ok) return { kind: "invalid", message: input.error };
   const v = input.value;
@@ -73,7 +76,7 @@ export async function createDrop(actor: CommunityActor, body: unknown): Promise<
 }
 
 export async function endDrop(actor: CommunityActor, dropId: string): Promise<Outcome<EndDropResponse>> {
-  if (!actor.isModerator) return { kind: "forbidden", message: "Only the store team can end drops." };
+  if (!actor.isTeam) return { kind: "forbidden", message: "Only the store team can end drops." };
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(dropId)) return { kind: "not_found" };
   const res = await withTenant(actor.tenantId, (db) =>
     db.communityDrop.updateMany({ where: { id: dropId }, data: { isActive: false, endedAt: new Date() } }),

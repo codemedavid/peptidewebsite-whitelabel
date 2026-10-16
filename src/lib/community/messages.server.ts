@@ -5,9 +5,12 @@ import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import type { CommunityMessage, MessagesResponse, ThreadType } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
 import { loadProductCards, loadProtocolCards, refKey } from "./cards.server";
+import { openRoundFor, withLiveRounds } from "./group-buy-cards.server";
 import { decodeCursor, decodePollCursor, encodeCursor, encodePollCursor, type Cursor } from "./cursor";
-import { canDeleteMessage, canEditMessage } from "./rules";
+import { MUTED_REASON } from "./moderation";
+import { canDeleteMessage, canEditMessage, isOwnMessage } from "./rules";
 import { resolveThread, threadInfo, threadWhere, type ThreadAccess } from "./thread-access.server";
+import { checkForPoach, recordFlag } from "./moderation.server";
 import { findOwnUpload } from "./uploads.server";
 import { nextReadMarker } from "./unread";
 import { parseEditBody, parseMessageBody } from "./validate";
@@ -22,7 +25,7 @@ const PAGE = 30;
 const MAX_PAGE = 100;
 const MAX_POLL = 100;
 const CLIENT_ID_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
-const SEND_KINDS = new Set(["text", "image", "file", "product", "protocol"]);
+const SEND_KINDS = new Set(["text", "image", "file", "product", "protocol", "groupbuy"]);
 const EMPTY_CURSOR: Cursor = { createdAt: new Date(0), id: "0" };
 
 export type Outcome<T> =
@@ -54,7 +57,7 @@ export async function listMessages(
 ): Promise<Outcome<MessagesResponse>> {
   const now = new Date();
   const limit = Math.min(Math.max(Number(params.get("limit")) || PAGE, 1), MAX_PAGE);
-  return withTenant(actor.tenantId, async (db): Promise<Outcome<MessagesResponse>> => {
+  const res = await withTenant(actor.tenantId, async (db): Promise<Outcome<MessagesResponse>> => {
     const access = await resolveThread(db, actor, type, id);
     if (!access) return NOT_FOUND;
     const where = threadWhere(access);
@@ -69,7 +72,10 @@ export async function listMessages(
         db.communityMessage.findMany({
           where: {
             ...where,
-            AND: [atOrBefore(poll), { OR: [{ editedAt: { gt: poll.at } }, { deletedAt: { gt: poll.at } }] }],
+            AND: [
+              atOrBefore(poll),
+              { OR: [{ editedAt: { gt: poll.at } }, { deletedAt: { gt: poll.at } }, { moderatedAt: { gt: poll.at } }] },
+            ],
           },
           orderBy: NEWEST_FIRST,
           take: MAX_POLL,
@@ -110,17 +116,36 @@ export async function listMessages(
       },
     };
   });
+  if (res.kind !== "ok") return res;
+  const [messages, changed] = await Promise.all([withLiveRounds(actor, res.value.messages), withLiveRounds(actor, res.value.changed)]);
+  return { kind: "ok", value: { ...res.value, messages, changed } };
+}
+
+/** A single-message outcome with the live group-buy round swapped in (after the transaction). */
+async function liveOne<T extends { message: CommunityMessage } | CommunityMessage>(
+  actor: CommunityActor,
+  res: Outcome<T>,
+): Promise<Outcome<T>> {
+  if (res.kind !== "ok") return res;
+  const message = "message" in res.value ? res.value.message : (res.value as CommunityMessage);
+  const [live] = await withLiveRounds(actor, [message]);
+  if (live === message) return res;
+  return { kind: "ok", value: ("message" in res.value ? { ...res.value, message: live } : live) as T };
 }
 
 // ── send ─────────────────────────────────────────────────────────────────────
 
 type Draft = Omit<Prisma.CommunityMessageUncheckedCreateInput, "tenantId" | "senderKey" | "authorKey" | "clientId" | "createdAt">;
 
+/** kind "groupbuy": the live round, checked before the transaction (it's a storefront load). */
+type RoundCheck = Awaited<ReturnType<typeof openRoundFor>> | null;
+
 async function buildDraft(
   db: TenantTx,
   actor: CommunityActor,
   access: ThreadAccess,
   body: Record<string, unknown>,
+  round: RoundCheck,
 ): Promise<{ ok: true; draft: Draft } | { ok: false; message: string }> {
   const kind = String(body.kind ?? "");
   if (!SEND_KINDS.has(kind)) return { ok: false, message: "That kind of message isn't supported." };
@@ -137,6 +162,10 @@ async function buildDraft(
     const protocolId = String(body.protocolId ?? "");
     if (!loadProtocolCards(actor.tenant).has(protocolId)) return { ok: false, message: "That protocol isn't available." };
     draft.protocolId = protocolId;
+  } else if (kind === "groupbuy") {
+    // Only the round that is live and taking orders right now — never an id the client made up.
+    if (!round?.ok) return { ok: false, message: round?.message ?? "That group buy isn't open right now." };
+    draft.groupBuyId = round.id;
   } else if (kind === "image" || kind === "file") {
     // Only this participant's own upload of this tenant, and every detail comes
     // from the upload record — never from the request body.
@@ -189,8 +218,12 @@ export async function sendMessage(
   const clientId = typeof body.clientId === "string" ? body.clientId : "";
   if (!CLIENT_ID_RE.test(clientId)) return invalid("Couldn't send that message. Try again.");
   const now = new Date();
+  const round = body.kind === "groupbuy" ? await openRoundFor(actor, body.groupBuyId) : null;
+  // The safety bot asks Jev BEFORE the transaction (a network call); a sure catch is written already hidden.
+  // (checkForPoach skips muted members — the transaction refuses them before any write.)
+  const poach = await checkForPoach(actor, type === "dm" ? "private message" : "channel", typeof body.body === "string" ? body.body : null);
   try {
-    return await withTenant(actor.tenantId, async (db): Promise<Outcome<SendResult>> => {
+    const res = await withTenant(actor.tenantId, async (db): Promise<Outcome<SendResult>> => {
       const access = await resolveThread(db, actor, type, id);
       if (!access) return NOT_FOUND;
       // Idempotent: the same clientId from the same sender is the same message.
@@ -202,12 +235,16 @@ export async function sendMessage(
         return { kind: "ok", value: { message, created: false, access } };
       }
       if (!access.canPost) return forbidden(access.postBlockedReason ?? "You can't post here.");
-      const built = await buildDraft(db, actor, access, body);
+      const built = await buildDraft(db, actor, access, body, round);
       if (!built.ok) return invalid(built.message);
-      const row = await insertMessage(db, actor, access, { ...built.draft, clientId }, now);
+      // A borderline catch stays visible and waits in the moderators' queue.
+      const hidden = poach?.verdict === "hide" ? { deletedAt: now, moderatedAt: now } : {};
+      const row = await insertMessage(db, actor, access, { ...built.draft, ...hidden, clientId }, now);
+      if (poach !== null) await recordFlag(db, actor, row, poach, now);
       const [message] = await buildMessageViews(db, actor, [row], now);
       return { kind: "ok", value: { message, created: true, access } };
     });
+    return await liveOne(actor, res);
   } catch (e) {
     // Two racing retries of one clientId: the loser re-reads the winner.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -232,15 +269,25 @@ export async function editMessage(actor: CommunityActor, messageId: string, body
   const text = parseEditBody(body);
   if (!text.ok) return invalid(text.error);
   const now = new Date();
-  return withTenant(actor.tenantId, async (db): Promise<Outcome<CommunityMessage>> => {
+  if (actor.isMuted && !actor.isModerator) return forbidden(MUTED_REASON);
+  // Editing a harmless message into an invite is caught the same way as sending one —
+  // scanned only once it's confirmed to be this member's own message (no Jev call for anyone else's id).
+  const own = /^[A-Za-z0-9_-]{1,64}$/.test(messageId)
+    ? await withTenant(actor.tenantId, (db) => db.communityMessage.findFirst({ where: { id: messageId }, select: { topicId: true, senderKey: true, authorKey: true } }))
+    : null;
+  const poach = own && isOwnMessage(actor, own) ? await checkForPoach(actor, own.topicId ? "channel" : "private message", text.value) : null;
+  const res = await withTenant(actor.tenantId, async (db): Promise<Outcome<CommunityMessage>> => {
     const found = await loadOwnThread(db, actor, messageId);
     if (!found) return NOT_FOUND;
     if (!canEditMessage(actor, found.row, now)) return forbidden("You can only edit your own messages for 15 minutes.");
-    await db.communityMessage.updateMany({ where: { id: messageId }, data: { body: text.value, editedAt: now } });
+    const hidden = poach?.verdict === "hide" ? { deletedAt: now, moderatedAt: now } : {};
+    await db.communityMessage.updateMany({ where: { id: messageId }, data: { body: text.value, editedAt: now, ...hidden } });
+    if (poach !== null) await recordFlag(db, actor, found.row, poach, now);
     const fresh = await db.communityMessage.findFirst({ where: { id: messageId } });
     const [view] = await buildMessageViews(db, actor, [fresh!], now);
     return { kind: "ok", value: view };
   });
+  return liveOne(actor, res);
 }
 
 export async function deleteMessage(actor: CommunityActor, messageId: string): Promise<Outcome<CommunityMessage>> {
@@ -249,7 +296,8 @@ export async function deleteMessage(actor: CommunityActor, messageId: string): P
     const found = await loadOwnThread(db, actor, messageId);
     if (!found) return NOT_FOUND;
     if (!canDeleteMessage(actor, found.row, found.access.type)) return forbidden("You can't delete this message.");
-    await db.communityMessage.updateMany({ where: { id: messageId }, data: { deletedAt: now } });
+    // moderatedAt cleared: it's the sender's delete now, so a later "It's fine" on its flag can't bring it back.
+    await db.communityMessage.updateMany({ where: { id: messageId }, data: { deletedAt: now, moderatedAt: null } });
     // Deleting a drop's announcement ends the drop too.
     if (found.row.dropId) {
       await db.communityDrop.updateMany({ where: { id: found.row.dropId }, data: { isActive: false, endedAt: now } });

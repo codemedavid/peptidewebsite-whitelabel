@@ -37,6 +37,8 @@ export type PreviewSource = {
   kind: string;
   body: string | null;
   deleted: boolean;
+  /** Removed by the safety bot (deleted is true as well). */
+  moderated?: boolean;
   fileName?: string | null;
   productName?: string | null;
   protocolName?: string | null;
@@ -49,11 +51,13 @@ function clip(s: string): string {
 
 /** The one-line inbox preview of a message. Never includes file contents. */
 export function previewText(m: PreviewSource): string {
-  if (m.deleted) return "Message deleted";
+  if (m.deleted) return m.moderated ? "Removed by the safety bot" : "Message deleted";
   const caption = m.body ? clip(m.body) : "";
   switch (m.kind) {
     case "image":
       return clip(`📷 ${caption || "Photo"}`);
+    case "video":
+      return clip(`🎬 ${caption || "Video"}`);
     case "file":
       return clip(`📎 ${caption || m.fileName || "File"}`);
     case "product":
@@ -62,6 +66,8 @@ export function previewText(m: PreviewSource): string {
       return clip(`📋 ${caption || m.protocolName || "Protocol"}`);
     case "drop":
       return clip(`🔥 ${caption || "New drop"}`);
+    case "groupbuy":
+      return clip(`👥 ${caption || "Group buy"}`);
     default:
       return caption;
   }

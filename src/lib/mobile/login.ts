@@ -177,7 +177,8 @@ async function attemptAdmin(store: Store, email: string, password: string): Prom
   return { kind: "ok", subject: result.kind === "owner" ? { kind: "owner" } : { kind: "staff", id: result.id } };
 }
 
-async function openSession(
+/** Issue the app session for a subject that has just proven who they are. */
+export async function openSession(
   store: Store,
   subject: MobileSubject,
   ip: string,

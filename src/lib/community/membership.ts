@@ -17,6 +17,14 @@ export function membershipFor(args: { enabled: boolean; isModerator: boolean; st
 }
 
 /**
+ * A community admin's powers hold only while they are an approved member and
+ * not muted — revoking, banning or muting one takes the powers with it.
+ */
+export function isActiveAdmin(member: { isAdmin: boolean; status: string; mutedAt: Date | null }): boolean {
+  return member.isAdmin && member.status === "approved" && member.mutedAt === null;
+}
+
+/**
  * Who gets into the store's community (branding.config.communityJoin):
  *   - "open"     — every signed-in customer can read and message right away;
  *   - "approval" — first sign-in files a pending application the owner reviews.

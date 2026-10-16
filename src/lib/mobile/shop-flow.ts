@@ -2,7 +2,9 @@ import "server-only";
 
 import { placeStorefrontOrderAction, quoteStorefrontOrderAction } from "@/actions/orders";
 import { getTenantContext } from "@/lib/tenant/context";
+import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import type { ApiErrorCode } from "./contract";
+import type { OrderItem } from "@/storefront/types";
 import type { ShopOrder, ShopQuote } from "./shop-contract";
 import { readCheckoutConfig } from "./shop-checkout";
 import { asShopper, type ShopStore } from "./shop";
@@ -67,6 +69,30 @@ export async function quoteShopOrder(store: ShopStore, body: Row): Promise<FlowR
   return "error" in result ? invalid(result.error) : { ok: true, data: result.quote };
 }
 
+/**
+ * Will placement treat this cart as a pay-after-close group-buy order? Only
+ * stores with the invoice switch on pay for the answer, and the answer is the
+ * action's own (the quote runs the same validateLiveOrder placement does).
+ */
+async function isInvoiceCart(store: ShopStore, items: OrderItem[], shipping: ShippingChoice): Promise<boolean> {
+  const { branding } = await getTenantContext(store.tenantId);
+  if (!normalizeGroupBuyInvoice(((branding?.config ?? {}) as Row).groupBuyInvoice).enabled) return false;
+  const draft = buildOrderDraft({
+    id: "",
+    items,
+    shipping,
+    paymentMethod: "",
+    paymentProof: null,
+    paidUpfront: false,
+    promoCode: "",
+    customer: { name: "", email: "", phone: "" },
+    customerNote: "",
+    shown: null,
+  });
+  const quoted = await asShopper(store, () => quoteStorefrontOrderAction(draft));
+  return "quote" in quoted && !!quoted.quote.invoice;
+}
+
 function readShown(raw: unknown): { adminFee: number; paymentFee: number } | null {
   const s = obj(raw);
   const a = Number(s.adminFee);
@@ -103,10 +129,13 @@ export async function placeShopOrder(store: ShopStore, body: Row): Promise<FlowR
   const address = obj(body.shipping);
   const shipping = resolveShipping(checkout, body.courier, address.locationId, true);
   if ("ok" in shipping) return invalid(shipping.message);
-  const paymentMethod = resolvePaymentMethod(checkout, body.paymentMethod);
+  // A pay-after-close group-buy cart is paid on the invoice sent at close:
+  // no method, no proof now (the action stamps it unpaid either way).
+  const payLater = await isInvoiceCart(store, items.items, shipping as ShippingChoice);
+  const paymentMethod = payLater ? "" : resolvePaymentMethod(checkout, body.paymentMethod);
   if (paymentMethod === null) return invalid("Please choose a payment method.");
-  const paidUpfront = checkout.paymentMethods.length > 0;
-  const paymentProof = cleanProofUrl(body.paymentProof);
+  const paidUpfront = !payLater && checkout.paymentMethods.length > 0;
+  const paymentProof = payLater ? null : cleanProofUrl(body.paymentProof);
   if (paidUpfront && checkout.requireProofOfPayment && !paymentProof) {
     return invalid("Please upload your proof of payment.");
   }

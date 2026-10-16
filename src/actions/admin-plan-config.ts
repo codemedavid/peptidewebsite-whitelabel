@@ -7,7 +7,9 @@
 // .demo-data/platform-settings.json, DB mode to the platform_settings row.
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { platformSettingTag } from "@/lib/platform/platform-setting-cache";
+import { ENTITLEMENTS_TAG } from "@/lib/features/entitlements";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode, saveDemoPlatformSetting } from "@/lib/demo/fixtures";
@@ -78,6 +80,10 @@ export async function savePlanConfigAction(input: PlanConfig): Promise<PlanConfi
     return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
   }
 
+  // The save re-synced every plan's feature ceiling, so every tenant's cached
+  // entitlements are stale — not just one.
+  revalidateTag(platformSettingTag(PLAN_CONFIG_KEY));
+  revalidateTag(ENTITLEMENTS_TAG);
   bust();
   return { ok: true };
 }

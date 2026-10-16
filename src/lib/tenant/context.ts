@@ -9,6 +9,13 @@ import { stripInlineMedia } from "@/lib/storefront/inline-media";
 // Cross-request cache: per-tenant identity + branding + settings. Tagged so
 // branding/settings mutations can revalidateTag(`tenant:<id>`) and the next
 // request reads fresh data without paying for a full DB round-trip first.
+//
+// One hour, not five minutes: the branding row is 20–84kB of JSON and was a
+// top source of Supabase egress. Every writer of these columns (branding,
+// settings, name/slug/status/plan, orderNumberFormat) busts `tenant:<id>`, so
+// the TTL only bounds out-of-band edits (direct-Prisma scripts, SQL console).
+const TENANT_ROW_REVALIDATE_SECONDS = 3600;
+
 const loadTenant = (tenantId: string) =>
   unstable_cache(
     async () => {
@@ -41,14 +48,14 @@ const loadTenant = (tenantId: string) =>
       };
     },
     ["tenant-row", tenantId],
-    { tags: [`tenant:${tenantId}`], revalidate: 300 },
+    { tags: [`tenant:${tenantId}`], revalidate: TENANT_ROW_REVALIDATE_SECONDS },
   )();
 
 /**
  * Everything a tenant-scoped page needs in one cached call:
  * identity, branding, settings, and resolved entitlements.
  * Outer `cache()` dedupes within a single render; inner `unstable_cache`
- * dedupes across requests (5 min TTL, tag-invalidated by mutations).
+ * dedupes across requests (1h TTL, tag-invalidated by mutations).
  */
 export const getTenantContext = cache(async (tenantId: string) => {
   if (isDemoMode()) return getDemoContext(tenantId);

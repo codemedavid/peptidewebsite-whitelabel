@@ -8,9 +8,14 @@ import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { ACTIVE_ORDERS_WHERE, TRASHED_ORDERS_WHERE } from "@/lib/orders/trash";
 import { isOrderStatus } from "@/lib/storefront/order-status";
 import type { Order } from "@/storefront/types";
-import type { OrderDetail, OrderListResponse, OrderUpdateRequest } from "./contract";
+import { formatMoney } from "@/lib/storefront/currency";
+import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
+import type { OrderDetail, OrderListResponse, OrderUpdateRequest, WaybillsResponse } from "./contract";
 import type { MobileContext } from "./auth";
 import { queueCountsFrom, statusesForFilter, toOrderDetail, toOrderSummary } from "./order-view";
+import { loadRoundRows, scheduledRoundsOn } from "./order-rounds.server";
+import { roundFacets, roundWhere, type RoundCount, type RoundRow } from "./order-rounds";
+import { toWaybill, WAYBILL_LIMIT, type WaybillQuery } from "./waybill";
 
 /**
  * Tenant-scoped order reads/writes for the mobile API. Every query runs inside
@@ -84,12 +89,19 @@ export async function listOrders(
   const cursor = decodeCursor(params.get("cursor"));
   const limit = Math.min(Math.max(Number(params.get("limit")) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
-  return withTenant(ctx.tenantId, async (db) => {
+  const round = roundWhere(params.get("round"));
+
+  const result = await withTenant(ctx.tenantId, async (db) => {
     const ids = q ? await searchIds(db, ctx.tenantId, q) : null;
-    const where: Prisma.StorefrontOrderWhereInput = {
+    // The view before the round filter — what the round bar counts.
+    const view: Prisma.StorefrontOrderWhereInput = {
       ...ACTIVE_ORDERS_WHERE,
       ...(statuses ? { status: { in: statuses } } : {}),
       ...(ids ? { id: { in: ids } } : {}),
+    };
+    const where: Prisma.StorefrontOrderWhereInput = {
+      ...view,
+      ...(round ?? {}),
       ...(cursor
         ? {
             OR: [
@@ -99,21 +111,76 @@ export async function listOrders(
           }
         : {}),
     };
-    const [rows, counts] = await Promise.all([
+    const [rows, counts, rounds] = await Promise.all([
       db.storefrontOrder.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
       }),
       queueCounts(db),
+      cursor ? Promise.resolve(null) : roundBar(db, view),
     ]);
     const page = rows.slice(0, limit);
     return {
       orders: page.map((r) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), currencyOf(ctx))),
       nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null,
       counts,
+      rounds,
     };
   });
+  const bar = result.rounds;
+  return {
+    ...result,
+    rounds: bar ? roundFacets(bar.counts, bar.rows, await scheduledRoundsOn(ctx.tenantId, bar.rows)) : null,
+  };
+}
+
+/** Per-round order counts of `view` (null = on-hand) and the rounds behind them. */
+async function roundBar(
+  db: TenantTx,
+  view: Prisma.StorefrontOrderWhereInput,
+): Promise<{ counts: RoundCount[]; rows: RoundRow[] }> {
+  const groups = await db.storefrontOrder.groupBy({
+    by: ["groupBuyId"],
+    where: view,
+    _count: { _all: true },
+    _max: { groupBuyName: true },
+  });
+  const counts = groups.map((g) => ({ groupBuyId: g.groupBuyId, count: g._count._all, snapshotName: g._max.groupBuyName }));
+  const rows = await loadRoundRows(db, counts.flatMap((c) => (c.groupBuyId ? [c.groupBuyId] : [])));
+  return { counts, rows };
+}
+
+/**
+ * The orders to print waybills for: one order, or a round's orders under the
+ * current status + search — oldest first (packing order), never cancelled ones
+ * (nothing ships). Quantities use the round invoice's unit ("2 vials").
+ */
+export async function listWaybills(ctx: MobileContext, query: WaybillQuery): Promise<WaybillsResponse> {
+  const rows = await withTenant(ctx.tenantId, async (db) => {
+    if (query.kind === "one") {
+      return db.storefrontOrder.findMany({ where: { ...ACTIVE_ORDERS_WHERE, id: query.id }, take: 1 });
+    }
+    const statuses = statusesForFilter(query.filter);
+    const ids = query.q ? await searchIds(db, ctx.tenantId, query.q) : null;
+    return db.storefrontOrder.findMany({
+      where: {
+        ...ACTIVE_ORDERS_WHERE,
+        AND: [{ status: { not: "cancelled" } }, ...(statuses ? [{ status: { in: statuses } }] : [])],
+        ...(ids ? { id: { in: ids } } : {}),
+        ...(roundWhere(query.round) ?? {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: WAYBILL_LIMIT + 1,
+    });
+  });
+  const config = (ctx.tenant.branding?.config ?? {}) as Record<string, unknown>;
+  const unit = normalizeGroupBuyInvoice(config.groupBuyInvoice).unit;
+  const money = (n: number) => formatMoney(n, currencyOf(ctx));
+  return {
+    waybills: rows.slice(0, WAYBILL_LIMIT).map((r) => toWaybill(dbOrderToStorefront(r as DbOrderRow), { money, unit })),
+    truncated: rows.length > WAYBILL_LIMIT,
+  };
 }
 
 function detailOf(ctx: MobileContext, order: Order, updatedAt: Date | string, customerAccountId: string | null): OrderDetail {

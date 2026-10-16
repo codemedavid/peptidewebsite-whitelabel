@@ -10,6 +10,8 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { platformSettingTag } from "@/lib/platform/platform-setting-cache";
+import { ENTITLEMENTS_TAG } from "@/lib/features/entitlements";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformUser } from "@/lib/auth/session";
 import { isDemoMode, saveDemoPlatformSetting } from "@/lib/demo/fixtures";
@@ -77,6 +79,8 @@ export async function savePlanFeaturesConfigAction(
     // storefront re-resolves nav + route guards on the next request.
     const tenants = await prisma.tenant.findMany({ select: { id: true } });
     for (const t of tenants) revalidateTag(`tenant:${t.id}:entitlements`);
+    revalidateTag(ENTITLEMENTS_TAG);
+    revalidateTag(platformSettingTag(PLAN_FEATURES_CONFIG_KEY));
   } catch {
     return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
   }

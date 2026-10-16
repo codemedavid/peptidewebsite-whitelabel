@@ -1,3 +1,5 @@
+import { customerPreview, previewBlocksOrder } from "@/lib/community/preview.server";
+import { PREVIEW_LOCKED_MESSAGE } from "@/lib/mobile/contract";
 import { fail, ok, readJson, withCustomer } from "@/lib/mobile/http";
 import { listShopOrders } from "@/lib/mobile/shop-orders";
 import { placeShopOrder } from "@/lib/mobile/shop-flow";
@@ -17,14 +19,17 @@ export async function POST(req: Request) {
     }
     const body = await readJson(req);
     if (!body) return fail("invalid_input", "Your order couldn't be read. Please try again.");
+    // Not approved yet: only the kinds of order the store's preview allows.
+    const preview = await customerPreview(ctx);
+    if (preview && (await previewBlocksOrder(ctx, preview, body.lines))) return fail("forbidden", PREVIEW_LOCKED_MESSAGE);
     const result = await placeShopOrder({ tenantId: ctx.tenantId, slug: ctx.slug, customer: ctx }, body);
     return result.ok ? ok({ order: result.data }) : fail(result.code, result.message);
   });
 }
 
-// GET /api/mobile/v1/shop/orders → ShopOrdersResponse (newest first, max 100)
+// GET /api/mobile/v1/shop/orders → ShopOrdersResponse (newest first, max 100, + their rounds)
 export async function GET(req: Request) {
   return withCustomer(req, { route: "shop/orders" }, async (ctx) =>
-    ok({ orders: await listShopOrders(ctx.tenantId, ctx.customer.id) }),
+    ok(await listShopOrders(ctx.tenantId, ctx.customer.id)),
   );
 }

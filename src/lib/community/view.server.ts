@@ -13,11 +13,13 @@ import type {
 } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
 import { loadProductCards, loadProtocolCards, refKey, type ProductRef } from "./cards.server";
+import { cardsForRounds } from "./group-buy-cards.server";
 import { STORE_KEY } from "./keys";
 import { loadParticipants, publicParticipant, type MemberCard } from "./participants.server";
 import { canDeleteMessage, canEditMessage } from "./rules";
 import { isOrderBotMessage, orderIdFromBotClientId } from "./order-bot";
 import { firstName, previewText } from "./text";
+import { videoPosterUrl } from "./welcome";
 
 /**
  * Message rows → the app's CommunityMessage, for a whole page at once. Every
@@ -26,7 +28,7 @@ import { firstName, previewText } from "./text";
  * caller's withTenant() transaction — never one per message.
  */
 
-const MESSAGE_KINDS = new Set<MessageKind>(["text", "image", "file", "product", "protocol", "drop", "system", "order"]);
+const MESSAGE_KINDS = new Set<MessageKind>(["text", "image", "video", "file", "product", "protocol", "drop", "system", "order", "groupbuy"]);
 
 /** Order bot messages → the order they're about, in ONE query (only bot rows can name an order). */
 async function loadOrderRefs(db: TenantTx, rows: MessageRow[]): Promise<Map<string, OrderRefCard>> {
@@ -89,11 +91,14 @@ export async function buildMessageViews(
     ...drops.map((d) => ({ productId: d.productId, variationId: d.variationId })),
   ];
   const keys = new Set([...rows, ...replies].map((r) => r.senderKey));
-  const [participants, cards, names, orderRefs] = await Promise.all([
+  const roundIds = rows.filter((r) => r.groupBuyId && !r.deletedAt).map((r) => r.groupBuyId!);
+  const [participants, cards, names, orderRefs, rounds] = await Promise.all([
     loadParticipants(db, actor.tenant, keys),
     loadProductCards(db, actor.tenant, refs),
-    actor.isModerator ? staffNames(db, rows.map((r) => r.authorKey ?? "")) : Promise.resolve(new Map<string, string>()),
+    actor.isTeam ? staffNames(db, rows.map((r) => r.authorKey ?? "")) : Promise.resolve(new Map<string, string>()),
     loadOrderRefs(db, rows),
+    // Saved names only; the caller swaps the live round in after its transaction (withLiveRounds).
+    cardsForRounds(db, roundIds),
   ]);
   const protocols = rows.some((r) => r.protocolId) ? loadProtocolCards(actor.tenant) : new Map();
   const replyById = new Map(replies.map((r) => [r.id, r]));
@@ -112,7 +117,7 @@ export async function buildMessageViews(
       threadId: thread.id,
       threadType: thread.type,
       sender: kind === "system" || !sender ? null : publicParticipant(sender),
-      authorName: actor.isModerator && r.senderKey === STORE_KEY && r.authorKey ? (names.get(r.authorKey) ?? null) : null,
+      authorName: actor.isTeam && r.senderKey === STORE_KEY && r.authorKey ? (names.get(r.authorKey) ?? null) : null,
       mine: r.senderKey === actor.key,
       clientId: r.senderKey === actor.key && !isOrderBotMessage(r) ? (r.clientId ?? null) : null,
       kind,
@@ -120,12 +125,24 @@ export async function buildMessageViews(
       product: !deleted && r.productId ? (cards.get(refKey({ productId: r.productId, variationId: r.variationId })) ?? null) : null,
       protocol: !deleted && r.protocolId ? (protocols.get(r.protocolId) ?? null) : null,
       image: !deleted && r.imageUrl ? { url: r.imageUrl, width: r.imageWidth ?? 0, height: r.imageHeight ?? 0 } : null,
+      video:
+        !deleted && kind === "video" && r.fileUrl
+          ? {
+              url: r.fileUrl,
+              posterUrl: videoPosterUrl(r.fileUrl),
+              width: r.imageWidth ?? null,
+              height: r.imageHeight ?? null,
+              size: r.fileSize ?? 0,
+              mime: r.fileMime ?? "video/mp4",
+            }
+          : null,
       file:
-        !deleted && r.fileUrl
+        !deleted && kind !== "video" && r.fileUrl
           ? { url: r.fileUrl, name: r.fileName ?? "File", size: r.fileSize ?? 0, mime: r.fileMime ?? "application/octet-stream" }
           : null,
       drop: !deleted && drop && dropCard ? dropView(drop, dropCard, now) : null,
       order: !deleted && isOrderBotMessage(r) ? (orderRefs.get(orderIdFromBotClientId(r.clientId) ?? "") ?? null) : null,
+      groupBuy: !deleted && r.groupBuyId ? (rounds.get(r.groupBuyId) ?? null) : null,
       replyTo:
         reply && !deleted
           ? {
@@ -139,6 +156,7 @@ export async function buildMessageViews(
       createdAt: r.createdAt.toISOString(),
       editedAt: r.editedAt?.toISOString() ?? null,
       deletedAt: r.deletedAt?.toISOString() ?? null,
+      moderated: deleted && !!r.moderatedAt,
       canEdit: canEditMessage(actor, r, now),
       canDelete: canDeleteMessage(actor, r, thread.type),
     };
@@ -148,7 +166,7 @@ export async function buildMessageViews(
 /** Inbox preview line for a thread's latest message. */
 export function messagePreview(
   actor: CommunityActor,
-  row: Pick<MessageRow, "kind" | "body" | "senderKey" | "fileName" | "deletedAt" | "createdAt">,
+  row: Pick<MessageRow, "kind" | "body" | "senderKey" | "fileName" | "deletedAt" | "createdAt"> & { moderatedAt?: Date | null },
   participants: Map<string, MemberCard>,
 ): MessagePreview {
   const sender = participants.get(row.senderKey);
@@ -162,7 +180,7 @@ export function messagePreview(
           : firstName(sender?.name ?? "Member");
   return {
     author,
-    text: previewText({ kind: row.kind, body: row.body, deleted: !!row.deletedAt, fileName: row.fileName }),
+    text: previewText({ kind: row.kind, body: row.body, deleted: !!row.deletedAt, moderated: !!row.moderatedAt, fileName: row.fileName }),
     at: row.createdAt.toISOString(),
   };
 }

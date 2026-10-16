@@ -6,11 +6,14 @@ import { storeDisplayName, storeLogoUrl } from "@/lib/mobile/store-name";
 import type { Participant } from "@/lib/mobile/contract";
 import { profileSubject, shownName } from "@/lib/mobile/account-profile";
 import { STORE_KEY, avatarHue, customerKey, parseParticipantKey } from "./keys";
+import { isActiveAdmin } from "./membership";
 
 /**
  * Participant cards for a set of keys, loaded in ONE query (never per row).
  * The store is its own card (store name + logo, team badge); a customer is
- * their nickname (else community display name) and profile photo. A key whose member row is gone renders as a
+ * their nickname (else community display name) and profile photo, with an
+ * admin badge while they are a community admin and a VR badge while they are a
+ * verified reseller. A key whose member row is gone renders as a
  * neutral "Former member" rather than failing the whole thread.
  */
 
@@ -45,7 +48,7 @@ export async function loadParticipants(
   if (customerIds.size > 0) {
     const rows = await db.communityMember.findMany({
       where: { customerId: { in: [...customerIds] } },
-      select: { customerId: true, displayName: true, avatarHue: true, status: true, bio: true, reviewedAt: true },
+      select: { customerId: true, displayName: true, avatarHue: true, status: true, bio: true, reviewedAt: true, isAdmin: true, mutedAt: true, verifiedReseller: true },
     });
     // Personal profiles (nickname + photo) for the same customers, in one more query.
     const profiles = await db.accountProfile.findMany({
@@ -62,6 +65,8 @@ export async function loadParticipants(
         avatarHue: r.avatarHue,
         imageUrl: profile?.avatarUrl ?? null,
         isTeam: false,
+        isAdmin: isActiveAdmin(r),
+        isVerifiedReseller: r.verifiedReseller && r.status === "approved",
         status: r.status,
         bio: r.bio,
         memberSince: r.status === "approved" ? r.reviewedAt : null,
@@ -76,5 +81,5 @@ export async function loadParticipants(
 }
 
 export function publicParticipant(card: MemberCard): Participant {
-  return { key: card.key, name: card.name, avatarHue: card.avatarHue, imageUrl: card.imageUrl, isTeam: card.isTeam };
+  return { key: card.key, name: card.name, avatarHue: card.avatarHue, imageUrl: card.imageUrl, isTeam: card.isTeam, isAdmin: card.isAdmin === true, isVerifiedReseller: card.isVerifiedReseller === true };
 }

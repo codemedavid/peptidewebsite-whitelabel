@@ -175,6 +175,12 @@ async function main() {
       .filter((name) => !lookupAction(BRIDGED_ACTIONS, name));
     assert.deepEqual(missing, [], "a new storefront-admin action needs a bridge decision");
   });
+  await test("the live group-buy strip is editable from the app's Group buys screen", () => {
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    assert.ok(lookupAction(BRIDGED_ACTIONS, "saveGroupBuyLiveBannerAction"), "saveGroupBuyLiveBannerAction not bridged");
+    const settings = readFileSync("mobile/src/features/admin/group-buys/StoreSettings.tsx", "utf8");
+    assert.ok(settings.includes('"saveGroupBuyLiveBannerAction"'), "Group buys settings never save the strip");
+  });
   await test("customer-account admin actions are bridged (disable / re-enable in the app)", () => {
     for (const name of ["listStoreCustomersAction", "setStoreCustomerStatusAction"]) {
       assert.ok(lookupAction(BRIDGED_ACTIONS, name), `${name} not bridged`);

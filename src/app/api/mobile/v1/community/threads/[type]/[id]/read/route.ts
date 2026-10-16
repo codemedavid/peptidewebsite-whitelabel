@@ -8,7 +8,7 @@ type Params = { params: Promise<{ type: string; id: string }> };
 // POST /api/mobile/v1/community/threads/:type/:id/read  { at } — the server-side
 // read marker (shared by all of this account's phones; never moves backwards).
 export async function POST(req: Request, { params }: Params) {
-  return withCommunity(req, { route: "community/threads/read" }, async (actor) => {
+  return withCommunity(req, { route: "community/threads/read", preview: true }, async (actor) => {
     const { type: rawType, id } = await params;
     const type = parseThreadType(rawType);
     if (!type) return fail("not_found", "This chat isn't available.");

@@ -29,6 +29,10 @@ const MEMBER_SELECT = {
   bio: true,
   avatarHue: true,
   reason: true,
+  verifiedReseller: true,
+  isAdmin: true,
+  welcomedAt: true,
+  mutedAt: true,
 } as const;
 
 export type MemberRow = {
@@ -38,6 +42,10 @@ export type MemberRow = {
   bio: string;
   avatarHue: number;
   reason: string | null;
+  verifiedReseller: boolean;
+  isAdmin: boolean;
+  welcomedAt: Date | null;
+  mutedAt: Date | null;
 };
 
 export function joinModeOf(tenant: TenantContext): JoinMode {

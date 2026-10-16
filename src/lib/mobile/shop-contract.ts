@@ -50,6 +50,57 @@ export type ShopProduct = {
 
 export type ShopCategory = { id: string; label: string };
 
+/**
+ * The live group-buy round, as the website's group-buy page shows it. Absent
+ * (null) with no live round, when the owner HID the group-buy way, or when no
+ * listed product is in the round. Prices still come from each ShopProduct —
+ * this only frames them.
+ */
+export type ShopGroupBuy = {
+  id: string;
+  /** The owner's label — "GB #5", "Holiday Round". */
+  name: string;
+  description: string;
+  /** Customer-facing, e.g. "3–4 weeks after close" ("" when unset). */
+  deliveryEta: string;
+  /** ISO close boundary; null = open-ended. */
+  endsAt: string | null;
+  /** "closed" = the owner paused ordering: browse the round, buy nothing. */
+  ordering: "open" | "closed";
+  /** Progress-bar goal; 0 = no bar. */
+  slotGoal: number;
+  /** Slots taken so far (the round's live orders). */
+  filled: number;
+  /** Listed products in the round, catalog order. */
+  productIds: string[];
+  /** Lowest price across the round's products and options; null when none. */
+  fromPrice: number | null;
+  /** Up to four product photos, for the banner's stack. */
+  images: string[];
+  /** "How group buys work" — the owner's copy, {eta} already filled in. */
+  howTitle: string;
+  steps: string[];
+  terms: string;
+  /**
+   * The strip pinned above the customer app's tab bar while the round is live
+   * — the owner's text (branding.config.groupBuyLiveBanner) with blanks filled
+   * from the round. null = the owner switched the strip off.
+   */
+  liveBanner: ShopGroupBuyLiveBanner | null;
+  /**
+   * Pay after the round closes (branding.config.groupBuyInvoice): checkout
+   * takes no payment, adds `shippingFee` once per customer per round, and the
+   * invoice arrives in chat at close. null/absent = pay at checkout as usual.
+   */
+  invoice?: { shippingFee: number } | null;
+};
+
+export type ShopGroupBuyLiveBanner = {
+  headline: string;
+  message: string;
+  ctaLabel: string;
+};
+
 export type ShopPaymentMethod = {
   id: string;
   name: string;
@@ -102,6 +153,8 @@ export type ShopCatalog = {
   categories: ShopCategory[];
   products: ShopProduct[];
   checkout: ShopCheckoutConfig;
+  /** The live group-buy round, or null. Older servers omit it. */
+  groupBuy?: ShopGroupBuy | null;
 };
 
 // ── Cart, quote, place ───────────────────────────────────────────────────────
@@ -155,6 +208,12 @@ export type ShopQuote = {
   paymentFee: ShopFee | null;
   discount: { code: string; label: string; amount: number } | null;
   total: number;
+  /**
+   * Set when this cart is a pay-after-close group-buy order: no payment now,
+   * the invoice comes at close. `addOn` = the shopper already ordered in this
+   * round, so this joins that invoice and shippingFee is 0. Older servers omit it.
+   */
+  invoice?: { addOn: boolean; roundName: string } | null;
 };
 
 /** POST /shop/orders (customer session). Retrying with the same `id` returns
@@ -205,9 +264,27 @@ export type ShopOrder = {
   statusHistory: { status: ShopOrderStatus; at: string }[];
   paymentStatus: "pending" | "paid";
   total: number;
+  /** The group-buy round it was placed in (null = an on-hand order). */
+  groupBuyId: string | null;
+  /** The round's name when the order was placed. */
+  groupBuyName: string | null;
+};
+
+/** A round the shopper has orders in — the My orders section header. */
+export type ShopOrderRound = {
+  id: string;
+  name: string;
+  /** Owner's batch label, "" when unset. */
+  batch: string;
+  state: "live" | "upcoming" | "closed";
+  /** Customer-facing ETA, e.g. "3–4 weeks after close"; "" when unset. */
+  deliveryEta: string;
+  /** ISO — scheduled close while live, actual close once closed. */
+  endsAt: string | null;
+  closedAt: string | null;
 };
 
 export type PlaceShopOrderResponse = { order: ShopOrder };
-export type ShopOrdersResponse = { orders: ShopOrder[] };
+export type ShopOrdersResponse = { orders: ShopOrder[]; rounds: ShopOrderRound[] };
 /** POST /shop/proof, multipart `file` (image ≤ 10 MB). */
 export type ShopProofResponse = { url: string };

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { customerKey } from "@/lib/community/keys";
+import { isSupabaseMarker, supabaseTokenOwnsAccount } from "./exchange";
 import { rateLimit } from "@/lib/security/rate-limit";
 import type { ApiErrorCode, DeleteAccountResponse } from "./contract";
 import type { CustomerContext, MobileContext, Principal } from "./auth";
@@ -80,18 +81,39 @@ function passwordMatches(password: string, hash: string | null): boolean {
   return verifyPassword(password, hash);
 }
 
-export async function deleteAccount(principal: Principal, rawPassword: unknown): Promise<DeleteOutcome> {
+/**
+ * Confirms it is really the account holder: the password, or — for a customer
+ * made by /auth/exchange, which has none — a fresh token from the partner app's
+ * Supabase login, bound to that exact user.
+ */
+async function confirmIdentity(principal: Principal, rawPassword: unknown, rawSupabaseToken: unknown): Promise<DeleteOutcome | null> {
+  const hash = await currentHash(principal);
+  if (principal.kind === "customer" && isSupabaseMarker(hash)) {
+    const token = typeof rawSupabaseToken === "string" ? rawSupabaseToken.trim() : "";
+    if (!token) return { ok: false, code: "invalid_input", message: "Sign in to the app again, then retry." };
+    if (!(await supabaseTokenOwnsAccount(principal.ctx.tenantId, hash, token))) {
+      return { ok: false, code: "wrong_password", message: "We couldn't confirm it's you. Sign in to the app again, then retry." };
+    }
+    return null;
+  }
+  const password = typeof rawPassword === "string" ? rawPassword.slice(0, MAX_PASSWORD) : "";
+  if (!password.trim()) return { ok: false, code: "invalid_input", message: "Enter your password to continue." };
+  if (!passwordMatches(password, hash)) return { ok: false, code: "wrong_password", message: WRONG_PASSWORD };
+  return null;
+}
+
+export async function deleteAccount(
+  principal: Principal,
+  rawPassword: unknown,
+  rawSupabaseToken?: unknown,
+): Promise<DeleteOutcome> {
   const subject = encodeSubject(subjectOf(principal));
   const { tenantId } = principal.ctx;
   if (!rateLimit(`mobile:delete:${tenantId}:${subject}`, ATTEMPTS, FIFTEEN_MIN).ok) {
     return { ok: false, code: "rate_limited", message: "Too many attempts. Try again in a few minutes." };
   }
-  const password = typeof rawPassword === "string" ? rawPassword.slice(0, MAX_PASSWORD) : "";
-  if (!password.trim()) return { ok: false, code: "invalid_input", message: "Enter your password to continue." };
-
-  if (!passwordMatches(password, await currentHash(principal))) {
-    return { ok: false, code: "wrong_password", message: WRONG_PASSWORD };
-  }
+  const refused = await confirmIdentity(principal, rawPassword, rawSupabaseToken);
+  if (refused) return refused;
 
   if (principal.kind === "customer") {
     await purgeCustomer(principal.ctx);

@@ -1,5 +1,6 @@
 import ImageKit from "imagekit";
 import { prisma } from "@/lib/db/prisma";
+import { mediaFolderPrefix, onboardingFolder, tenantFolder } from "@/lib/imagekit/folders";
 
 // Lazily constructed so importing this module (e.g. during build page-data
 // collection) doesn't require the private key to be present.
@@ -24,7 +25,9 @@ export function getImageKit(): ImageKit {
  * tenantId — never smuggled in from the client — and is validated
  * (`^[a-z0-9-]{2,}$` at creation) so it's always a safe path segment. Existing
  * media uploaded under the old `/tenant/<cuid>` paths keeps its stored URLs;
- * only new uploads land under the slug folder.
+ * only new uploads land under the slug folder. A server instance with
+ * IMAGEKIT_FOLDER_PREFIX (Mama Mica: "/mamamica") nests it under that prefix —
+ * see folders.ts.
  */
 export async function tenantMediaFolder(tenantId: string): Promise<string> {
   if (!tenantId) throw new Error("tenantMediaFolder: missing tenantId");
@@ -36,7 +39,7 @@ export async function tenantMediaFolder(tenantId: string): Promise<string> {
   if (!slug || /[^A-Za-z0-9_-]/.test(slug)) {
     throw new Error(`tenantMediaFolder: no valid slug for tenant ${tenantId}`);
   }
-  return `/tenant/${slug}`;
+  return tenantFolder(slug, mediaFolderPrefix(process.env));
 }
 
 /**
@@ -109,7 +112,7 @@ export async function uploadOnboardingMedia(opts: {
   return getImageKit().upload({
     file: opts.file,
     fileName: opts.fileName,
-    folder: "/onboarding",
+    folder: onboardingFolder(mediaFolderPrefix(process.env)),
     useUniqueFileName: true,
     tags: opts.tags ?? ["onboarding"],
   });

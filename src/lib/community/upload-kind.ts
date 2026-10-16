@@ -11,6 +11,8 @@
 
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const FILE_MAX_BYTES = 25 * 1024 * 1024;
+/** Videos (store team only — the welcome messages) go straight to the media host. */
+export const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 /** Demo / no-ImageKit fallback stores the bytes inline, so keep them small. */
 export const INLINE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -32,7 +34,7 @@ export function sanitizeFileName(raw: string, ext: string): string {
 }
 
 export type UploadVerdict =
-  | { ok: true; kind: "image" | "file"; mime: string; ext: string }
+  | { ok: true; kind: "image" | "video" | "file"; mime: string; ext: string }
   | { ok: false; error: string };
 
 type Signature = "pdf" | "zip" | "ole" | "rtf" | "text";
@@ -75,6 +77,20 @@ function sniffImage(head: Uint8Array): { mime: string; ext: string } | null {
   return null;
 }
 
+/** ISO-BMFF brands that are stills or audio, never video. */
+const NOT_VIDEO_BRANDS = new Set(["heic", "heix", "hevc", "mif1", "msf1", "avif", "avis", "M4A ", "M4B ", "M4P "]);
+
+/** The video format these bytes are (MP4 / MOV / 3GP / WebM), or null. */
+export function sniffVideo(head: Uint8Array): { mime: string; ext: string } | null {
+  if (startsWith(head, [0x1a, 0x45, 0xdf, 0xa3])) return { mime: "video/webm", ext: "webm" };
+  if (ascii(head, 4, 8) !== "ftyp") return null;
+  const brand = ascii(head, 8, 12);
+  if (NOT_VIDEO_BRANDS.has(brand)) return null;
+  if (brand === "qt  ") return { mime: "video/quicktime", ext: "mov" };
+  if (brand.startsWith("3g")) return { mime: "video/3gpp", ext: "3gp" };
+  return { mime: "video/mp4", ext: "mp4" };
+}
+
 /** Printable text: no NULs and almost no control bytes in the sample. */
 function looksLikeText(head: Uint8Array): boolean {
   if (head.length === 0) return false;
@@ -112,6 +128,8 @@ export function classifyUpload(input: {
   /** The first bytes of the file (a few hundred is plenty). */
   head: Uint8Array;
   size: number;
+  /** Moderators may upload videos (for the welcome messages); members may not. */
+  allowVideo?: boolean;
 }): UploadVerdict {
   if (!Number.isFinite(input.size) || input.size <= 0) return { ok: false, error: "That file is empty." };
 
@@ -119,6 +137,12 @@ export function classifyUpload(input: {
   if (image) {
     if (input.size > IMAGE_MAX_BYTES) return { ok: false, error: "Photos can be up to 10 MB." };
     return { ok: true, kind: "image", ...image };
+  }
+
+  const video = input.allowVideo ? sniffVideo(input.head) : null;
+  if (video) {
+    if (input.size > VIDEO_MAX_BYTES) return { ok: false, error: "Videos can be up to 50 MB." };
+    return { ok: true, kind: "video", ...video };
   }
 
   const ext = extensionOf((input.name || "").trim());
@@ -159,4 +183,23 @@ export function imageSize(head: Uint8Array): { width: number; height: number } |
     }
   }
   return null;
+}
+
+/**
+ * A video the phone uploaded straight to the media host, checked before it is
+ * recorded: it must sit inside this tenant's folder (the upload token can't
+ * pin the folder, so a stripped check would land elsewhere), be within the
+ * size cap, and its first bytes must really be a video.
+ */
+export function checkDirectVideo(input: { filePath: string; folder: string; size: number; head: Uint8Array }):
+  | { ok: true; mime: string; ext: string }
+  | { ok: false; error: string; inFolder: boolean } {
+  const folder = input.folder.replace(/\/+$/, "");
+  const inFolder = input.filePath.startsWith(`${folder}/`) && !input.filePath.includes("..");
+  if (!inFolder) return { ok: false, error: "That upload isn't in this store's media.", inFolder };
+  if (!Number.isFinite(input.size) || input.size <= 0) return { ok: false, error: "That video is empty.", inFolder };
+  if (input.size > VIDEO_MAX_BYTES) return { ok: false, error: "Videos can be up to 50 MB.", inFolder };
+  const video = sniffVideo(input.head);
+  if (!video) return { ok: false, error: "That file isn't a video we can send. Try an MP4 or MOV.", inFolder };
+  return { ok: true, ...video };
 }

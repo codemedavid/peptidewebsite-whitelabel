@@ -275,6 +275,41 @@ async function main() {
     assert.deepEqual(r.json.data.orders.map((o: Json) => o.orderNumber), ["ALP-1001"]);
   });
 
+  await test("orders file per group buy: round bar counts + round filter", async () => {
+    const live = await db.groupBuy.create({ data: { tenantId: A.id, name: "Round 7", status: "active", batchNumber: "TR7" } });
+    const other = await db.groupBuy.create({ data: { tenantId: B.id, name: "Beta round", status: "active" } });
+    const a2 = await db.storefrontOrder.findFirst({ where: { tenantId: A.id, orderNumber: "ALP-1002" } });
+    await db.storefrontOrder.update({ where: { id: a2!.id }, data: { groupBuyId: live.id, groupBuyName: "Round 7" } });
+    try {
+      const all = await call(orders, req("GET", "/orders?filter=all", aTok));
+      assert.deepEqual(
+        all.json.data.rounds.map((f: Json) => [f.key, f.name, f.batch, f.state, f.count]),
+        [
+          [live.id, "Round 7", "TR7", "live", 1],
+          ["on-hand", "On-hand", "", "on-hand", 1],
+        ],
+      );
+      const gbOrder = all.json.data.orders.find((o: Json) => o.orderNumber === "ALP-1002");
+      assert.equal(gbOrder.groupBuyId, live.id);
+
+      const inRound = await call(orders, req("GET", `/orders?filter=all&round=${live.id}`, aTok));
+      assert.deepEqual(inRound.json.data.orders.map((o: Json) => o.orderNumber), ["ALP-1002"]);
+      assert.equal(inRound.json.data.rounds.length, 2, "the bar keeps every chip while one is picked");
+
+      const onHand = await call(orders, req("GET", "/orders?filter=all&round=on-hand", aTok));
+      assert.deepEqual(onHand.json.data.orders.map((o: Json) => o.orderNumber), ["ALP-1001"]);
+
+      const status = await call(orders, req("GET", "/orders?filter=new", aTok));
+      assert.deepEqual(status.json.data.rounds.map((f: Json) => [f.key, f.count]), [["on-hand", 1]], "counts honour the status filter");
+
+      const foreign = await call(orders, req("GET", `/orders?filter=all&round=${other.id}`, aTok));
+      assert.deepEqual(foreign.json.data.orders, [], "another store's round shows nothing");
+    } finally {
+      await db.storefrontOrder.update({ where: { id: a2!.id }, data: { groupBuyId: null, groupBuyName: null } });
+      await db.groupBuy.deleteMany({ where: { id: { in: [live.id, other.id] } } });
+    }
+  });
+
   let a1Updated = a1.updatedAt.toISOString();
   await test("confirm runs the website engine: status, journey, stock deduction", async () => {
     const r = await call(

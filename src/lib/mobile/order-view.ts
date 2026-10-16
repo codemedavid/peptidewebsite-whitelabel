@@ -144,6 +144,7 @@ export function toOrderSummary(order: Order, currency: unknown): OrderSummary {
     payment: paymentView(order),
     orderType: order.orderType === "reseller" ? "reseller" : "retail",
     hasCustomerNote: (order.customerNote ?? "").trim() !== "",
+    groupBuyId: order.groupBuyId ?? null,
     groupBuyName: order.groupBuyName ?? null,
   };
 }

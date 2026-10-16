@@ -64,7 +64,11 @@ const TENANT_MODELS = new Set<string>([
   "communityMessage",
   "communityDrop",
   "communityRead",
+  "communityChannelMute",
   "communityUpload",
+  // Safety-bot review queue (lib/community/moderation.server.ts)
+  "communityFlag",
+  "communityModerationRule",
   // Personal app-account profiles (lib/mobile/account-profile.ts)
   "accountProfile",
 ]);

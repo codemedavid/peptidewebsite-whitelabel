@@ -8,15 +8,18 @@ import { customerStampFor, resolveActor, storeAvailability } from "@/lib/mobile/
 import { deliverPush, type OutgoingPush, type Recipient } from "@/lib/mobile/push";
 import { decodeSubject } from "@/lib/mobile/sessions";
 import { STORE_KEY, customerKey, parseParticipantKey } from "./keys";
+import { isAudience } from "./rules";
 import { firstName } from "./text";
+import { buildTopicPush, topicPushAudience } from "./topic-push";
 
 /**
  * Community pushes, through the same Expo sender as new-order alerts.
  *
  *   DM   → the OTHER participant's phones: a customer's own sessions, or — for
  *          the store — the owner's and every staff phone holding `community`.
- *   drop → every approved member's phones.
- *   topic messages never push.
+ *   drop / group buy broadcast → every approved member's phones.
+ *   topic message → every approved member who can see the channel, except the
+ *          sender and members who muted the channel (CommunityChannelMute).
  *
  * Payload is {type, threadId} only; the lock screen names the sender but never
  * shows the message. Every recipient is re-authorised at send time (live
@@ -142,12 +145,63 @@ export async function notifyDm(args: {
   }
 }
 
+/**
+ * A chat message in a channel topic. Throttled per recipient per topic (the DM
+ * gap), so a busy thread buzzes each phone once while the replies keep coming —
+ * but someone who hasn't been pushed yet (the person being answered) still is.
+ */
+export async function notifyTopicMessage(args: {
+  tenantId: string;
+  topic: { id: string; name: string; isGeneral: boolean };
+  channel: { id: string; name: string; emoji: string; audience: string };
+  senderKey: string;
+  senderName: string;
+  storeName: string;
+}): Promise<void> {
+  try {
+    if (!isAudience(args.channel.audience)) return;
+    const [members, mutes] = await Promise.all([
+      prisma.communityMember.findMany({ where: { tenantId: args.tenantId, status: "approved" }, select: { customerId: true } }),
+      prisma.communityChannelMute.findMany({ where: { tenantId: args.tenantId, channelId: args.channel.id }, select: { participantKey: true } }),
+    ]);
+    const audience = topicPushAudience(
+      members.map((m) => m.customerId),
+      { senderKey: args.senderKey, mutedKeys: new Set(mutes.map((m) => m.participantKey)) },
+    );
+    const due = audience.filter((id) => claimDmPushSlot(`${args.tenantId}:topic:${args.topic.id}:${id}`));
+    if (due.length === 0) return;
+    await send(
+      args.tenantId,
+      await customerRecipients(args.tenantId, due),
+      buildTopicPush({
+        storeName: args.storeName,
+        channel: args.channel,
+        topic: args.topic,
+        senderName: args.senderName,
+        fromStore: args.senderKey === STORE_KEY,
+      }),
+    );
+  } catch (e) {
+    logFailure("topic", e);
+  }
+}
+
+/** The approved members who can see the topic's channel (see canSeeChannel); none for a hidden one. */
+async function audienceOf(tenantId: string, topicId: string): Promise<Array<{ customerId: string }>> {
+  const topic = await prisma.communityTopic.findFirst({
+    where: { tenantId, id: topicId },
+    select: { channel: { select: { audience: true } } },
+  });
+  if (!isAudience(topic?.channel.audience ?? "everyone")) return [];
+  return prisma.communityMember.findMany({
+    where: { tenantId, status: "approved" },
+    select: { customerId: true },
+  });
+}
+
 export async function notifyDrop(args: { tenantId: string; topicId: string; headline: string; storeName: string; exceptKey?: string }): Promise<void> {
   try {
-    const members = await prisma.communityMember.findMany({
-      where: { tenantId: args.tenantId, status: "approved" },
-      select: { customerId: true },
-    });
+    const members = await audienceOf(args.tenantId, args.topicId);
     const ids = members.map((m) => m.customerId).filter((id) => customerKey(id) !== args.exceptKey);
     await send(args.tenantId, await customerRecipients(args.tenantId, ids), {
       title: args.storeName,
@@ -156,6 +210,38 @@ export async function notifyDrop(args: { tenantId: string; topicId: string; head
     });
   } catch (e) {
     logFailure("drop", e);
+  }
+}
+
+/**
+ * One "group buy is open" push per round per store every 30 minutes, however
+ * many staff press "Send to everyone" (each has their own rate limit). The
+ * cards still post; only the repeat buzz is skipped. In-memory per instance,
+ * like the DM throttle.
+ */
+const GROUP_BUY_PUSH_GAP_MS = 30 * 60 * 1000;
+const lastGroupBuyPush = new Map<string, number>();
+
+export function claimGroupBuyPushSlot(tenantId: string, roundId: string, now = Date.now()): boolean {
+  const key = `${tenantId}:${roundId}`;
+  const last = lastGroupBuyPush.get(key);
+  if (last !== undefined && now - last < GROUP_BUY_PUSH_GAP_MS) return false;
+  if (lastGroupBuyPush.size >= MAX_THROTTLE_ENTRIES) lastGroupBuyPush.clear();
+  lastGroupBuyPush.set(key, now);
+  return true;
+}
+
+/** "Send the group buy to everyone": one push per approved member, opening the first channel it landed in. */
+export async function notifyGroupBuy(args: { tenantId: string; topicId: string; roundName: string; storeName: string }): Promise<void> {
+  try {
+    const members = await audienceOf(args.tenantId, args.topicId);
+    await send(args.tenantId, await customerRecipients(args.tenantId, members.map((m) => m.customerId)), {
+      title: args.storeName,
+      body: `👥 ${args.roundName} is open — join the group buy`,
+      data: { type: "group_buy", threadId: args.topicId },
+    });
+  } catch (e) {
+    logFailure("group_buy", e);
   }
 }
 
@@ -181,5 +267,23 @@ export async function notifyOrderUpdate(args: {
     });
   } catch (e) {
     logFailure("order_update", e);
+  }
+}
+
+/**
+ * The safety bot hid a message: tell the store team's phones (owner + staff
+ * holding `community`), at most once per store every 3 minutes. The payload
+ * is only a pointer to the review queue — never the message.
+ */
+export async function notifySafetyFlag(args: { tenantId: string; storeName: string }): Promise<void> {
+  try {
+    if (!claimDmPushSlot(`${args.tenantId}:safety`)) return;
+    await send(args.tenantId, await storeRecipients(args.tenantId), {
+      title: args.storeName,
+      body: "🛡 The safety bot hid a message that invited members to another group. Tap to review.",
+      data: { type: "safety" },
+    });
+  } catch (e) {
+    logFailure("safety", e);
   }
 }

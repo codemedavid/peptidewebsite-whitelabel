@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { isModuleAllowed } from "@/storefront/admin/staff-permissions";
-import type { ApiErrorCode } from "./contract";
+import { PREVIEW_LOCKED_MESSAGE, type ApiErrorCode } from "./contract";
 import { resolveCommunityActor, type CommunityActor } from "@/lib/community/actor.server";
 import {
   authenticateCustomer,
@@ -140,11 +140,14 @@ export async function withCustomer(
 /**
  * Anyone IN the community: approved customers, the owner, and staff holding
  * the `community` module — and only while the store holds MOBILE_COMMUNITY.
- * `moderator: true` further limits the route to the store team.
+ * `moderator: true` further limits the route to moderators (the store team
+ * and community admins); `team: true` to the store team alone. Customers in
+ * preview (pending, the store's preview on) are refused unless the route sets
+ * `preview: true` — deny by default, so a new route never leaks to them.
  */
 export async function withCommunity(
   req: Request,
-  opts: { route: string; moderator?: boolean },
+  opts: { route: string; moderator?: boolean; team?: boolean; preview?: boolean },
   handler: (actor: CommunityActor) => Promise<NextResponse>,
 ): Promise<NextResponse> {
   return guarded(opts.route, async () => {
@@ -152,9 +155,10 @@ export async function withCommunity(
     if (!auth.ok) return fail(auth.failure.code, auth.failure.message);
     const resolved = await resolveCommunityActor(auth.principal);
     if (!resolved.ok) return fail(resolved.failure.code, resolved.failure.message);
-    if (opts.moderator && !resolved.actor.isModerator) {
+    if ((opts.moderator && !resolved.actor.isModerator) || (opts.team && !resolved.actor.isTeam)) {
       return fail("forbidden", "Only the store team can do this.");
     }
+    if (resolved.actor.preview && !opts.preview) return fail("forbidden", PREVIEW_LOCKED_MESSAGE);
     return handler(resolved.actor);
   });
 }

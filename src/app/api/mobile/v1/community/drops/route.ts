@@ -6,13 +6,13 @@ import { ok, readJson, withCommunity } from "@/lib/mobile/http";
 
 // GET /api/mobile/v1/community/drops → { drops } (live ones only)
 export async function GET(req: Request) {
-  return withCommunity(req, { route: "community/drops" }, async (actor) => ok(await listDrops(actor)));
+  return withCommunity(req, { route: "community/drops", preview: true }, async (actor) => ok(await listDrops(actor)));
 }
 
 // POST /api/mobile/v1/community/drops  DropInput → CommunityDrop (moderators).
 // Announces in the channel's General topic and pushes every approved member.
 export async function POST(req: Request) {
-  return withCommunity(req, { route: "community/drops:post", moderator: true }, async (actor) => {
+  return withCommunity(req, { route: "community/drops:post", team: true }, async (actor) => {
     const res = await createDrop(actor, await readJson(req));
     if (res.kind === "ok") {
       const drop = res.value;

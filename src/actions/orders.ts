@@ -66,6 +66,7 @@ import {
 } from "@/lib/storefront/checkout-rules";
 import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { INVOICE_PAYMENT_METHOD, invoiceShippingFee, normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { resolveResellerCaps, type ResellerCapabilities } from "@/lib/storefront/reseller-caps";
@@ -168,7 +169,11 @@ export type OrderQuote = {
   paymentFee: { label: string; amount: number } | null;
   discount: { code: string; label: string; amount: number } | null;
   total: number;
+  /** Set when this is a pay-after-close group-buy order (no payment now; an
+   *  `addOn` joins the customer's earlier order in the round, no second fee). */
+  invoice: GroupBuyInvoiceStamp | null;
 };
+export type GroupBuyInvoiceStamp = { addOn: boolean; roundName: string };
 export type QuoteResult = { ok: true; quote: OrderQuote } | { error: string };
 export type ListOrdersResult = { ok: true; orders: Order[] } | { error: string };
 export type UpdateOrderResult = { ok: true; order: Order } | { error: string };
@@ -518,6 +523,52 @@ async function stampGroupBuy(
 }
 
 /**
+ * Pay-after-close group buys (branding.config.groupBuyInvoice, lib/storefront/
+ * gb-invoice.ts). For an order the attribution above put in a live round:
+ * the shipping fee becomes the owner's flat fee — or 0 when this customer
+ * already has an order in the round (an add-on to the same invoice) — and the
+ * order is taken unpaid, since payment is settled on the invoice sent at close.
+ * Null when the switch is off, the order isn't in a round, or it came from the
+ * website (which still takes payment at checkout).
+ */
+async function stampGroupBuyInvoice(
+  config: Record<string, unknown>,
+  p: Order,
+  tenantId: string,
+): Promise<GroupBuyInvoiceStamp | null> {
+  const settings = normalizeGroupBuyInvoice(config.groupBuyInvoice);
+  if (!settings.enabled || !p.groupBuyId) return null;
+  // App checkouts only: the app shows the pay-later step and the invoice lands
+  // in its chat. The website checkout still collects payment + proof up front,
+  // so stamping it here would discard a proof the buyer just uploaded.
+  if (currentAppShopperScope() === null) return null;
+  const addOn = await hasOrderInRound(tenantId, p.groupBuyId);
+  p.shipping.fee = invoiceShippingFee(settings, addOn);
+  p.paymentMethod = INVOICE_PAYMENT_METHOD;
+  p.paymentStatus = "pending";
+  p.paymentProof = null;
+  return { addOn, roundName: p.groupBuyName ?? "" };
+}
+
+/**
+ * Has this shopper already ordered in the round? Matched by their account id,
+ * read from the session — never the payload, and never a typed phone number,
+ * which anyone could copy to dodge the fee. A cancelled or trashed order
+ * doesn't count. No account = not an add-on.
+ */
+async function hasOrderInRound(tenantId: string, groupBuyId: string): Promise<boolean> {
+  const account = await getSignedInCustomer(tenantId).catch(() => null);
+  if (!account) return false;
+  const prior = await withTenant(tenantId, (db) =>
+    db.storefrontOrder.findFirst({
+      where: { ...ACTIVE_ORDERS_WHERE, groupBuyId, status: { not: "cancelled" }, customerAccountId: account.id },
+      select: { id: true },
+    }),
+  );
+  return prior !== null;
+}
+
+/**
  * Stamp whether this is a RESELLER order — server-side, from the httpOnly
  * `sf.reseller` cookie, never from the client. Returns the decision so the MOQ
  * validation below can key off it.
@@ -783,7 +834,9 @@ function demoDisplaySymbol(slug: string): string {
  * app's quoted total is, by construction, what placement would charge. NOT
  * exported: every export of a "use server" module is a public endpoint.
  */
-type LiveOrderCheck = { ok: true; config: Record<string, unknown>; slug: string } | { error: string };
+type LiveOrderCheck =
+  | { ok: true; config: Record<string, unknown>; slug: string; invoice: GroupBuyInvoiceStamp | null }
+  | { error: string };
 
 async function validateLiveOrder(
   tenantId: string,
@@ -886,6 +939,10 @@ async function validateLiveOrder(
   // Shipping fee + courier — re-derived from the tenant's shipping locations,
   // never trusted from the client (same authority as the admin fee).
   stampShipping(config, p, catalog);
+  // Pay-after-close group buys override that fee: one flat fee per customer
+  // per round, none on an add-on, and no payment taken now (the invoice comes
+  // when the round closes). Before the QR PH stamp, which keys off the method.
+  const invoice = await stampGroupBuyInvoice(config, p, tenantId);
   // Discount — re-derived from the tenant's promo codes by the applied code,
   // never trusted from the client. Rejected (not silently dropped) when the
   // code is no longer valid, so the customer never pays a higher total than
@@ -939,7 +996,7 @@ async function validateLiveOrder(
   const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, catalog);
   if (gbOnHand) return { error: gbOnHand };
 
-  return { ok: true, config, slug };
+  return { ok: true, config, slug, invoice };
 }
 
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
@@ -1187,6 +1244,7 @@ export async function quoteStorefrontOrderAction(input: unknown): Promise<QuoteR
         paymentFee: p.paymentFee ?? null,
         discount: p.discount ?? null,
         total: totals.total,
+        invoice: checked.invoice,
       },
     };
   } catch {
