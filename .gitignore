@@ -21,3 +21,6 @@ next-env.d.ts
 
 # Design reference screenshots (large, local only)
 inspiration/
+
+# Second Next instance (Mamamica community server, NEXT_DIST_DIR)
+/.next-mamamica/
