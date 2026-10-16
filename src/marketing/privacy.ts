@@ -7,7 +7,7 @@ import { TERMS_META, type TermsSection } from "@/marketing/terms";
 
 export const PRIVACY_META = {
   effectiveDate: "October 1, 2026",
-  lastUpdated: "October 1, 2026",
+  lastUpdated: "October 7, 2026",
   contactEmail: SITE.contactEmail,
   operator: TERMS_META.operator,
   businessName: TERMS_META.businessName,
@@ -36,7 +36,7 @@ export const PRIVACY_SECTIONS: TermsSection[] = [
     blocks: [
       { type: "p", text: "Information you give us:" },
       { type: "ul", items: [
-        "Account details: your name, nickname, email address, password (stored only as a one-way hash), and an optional profile photo.",
+        "Account details: your first and last name, nickname, email address, mobile number, age, password (stored only as a one-way hash), and, if you choose to give them, your gender and a profile photo.",
         "Order details: the items you order, your delivery name, phone number, delivery address, chosen courier, and any note you add at checkout.",
         "Payment confirmation: if you pay by bank transfer or e-wallet, the screenshot or photo of your payment receipt that you upload. We do not collect or store card numbers, and we do not process card payments in the app.",
         "Content you share: messages, photos, and documents you send in Store chats and community channels, and reviews you post.",

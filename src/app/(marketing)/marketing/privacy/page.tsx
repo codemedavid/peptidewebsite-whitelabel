@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "How Pepweb and the PepWorld app collect, use, and protect your information.",
+  openGraph: { title: "Privacy Policy · Pepweb", description: "How Pepweb and the PepWorld app collect, use, and protect your information." },
+  twitter: { title: "Privacy Policy · Pepweb", description: "How Pepweb and the PepWorld app collect, use, and protect your information." },
 };
 
 export default function PrivacyPage() {

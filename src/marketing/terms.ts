@@ -52,7 +52,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     n: 3,
     title: "Our Services",
     blocks: [
-      { type: "p", text: "We design, build, and deliver website packages — including peptide ordering websites and related features — along with optional ongoing care. The specific features, inclusions, and price for your project are set out in your quote and/or signed Service Agreement." },
+      { type: "p", text: "We design, build, and deliver online store and ordering website packages for businesses and communities of every kind, and related features, along with optional ongoing care. The specific features, inclusions, and price for your project are set out in your quote and/or signed Service Agreement." },
       { type: "p", text: "We provide the website technology and the work described in your package. We do not supply, sell, endorse, test, or take responsibility for the products you choose to sell through your website." },
     ],
   },
@@ -122,7 +122,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
         "You are solely responsible for ensuring your products, claims, labeling, marketing materials, and business operations comply with all applicable laws, regulations, and platform rules.",
         "You will not use the website or our Services to mislead customers, infringe others’ rights, or distribute unlawful, harmful, or prohibited content.",
       ] },
-      { type: "note", text: "Important: We provide website technology only. We do not manufacture, supply, verify, or endorse any peptide or other product sold through your website, and we make no representations about their safety, legality, or fitness for any purpose. Full responsibility for your products, claims, and how your business is run rests with you." },
+      { type: "note", text: "Important: We provide website technology only. We do not manufacture, supply, verify, or endorse any product sold through your website, and we make no representations about their safety, legality, or fitness for any purpose. Full responsibility for your products, claims, and how your business is run rests with you." },
     ],
   },
   {

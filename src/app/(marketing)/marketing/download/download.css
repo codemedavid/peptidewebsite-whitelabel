@@ -1,0 +1,138 @@
+/* /download — PepWorld app install page. Scoped under .mk via the marketing
+   layout; reuses its paper/ink/green tokens. */
+
+.mk .dl-hero { border-top: 0; }
+.mk .dl-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: clamp(32px, 6vw, 88px);
+  align-items: center;
+}
+
+.mk .dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+.mk .dl-actions .mk-btn { gap: 10px; }
+.mk .dl-actions [aria-disabled="true"] { cursor: default; }
+.mk .dl-btn-icon { flex-shrink: 0; }
+.mk .dl-mobile-icon {
+  display: none;
+  margin-bottom: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.mk .dl-meta {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Device mock: a quiet, tilted phone on the paper with a green tint screen. */
+.mk .dl-device {
+  margin: 0;
+  justify-self: center;
+  width: min(260px, 100%);
+  aspect-ratio: 9 / 18;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 34px;
+  background: var(--paper-deep);
+  transform: rotate(3deg);
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mk .dl-hero-grid:hover .dl-device { transform: rotate(0deg) translateY(-4px); }
+.mk .dl-device-screen {
+  height: 100%;
+  border-radius: 26px;
+  background: var(--green-tint);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+.mk .dl-device-icon {
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.mk .dl-device-name {
+  font-family: var(--font-head);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ink);
+}
+.mk .dl-device-tag {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+/* Install steps: numbered editorial columns divided by hairlines. */
+.mk .dl-steps-lead { max-width: 560px; }
+.mk .dl-steps {
+  list-style: none;
+  padding: 0;
+  margin: clamp(32px, 5vw, 48px) 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--ink);
+}
+.mk .dl-step {
+  padding: 24px 28px 8px 0;
+}
+.mk .dl-step + .dl-step {
+  padding-left: 28px;
+  border-left: 1px solid var(--line);
+}
+.mk .dl-step-n {
+  display: block;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 40px;
+  line-height: 1;
+  color: var(--green);
+  margin-bottom: 14px;
+}
+.mk .dl-step p,
+.mk .dl-notes p {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--body-text);
+}
+
+.mk .dl-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(24px, 5vw, 64px);
+}
+
+@media (max-width: 820px) {
+  .mk .dl-hero-grid { grid-template-columns: 1fr; }
+  .mk .dl-device { display: none; }
+  .mk .dl-mobile-icon { display: block; }
+  .mk .dl-steps,
+  .mk .dl-notes { grid-template-columns: 1fr; }
+  .mk .dl-step,
+  .mk .dl-step + .dl-step {
+    padding: 22px 0 14px;
+    border-left: 0;
+  }
+  .mk .dl-step + .dl-step { border-top: 1px solid var(--line); }
+}
+@media (max-width: 480px) {
+  .mk .dl-actions .mk-btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mk .dl-device { transition: none; }
+  .mk .dl-hero-grid:hover .dl-device { transform: rotate(3deg); }
+}

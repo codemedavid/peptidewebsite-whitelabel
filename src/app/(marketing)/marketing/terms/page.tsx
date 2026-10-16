@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: "Terms & Conditions",
   description:
     "The simple, friendly rules for working together with Pepweb.",
+  openGraph: { title: "Terms & Conditions · Pepweb", description: "The simple, friendly rules for working together with Pepweb." },
+  twitter: { title: "Terms & Conditions · Pepweb", description: "The simple, friendly rules for working together with Pepweb." },
 };
 
 export default function TermsPage() {
