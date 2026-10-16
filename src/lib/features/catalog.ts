@@ -36,6 +36,9 @@ export const FEATURES = {
   // block on the product detail page. Operator-grantable, default OFF.
   STORE_COA: "storefront.coa",
   STORE_PROTOCOLS: "storefront.protocols",
+  // Customer Assessment quiz (#assessment) and its store-admin Assessments
+  // manager. Operator-grantable, default OFF — submissions hold health data.
+  STORE_ASSESSMENT: "storefront.assessment",
   STORE_SEARCH: "storefront.search",
   STORE_CATEGORIES: "storefront.categories",
   STORE_COMMUNITY_LINK: "storefront.community_link",
@@ -291,6 +294,8 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // grant (scripts/backfill-coa-protocols-grants.ts) so nothing disappears.
   FEATURES.STORE_COA,
   FEATURES.STORE_PROTOCOLS,
+  // Assessment quiz: same shape — outside every plan ceiling, granted per tenant.
+  FEATURES.STORE_ASSESSMENT,
   FEATURES.STORE_SALES_ANALYTICS,
   FEATURES.STORE_SMART_CHECKOUT,
   // The Reseller PARENT. It sits in the Starter and Automated ceilings but NOT
@@ -410,6 +415,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_CARD_STUDIO]: { label: "Card Studio", description: "Product card design studio in the store admin (presets, templates, per-card styling).", group: "Catalog" },
   [FEATURES.STORE_REVIEWS]: { label: "Product reviews", description: "Customer reviews / testimonials page on the storefront and its Reviews manager in the store admin. The owner uploads a photo, writes the description (with its own font / size / weight / colour) and connects each review to any number of products — a connected review also shows under that product's description. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor.", group: "Catalog" },
   [FEATURES.STORE_COA]: { label: "Lab reports (COA)", description: "Certificate-of-analysis page on the storefront and its Lab Results manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor. Separate from “Product specs”, which only gates the COA block on product pages.", group: "Catalog" },
+  [FEATURES.STORE_ASSESSMENT]: { label: "Assessment quiz", description: "Customer goals quiz on the storefront (#assessment) that recommends products from the store's own catalog, plus the Assessments manager in the store admin (submissions + goal→product keywords). Operator-grantable, default OFF. Submissions include self-reported medical history and are visible to the owner and permitted staff only.", group: "Catalog" },
   [FEATURES.STORE_PROTOCOLS]: { label: "Protocols", description: "Peptide protocol guides page on the storefront and its Protocols manager in the store admin. Operator-grantable, default OFF. Once on, the store owner still shows/hides the page from the branding editor.", group: "Catalog" },
 
   [FEATURES.ECOM_CART]: { label: "Shopping cart", description: "Add-to-cart and cart page.", group: "Ecommerce" },

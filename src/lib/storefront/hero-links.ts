@@ -21,6 +21,8 @@ export const HERO_LINK_PAGES: ReadonlySet<string> = new Set([
   "calculator",
   "track",
   "merchant",
+  "articles",
+  "assessment",
 ]);
 
 // Default destination per button when none is configured. Primary keeps the

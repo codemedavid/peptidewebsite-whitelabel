@@ -53,6 +53,7 @@ const TENANT_MODELS = new Set<string>([
   "tenantSettings",
   "page",
   "blogPost",
+  "assessmentResponse",
   "coupon",
   "mediaAsset",
   "subscriptionPayment",

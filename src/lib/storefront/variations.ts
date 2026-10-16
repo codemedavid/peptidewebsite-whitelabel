@@ -99,6 +99,17 @@ export function buildProductOptions(product: OptionSource): ProductOption[] {
 }
 
 /**
+ * Which option a card/modal starts on. By default NOTHING is selected (-1): the
+ * price stays hidden until the customer picks (see the reveal rule above).
+ * A store that opts in (Brand.variationPreselect) starts on the first option
+ * instead, so its price shows straight away — The Peppy Lab's old site opened
+ * every card on "Vial Only" with its price visible.
+ */
+export function initialOptionIndex(optionCount: number, preselect: boolean | undefined): number {
+  return preselect === true && optionCount > 0 ? 0 : -1;
+}
+
+/**
  * Should the card render its option picker?
  *
  * Any variation at all earns one. This deliberately does NOT key off the option

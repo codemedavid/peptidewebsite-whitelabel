@@ -18,6 +18,7 @@ import {
 } from "@/lib/media/image-url";
 import {
   buildProductOptions,
+  initialOptionIndex,
   selectedIncludes,
   shouldShowOptionPicker,
   splitOptionsForCard,
@@ -395,9 +396,12 @@ export function ProductCard({
   storeClosed,
   defaultImage,
   storeName,
+  preselectOption,
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
+  /** Start on the first option (Brand.variationPreselect). Default: nothing picked. */
+  preselectOption?: boolean;
   /** Open the full-detail quick-view modal for this product. Optional so the
    *  admin Card Studio preview (which renders this card outside the catalog)
    *  keeps working — there, the card's image/name are simply not clickable. */
@@ -432,11 +436,12 @@ export function ProductCard({
   // named variation already carries the base price (it IS the standard). No
   // variations → unchanged single-price behavior.
   const options = buildProductOptions(product);
-  // Start with NOTHING selected (-1). A variation product then shows only its
-  // option names and no price until the customer clicks a pill — the price on
-  // screen always names the option they chose. A single-price product has no
-  // options, so this index never matters and its price shows immediately.
-  const [optIdx, setOptIdx] = useState(-1);
+  // Start with NOTHING selected (-1) unless the store opts in to preselecting
+  // the first option. A variation product then shows only its option names and
+  // no price until the customer clicks a pill — the price on screen always
+  // names the option they chose. A single-price product has no options, so
+  // this index never matters and its price shows immediately.
+  const [optIdx, setOptIdx] = useState(() => initialOptionIndex(options.length, preselectOption));
   const selectedOpt =
     optIdx >= 0 && optIdx < options.length ? options[optIdx] : null;
   // Any variation the seller priced earns a picker. Keying off the option count
@@ -749,8 +754,11 @@ export function ProductDetailModal({
   // unreadable for the chat screenshots owners actually upload.
   const [reviewViewer, setReviewViewer] = useState<Review | null>(null);
   // Nothing picked yet (-1): a product with options shows no price until the
-  // customer clicks one, same as the catalog card it opened from.
-  const [optIdx, setOptIdx] = useState(-1);
+  // customer clicks one, same as the catalog card it opened from — unless the
+  // store preselects the first option (Brand.variationPreselect).
+  const [optIdx, setOptIdx] = useState(() =>
+    initialOptionIndex(buildProductOptions(product).length, brand.variationPreselect),
+  );
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const selectedIdx =
@@ -1187,6 +1195,7 @@ export function Catalog({
               gbBlocked={isOnHandBlocked(p.id, brand.groupBuyGate)}
               storeClosed={storeClosed}
               storeName={brand.name}
+              preselectOption={brand.variationPreselect}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
               onOpenDetail={() => openDetail(p)}
             />

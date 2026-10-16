@@ -12,6 +12,8 @@ import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import type { StoreStatus } from "@/lib/storefront/store-status";
 import type { ProductClass } from "@/lib/storefront/product-class";
 import type { SortCategory } from "@/lib/storefront/sort-categories";
+import type { ArticleSummary } from "@/lib/storefront/articles";
+import type { AssessmentConfig } from "@/lib/storefront/assessment";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { BrandTrial } from "@/lib/trial/trial-state";
@@ -606,6 +608,30 @@ export type Brand = {
   // even offers the "Protocols page" toggle. Undefined outside the entitlement-
   // aware storefront render (treated as entitled there).
   protocolsEntitled?: boolean;
+  // Articles page (#articles, #articles/<slug>). Server-derived in
+  // storefront-brand.ts: the blog entitlement (FEATURES.SITE_BLOG) AND the
+  // owner's toggle (config.showPageArticles, default on) AND at least one
+  // published post — so a store never links to an empty page. `articles` is the
+  // published SUMMARIES only (no body); a post's body is fetched when opened.
+  showPageArticles?: boolean;
+  articlesEntitled?: boolean;
+  articles?: ArticleSummary[];
+  articlesTitle?: string;
+  articlesIntro?: string;
+  // Assessment quiz (#assessment). Server-derived: FEATURES.STORE_ASSESSMENT
+  // (operator-grantable, default OFF) AND the owner's assessment.enabled.
+  // `assessment` is the normalized owner config (copy + goal keyword map).
+  showPageAssessment?: boolean;
+  // Start variation products on their FIRST option (price visible at once)
+  // instead of the default "pick an option to see the price". Default off.
+  variationPreselect?: boolean;
+  // Classic home: the "why us" trust strip under the catalog, built from
+  // boutique.assurances. Default off, so no classic store changes on deploy.
+  showTrustStrip?: boolean;
+  trustStripTitle?: string;
+  trustStripQuote?: string;
+  assessmentEntitled?: boolean;
+  assessment?: AssessmentConfig;
   showPageCalculator: boolean;
   // Server-derived: is the reconstitution calculator (FEATURES.STORE_CALCULATOR)
   // entitled for this tenant? Drives whether the store-admin even offers the

@@ -24,3 +24,6 @@ inspiration/
 
 # Second Next instance (Mamamica community server, NEXT_DIST_DIR)
 /.next-mamamica/
+
+# Legacy-store migration exports (may hold customer PII)
+.migration/
