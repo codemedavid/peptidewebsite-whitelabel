@@ -15,7 +15,7 @@ import {
   type McpImageAsset,
 } from "@/lib/mcp/image-assets";
 
-export type McpMediaKind = "hero" | "product" | "splash";
+export type McpMediaKind = "hero" | "product" | "splash" | "category" | "payment" | "content";
 export type McpMediaUpload = { url: string; fileId?: string };
 
 /**
@@ -52,6 +52,9 @@ const MEDIA_KINDS: Record<McpMediaKind, { label: string; mediaType: string; tags
   hero: { label: "hero image", mediaType: "branding:hero", tags: ["branding:hero", "hero"] },
   product: { label: "product image", mediaType: "product", tags: ["product"] },
   splash: { label: "splash logo", mediaType: "branding:splash", tags: ["branding:splash", "splash"] },
+  category: { label: "category image", mediaType: "category", tags: ["category"] },
+  payment: { label: "payment QR image", mediaType: "payment", tags: ["payment", "qr"] },
+  content: { label: "store image", mediaType: "content", tags: ["content"] },
 };
 
 /**

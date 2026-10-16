@@ -18,6 +18,26 @@ import {
   callListFeatures,
   callSetFeatures,
 } from "@/lib/mcp/feature-tool";
+import {
+  CONFIGURE_CHECKOUT_TOOL,
+  GET_STORE_SETTINGS_TOOL,
+  MANAGE_CATEGORIES_TOOL,
+  SET_STORE_ACCESS_TOOL,
+  SET_STORE_ADMIN_LOGIN_TOOL,
+  callConfigureCheckout,
+  callGetStoreSettings,
+  callManageCategories,
+  callSetStoreAccess,
+  callSetStoreAdminLogin,
+} from "@/lib/mcp/store-settings-tool";
+import {
+  MANAGE_STORE_CONTENT_TOOL,
+  RUN_STORE_ADMIN_ACTION_TOOL,
+  UPLOAD_STORE_IMAGE_TOOL,
+  callManageStoreContent,
+  callRunStoreAdminAction,
+  callUploadStoreImage,
+} from "@/lib/mcp/store-content-tool";
 import { normalizeProductInput } from "@/lib/storefront/product-input";
 import { buildVariationPlan, MAX_VARIATIONS } from "@/lib/storefront/variation-plan";
 import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
@@ -38,7 +58,7 @@ const MCP_PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = {
   name: "pepweb-whitelabel-admin",
   title: "Pepweb Whitelabel Admin",
-  version: "1.3.0",
+  version: "1.4.0",
 };
 
 type JsonRpcId = string | number | null;
@@ -488,6 +508,20 @@ const UPLOAD_HERO_IMAGE_TOOL = {
     openWorldHint: true,
   },
 };
+
+/** The store-settings tools share one dispatch shape: auth, then (args) => result. */
+const STORE_SETTINGS_TOOLS: ReadonlyArray<
+  readonly [{ name: string }, (args: Record<string, unknown>) => Promise<unknown>]
+> = [
+  [GET_STORE_SETTINGS_TOOL, callGetStoreSettings],
+  [SET_STORE_ADMIN_LOGIN_TOOL, callSetStoreAdminLogin],
+  [MANAGE_CATEGORIES_TOOL, callManageCategories],
+  [CONFIGURE_CHECKOUT_TOOL, callConfigureCheckout],
+  [SET_STORE_ACCESS_TOOL, callSetStoreAccess],
+  [MANAGE_STORE_CONTENT_TOOL, callManageStoreContent],
+  [UPLOAD_STORE_IMAGE_TOOL, callUploadStoreImage],
+  [RUN_STORE_ADMIN_ACTION_TOOL, callRunStoreAdminAction],
+];
 
 function jsonRpcResult(id: JsonRpcId | undefined, result: unknown) {
   return { jsonrpc: "2.0", id: id ?? null, result };
@@ -1384,7 +1418,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
       },
       serverInfo: SERVER_INFO,
       instructions:
-        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Every tool here works on ANY store on the platform, not only ones you created. When the operator names a store rather than a slug, or a slug is not found, call list_whitelabel_tenants \u2014 it is read-only and returns the exact slugs. Tenant arguments also accept a store name or a storefront URL, so \"restyle HP Glow\" resolves without the operator digging up a slug; a name matching two stores is refused with both named, and you must ask the operator which one rather than guessing. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. To add, edit, or remove a product's size/dose/colorway variations, call manage_product_variations rather than update_products \u2014 it changes only the options you name, while an update_products patch replaces the whole option list and would silently delete the ones you did not mention. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. Ask for missing required tenant, product, or image details before calling.",
+        "This MCP server creates Pepweb whitelabel tenants, restyles existing ones, adds or edits products, and uploads hero section images. Every tool here works on ANY store on the platform, not only ones you created. When the operator names a store rather than a slug, or a slug is not found, call list_whitelabel_tenants \u2014 it is read-only and returns the exact slugs. Tenant arguments also accept a store name or a storefront URL, so \"restyle HP Glow\" resolves without the operator digging up a slug; a name matching two stores is refused with both named, and you must ask the operator which one rather than guessing. Only call create_whitelabel_tenant after the operator explicitly asks to create a NEW tenant. To change how an EXISTING store looks — theme, colors, fonts, storefront layout, home layout, hero copy, hero image, logo, favicon, loading splash — call update_whitelabel_branding; it is a partial update that leaves products, orders and storefront data untouched. Never re-create a tenant, and never duplicate one, in order to restyle it. Only call product tools after the operator explicitly asks to add or edit products for an existing tenant. To add, edit, or remove a product's size/dose/colorway variations, call manage_product_variations rather than update_products \u2014 it changes only the options you name, while an update_products patch replaces the whole option list and would silently delete the ones you did not mention. Product deletion is intentionally unavailable. Only call upload_hero_image after the operator explicitly asks to set a tenant hero image. To see which features/modules a store has switched on — group buys, reviews, lab reports, sales analytics, the access-code gate and the rest — call list_whitelabel_features; it is read-only. To turn a feature on or off for an existing store, call set_whitelabel_features. That is a live change to what a real storefront exposes, so only call it when the operator explicitly asks to enable or disable something for a named tenant, and prefer dryRun first when the request is ambiguous. It never grants beyond the tenant's package: a feature the plan does not include is refused, naming the plan it needs — never try to work around that by re-creating the tenant or changing its branding. To make a store able to SELL, after creating it: set_store_admin_login (the owner's #admin sign-in), manage_store_categories (create categories BEFORE adding products, and use the returned category ids on products), configure_store_checkout (payment methods with QR images, couriers, shipping locations + fees, order contact channels, currency), manage_store_content (FAQ, lab reports, reviews, promo codes, notice popup, delivery note, footer/social links) and set_store_access (open/closed switch, visitor access code). Always call get_store_settings first when editing an existing store: lists are saved whole, so a list you send replaces the stored one. run_store_admin_action reaches the remaining store-admin settings (hero copy, banner, checkout rules, card design, protocols, group buys); prefer a dedicated tool when one fits. upload_store_image hosts an image and returns its URL. Orders, customers, staff and deletion are deliberately not available through this connector. Report every failed step to the operator — never describe a partially applied change as done. Ask for missing required tenant, product, or image details before calling.",
     });
   }
 
@@ -1403,6 +1437,7 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
         UPLOAD_HERO_IMAGE_TOOL,
         LIST_FEATURES_TOOL,
         SET_FEATURES_TOOL,
+        ...STORE_SETTINGS_TOOLS.map(([tool]) => tool),
       ],
     });
   }
@@ -1439,6 +1474,14 @@ async function handleMessage(req: NextRequest, message: JsonRpcRequest) {
     }
     if (name === UPLOAD_HERO_IMAGE_TOOL.name) {
       return jsonRpcResult(message.id, await callUploadHeroImage(req, args));
+    }
+    const storeTool = STORE_SETTINGS_TOOLS.find(([tool]) => tool.name === name);
+    if (storeTool) {
+      const authError = requireMcpAuth(req, args);
+      if (authError) {
+        return jsonRpcResult(message.id, { content: [{ type: "text", text: authError }], isError: true });
+      }
+      return jsonRpcResult(message.id, await storeTool[1](args));
     }
     if (name === LIST_FEATURES_TOOL.name || name === SET_FEATURES_TOOL.name) {
       const authError = requireMcpAuth(req, args);
