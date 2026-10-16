@@ -46,6 +46,7 @@ import { readResellerPageCopy, readResellerPageCopyPatch } from "@/lib/storefron
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import { safeExternalUrl } from "@/lib/storefront/courier-booking";
+import { cleanCourierNote } from "@/lib/storefront/courier-note";
 import { saveResellerSession, clearResellerSession } from "@/lib/auth/reseller-session";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -482,6 +483,9 @@ function normalizeCouriers(input: unknown): Courier[] {
       // COD/no-location couriers (Lalamove, Maxim) need no shipping location or
       // fee — only persist the flag when set so legacy rows stay unchanged.
       ...(o.noLocation === true ? { noLocation: true } : {}),
+      // Owner's checkout note (coverage / pick-up point). Plain text, capped;
+      // only persisted when set so legacy rows stay unchanged.
+      ...(cleanCourierNote(o.note) ? { note: cleanCourierNote(o.note) } : {}),
     });
   }
   return out;

@@ -98,7 +98,12 @@ export type Product = {
    *  these into a swipeable gallery (see lib/storefront/product-gallery.ts); a
    *  product whose options carry none renders exactly as it always has.
    *  `extraImages` are that option's further photos after `image`; every one of
-   *  them selects the option when swiped to. */
+   *  them selects the option when swiped to.
+   *
+   *  `includes` is the option's own packing list, one item per line ("10 pcs
+   *  syringes"). The card and detail modal show it only while that option is
+   *  picked, so a "Vial only" buyer is never told the set's extras come with it
+   *  (see selectedIncludes in lib/storefront/variations.ts). */
   variations?: {
     name: string;
     price: number;
@@ -106,6 +111,7 @@ export type Product = {
     gbPrice?: number;
     image?: string;
     extraImages?: string[];
+    includes?: string;
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -307,6 +313,10 @@ export type Courier = {
    *  doesn't trigger the "no shipping location" warning in admin. Absent/false →
    *  the courier behaves normally (requires an active linked location). */
   noLocation?: boolean;
+  /** The owner's note shown at checkout under the courier picker while this
+   *  courier is selected (coverage, pick-up point…). Plain text; see
+   *  lib/storefront/courier-note. Absent = no note. */
+  note?: string;
 };
 
 export type CoaReport = {
@@ -918,6 +928,9 @@ export type Brand = {
   contactChannels?: ContactChannel[];
   checkoutTitle?: string;
   checkoutNote?: string;
+  /** Drop the Email field from checkout (see lib/storefront/checkout-fields).
+   *  Absent/false = Email shown and required, as before. */
+  checkoutHideEmail?: boolean;
   // Link-preview / SEO description — shown when the storefront URL is shared
   // (WhatsApp, social, search). Falls back to a generic line when blank.
   metaDescription?: string;

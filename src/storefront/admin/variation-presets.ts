@@ -23,6 +23,9 @@ export type VariationDraft = {
   image?: string;
   /** Further photos after `image` — see lib/storefront/product-photos.ts. */
   extraImages?: string[];
+  /** What this option ships with, one item per line. `undefined` = the editor's
+   *  "What's included" box is closed; "" = open but empty (saves as nothing). */
+  includes?: string;
 };
 
 /**

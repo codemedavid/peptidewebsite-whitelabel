@@ -505,7 +505,8 @@ export function buildOrderMessage(
     "",
     "Customer:",
     `Name: ${customer.name}`,
-    `Email: ${customer.email}`,
+    // Blank when the store hides the Email field (checkoutHideEmail).
+    ...(customer.email.trim() ? [`Email: ${customer.email}`] : []),
     `Phone: ${customer.phone}`,
     `Ship to: ${ship || "—"}`,
     ...noteLines,

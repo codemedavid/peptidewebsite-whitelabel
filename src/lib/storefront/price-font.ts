@@ -10,6 +10,7 @@
 // (--brand-price-font: var(--brand-body-font)) applies. This mirrors buttonFont.
 
 import type { Brand } from "@/storefront/types";
+import { fontStack } from "@/lib/theme/tokens";
 
 /** The effective price family: an explicit priceFont, else the body font, else
  *  a safe "Inter" fallback (matches the CSS body-font default). */
@@ -24,5 +25,5 @@ export function resolvePriceFont(brand: Pick<Brand, "priceFont" | "bodyFont">): 
  *  written (unset/blank) so the CSS body-font default keeps applying. */
 export function priceFontVar(brand: Pick<Brand, "priceFont">): string | null {
   const priceFont = (brand.priceFont ?? "").trim();
-  return priceFont ? `"${priceFont}", system-ui, sans-serif` : null;
+  return priceFont ? fontStack(priceFont, "system-ui, sans-serif") : null;
 }

@@ -19,6 +19,7 @@ import {
 import {
   buildProductOptions,
   initialOptionIndex,
+  selectedIncludes,
   shouldShowOptionPicker,
   splitOptionsForCard,
   type ProductOption,
@@ -135,6 +136,37 @@ function OptionPicker({
           {showAllOpts ? "Show less" : `+${hiddenCount} more`}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The picked option's packing list ("Complete Set includes: …").
+ *
+ * Renders nothing until an option that HAS a list is selected — the whole point:
+ * a "Vial only" buyer must not be told the set's syringes and case come with it
+ * (see selectedIncludes). Shared by the card and the modal so both word it the
+ * same way; `variant` only picks the size.
+ */
+function OptionIncludes({
+  options,
+  selectedIndex,
+  variant,
+}: {
+  options: ProductOption[];
+  selectedIndex: number;
+  variant: "card" | "detail";
+}) {
+  const items = selectedIncludes(options, selectedIndex);
+  if (items.length === 0) return null;
+  return (
+    <div className={`sf-includes sf-includes--${variant}`}>
+      <p className="sf-includes__title">{options[selectedIndex].name} includes:</p>
+      <ul className="sf-includes__list">
+        {items.map((item, i) => (
+          <li key={`${i}-${item}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -597,6 +629,9 @@ export function ProductCard({
             marginTop={10}
           />
         )}
+        {showSelector && !poa && (
+          <OptionIncludes options={options} selectedIndex={optIdx} variant="card" />
+        )}
       </div>
 
       <hr className="hairline" />
@@ -899,6 +934,13 @@ function ProductDetailModal({
                 isSoldOut={(_o, i) => (detail.optionStock[i] ?? 0) <= 0}
                 label={`Options for ${detail.name}`}
                 marginTop={4}
+              />
+            )}
+            {detail.showOptions && !detail.priceOnRequest && (
+              <OptionIncludes
+                options={detail.options}
+                selectedIndex={selectedIdx}
+                variant="detail"
               />
             )}
 

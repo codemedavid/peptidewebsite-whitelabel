@@ -36,6 +36,8 @@ import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-b
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
 import { DIRECT_CONTACT_METHOD, isDirectHandoff } from "@/lib/storefront/checkout-handoff";
 import { rememberRecentOrder } from "@/lib/storefront/recent-order";
+import { checkoutFields } from "@/lib/storefront/checkout-fields";
+import { courierNote } from "@/lib/storefront/courier-note";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildWholesaleScope, wholesaleRemaining } from "@/lib/storefront/wholesale";
 import {
@@ -64,20 +66,11 @@ import { useCustomerAccount } from "../customer-account-client";
 
 type Step = "cart" | "details" | "payment";
 
-const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; type?: string }[] = [
-  { key: "name", label: "Full name", required: true },
-  { key: "email", label: "Email", required: true, type: "email" },
-  { key: "phone", label: "Phone", required: true, type: "tel" },
-  { key: "address", label: "Address", required: true },
-  { key: "barangay", label: "Barangay", required: true },
-  { key: "city", label: "City / Municipality", required: true },
-  { key: "province", label: "Province / State", required: true },
-  { key: "postal", label: "Postal code", required: false },
-];
-
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
+  // Per store: a store that never emails buyers can drop the Email field.
+  const fields = checkoutFields(brand);
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   // A signed-in shopper (customer accounts) gets their contact fields prefilled.
   // Only EMPTY fields are filled, so nothing the buyer typed is ever overwritten.
@@ -422,7 +415,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
   }, [appliedPromo, subtotal, currency]);
 
-  const missing = FIELDS.filter((f) => f.required && !customer[f.key].trim());
+  const missing = fields.filter((f) => f.required && !customer[f.key].trim());
   const detailsValid = missing.length === 0;
 
   // Upload the proof screenshot to the tenant's ImageKit folder as soon as it's
@@ -799,7 +792,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </p>
               )}
               <div className="sf-cart__fields">
-                {FIELDS.map((f) => (
+                {fields.map((f) => (
                   <label key={f.key} className="sf-cart__field">
                     <span>
                       {f.label}
@@ -842,6 +835,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       ))}
                     </select>
                   </label>
+                  {courierNote(selectedCourier) && (
+                    <p className="sf-cart__courier-note">{courierNote(selectedCourier)}</p>
+                  )}
                   {codCourier ? (
                     // COD/no-location courier (Lalamove, Maxim…) — no location to
                     // pick and no shipping fee; the customer pays on delivery.

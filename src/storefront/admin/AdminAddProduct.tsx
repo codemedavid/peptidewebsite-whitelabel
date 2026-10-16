@@ -16,7 +16,7 @@ import {
   assignVariationImages,
   type VariationDraft,
 } from "./variation-presets";
-import { unpricedVariationNames } from "@/lib/storefront/variations";
+import { MAX_INCLUDES_LENGTH, unpricedVariationNames } from "@/lib/storefront/variations";
 import { resolveSelectableCategories } from "@/lib/storefront/categories";
 import { assignableSortCategories } from "@/lib/storefront/sort-categories";
 import { MAX_PHOTOS_PER_ITEM } from "@/lib/storefront/product-photos";
@@ -311,6 +311,42 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
                 })
               }
             />
+          </div>
+        )}
+        {/* What THIS option ships with. Kept per option, not in the description,
+            so "Vial only" buyers are never shown the set's extras — the
+            storefront reveals it only once this option is picked. */}
+        {it.includes === undefined ? (
+          <button
+            type="button"
+            className="admin-includes__add"
+            onClick={() => upd(i, { includes: "" })}
+          >
+            + What&apos;s included{it.name.trim() ? ` with ${it.name.trim()}` : ""}
+          </button>
+        ) : (
+          <div className="admin-includes">
+            <label className="admin-field__hint" htmlFor={`variation-includes-${i}`}>
+              {it.name.trim() ? `${it.name.trim()} includes` : "This option includes"} — one
+              item per line. Customers see it only when they pick this option.
+            </label>
+            <textarea
+              id={`variation-includes-${i}`}
+              className="admin-textarea admin-includes__text"
+              placeholder={"10ml vial\n10 pcs insulin syringes\n20 pcs alcohol pads\n1 hard case"}
+              maxLength={MAX_INCLUDES_LENGTH}
+              value={it.includes}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                upd(i, { includes: e.target.value })
+              }
+            />
+            <button
+              type="button"
+              className="admin-includes__remove"
+              onClick={() => upd(i, { includes: undefined })}
+            >
+              Remove list
+            </button>
           </div>
         )}
         </Fragment>
@@ -613,9 +649,13 @@ export function AdminAddProduct({
           // pasted junk value is dropped rather than stored.
           const image = (v.image ?? "").trim();
           const withImage = image ? { ...withStock, image } : withStock;
-          return v.extraImages?.length
+          const withExtras = v.extraImages?.length
             ? { ...withImage, extraImages: v.extraImages }
             : withImage;
+          // The option's packing list, only when there is one (the server trims
+          // and caps it again in normalizeProductInput).
+          const includes = (v.includes ?? "").trim();
+          return includes ? { ...withExtras, includes } : withExtras;
         })
         .filter((v) => v.name),
       stock: Number(stock) || 0,

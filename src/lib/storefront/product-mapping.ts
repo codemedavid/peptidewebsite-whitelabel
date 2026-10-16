@@ -13,6 +13,7 @@ import type { Product } from "@/storefront/types";
 import { toProductClass, type ProductClass } from "./product-class";
 import { normalizeHostedImageUrl } from "./product-image";
 import { cleanExtraImages, photoList } from "./product-photos";
+import { cleanIncludes } from "./variations";
 
 /** The subset of the Prisma `Product` row this layer reads. */
 export type DbProductRow = {
@@ -108,6 +109,7 @@ type VariationMeta = {
   gbPrice?: number;
   image?: string;
   extraImages?: string[];
+  includes?: string;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -329,6 +331,9 @@ function cleanVariations(
         normalizeHostedImageUrl(x?.image),
         x?.extraImages,
       );
+      // The option's packing list ("10 pcs syringes" per line), trimmed and
+      // capped; blank = no key, so an option without one reads as it always did.
+      const includes = cleanIncludes(x?.includes);
       return {
         name,
         price,
@@ -336,6 +341,7 @@ function cleanVariations(
         ...(hasGb ? { gbPrice: gb } : {}),
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
+        ...(includes ? { includes } : {}),
       };
     })
     .filter((x) => x.name);

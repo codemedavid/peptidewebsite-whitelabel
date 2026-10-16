@@ -104,7 +104,30 @@ export const FONT_REGISTRY: Record<string, FontEntry> = {
   Marcellus: { weights: [400], italic: false, fallback: "serif" },
   "Bodoni Moda": { weights: [400, 500, 600, 700, 800], italic: true, fallback: "serif" },
   "Roboto Slab": { weights: [400, 500, 600, 700, 800], italic: false, fallback: "serif" },
+  // A SYSTEM font, not a Google one — see SYSTEM_FONT_TWINS for how it loads.
+  "Times New Roman": { weights: [400, 700], italic: true, fallback: "serif" },
 };
+
+/**
+ * System fonts a store may pick, mapped to a metric-compatible Google twin.
+ *
+ * WHY (thepeppylab, 2026-10-17): Times New Roman is not on Google Fonts, and
+ * css2 rejects the WHOLE stylesheet request when one family is unknown — naming
+ * it raw would break every other font on the page too. It is also missing on
+ * Android. So the loader fetches the twin instead, and the CSS stack names the
+ * real font first: Apple and Windows devices render genuine Times New Roman,
+ * everything else gets Tinos, which shares its letter widths exactly.
+ */
+export const SYSTEM_FONT_TWINS: Readonly<Record<string, string>> = {
+  "Times New Roman": "Tinos",
+};
+
+/** A CSS font-family stack for a chosen font: the font, its web twin when it is
+ *  a system font, then `fallback` (e.g. "Georgia, serif"). */
+export function fontStack(name: string, fallback: string): string {
+  const twin = SYSTEM_FONT_TWINS[name];
+  return twin ? `"${name}", "${twin}", ${fallback}` : `"${name}", ${fallback}`;
+}
 
 /** Every selectable font, in registry (curated) order. */
 export const FONT_OPTIONS = Object.keys(FONT_REGISTRY) as readonly string[];
@@ -114,7 +137,8 @@ export type FontName = string;
 export function fontFamilyValue(name?: string): string | undefined {
   if (!name) return undefined;
   const generic = FONT_REGISTRY[name]?.fallback ?? "sans-serif";
-  return `'${name}', ${generic}`;
+  const twin = SYSTEM_FONT_TWINS[name];
+  return twin ? `'${name}', '${twin}', ${generic}` : `'${name}', ${generic}`;
 }
 
 /** The css2 query fragment for one family (`family=…`), requesting only the
@@ -142,7 +166,9 @@ function familySpec(name: string): string {
 export function googleFontsUrl(...families: (string | undefined)[]): string {
   const set = new Set<string>();
   for (const f of families) {
-    if (f) set.add(f);
+    // A system font is never requested by name (css2 would reject the whole
+    // URL); its Google twin is loaded in its place.
+    if (f) set.add(SYSTEM_FONT_TWINS[f] ?? f);
   }
   if (set.size === 0) set.add("Inter");
   const params = [...set].map(familySpec).join("&");

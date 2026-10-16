@@ -48,6 +48,7 @@ import {
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
 import { brandBorderVars } from "@/lib/storefront/brand-border";
 import { priceFontVar } from "@/lib/storefront/price-font";
+import { fontStack } from "@/lib/theme/tokens";
 import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
 import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
 import { qtyDelta } from "@/lib/storefront/qty-input";
@@ -207,12 +208,12 @@ function applyBrandStyle(b: Brand) {
     if (borderVars[varName]) r.setProperty(varName, borderVars[varName]);
     else r.removeProperty(varName);
   }
-  r.setProperty("--brand-heading-font", `"${b.headingFont}", Georgia, serif`);
-  r.setProperty("--brand-body-font", `"${b.bodyFont}", system-ui, sans-serif`);
+  r.setProperty("--brand-heading-font", fontStack(b.headingFont, "Georgia, serif"));
+  r.setProperty("--brand-body-font", fontStack(b.bodyFont, "system-ui, sans-serif"));
   // Button font is optional — remove (not set "") when unset so the CSS default
   // (--brand-button-font: var(--brand-body-font)) applies and a previous
   // tenant's value can't linger.
-  if (b.buttonFont) r.setProperty("--brand-button-font", `"${b.buttonFont}", system-ui, sans-serif`);
+  if (b.buttonFont) r.setProperty("--brand-button-font", fontStack(b.buttonFont, "system-ui, sans-serif"));
   else r.removeProperty("--brand-button-font");
   // Price font is optional too — set it only when pinned; unset removes the var
   // so the CSS default (--brand-price-font: var(--brand-body-font)) applies.
