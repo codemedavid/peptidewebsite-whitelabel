@@ -6,7 +6,9 @@ export type PushTarget =
   /** The order bot's update: the store chat, or the buyer's order page outside the community. */
   | { screen: "order_update"; threadId: string; orderNumber: string | null }
   | { screen: "dm"; id: string }
-  | { screen: "topic"; id: string };
+  | { screen: "topic"; id: string }
+  /** The safety bot hid a message — the moderators' review queue. */
+  | { screen: "safety" };
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const ORDER_NUMBER_RE = /^[A-Za-z0-9#_-]{1,40}$/;
@@ -19,6 +21,7 @@ export function pushTarget(data: unknown): PushTarget | null {
     const orderId = id(d.orderId);
     return orderId ? { screen: "order", id: orderId } : null;
   }
+  if (d.type === "safety") return { screen: "safety" };
   const threadId = id(d.threadId);
   if (!threadId) return null;
   if (d.type === "order_update") {
@@ -27,8 +30,8 @@ export function pushTarget(data: unknown): PushTarget | null {
     return { screen: "order_update", threadId, orderNumber };
   }
   if (d.type === "dm") return { screen: "dm", id: threadId };
-  // A drop is announced in its channel's General topic.
-  if (d.type === "drop") return { screen: "topic", id: threadId };
+  // A drop, and a group buy sent to everyone, land in a channel's General topic.
+  if (d.type === "drop" || d.type === "group_buy") return { screen: "topic", id: threadId };
   return null;
 }
 
@@ -38,7 +41,7 @@ export type PushRoute =
   | { pathname: "/order/[id]"; params: { id: string }; method: "push" }
   | { pathname: "/my-order/[number]"; params: { number: string }; method: "push" }
   | { pathname: "/community/dm/[id]" | "/community/topic/[id]"; params: { id: string }; method: "navigate" }
-  | { pathname: "/" | "/community" | "/me"; params?: undefined; method: "navigate" };
+  | { pathname: "/" | "/community" | "/me" | "/community/safety"; params?: undefined; method: "navigate" };
 
 /** The mode's home tab — where a tap lands when its target isn't open to this account. */
 export function homeRoute(access: PushAccess): PushRoute {
@@ -57,6 +60,9 @@ export function resolvePushRoute(target: PushTarget | null, access: PushAccess):
     return access.mode === "admin" && access.canOrders
       ? { pathname: "/order/[id]", params: { id: target.id }, method: "push" }
       : homeRoute(access);
+  }
+  if (target.screen === "safety") {
+    return access.mode === "admin" && access.inCommunity ? { pathname: "/community/safety", method: "navigate" } : homeRoute(access);
   }
   if (target.screen === "order_update") {
     if (access.mode !== "customer") return homeRoute(access);

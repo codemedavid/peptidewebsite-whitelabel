@@ -16,6 +16,7 @@ import { ProductCard } from "./ProductCard";
 import { GridSkeleton } from "./GridSkeleton";
 import { CartButton, ProductImage } from "./ShopUI";
 import { CatalogError, ClosedBanner, goToSignIn } from "./ShopStates";
+import { GroupBuyBanner } from "./group-buy/GroupBuyBanner";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -178,10 +179,14 @@ function Controls({
   onCategory: (c: string) => void;
 }) {
   const t = useTheme();
+  const { paths } = useShop();
   const chips = categoryChips(catalog);
   return (
     <View style={styles.controls}>
       {!catalog.open ? <ClosedBanner message={catalog.closedMessage} /> : null}
+      {catalog.groupBuy ? (
+        <GroupBuyBanner round={catalog.groupBuy} currency={catalog.store.currency} onPress={() => router.push(paths.groupBuy)} />
+      ) : null}
       <View style={[styles.search, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         <Ionicons name="search" size={18} color={t.colors.textFaint} />
         <TextInput

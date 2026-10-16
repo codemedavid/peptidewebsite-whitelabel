@@ -48,6 +48,7 @@ export function ChannelScreen({ id }: { id: string }) {
   const topics = q.data?.topics ?? [];
   const total = topics.reduce((sum, t) => sum + t.messageCount, 0);
   const broadcast = channel?.postRole === "admins";
+  const hub = channel?.audience === "hub";
 
   return (
     <View style={{ flex: 1, backgroundColor: CHAT.surface }}>
@@ -71,11 +72,11 @@ export function ChannelScreen({ id }: { id: string }) {
           keyExtractor={(t) => t.id}
           contentContainerStyle={{ paddingBottom: 110, flexGrow: 1 }}
           ListHeaderComponent={
-            channel?.description || broadcast ? (
+            channel?.description || broadcast || hub ? (
               <View style={{ padding: GUTTER, gap: 4, backgroundColor: CHAT.surfaceAlt, borderBottomWidth: 1, borderBottomColor: CHAT.hairline }}>
-                {broadcast ? (
+                {broadcast || hub ? (
                   <ChatText variant="overline" color={b.brandText}>
-                    Announcements · the store posts
+                    {hub ? "Verified Resellers Hub · resellers post on hand, members post what they need" : "Announcements · the store posts"}
                   </ChatText>
                 ) : null}
                 {channel?.description ? <ChatText variant="callout">{channel.description}</ChatText> : null}

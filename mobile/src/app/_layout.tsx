@@ -21,6 +21,7 @@ import { focusManager, onlineManager, QueryClient, type Query } from "@tanstack/
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { ApiError } from "@/api/client";
+import { GUEST_BROWSING } from "@/config";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { UnreachableScreen } from "@/features/session/UnreachableScreen";
@@ -141,10 +142,10 @@ function Navigator() {
   if (state.status === "unreachable") return <UnreachableScreen />;
 
   const signedIn = state.status === "signedIn";
-  // Signed out on a phone linked to a store that runs the customer app: land
-  // on its shop (browse + cart); sign-in stays one tap away. Otherwise the
-  // sign-in screen, as before.
-  const guestShop = !signedIn && !!storeLink.linked?.customerSignIn;
+  // Signed out, the app is the welcome screen and its two doors (sign in,
+  // create account) — nothing else. The guest shop stays off unless
+  // GUEST_BROWSING is turned back on.
+  const guestShop = GUEST_BROWSING && !signedIn && !!storeLink.linked?.customerSignIn;
   return (
     <ShopProvider>
       <StatusBar style={t.statusBar} />
@@ -156,7 +157,10 @@ function Navigator() {
           <Stack.Screen name="guest" />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
+          {/* First = where a signed-out app lands (cold start, sign-out, "/"). */}
+          <Stack.Screen name="welcome" options={{ animation: "fade" }} />
           <Stack.Screen name="sign-in" />
+          <Stack.Screen name="create-account" />
         </Stack.Protected>
       </Stack>
     </ShopProvider>

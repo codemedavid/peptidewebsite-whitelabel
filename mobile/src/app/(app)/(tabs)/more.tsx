@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, type Href } from "expo-router";
@@ -6,6 +7,9 @@ import Constants from "expo-constants";
 import { useSession, useSignedIn } from "@/auth/SessionProvider";
 import { APP_NAME } from "@/config";
 import { communityAccess } from "@/features/community/lib/access";
+import { welcomeCardLine } from "@/features/community/lib/welcome";
+import { useWelcome } from "@/features/community/hooks/useCommunityData";
+import { WelcomeSheet } from "@/features/community/components/WelcomeEditor";
 import { useSwitchView } from "@/features/community/useAppView";
 import { adminBridge, type AdminMenuItem } from "@/features/admin/bridge";
 import { NATIVE_VIEW_ROUTES } from "@/features/admin/native-views";
@@ -14,6 +18,25 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { BrandMark } from "@/ui/BrandMark";
 import { AppText, Card, Divider, Pill, Row, SectionLabel, type IconName } from "@/ui/primitives";
+
+/** The automated welcome messages every new member gets — opens the editor in place. */
+function WelcomeMessagesRow() {
+  const welcome = useWelcome();
+  const [open, setOpen] = useState(false);
+  const w = welcome.data;
+  return (
+    <>
+      <Row
+        icon="hand-left-outline"
+        label="Welcome messages"
+        detail={w ? welcomeCardLine(w) : welcome.isError ? "Couldn't load · tap to retry" : "Loading…"}
+        onPress={() => (w ? setOpen(true) : void welcome.refetch())}
+        trailing={w ? <Pill tone={w.enabled ? "success" : "neutral"} size="sm" label={w.enabled ? "On" : "Off"} /> : undefined}
+      />
+      {open && w ? <WelcomeSheet welcome={w} visible={open} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
 
 /** Account, settings, and every store-admin section (native or embedded website). */
 export default function More() {
@@ -108,6 +131,8 @@ export default function More() {
               onPress={() => router.push("/community/members")}
               trailing={me.community.pendingApplications ? <Pill tone="warning" size="sm" label={String(me.community.pendingApplications)} /> : undefined}
             />
+            <Divider inset={62} />
+            <WelcomeMessagesRow />
             <Divider inset={62} />
             <Row icon="add-circle-outline" label="New channel" onPress={() => router.push("/community/channel-new")} />
             <Divider inset={62} />

@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Modal, PixelRatio, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { bubbleImageSize } from "../lib/attachments";
 import { hueFromString } from "../lib/color";
 import { fileTypeLabel, formatBytes } from "../lib/documents";
+import { fullPhotoUrl, sizedChatImage, thumbWidthFor } from "../lib/media";
 import { splitMatches } from "../lib/search";
 import { splitLinks } from "../lib/shared";
 import { openLink } from "../open";
@@ -60,7 +61,7 @@ export function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () 
     <Modal visible={uri !== null} onRequestClose={onClose} animationType="fade" transparent statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.94)" }} accessibilityViewIsModal>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close photo" style={{ flex: 1 }}>
-          {uri ? <Image source={{ uri }} contentFit="contain" style={{ flex: 1 }} accessibilityLabel="Shared photo" /> : null}
+          {uri ? <Image source={{ uri: fullPhotoUrl(uri) }} contentFit="contain" style={{ flex: 1 }} accessibilityLabel="Shared photo" /> : null}
         </Pressable>
         <IconButton name="close" label="Close" variant="overlay" onPress={onClose} style={{ position: "absolute", top: insets.top + 8, right: 12 }} />
       </View>
@@ -74,6 +75,8 @@ type ChatImageProps = { uri: string; width: number | null; height: number | null
 export function ChatImage({ uri, width, height, radius, uploading = false, onLongPress }: ChatImageProps) {
   const [open, setOpen] = useState(false);
   const size = bubbleImageSize(width, height, BUBBLE_WIDTH);
+  // The bubble loads a copy sized to itself; the full photo only loads when opened.
+  const thumb = sizedChatImage(uri, thumbWidthFor(size.width, PixelRatio.get())) ?? uri;
   return (
     <>
       <Pressable
@@ -84,7 +87,7 @@ export function ChatImage({ uri, width, height, radius, uploading = false, onLon
         accessibilityLabel={uploading ? "Photo, uploading" : "Photo, tap to view full screen"}
       >
         <Image
-          source={{ uri }}
+          source={{ uri: thumb }}
           placeholder={{ blurhash: CHAT_IMAGE_BLURHASH }}
           contentFit="cover"
           transition={160}

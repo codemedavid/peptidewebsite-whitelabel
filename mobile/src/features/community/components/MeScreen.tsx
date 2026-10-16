@@ -16,6 +16,7 @@ import { ChatText } from "./ChatText";
 import { ChatButton, IconButton, type IconName } from "./ChatKit";
 import { Field, FormError } from "./Form";
 import { MembershipScreen } from "./MembershipScreen";
+import { RoleBadge } from "./RoleBadge";
 import { Sheet } from "./Surfaces";
 import { BusinessSwitch } from "./ViewSwitch";
 
@@ -134,6 +135,8 @@ function MemberProfile({ variant = "member" }: { variant?: "member" | "moderator
   const name = me.account.displayName;
   const liveDrops = inbox.data?.drops.filter((d) => d.isActive).length ?? 0;
   const moderator = variant === "moderator";
+  const communityAdmin = !moderator && me.community.isAdmin === true;
+  const verifiedReseller = !moderator && me.community.isVerifiedReseller === true;
   const chatsHref = CHATS_HREF[variant];
   const pending = me.community.pendingApplications;
 
@@ -166,6 +169,12 @@ function MemberProfile({ variant = "member" }: { variant?: "member" | "moderator
               <ChatText variant="footnote" color={b.onBrand} numberOfLines={1}>
                 {me.actor.email}
               </ChatText>
+              {communityAdmin || verifiedReseller ? (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                  {communityAdmin ? <RoleBadge role="admin" surface="brand" /> : null}
+                  {verifiedReseller ? <RoleBadge role="reseller" surface="brand" /> : null}
+                </View>
+              ) : null}
             </View>
           </View>
           {profile?.bio ? (
@@ -198,7 +207,20 @@ function MemberProfile({ variant = "member" }: { variant?: "member" | "moderator
                 onPress={() => router.navigate("/community-view/members")}
               />
               <ListRow icon="add-circle" tint={b.brand} label="New channel" onPress={() => router.push("/community/channel-new")} />
+              <ListRow icon="pricetags" tint="#B4458C" label="Member tags" detail="Style the Admin and Verified reseller tags" onPress={() => router.push("/community/tags")} />
               <ListRow icon="flash" tint={CHAT.warning} label="Broadcast a drop" detail="Pushes to every member" onPress={() => router.push("/community/drop-new")} last />
+            </Section>
+          ) : communityAdmin ? (
+            <Section title="Help run the community">
+              <ListRow
+                icon="person-add"
+                tint={CHAT.success}
+                label="Members"
+                detail={pending ? `${pending} waiting for review` : "Approve or remove members"}
+                onPress={() => router.push("/community/members")}
+              />
+              <ListRow icon="add-circle" tint={b.brand} label="New channel" onPress={() => router.push("/community/channel-new")} />
+              <ListRow icon="pricetags" tint="#B4458C" label="Member tags" detail="Style the Admin and Verified reseller tags" onPress={() => router.push("/community/tags")} last />
             </Section>
           ) : null}
           <Section title="Account">

@@ -32,6 +32,7 @@ export function RoundCard({
   onDuplicate,
   onEdit,
   onArchive,
+  onSendInvoices,
 }: {
   gb: GroupBuy;
   row: RoundListRow | undefined;
@@ -45,6 +46,8 @@ export function RoundCard({
   onDuplicate: () => void;
   onEdit: () => void;
   onArchive: () => void;
+  /** Pay-after-close stores, closed rounds: send the round's invoices now. */
+  onSendInvoices?: () => void;
 }) {
   const t = useTheme();
   const archived = gb.status === "archived";
@@ -94,6 +97,16 @@ export function RoundCard({
                 : "Supplier and customer reports for this round"
             }
             onPress={onReport}
+          />
+        ) : null}
+        {onSendInvoices ? (
+          <Button
+            label="Send invoices"
+            variant="secondary"
+            icon="receipt-outline"
+            disabled={busy}
+            accessibilityHint="Sends every customer in this round their invoice in Chats"
+            onPress={onSendInvoices}
           />
         ) : null}
         {caps.canDuplicate ? <Button label="Duplicate" variant="ghost" icon="copy-outline" disabled={busy} onPress={onDuplicate} /> : null}

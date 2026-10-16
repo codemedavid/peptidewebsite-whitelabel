@@ -50,15 +50,11 @@ const TIMEOUT_MS = 20_000;
 const EXPIRY_SKEW_MS = 30_000;
 const SIGN_OUT_CODES = new Set<ClientErrorCode>(["session_revoked", "store_unavailable"]);
 /**
- * fetch() only says "it failed" — a phone with no signal and a server that is
- * down (or a dev tunnel that expired) look identical from here, so the copy
- * must not blame the owner's connection.
+ * fetch() only says "it failed": no signal, a DNS block, a TLS error and (on
+ * the web build) a CORS block all look identical from here. The real server
+ * being down shows up as a 5xx instead (see parse), so don't blame it here.
  */
-const OFFLINE = new ApiError(
-  "network",
-  "Can't reach the server right now. If your internet is working, the store server may be down — try again in a moment.",
-  0,
-);
+const OFFLINE = new ApiError("network", "Couldn't connect. Check your internet connection and try again.", 0);
 /** Gateway answers (proxy/tunnel up, app behind it down) — HTML, not our JSON. */
 const GATEWAY_STATUSES = new Set([502, 503, 504, 530]);
 
@@ -116,7 +112,7 @@ async function sendOnce(path: string, opts: Options, token: string | null): Prom
     if (controller.signal.aborted) {
       throw new ApiError("timeout", "The server is taking too long to answer. Please try again.", 0);
     }
-    if (__DEV__) console.warn(`[api] ${opts.method ?? "GET"} ${API_BASE_URL}${path} failed:`, cause);
+    if (__DEV__) console.warn(`[api] ${opts.method ?? "GET"} ${API_BASE_URL}/api/mobile/v1${path} failed:`, cause);
     throw OFFLINE;
   } finally {
     clearTimeout(timer);
@@ -196,4 +192,36 @@ export async function apiUpload<T>(path: string, field: string, file: UploadFile
   const form = new FormData();
   form.append(field, { name: file.name, type: file.type, bytes: async () => bytes } as unknown as Blob);
   return api<T>(path, { method: "POST", form, timeoutMs: UPLOAD_TIMEOUT_MS, signal });
+}
+
+/**
+ * POST one file as multipart/form-data straight to another host (a media
+ * host's signed upload — no session headers), with `fields` alongside it.
+ * Large videos go this way because an API request can't carry them.
+ */
+export async function uploadDirect<T>(endpoint: string, fields: Record<string, string>, file: UploadFile, signal?: AbortSignal): Promise<T> {
+  let bytes: Uint8Array;
+  try {
+    bytes = await new File(file.uri).bytes();
+  } catch {
+    throw new ApiError("invalid_input", "Couldn't read that video. Please try another one.", 0);
+  }
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  form.append("file", { name: file.name, type: file.type, bytes: async () => bytes } as unknown as Blob);
+  const timer = new AbortController();
+  const timeout = setTimeout(() => timer.abort(), UPLOAD_TIMEOUT_MS * 3);
+  signal?.addEventListener("abort", () => timer.abort());
+  try {
+    const res = await fetch(endpoint, { method: "POST", body: form, signal: timer.signal });
+    const json = (await res.json().catch(() => null)) as (T & { message?: string }) | null;
+    if (!res.ok || !json) throw new ApiError("invalid_input", json?.message ? `Upload failed: ${json.message}` : "The video didn't upload. Try again.", res.status);
+    return json;
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    if (signal?.aborted) throw new ApiError("aborted", "Cancelled.", 0);
+    throw new ApiError("network", "The video didn't upload. Check your connection and try again.", 0);
+  } finally {
+    clearTimeout(timeout);
+  }
 }

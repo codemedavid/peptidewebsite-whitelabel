@@ -6,17 +6,22 @@ import { SPACE } from "@/theme/tokens";
 import { EditorSheet, Hint, Section, ToggleRow } from "@/features/admin/setup/ui";
 import { Field } from "@/ui/inputs";
 import { AppText, Button } from "@/ui/primitives";
+import { LiveStripView } from "@/features/shop/components/group-buy/LiveGroupBuyStrip";
 import { useGroupBuySetting } from "./hooks";
 import { ButtonGroup } from "./parts";
 import {
   GB_CONTENT_LIMITS,
+  GB_LIVE_BANNER_LIMITS,
   normalizeGroupBuyContent,
+  normalizeGroupBuyLiveBanner,
   renderGbCopy,
+  renderGroupBuyLiveBanner,
   setWayAcceptOrders,
   setWayVisible,
   wayAcceptsOrders,
   wayIsVisible,
   type GroupBuyContent,
+  type GroupBuyLiveBanner,
   type TwoWaysMode,
   type WayKey,
 } from "./model";
@@ -25,7 +30,8 @@ import {
  * The store-wide Group Buy settings above the rounds list on the website:
  * Ways to order (saveTwoWaysModeAction), the on-hand-during-a-round toggle
  * (saveGroupBuyAllowOnHandAction) and the storefront copy
- * (saveGroupBuyContentAction). Each saves on its own, optimistically, and
+ * (saveGroupBuyContentAction) — plus the app-only live strip
+ * (saveGroupBuyLiveBannerAction). Each saves on its own, optimistically, and
  * reverts if the server refuses.
  */
 
@@ -213,7 +219,123 @@ export function ContentEditor({
   );
 }
 
+// ── Live banner (the customer app's strip above the tab bar) ────────────────
+
+type PreviewRound = { name: string; description: string; deliveryEta: string };
+
+function StripPreview({ config, round }: { config: GroupBuyLiveBanner; round: PreviewRound }) {
+  const text = renderGroupBuyLiveBanner({ ...config, enabled: true }, round);
+  if (!text) return null;
+  return (
+    <View style={styles.preview}>
+      <LiveStripView {...text} statusLabel="Closes in 3 days" tone="soon" a11y={`Preview: ${text.headline}. ${text.message}`} />
+    </View>
+  );
+}
+
+/** Controlled: the screen owns the value so the editor and the switch share it. */
+export function LiveBannerCard({
+  value,
+  setValue,
+  round,
+  onEdit,
+}: {
+  value: GroupBuyLiveBanner;
+  setValue: (v: GroupBuyLiveBanner) => void;
+  round: PreviewRound;
+  onEdit: () => void;
+}) {
+  const save = useGroupBuySetting<{ ok: true; liveBanner: GroupBuyLiveBanner }>("saveGroupBuyLiveBannerAction");
+  return (
+    <Section
+      title="Live banner (app)"
+      hint="A strip above the tab bar on every screen of your customer app while a group buy is open. Tapping it opens the group buy. It hides itself when ordering is paused or the round closes."
+    >
+      <ToggleRow
+        label="Show the live banner"
+        value={value.enabled}
+        disabled={save.isPending}
+        onChange={(enabled) => {
+          const prev = value;
+          setValue({ ...value, enabled });
+          save.mutate({ ...value, enabled }, { onSuccess: (res) => setValue(res.liveBanner), onError: () => setValue(prev) });
+        }}
+      />
+      {value.enabled ? (
+        <>
+          <StripPreview config={value} round={round} />
+          <Button label="Edit banner text" variant="secondary" icon="create-outline" onPress={onEdit} />
+        </>
+      ) : (
+        <Hint>Customers won&apos;t see a banner. The group buy is still on the Shop tab.</Hint>
+      )}
+    </Section>
+  );
+}
+
+/** Headline, message, button label — blank = automatic text from the live round. */
+export function LiveBannerEditor({
+  initial,
+  round,
+  onClose,
+  onSaved,
+}: {
+  initial: GroupBuyLiveBanner;
+  round: PreviewRound;
+  onClose: () => void;
+  onSaved: (v: GroupBuyLiveBanner) => void;
+}) {
+  const save = useGroupBuySetting<{ ok: true; liveBanner: GroupBuyLiveBanner }>("saveGroupBuyLiveBannerAction");
+  const [headline, setHeadline] = useState(initial.headline);
+  const [message, setMessage] = useState(initial.message);
+  const [ctaLabel, setCtaLabel] = useState(initial.ctaLabel);
+  const draft = normalizeGroupBuyLiveBanner({ enabled: initial.enabled, headline, message, ctaLabel });
+  const dirty = draft.headline !== initial.headline || draft.message !== initial.message || draft.ctaLabel !== initial.ctaLabel;
+
+  return (
+    <EditorSheet
+      visible
+      title="Live banner"
+      saveLabel="Save banner"
+      canSave
+      dirty={dirty}
+      saving={save.isPending}
+      onCancel={onClose}
+      onSave={() => save.mutate(draft, { onSuccess: (res) => onSaved(res.liveBanner) })}
+    >
+      <Hint>
+        Leave a field blank to use automatic text from the live round. Use {"{name}"} for the round&apos;s name and {"{eta}"} for its
+        delivery ETA.
+      </Hint>
+      <StripPreview config={draft} round={round} />
+      <Field
+        label="Headline"
+        value={headline}
+        maxLength={GB_LIVE_BANNER_LIMITS.headline}
+        placeholder={`${round.name} is live`}
+        onChangeText={setHeadline}
+      />
+      <Field
+        label="Message"
+        value={message}
+        multiline
+        maxLength={GB_LIVE_BANNER_LIMITS.message}
+        placeholder={round.description.trim() || "Lock your slot at the group price."}
+        onChangeText={setMessage}
+      />
+      <Field
+        label="Button label"
+        value={ctaLabel}
+        maxLength={GB_LIVE_BANNER_LIMITS.ctaLabel}
+        placeholder="Join now"
+        onChangeText={setCtaLabel}
+      />
+    </EditorSheet>
+  );
+}
+
 const styles = StyleSheet.create({
+  preview: { borderRadius: 14, overflow: "hidden" },
   step: { flexDirection: "row", alignItems: "flex-end", gap: SPACE.sm },
   remove: { width: 44, height: 48, alignItems: "center", justifyContent: "center" },
 });

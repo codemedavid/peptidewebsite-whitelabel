@@ -1,7 +1,7 @@
 // The open thread's cache, and every way it changes: first page, older pages,
 // 3-second polls (new + changed), and optimistic sends. Pure and immutable, so
 // the merge rules are unit-tested (scripts/test-community-lib.ts).
-import type { CommunityMessage, MessagesResponse, Participant, ProductCard, ProtocolCard, ThreadInfo, ThreadType } from "@contract";
+import type { CommunityMessage, GroupBuyCard, MessagesResponse, Participant, ProductCard, ProtocolCard, ThreadInfo, ThreadType } from "@contract";
 
 /** A message as the app holds it: server rows, plus our own not-yet-confirmed sends. */
 export type LocalMessage = CommunityMessage & {
@@ -128,13 +128,24 @@ export type OptimisticInput = {
   replyTo: CommunityMessage | null;
   product?: ProductCard | null;
   protocol?: ProtocolCard | null;
+  groupBuy?: GroupBuyCard | null;
   image?: { uri: string; width: number | null; height: number | null } | null;
   file?: { uri: string; name: string; size: number | null; mime: string } | null;
 };
 
 /** The bubble shown the instant the member taps send. */
 export function makeOptimistic(input: OptimisticInput): LocalMessage {
-  const kind = input.image ? "image" : input.file ? "file" : input.product ? "product" : input.protocol ? "protocol" : "text";
+  const kind = input.image
+    ? "image"
+    : input.file
+      ? "file"
+      : input.product
+        ? "product"
+        : input.protocol
+          ? "protocol"
+          : input.groupBuy
+            ? "groupbuy"
+            : "text";
   return {
     id: `local-${input.clientId}`,
     clientId: input.clientId,
@@ -150,9 +161,11 @@ export function makeOptimistic(input: OptimisticInput): LocalMessage {
     product: input.product ?? null,
     protocol: input.protocol ?? null,
     image: input.image ? { url: input.image.uri, width: input.image.width ?? 0, height: input.image.height ?? 0 } : null,
+    video: null,
     file: input.file ? { url: "", name: input.file.name, size: input.file.size ?? 0, mime: input.file.mime } : null,
     drop: null,
     order: null,
+    groupBuy: input.groupBuy ?? null,
     replyTo: input.replyTo
       ? {
           id: input.replyTo.id,

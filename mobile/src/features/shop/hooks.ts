@@ -79,6 +79,7 @@ export function usePlaceOrder() {
       // Show it in My orders straight away (the refetch confirms it).
       qc.setQueryData<ShopOrdersResponse>(shopKeys.myOrders(scope), (prev) => ({
         orders: [order, ...(prev?.orders ?? []).filter((o) => o.orderNumber !== order.orderNumber)],
+        rounds: prev?.rounds ?? [],
       }));
       void qc.invalidateQueries({ queryKey: shopKeys.myOrders(scope) });
       // Stock just moved.

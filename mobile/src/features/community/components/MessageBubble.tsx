@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Pressable, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { CommunityMessage, Participant } from "@contract";
+import { useCommunityTags } from "../hooks/useCommunityData";
 import { senderColor } from "../lib/color";
 import { formatClock } from "../lib/format";
 import type { LocalMessage } from "../lib/messages";
@@ -9,7 +10,9 @@ import { CHAT, INTER, type ChatBrand } from "../theme";
 import { ParticipantAvatar } from "./Avatar";
 import { ProductChatCard, ProtocolChatCard } from "./Cards";
 import { ChatText } from "./ChatText";
+import { ChatVideo } from "./ChatVideo";
 import { DropCard } from "./Drops";
+import { GroupBuyChatCard } from "./GroupBuyChatCard";
 import { OrderUpdateCard } from "./OrderUpdateCard";
 import { ChatImage, FileCard, HighlightedText } from "./Media";
 
@@ -69,6 +72,7 @@ function ReplyQuote({ reply, mine, brand }: { reply: NonNullable<CommunityMessag
 }
 
 function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress, onEndDrop, onPressSender, hideName = false, highlight, focused = false }: Props) {
+  const tags = useCommunityTags();
   const mine = message.mine;
   const sender = message.sender;
   const name = sender?.name ?? "Member";
@@ -85,13 +89,18 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
   }
 
   const deleted = !!message.deletedAt;
+  // The safety bot hid it: the sender is told why; everyone else just sees it was removed.
+  const moderated = deleted && message.moderated === true;
+  const deletedLabel = !moderated ? "Message deleted" : mine ? "Removed by the safety bot — inviting members to other groups isn't allowed" : "Removed by the safety bot";
   const pending = !!message.pending;
   const isProduct = message.kind === "product" && !deleted;
   const isProtocol = message.kind === "protocol" && !deleted;
+  const isGroupBuy = message.kind === "groupbuy" && !deleted;
   const imageUri = message.localUri && message.kind === "image" ? message.localUri : message.image?.url;
   const isImage = message.kind === "image" && !!imageUri && !deleted;
+  const isVideo = message.kind === "video" && !!message.video && !deleted;
   const isFile = message.kind === "file" && !!message.file && !deleted;
-  const isCard = isProduct || isProtocol || isImage || isFile;
+  const isCard = isProduct || isProtocol || isGroupBuy || isImage || isVideo || isFile;
   const fg = mine ? brand.onBubbleMine : CHAT.ink;
   const meta = mine ? brand.metaMine : CHAT.inkMuted;
   const link = mine ? brand.onBubbleMine : CHAT.info;
@@ -118,7 +127,7 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
     </View>
   );
 
-  const a11y = [mine ? "You" : name, deleted ? "message deleted" : (message.body ?? ""), pending ? "sending" : formatClock(message.createdAt)]
+  const a11y = [mine ? "You" : name, deleted ? deletedLabel : (message.body ?? ""), pending ? "sending" : formatClock(message.createdAt)]
     .filter(Boolean)
     .join(", ");
 
@@ -180,7 +189,7 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
                 paddingTop: isCard ? 3 : 0,
               }}
             >
-              {sender?.isTeam ? `🛡 ${label}` : label}
+              {sender?.isTeam ? `🛡 ${label}` : [label, sender?.isAdmin ? tags.admin.label : null, sender?.isVerifiedReseller ? `✓ ${tags.reseller.label}` : null].filter(Boolean).join(" · ")}
             </ChatText>
           </Pressable>
         ) : null}
@@ -189,8 +198,8 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
 
         {deleted ? (
           <View style={{ flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap" }}>
-            <Ionicons name="ban-outline" size={14} color={meta} style={{ marginRight: 4, marginBottom: 2 }} />
-            <ChatText style={{ ...TEXT, fontStyle: "italic", color: meta }}>Message deleted</ChatText>
+            <Ionicons name={moderated ? "shield-outline" : "ban-outline"} size={14} color={meta} style={{ marginRight: 4, marginBottom: 2 }} />
+            <ChatText style={{ ...TEXT, fontStyle: "italic", color: meta }}>{deletedLabel}</ChatText>
             {stamp}
           </View>
         ) : isCard ? (
@@ -199,6 +208,10 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
               <ProductChatCard product={message.product} />
             ) : isProtocol ? (
               <ProtocolChatCard protocol={message.protocol} />
+            ) : isGroupBuy ? (
+              <GroupBuyChatCard round={message.groupBuy} onLongPress={longPress} />
+            ) : isVideo ? (
+              <ChatVideo video={message.video!} radius={R - 4} onLongPress={longPress} />
             ) : isFile ? (
               <FileCard
                 name={message.file!.name}

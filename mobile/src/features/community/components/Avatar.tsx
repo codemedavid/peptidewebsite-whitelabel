@@ -1,10 +1,11 @@
-import { View } from "react-native";
+import { PixelRatio, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { Participant } from "@contract";
 import { avatarColors } from "../lib/color";
 import { initials } from "../lib/format";
+import { sizedChatImage, thumbWidthFor } from "../lib/media";
 import { CHAT, GRADIENTS, INTER, useChatBrand } from "../theme";
 import { ChatText } from "./ChatText";
 
@@ -26,7 +27,7 @@ export function Avatar({ name, hue, size = 40, imageUrl, team = false }: AvatarP
     <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {imageUrl ? (
         <Image
-          source={{ uri: imageUrl }}
+          source={{ uri: sizedChatImage(imageUrl, thumbWidthFor(size, PixelRatio.get())) ?? imageUrl }}
           contentFit="cover"
           transition={120}
           style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: CHAT.surfaceAlt }, ring]}
@@ -87,7 +88,7 @@ export function EmojiAvatar({ emoji, hue, size = 52, broadcast = false, square =
   if (imageUrl) {
     return (
       <Image
-        source={{ uri: imageUrl }}
+        source={{ uri: sizedChatImage(imageUrl, thumbWidthFor(size, PixelRatio.get())) ?? imageUrl }}
         contentFit="cover"
         transition={150}
         accessibilityIgnoresInvertColors

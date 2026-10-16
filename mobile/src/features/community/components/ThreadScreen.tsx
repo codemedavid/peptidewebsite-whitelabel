@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from "react";
-import { Alert, Pressable, View, type FlatList, type TextInput } from "react-native";
+import { Alert, Platform, Pressable, View, type FlatList, type TextInput } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 import * as Clipboard from "expo-clipboard";
-import type { CommunityMessage, Participant, ThreadType } from "@contract";
+import type { CommunityMessage, Participant, SavedReply, SavedReplyImage, ThreadType } from "@contract";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { cartCount } from "@/features/shop/lib/cart";
 import { useShop } from "@/features/shop/ShopProvider";
@@ -14,15 +14,19 @@ import { useThread } from "../hooks/useThread";
 import { useThreadActions } from "../hooks/useThreadActions";
 import type { Attachment } from "../lib/attachments";
 import { restoreDraft } from "../lib/messages";
+import { applySavedReply, photoLabel, saveAsReplyFrom } from "../lib/savedReplies";
+import { canBlock, confirmBlock, reportMessage, useBlocked, withoutBlocked } from "../lib/safety";
 import { hueFromString } from "../lib/color";
 import { firstName } from "../lib/format";
 import { CHAT } from "../theme";
 import { EmojiAvatar, ParticipantAvatar } from "./Avatar";
+import { CommunityRules } from "./CommunityRules";
 import { ChatButton, ChatEmpty, IconButton } from "./ChatKit";
 import { Composer } from "./Composer";
 import { DropPinnedBar } from "./Drops";
 import { NavBar } from "./Headers";
 import { ProfileSheet } from "./ProfileSheet";
+import { QueuedPhotosBar, SavedRepliesSheet, SavedReplySuggestions, type SavedReplySeed } from "./SavedReplies";
 import { useOpenProduct } from "./Cards";
 import { PhotoViewer } from "./Media";
 import { openLink } from "../open";
@@ -47,7 +51,15 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
   // The message whose sender was tapped, so the card can offer "Reply in community".
   const [profileFrom, setProfileFrom] = useState<CommunityMessage | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  // Saved replies (store team): closed = null; open with startWith set = straight to a new reply.
+  const [saved, setSaved] = useState<{ startWith: SavedReplySeed | null } | null>(null);
+  // iOS drops a sheet presented while the long-press menu is still closing, so "Save as reply" waits for it there.
+  const [saveAfterMenu, setSaveAfterMenu] = useState<SavedReplySeed | null>(null);
+  // A picked saved reply's photos, sent right after the next message.
+  const [queuedPhotos, setQueuedPhotos] = useState<{ title: string; images: SavedReplyImage[] } | null>(null);
   const { me } = useSignedIn();
+  const isTeam = me.community.isModerator;
+  const safety = useBlocked();
   const shop = useShop();
   const inCart = me.mode === "customer" ? cartCount(shop.lines) : 0;
   const openProduct = useOpenProduct();
@@ -61,7 +73,7 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
   const canPost = info?.canPost ?? false;
   const liveDrop = !dm ? (inbox.data?.drops.find((d) => d.isActive && d.topicId === id) ?? inbox.data?.drops.find((d) => d.isActive)) : undefined;
 
-  const { send, edit, remove, endDrop } = actions;
+  const { send, sendSavedImage, edit, remove, endDrop } = actions;
 
   const startEdit = useCallback((m: CommunityMessage) => {
     setReplyTo(null);
@@ -98,21 +110,30 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
       }
       const current = attachment;
       const replying = replyTo;
+      const photos = queuedPhotos;
       setDraft("");
       setAttachment(null);
       setReplyTo(null);
+      setQueuedPhotos(null);
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       // Not awaited: the optimistic bubble is queued, so the composer unlocks
-      // now while any upload runs. A failure puts the draft back.
-      void send({ body, attachment: current, replyTo: replying }).then((err) => {
-        if (!err) return;
-        Alert.alert("Message not sent", err);
-        setDraft((now) => restoreDraft(now, body));
-        setAttachment((now) => now ?? current);
-        setReplyTo((now) => now ?? replying);
+      // now while any upload runs. A failure puts the draft back. Saved photos
+      // follow the text, one at a time so they land in order.
+      void send({ body, attachment: current, replyTo: replying }).then(async (err) => {
+        if (err) {
+          Alert.alert("Message not sent", err);
+          setDraft((now) => restoreDraft(now, body));
+          setAttachment((now) => now ?? current);
+          setReplyTo((now) => now ?? replying);
+          setQueuedPhotos((now) => now ?? photos);
+          return;
+        }
+        let failed = 0;
+        for (const image of photos?.images ?? []) if (await sendSavedImage(image)) failed++;
+        if (failed) Alert.alert(`${photoLabel(failed)} not sent`, "Check your connection, then pick the saved reply again.");
       });
     },
-    [attachment, cancelEdit, edit, editing, replyTo, send],
+    [attachment, cancelEdit, edit, editing, queuedPhotos, replyTo, send, sendSavedImage],
   );
 
   const showProfile = useCallback((person: Participant, from: CommunityMessage | null = null) => {
@@ -126,6 +147,13 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
   const startReply = (m: CommunityMessage) => {
     if (editing) cancelEdit();
     setReplyTo(m);
+    inputRef.current?.focus();
+  };
+
+  const insertSavedReply = (reply: SavedReply) => {
+    setDraft((now) => applySavedReply(now, reply.body));
+    // An edit changes one message's text — photos can't ride along.
+    if (!editing) setQueuedPhotos(reply.images.length ? { title: reply.title, images: reply.images } : null);
     inputRef.current?.focus();
   };
 
@@ -176,8 +204,12 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
           titleHint="Shows media, links and docs"
           right={
             <>
-              {info?.canManage && !dm && info.channelId ? (
+              {isTeam && info?.canManage && !dm && info.channelId ? (
                 <IconButton name="flash" label="Broadcast a drop" variant="tinted" size={36} iconSize={17} onPress={() => router.push({ pathname: "/community/drop-new", params: { channel: info.channelId! } })} />
+              ) : null}
+              {/* A one-topic channel opens straight into this chat, so its name and description are edited from here. */}
+              {info?.canManage && !dm && info.channelId ? (
+                <IconButton name="create-outline" label="Edit channel" onPress={() => router.push({ pathname: "/community/channel-edit", params: { id: info.channelId! } })} />
               ) : null}
               <IconButton name="search" label="Search this chat" onPress={search.start} />
               <IconButton name="images-outline" label="Media, links and docs" onPress={openShared} />
@@ -190,7 +222,7 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
       {liveDrop ? <DropPinnedBar drop={liveDrop} /> : null}
 
       <ThreadList
-        messages={thread.state?.messages ?? []}
+        messages={withoutBlocked(thread.state?.messages ?? [], safety.blocked)}
         loading={thread.loading}
         hasMore={!!thread.state?.olderCursor}
         loadingOlder={thread.loadingOlder}
@@ -204,7 +236,7 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
         onLongPressMessage={setMenuFor}
         onPressSender={showProfile}
         hideNames={dm}
-        onEndDrop={info?.canManage ? confirmEndDrop : undefined}
+        onEndDrop={isTeam && info?.canManage ? confirmEndDrop : undefined}
         highlight={search.highlight}
         focusId={search.focusId}
       />
@@ -213,6 +245,7 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
         ref={inputRef}
         disabled={!!info && !canPost}
         disabledReason={info?.postBlockedReason ?? undefined}
+        placeholder={info?.composerHint ?? undefined}
         attachment={attachment}
         onClearAttachment={() => setAttachment(null)}
         replyTo={replyTo}
@@ -223,6 +256,16 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
         text={draft}
         onChangeText={setDraft}
         onSend={handleSend}
+        onOpenSaved={isTeam ? () => setSaved({ startWith: null }) : undefined}
+        suggestions={
+          isTeam ? (
+            <>
+              {queuedPhotos && !editing ? <QueuedPhotosBar title={queuedPhotos.title} images={queuedPhotos.images} onClear={() => setQueuedPhotos(null)} /> : null}
+              <SavedReplySuggestions draft={draft} enabled={canPost} onPick={insertSavedReply} />
+            </>
+          ) : null
+        }
+        hasExtra={!!queuedPhotos?.images.length}
       />
 
       <AttachMenu visible={attachOpen} onClose={() => setAttachOpen(false)} onAttach={setAttachment} />
@@ -239,9 +282,30 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
           else if (p?.mode === "file" && p.fileUrl) void openLink(p.fileUrl);
         }}
         onDelete={confirmDelete}
+        onReport={(m) => void reportMessage(m, { storeName: me.store.name, storeSlug: me.store.slug, reporterEmail: me.actor.email })}
+        onBlock={canBlock(menuFor?.sender, me.community.myKey) ? (m) => m.sender && confirmBlock(m.sender, safety.block) : undefined}
+        onSaveReply={
+          isTeam
+            ? (m) => {
+                const seed = saveAsReplyFrom(m);
+                if (!seed) return;
+                if (Platform.OS === "ios") setSaveAfterMenu(seed);
+                else setSaved({ startWith: seed });
+              }
+            : undefined
+        }
+        onDismiss={() => {
+          if (saveAfterMenu === null) return;
+          setSaved({ startWith: saveAfterMenu });
+          setSaveAfterMenu(null);
+        }}
         onClose={() => setMenuFor(null)}
       />
+      {isTeam ? (
+        <SavedRepliesSheet visible={saved !== null} startWith={saved?.startWith ?? null} draft={draft} onUse={insertSavedReply} onClose={() => setSaved(null)} />
+      ) : null}
       <PhotoViewer uri={viewing} onClose={() => setViewing(null)} />
+      <CommunityRules />
       <ProfileSheet
         person={profileFor}
         currentConversationPeer={dm ? peer?.key : undefined}

@@ -5,8 +5,22 @@ import type { CommunityMessage, MessagesResponse, Participant, ThreadInfo } from
 import { access } from "./community-test-access";
 import { communityAccess } from "../src/features/community/lib/access";
 
-import { attachmentLabel, bubbleImageSize, imageFileName, imageMimeFor } from "../src/features/community/lib/attachments";
+import { attachmentLabel, bubbleImageSize, imageFileName, imageMimeFor, videoFileName, videoMimeFor } from "../src/features/community/lib/attachments";
+import {
+  WELCOME_MAX_MESSAGES,
+  draftsFromWelcome,
+  itemProblem,
+  itemSummary,
+  moveItem,
+  removeItem,
+  toWelcomeRequest,
+  upsertItem,
+  welcomeCardLine,
+  welcomeProblem,
+  type DraftItem,
+} from "../src/features/community/lib/welcome";
 import { hueFromString, mix, parseHex, withAlpha } from "../src/features/community/lib/color";
+import { applySavedReply, formPhotosProblem, matchSavedReplies, photoLabel, saveAsReplyFrom, savedReplySummary, shortcutQuery, toSavedReplyRequest } from "../src/features/community/lib/savedReplies";
 import { docMimeFor, fileTypeLabel, formatBytes } from "../src/features/community/lib/documents";
 import { formatCountdown, formatRelative, initials, pluralize, splitCountdown } from "../src/features/community/lib/format";
 import { buildThreadRows, RUN_WINDOW_MS } from "../src/features/community/lib/grouping";
@@ -63,7 +77,7 @@ function msg(over: Partial<CommunityMessage> = {}): CommunityMessage {
   seq += 1;
   return {
     id: `m${seq}`, threadId: "t1", threadType: "topic", sender: ana, authorName: null, mine: false, clientId: null, kind: "text",
-    body: `hello ${seq}`, product: null, protocol: null, image: null, file: null, drop: null, order: null, replyTo: null,
+    body: `hello ${seq}`, product: null, protocol: null, image: null, video: null, file: null, drop: null, order: null, groupBuy: null, replyTo: null,
     createdAt: new Date(Date.UTC(2026, 8, 29, 10, 0, seq)).toISOString(), editedAt: null, deletedAt: null,
     canEdit: false, canDelete: false, ...over,
   };
@@ -178,6 +192,7 @@ test("file labels, sizes and mime detection", () => {
   assert.equal(imageFileName("image/png", null, 5), "photo-5.png");
   assert.equal(attachmentLabel("text"), null);
   assert.equal(attachmentLabel("file"), "📄 Document");
+  assert.equal(attachmentLabel("video"), "🎬 Video");
 });
 
 // ── optimistic merge reducer ──
@@ -265,7 +280,7 @@ test("reducer: patch, remove, delete and newestConfirmed", () => {
 // ── inbox / access / push ──
 test("inbox: folders, DM hiding, name search, unread count, channel target", () => {
   const ch = (id: string, postRole: "everyone" | "admins", unread: number, last: string) => ({
-    id, name: `Chan ${id}`, description: null, emoji: "💬", imageUrl: null, postRole, sortOrder: 0, topicCount: 1,
+    id, name: `Chan ${id}`, description: null, emoji: "💬", imageUrl: null, postRole, audience: "everyone" as const, sortOrder: 0, topicCount: 1,
     generalTopicId: `g-${id}`, lastMessageAt: last, preview: null, previewTopic: null, unread, canPost: true, canManage: false,
   });
   const dm = (id: string, count: number, unread: number, last: string) => ({
@@ -294,6 +309,13 @@ test("push: routes orders, DMs and drops; rejects junk", () => {
   assert.equal(pushTarget({ type: "dm", threadId: "../x" }), null);
   assert.equal(pushTarget({ type: "other", threadId: "t1" }), null);
   assert.equal(pushTarget(null), null);
+});
+test("push: a safety-bot alert opens the review queue for moderators only", () => {
+  assert.deepEqual(pushTarget({ type: "safety" }), { screen: "safety" });
+  const mod: PushAccess = { mode: "admin", canOrders: false, inCommunity: true };
+  const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };
+  assert.deepEqual(resolvePushRoute({ screen: "safety" }, mod), { pathname: "/community/safety", method: "navigate" });
+  assert.deepEqual(resolvePushRoute({ screen: "safety" }, member), { pathname: "/community", method: "navigate" });
 });
 
 test("reducer: the server's clientId wins over the local one", () => {
@@ -415,6 +437,143 @@ test("view mode: stored values are parsed defensively and keyed per signed-in sc
   assert.equal(parseStoredView("admin"), null);
   assert.equal(parseStoredView(null), null);
   assert.notEqual(viewKey("a:admin:x@y.z"), viewKey("b:admin:x@y.z"));
+});
+
+test("videos: type from the picker or the name, MP4 when unsure", () => {
+  assert.equal(videoMimeFor("video/quicktime", "IMG_1.MOV"), "video/quicktime");
+  assert.equal(videoMimeFor(null, "clip.webm"), "video/webm");
+  assert.equal(videoMimeFor("", ""), "video/mp4");
+  assert.equal(videoFileName("video/quicktime", null, 7), "video-7.mov");
+  assert.equal(videoFileName("video/mp4", " shop tour.mp4 "), "shop tour.mp4");
+});
+
+const saved = {
+  enabled: true,
+  message: "Hi!",
+  messages: [
+    { id: "a", text: "Hi!", media: null },
+    { id: "b", text: "", media: { kind: "image" as const, url: "https://ik.imagekit.io/x/p.jpg", name: "p.jpg", size: 9, mime: "image/jpeg", width: 4, height: 3, posterUrl: null } },
+    { id: "c", text: "How to order", media: { kind: "video" as const, url: "https://ik.imagekit.io/x/v.mp4", name: "v.mp4", size: 99, mime: "video/mp4", width: null, height: null, posterUrl: "https://ik.imagekit.io/x/v.mp4/ik-thumbnail.jpg" } },
+  ],
+};
+const textItem = (key: string, text: string): DraftItem => ({ key, id: null, text, media: null });
+
+test("welcome editor: saved messages become drafts and round-trip to the request", () => {
+  const drafts = draftsFromWelcome(saved);
+  assert.deepEqual(drafts.map((d) => [d.key, d.media?.status ?? null]), [["a", null], ["b", "ready"], ["c", "ready"]]);
+  assert.equal(drafts[2].media?.posterUrl, "https://ik.imagekit.io/x/v.mp4/ik-thumbnail.jpg");
+  assert.deepEqual(toWelcomeRequest(true, [...drafts, textItem("local-1", "  new  ")]), {
+    enabled: true,
+    messages: [
+      { id: "a", text: "Hi!", media: null },
+      { id: "b", text: "", media: { kind: "image", url: "https://ik.imagekit.io/x/p.jpg" } },
+      { id: "c", text: "How to order", media: { kind: "video", url: "https://ik.imagekit.io/x/v.mp4" } },
+      { text: "new", media: null },
+    ],
+  });
+});
+test("welcome editor: move, insert, replace and delete never mutate the list", () => {
+  const list = ["a", "b", "c"];
+  assert.deepEqual(moveItem(list, 0, 1), ["b", "a", "c"]);
+  assert.deepEqual(moveItem(list, 2, -1), ["a", "c", "b"]);
+  assert.deepEqual(moveItem(list, 0, -1), ["a", "b", "c"], "the first can't go up");
+  assert.deepEqual(moveItem(list, 2, 1), ["a", "b", "c"], "the last can't go down");
+  assert.deepEqual(removeItem(list, 1), ["a", "c"]);
+  assert.deepEqual(list, ["a", "b", "c"]);
+  const items = [textItem("1", "one"), textItem("2", "two")];
+  assert.deepEqual(upsertItem(items, null, textItem("3", "three")).map((i) => i.key), ["1", "2", "3"]);
+  assert.deepEqual(upsertItem(items, 0, textItem("1", "uno")).map((i) => i.text), ["uno", "two"]);
+  assert.equal(items[0].text, "one");
+});
+test("welcome editor: a message needs text or a finished upload", () => {
+  assert.equal(itemProblem({ text: "hi", media: null }), null);
+  assert.ok(itemProblem({ text: "  ", media: null }));
+  const uploading = { kind: "video" as const, previewUri: "file:///v.mov", url: null, posterUrl: null, width: null, height: null, size: 0, status: "uploading" as const, error: null };
+  assert.ok(/upload/.test(itemProblem({ text: "", media: uploading }) ?? ""));
+  assert.ok(/failed/.test(itemProblem({ text: "", media: { ...uploading, status: "failed", error: "x" } }) ?? ""));
+  assert.equal(itemProblem({ text: "", media: { ...uploading, url: "https://u", status: "ready" } }), null, "a video alone is fine");
+});
+test("welcome editor: whole-list rules and summaries", () => {
+  assert.ok(welcomeProblem(true, []), "on with nothing to send");
+  assert.equal(welcomeProblem(false, []), null);
+  assert.ok(/^Message 2:/.test(welcomeProblem(true, [textItem("1", "ok"), textItem("2", "")]) ?? ""));
+  assert.ok(welcomeProblem(true, Array.from({ length: WELCOME_MAX_MESSAGES + 1 }, (_, i) => textItem(String(i), "x"))));
+  assert.equal(itemSummary({ text: "  Hi\nthere ", media: null }), "Hi there");
+  assert.equal(itemSummary({ text: "", media: { kind: "video" } }), "Video");
+  assert.equal(welcomeCardLine(saved), "3 messages · Hi!");
+  assert.equal(welcomeCardLine({ ...saved, messages: [saved.messages[1]] }), "Photo");
+  assert.equal(welcomeCardLine({ ...saved, enabled: false }), "Off · new members get no message");
+});
+
+const savedReply = (title: string, body: string) => ({
+  id: title,
+  title,
+  body,
+  images: [] as { url: string; width: number | null; height: number | null }[],
+  createdBy: "Store owner",
+  updatedBy: "Store owner",
+  createdByKey: "owner",
+  updatedByKey: "owner",
+  createdAt: "2026-10-08T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
+});
+test("saved replies: a leading / in the composer is a shortcut search", () => {
+  assert.equal(shortcutQuery("/"), "");
+  assert.equal(shortcutQuery("/pay"), "pay");
+  assert.equal(shortcutQuery("/Payment info"), "Payment info");
+  assert.equal(shortcutQuery("hello /pay"), null, "only at the start");
+  assert.equal(shortcutQuery(""), null);
+  assert.equal(shortcutQuery("/pay\nmore"), null, "a second line means a real message");
+  assert.equal(shortcutQuery("/" + "x".repeat(80)), null, "longer than any title");
+});
+test("saved replies: title starts beat title contains beat message contains", () => {
+  const list = [savedReply("Hours", "Open 9 to 6"), savedReply("Payment", "GCash only"), savedReply("Shipping", "We ship via LBC, payment first"), savedReply("Repay", "x")];
+  assert.deepEqual(
+    matchSavedReplies(list, "pay").map((r) => r.title),
+    ["Payment", "Repay", "Shipping"],
+  );
+  assert.deepEqual(
+    matchSavedReplies(list, "PAY", 1).map((r) => r.title),
+    ["Payment"],
+  );
+  assert.deepEqual(
+    matchSavedReplies(list, "").map((r) => r.title),
+    ["Hours", "Payment", "Shipping", "Repay"],
+    "no query keeps the saved order",
+  );
+  assert.deepEqual(matchSavedReplies(list, "zzz"), []);
+});
+test("saved replies: picking one replaces a /shortcut or empty draft, else goes on a new line", () => {
+  assert.equal(applySavedReply("", "GCash only"), "GCash only");
+  assert.equal(applySavedReply("/pay", "GCash only"), "GCash only");
+  assert.equal(applySavedReply("   ", "GCash only"), "GCash only");
+  assert.equal(applySavedReply("Hi Ann!", "GCash only"), "Hi Ann!\nGCash only");
+  assert.equal(applySavedReply("Hi Ann!\n", "GCash only"), "Hi Ann!\nGCash only");
+  assert.equal(applySavedReply("/menu", ""), "", "a photo-only reply clears the shortcut");
+  assert.equal(applySavedReply("Hi Ann!", " "), "Hi Ann!", "and leaves a real draft alone");
+});
+const PIC = { url: "https://ik.imagekit.io/pep/p1.jpg", width: 800, height: 600 };
+test("saved replies: photo counts and the one-line summary", () => {
+  assert.equal(photoLabel(1), "1 photo");
+  assert.equal(photoLabel(12), "12 photos");
+  assert.equal(savedReplySummary({ ...savedReply("Menu", ""), images: [PIC, PIC] }), "2 photos");
+  assert.equal(savedReplySummary({ ...savedReply("Price", "Here po"), images: [PIC] }), "Here po");
+  assert.equal(savedReplySummary(savedReply("Hours", "Open\n9 to 6")), "Open 9 to 6");
+});
+test("saved replies: the form can't save while a photo is uploading or failed", () => {
+  const ready = { key: "a", previewUri: "file:///a.jpg", url: PIC.url, width: 1, height: 1, status: "ready" as const };
+  assert.equal(formPhotosProblem([ready]), null);
+  assert.ok(/uploading/i.test(formPhotosProblem([ready, { ...ready, key: "b", url: null, status: "uploading" }]) ?? ""));
+  assert.ok(/failed/i.test(formPhotosProblem([{ ...ready, url: null, status: "failed" }]) ?? ""));
+  assert.deepEqual(toSavedReplyRequest("Menu", " hi ", [ready]), { title: "Menu", body: " hi ", images: [{ url: PIC.url }] });
+});
+test("saved replies: Save as reply keeps the team's own photo, never a member's", () => {
+  const base = { body: "Price list", image: PIC, sender: { key: "store", name: "Shop", avatarHue: 0, imageUrl: null, isTeam: true } };
+  assert.deepEqual(saveAsReplyFrom(base as never), { body: "Price list", images: [PIC] });
+  assert.deepEqual(saveAsReplyFrom({ ...base, sender: { ...base.sender, key: "c:1", isTeam: false } } as never), { body: "Price list", images: [] });
+  assert.deepEqual(saveAsReplyFrom({ ...base, body: null } as never), { body: "", images: [PIC] });
+  assert.equal(saveAsReplyFrom({ ...base, body: null, image: null } as never), null, "nothing to save");
+  assert.equal(saveAsReplyFrom({ ...base, body: null, sender: { ...base.sender, isTeam: false } } as never), null);
 });
 
 console.log(`community lib: ${passed} passed, ${failures.length} failed`);

@@ -34,6 +34,14 @@ type Props = {
    * when saved.
    */
   onSend: (body: string) => Promise<void>;
+  /** Store team: opens the saved replies. The button shows only when this is set. */
+  onOpenSaved?: () => void;
+  /** Shown above the field, e.g. saved-reply matches while typing "/". */
+  suggestions?: ReactNode;
+  /** Something besides the text will go out (queued saved-reply photos), so send works with an empty field. */
+  hasExtra?: boolean;
+  /** The empty field's prompt, e.g. "What are you looking for?" in a resellers hub. */
+  placeholder?: string;
 };
 
 const MAX_LENGTH = 2000;
@@ -77,6 +85,8 @@ function AttachmentBar({ attachment, onClear }: { attachment: Attachment; onClea
     }
     case "protocol":
       return <ContextBar icon="clipboard" title={attachment.protocol.name} body="Sends as a protocol" onClear={onClear} />;
+    case "groupbuy":
+      return <ContextBar icon="people" title={attachment.groupBuy.name} body="Live group buy · sends as a card anyone can join from" onClear={onClear} />;
     case "image":
       return (
         <ContextBar
@@ -104,7 +114,7 @@ function AttachmentBar({ attachment, onClear }: { attachment: Attachment; onClea
 
 /** Telegram-style composer: attach, a growing field, send when there's something to send. */
 export const Composer = forwardRef<TextInput, Props>(function Composer(
-  { disabled, disabledReason, attachment, onClearAttachment, replyTo, onClearReply, editing, onCancelEdit, onAttach, text, onChangeText, onSend },
+  { disabled, disabledReason, attachment, onClearAttachment, replyTo, onClearReply, editing, onCancelEdit, onAttach, text, onChangeText, onSend, onOpenSaved, suggestions, hasExtra = false, placeholder = "Message" },
   ref,
 ) {
   const insets = useSafeAreaInsets();
@@ -116,7 +126,7 @@ export const Composer = forwardRef<TextInput, Props>(function Composer(
   const bottom = (keyboardOpen ? 0 : insets.bottom) + 6;
 
   const isEditing = !!editing;
-  const hasContent = text.trim().length > 0 || !!attachment || (isEditing && editing.kind !== "text");
+  const hasContent = text.trim().length > 0 || !!attachment || (isEditing ? editing.kind !== "text" : hasExtra);
   const canSend = !disabled && !sending && hasContent;
 
   const submit = async () => {
@@ -158,6 +168,7 @@ export const Composer = forwardRef<TextInput, Props>(function Composer(
         />
       ) : null}
       {attachment && !editing ? <AttachmentBar attachment={attachment} onClear={onClearAttachment} /> : null}
+      {suggestions}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 4, paddingHorizontal: 4, paddingTop: 6 }}>
         <Pressable
           onPress={onAttach}
@@ -169,18 +180,44 @@ export const Composer = forwardRef<TextInput, Props>(function Composer(
         >
           <Ionicons name="add-circle-outline" size={27} color={isEditing ? CHAT.inkFaint : CHAT.inkMuted} />
         </Pressable>
-        <View style={{ flex: 1, backgroundColor: CHAT.surfaceAlt, borderRadius: 22, borderWidth: 1, borderColor: CHAT.hairline, paddingHorizontal: 14, minHeight: 44, maxHeight: 132, justifyContent: "center" }}>
+        <View
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "flex-end",
+            backgroundColor: CHAT.surfaceAlt,
+            borderRadius: 22,
+            borderWidth: 1,
+            borderColor: CHAT.hairline,
+            paddingLeft: 14,
+            paddingRight: onOpenSaved ? 2 : 14,
+            minHeight: 44,
+            maxHeight: 132,
+          }}
+        >
           <TextInput
             ref={ref}
             value={text}
             onChangeText={onChangeText}
             maxLength={MAX_LENGTH}
-            placeholder={attachment ? "Add a caption…" : "Message"}
+            placeholder={attachment ? "Add a caption…" : placeholder}
             placeholderTextColor={CHAT.inkFaint}
             multiline
             accessibilityLabel={attachment ? "Caption" : "Message"}
-            style={{ fontFamily: INTER.regular, fontSize: 16, color: CHAT.ink, paddingTop: 10, paddingBottom: 10, lineHeight: 21 }}
+            style={{ flex: 1, alignSelf: "center", fontFamily: INTER.regular, fontSize: 16, color: CHAT.ink, paddingTop: 10, paddingBottom: 10, lineHeight: 21 }}
           />
+          {onOpenSaved ? (
+            <Pressable
+              onPress={onOpenSaved}
+              accessibilityRole="button"
+              accessibilityLabel="Saved replies"
+              accessibilityHint="Quick answers your store team saved"
+              hitSlop={2}
+              style={({ pressed }) => ({ width: 40, height: 42, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? b.brandSoft : "transparent" })}
+            >
+              <Ionicons name="chatbox-ellipses-outline" size={22} color={CHAT.inkMuted} />
+            </Pressable>
+          ) : null}
         </View>
         <Pressable
           onPress={submit}

@@ -23,6 +23,7 @@ export function OrderSummary({
   showItems = true,
   updating,
   shippingPending,
+  invoice,
 }: {
   totals: Totals;
   currency: string;
@@ -31,6 +32,8 @@ export function OrderSummary({
   updating?: boolean;
   /** No courier picked yet: say so instead of "Free". */
   shippingPending?: boolean;
+  /** A pay-after-close group-buy order: shipping is once per round. */
+  invoice?: { addOn: boolean } | null;
 }) {
   const t = useTheme();
   return (
@@ -48,9 +51,18 @@ export function OrderSummary({
       {showItems ? <Divider /> : null}
       <Line label="Subtotal" value={money(totals.subtotal, currency)} />
       <Line
-        label={totals.courier ? `Shipping · ${totals.courier}` : "Shipping"}
-        value={shippingPending ? "Choose a courier" : totals.shippingFee > 0 ? money(totals.shippingFee, currency) : "Free"}
+        label={invoice ? "Shipping · once per group buy" : totals.courier ? `Shipping · ${totals.courier}` : "Shipping"}
+        value={
+          shippingPending
+            ? "Choose a courier"
+            : invoice?.addOn
+              ? "Already on your invoice"
+              : totals.shippingFee > 0
+                ? money(totals.shippingFee, currency)
+                : "Free"
+        }
         muted={shippingPending}
+        color={invoice?.addOn && !shippingPending ? t.tone("success").fg : undefined}
       />
       {totals.adminFee ? <Line label={totals.adminFee.label} value={money(totals.adminFee.amount, currency)} /> : null}
       {totals.paymentFee ? <Line label={totals.paymentFee.label} value={money(totals.paymentFee.amount, currency)} /> : null}
@@ -62,9 +74,9 @@ export function OrderSummary({
         />
       ) : null}
       <Divider />
-      <View style={styles.row} accessible accessibilityLabel={`Total ${money(totals.total, currency)}`}>
+      <View style={styles.row} accessible accessibilityLabel={`${invoice ? "Due at close" : "Total"} ${money(totals.total, currency)}`}>
         <AppText variant="heading" style={{ flex: 1 }}>
-          Total
+          {invoice ? "Due at close" : "Total"}
         </AppText>
         {updating ? <ActivityIndicator size="small" color={t.brand.link} style={{ marginRight: SPACE.sm }} /> : null}
         <AppText variant="stat">{money(totals.total, currency)}</AppText>

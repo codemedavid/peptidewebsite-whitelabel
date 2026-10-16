@@ -2,14 +2,17 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, View } from "react-native";
 import { router, type Href } from "expo-router";
 import type { CommunityChannel, SearchHit } from "@contract";
-import { useChannelMutations } from "../hooks/useCommunityData";
+import { useChannelMutations, useLiveGroupBuy } from "../hooks/useCommunityData";
 import { useCommunityAccess, useInbox } from "../hooks/useInbox";
 import { useMessageSearch } from "../hooks/useSearch";
 import { buildChatRows, matchChatsByName, type ChatListRow, type Folder } from "../lib/inbox";
+import { useBlocked } from "../lib/safety";
 import { CHAT, GUTTER, useChatBrand } from "../theme";
 import { ChatButton, ChatEmpty, Fab, SearchBar } from "./ChatKit";
+import { CommunityRules } from "./CommunityRules";
 import { ChannelRowItem, DirectRowItem, ListSection, MessageHitRow } from "./ChatRows";
 import { DropStory } from "./Drops";
+import { GroupBuyPin } from "./GroupBuyChatCard";
 import { LargeHeader } from "./Headers";
 import { ShopRail } from "./ShopRail";
 import { SegmentedTabs } from "./Surfaces";
@@ -55,7 +58,14 @@ export function ChatsScreen({ inTabHeader = false, headerRight, shopHref }: { in
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const search = useMessageSearch(query, { scope: "everywhere" });
-  const data = inbox.data;
+  const safety = useBlocked();
+  const live = useLiveGroupBuy(access.inCommunity);
+  // Private chats with members you blocked leave the list (their messages are hidden too).
+  const data = useMemo(() => {
+    const d = inbox.data;
+    if (!d || safety.blocked.size === 0) return d;
+    return { ...d, conversations: d.conversations.filter((c) => c.peer.isTeam || !safety.blocked.has(c.peer.key)) };
+  }, [inbox.data, safety.blocked]);
 
   const rows = useMemo<Row[]>(() => {
     if (!data) return [];
@@ -80,6 +90,7 @@ export function ChatsScreen({ inTabHeader = false, headerRight, shopHref }: { in
 
   return (
     <View style={{ flex: 1, backgroundColor: CHAT.surface }}>
+      <CommunityRules />
       <LargeHeader title="Chats" flush noInset={inTabHeader} right={headerRight}>
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search chats and messages" />
       </LargeHeader>
@@ -111,6 +122,7 @@ export function ChatsScreen({ inTabHeader = false, headerRight, shopHref }: { in
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={b.brandText} />}
           ListHeaderComponent={
             <>
+              {showShop && live.data?.groupBuy ? <GroupBuyPin round={live.data.groupBuy} canBroadcast={live.data.canBroadcast} /> : null}
               {showRail ? (
                 <View style={{ borderBottomWidth: 1, borderBottomColor: CHAT.hairline }}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: GUTTER - 4, paddingVertical: 12, gap: 8 }}>
@@ -137,7 +149,7 @@ export function ChatsScreen({ inTabHeader = false, headerRight, shopHref }: { in
             ) : folder === "unread" ? (
               <ChatEmpty icon="checkmark-done-circle-outline" title="You're all caught up" body="New messages from every channel show here." />
             ) : (
-              <ChatEmpty icon="chatbubbles-outline" title="No chats yet" body={access.moderator ? "Open the first channel with the pencil button." : "Channels appear here as soon as the store opens one."} />
+              <ChatEmpty icon="chatbubbles-outline" title="No chats yet" body={access.runsCommunity ? "Open the first channel with the pencil button." : "Channels appear here as soon as the store opens one."} />
             )
           }
           renderItem={({ item }) => {
@@ -148,7 +160,7 @@ export function ChatsScreen({ inTabHeader = false, headerRight, shopHref }: { in
           }}
         />
       )}
-      {access.moderator ? <Fab icon="create-outline" label="New channel" onPress={() => router.push("/community/channel-new")} /> : null}
+      {access.runsCommunity ? <Fab icon="create-outline" label="New channel" onPress={() => router.push("/community/channel-new")} /> : null}
     </View>
   );
 }

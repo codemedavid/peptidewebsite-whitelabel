@@ -3,10 +3,13 @@ import type { Participant } from "@contract";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { useOpenDm, useProfileOf } from "../hooks/useCommunityData";
 import { firstName, memberSince } from "../lib/format";
+import { canBlock, confirmBlock, useBlocked } from "../lib/safety";
+import { rolesOf } from "../lib/tagLook";
 import { CHAT, GUTTER, RADII, useChatBrand } from "../theme";
 import { ParticipantAvatar } from "./Avatar";
 import { ChatText } from "./ChatText";
 import { ChatButton } from "./ChatKit";
+import { RoleBadges } from "./RoleBadge";
 import { Sheet } from "./Surfaces";
 
 type Props = {
@@ -29,9 +32,13 @@ export function ProfileSheet({ person, currentConversationPeer, onReplyInGroup, 
   const { me } = useSignedIn();
   const details = useProfileOf(person?.key ?? null);
   const openDm = useOpenDm();
+  const safety = useBlocked();
+  const blockable = canBlock(person, me.community.myKey);
+  const isBlocked = safety.isBlocked(person?.key);
   const isMe = !!person && person.key === me.community.myKey;
   const inThisDm = !!person && person.key === currentConversationPeer;
   const joined = memberSince(details.data?.memberSince ?? null);
+  const roles = person && !person.isTeam ? rolesOf({ isAdmin: person.isAdmin || details.data?.isAdmin, isVerifiedReseller: person.isVerifiedReseller || details.data?.isVerifiedReseller }) : [];
   const shortName = person ? (person.isTeam ? person.name : firstName(person.name)) : "";
 
   const message = () => {
@@ -66,9 +73,12 @@ export function ProfileSheet({ person, currentConversationPeer, onReplyInGroup, 
               <ChatText variant="footnote" color={b.brandText}>
                 Store team
               </ChatText>
-            ) : joined ? (
-              <ChatText variant="footnote">{`Member since ${joined}`}</ChatText>
-            ) : null}
+            ) : (
+              <>
+                <RoleBadges roles={roles} size="md" />
+                {joined ? <ChatText variant="footnote">{`Member since ${joined}`}</ChatText> : null}
+              </>
+            )}
           </View>
           {details.data?.bio ? (
             <View style={{ backgroundColor: CHAT.surface, borderRadius: RADII.md, padding: 12, gap: 2 }}>
@@ -102,6 +112,17 @@ export function ProfileSheet({ person, currentConversationPeer, onReplyInGroup, 
                 <ChatText variant="footnote" style={{ textAlign: "center" }}>
                   Private chats are only seen by the two of you.
                 </ChatText>
+              ) : null}
+              {blockable ? (
+                <ChatButton
+                  label={isBlocked ? `Unblock ${shortName}` : `Block ${shortName}`}
+                  size="lg"
+                  pill
+                  tone="tinted"
+                  icon={isBlocked ? "checkmark-circle-outline" : "ban-outline"}
+                  accessibilityLabel={isBlocked ? `Unblock ${person.name}` : `Block ${person.name}`}
+                  onPress={() => (isBlocked ? void safety.unblock(person.key) : confirmBlock(person, safety.block, onClose))}
+                />
               ) : null}
             </View>
           )}

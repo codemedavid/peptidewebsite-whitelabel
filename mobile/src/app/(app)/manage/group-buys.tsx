@@ -12,17 +12,29 @@ import {
   effectiveGroupBuyStatus,
   moneyOf,
   normalizeGroupBuyContent,
+  normalizeGroupBuyLiveBanner,
   normalizeTwoWaysMode,
   roundsAwaitingReport,
   type GroupBuy,
   type GroupBuyContent,
+  type GroupBuyLiveBanner,
   type ListResult,
 } from "@/features/admin/group-buys/model";
+import { CommunityShareCard } from "@/features/admin/group-buys/CommunityShareCard";
 import { PricingTab } from "@/features/admin/group-buys/PricingTab";
 import { ReportSheet } from "@/features/admin/group-buys/ReportSheet";
 import { RoundCard } from "@/features/admin/group-buys/RoundCard";
 import { RoundEditor } from "@/features/admin/group-buys/RoundEditor";
-import { AllowOnHandCard, ContentEditor, CopyCard, WaysCard } from "@/features/admin/group-buys/StoreSettings";
+import {
+  AllowOnHandCard,
+  ContentEditor,
+  CopyCard,
+  LiveBannerCard,
+  LiveBannerEditor,
+  WaysCard,
+} from "@/features/admin/group-buys/StoreSettings";
+import { InvoiceCard, InvoiceEditor, confirmSendInvoices, useSendInvoices } from "@/features/admin/group-buys/InvoiceSettings";
+import { normalizeGroupBuyInvoice, type GroupBuyInvoiceConfig } from "@/features/admin/group-buys/invoice";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
 import { Segmented } from "@/ui/inputs";
 import { AppText, Button } from "@/ui/primitives";
@@ -59,6 +71,13 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
   const [ways, setWays] = useState(() => normalizeTwoWaysMode(brand.twoWaysMode));
   const [contentOverride, setContentOverride] = useState<GroupBuyContent | null>(null);
   const [editingContent, setEditingContent] = useState(false);
+  // Tied to the list snapshot it was made against: a refetch (the save's own
+  // invalidation, or another admin's edit) brings the server's value back.
+  const [liveBannerOverride, setLiveBannerOverride] = useState<{ base: unknown; value: GroupBuyLiveBanner } | null>(null);
+  const [editingLiveBanner, setEditingLiveBanner] = useState(false);
+  const [invoiceOverride, setInvoiceOverride] = useState<{ base: unknown; value: GroupBuyInvoiceConfig } | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState(false);
+  const sendInvoices = useSendInvoices();
   const [showArchived, setShowArchived] = useState(false);
   const [editor, setEditor] = useState<{ round: GroupBuy | null } | null>(null);
   const [reporting, setReporting] = useState<GroupBuy | null>(null);
@@ -71,6 +90,18 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
   const data = list.data;
   const caps = data?.caps;
   const content = contentOverride ?? data?.content ?? normalizeGroupBuyContent(brand.groupBuyContent);
+  const liveBanner =
+    liveBannerOverride && liveBannerOverride.base === data?.liveBanner
+      ? liveBannerOverride.value
+      : normalizeGroupBuyLiveBanner(data?.liveBanner ?? brand.groupBuyLiveBanner);
+  const overrideLiveBanner = (value: GroupBuyLiveBanner) => setLiveBannerOverride({ base: data?.liveBanner, value });
+  const invoice =
+    invoiceOverride && invoiceOverride.base === data?.invoice ? invoiceOverride.value : normalizeGroupBuyInvoice(data?.invoice);
+  const overrideInvoice = (value: GroupBuyInvoiceConfig) => setInvoiceOverride({ base: data?.invoice, value });
+  const previewRound = useMemo(() => {
+    const live = data?.groupBuys.find((gb) => effectiveGroupBuyStatus(gb, data.caps.scheduled) === "active");
+    return live ?? { name: "GB #1", description: "", deliveryEta: "" };
+  }, [data]);
   const rowsById = useMemo(() => new Map((data?.rows ?? []).map((r) => [r.id, r])), [data?.rows]);
 
   // Auto report on close (groupbuy.reports.auto_on_close): pop the first finished
@@ -138,9 +169,19 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
           )
         ) : (
           <>
+            <CommunityShareCard />
             <WaysCard ways={ways} setWays={setWays} />
             {caps.productAssignment && ways.onHand === "open" ? <AllowOnHandCard initial={brand.groupBuyAllowOnHand !== false} /> : null}
             <CopyCard content={content} onEdit={() => setEditingContent(true)} />
+            <LiveBannerCard
+              value={liveBanner}
+              setValue={overrideLiveBanner}
+              round={previewRound}
+              onEdit={() => setEditingLiveBanner(true)}
+            />
+            {data.invoice !== undefined ? (
+              <InvoiceCard value={invoice} setValue={overrideInvoice} currency={currency} onEdit={() => setEditingInvoice(true)} />
+            ) : null}
             <RoundsList
               data={data}
               showArchived={showArchived}
@@ -158,6 +199,12 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
               onDuplicate={(gb) => duplicate.mutate([gb.id], { onError: fail("Couldn't duplicate") })}
               onEdit={(gb) => setEditor({ round: gb })}
               onArchive={confirmArchive}
+              onSendInvoices={
+                invoice.enabled
+                  ? (gb) => confirmSendInvoices(gb.name, () => sendInvoices.mutate(gb.id))
+                  : undefined
+              }
+              sendingInvoices={sendInvoices.isPending}
             />
           </>
         )}
@@ -185,6 +232,29 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
           }}
         />
       ) : null}
+      {editingLiveBanner ? (
+        <LiveBannerEditor
+          initial={liveBanner}
+          round={previewRound}
+          onClose={() => setEditingLiveBanner(false)}
+          onSaved={(v) => {
+            overrideLiveBanner(v);
+            setEditingLiveBanner(false);
+          }}
+        />
+      ) : null}
+      {editingInvoice ? (
+        <InvoiceEditor
+          initial={invoice}
+          currency={currency}
+          roundName={previewRound.name}
+          onClose={() => setEditingInvoice(false)}
+          onSaved={(v) => {
+            overrideInvoice(v);
+            setEditingInvoice(false);
+          }}
+        />
+      ) : null}
       {shownReport && data ? <ReportSheet groupBuy={shownReport} caps={data.caps} currency={currency} onClose={closeReport} /> : null}
     </View>
   );
@@ -204,6 +274,8 @@ function RoundsList({
   onDuplicate,
   onEdit,
   onArchive,
+  onSendInvoices,
+  sendingInvoices,
 }: {
   data: ListResult;
   showArchived: boolean;
@@ -218,6 +290,9 @@ function RoundsList({
   onDuplicate: (gb: GroupBuy) => void;
   onEdit: (gb: GroupBuy) => void;
   onArchive: (gb: GroupBuy) => void;
+  /** Set on pay-after-close stores: offered on closed rounds. */
+  onSendInvoices?: (gb: GroupBuy) => void;
+  sendingInvoices: boolean;
 }) {
   const { caps, groupBuys } = data;
   const visible = groupBuys.filter((gb) => (showArchived ? gb.status === "archived" : gb.status !== "archived"));
@@ -261,13 +336,18 @@ function RoundsList({
             effective={effectiveGroupBuyStatus(gb, caps.scheduled)}
             caps={caps}
             awaitingReport={awaiting.has(gb.id)}
-            busy={busy || !online}
+            busy={busy || !online || sendingInvoices}
             money={money}
             onOpen={() => onOpen(gb)}
             onReport={() => onReport(gb)}
             onDuplicate={() => onDuplicate(gb)}
             onEdit={() => onEdit(gb)}
             onArchive={() => onArchive(gb)}
+            onSendInvoices={
+              onSendInvoices && effectiveGroupBuyStatus(gb, caps.scheduled) === "closed"
+                ? () => onSendInvoices(gb)
+                : undefined
+            }
           />
         ))
       )}

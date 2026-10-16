@@ -115,6 +115,7 @@ export default function AppLayout() {
         {/* The store as shoppers see it — the native shop, read-only. */}
         <Stack.Screen name="storefront" options={{ title: "Your store" }} />
         <Stack.Screen name="storefront-product/[id]" options={{ title: "" }} />
+        <Stack.Screen name="storefront-group-buy" options={{ title: "Group buy" }} />
       </Stack.Protected>
 
       {/* Every account — owner, staff and customer (Apple 5.1.1(v)). */}
@@ -125,6 +126,7 @@ export default function AppLayout() {
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />
         {/* The in-app shop (docs/mobile-admin/SHOP.md). */}
         <Stack.Screen name="product/[id]" options={{ title: "" }} />
+        <Stack.Screen name="group-buy" options={{ title: "Group buy" }} />
         <Stack.Screen name="cart" options={{ title: "Cart" }} />
         <Stack.Screen name="checkout" options={{ title: "Checkout" }} />
         <Stack.Screen name="order-placed" options={{ headerShown: false, gestureEnabled: false }} />
@@ -144,11 +146,17 @@ export default function AppLayout() {
       <Stack.Protected guard={community.adminChatsTab}>
         <Stack.Screen name="community-view" options={{ headerShown: false, animation: "fade" }} />
       </Stack.Protected>
-      <Stack.Protected guard={community.moderator}>
+      {/* Channels + members: the store team and community admins. */}
+      <Stack.Protected guard={community.runsCommunity}>
         <Stack.Screen name="community/channel-new" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen name="community/channel-edit" options={{ presentation: "modal", headerShown: false }} />
-        <Stack.Screen name="community/drop-new" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen name="community/members" options={{ headerShown: false }} />
+        <Stack.Screen name="community/tags" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={community.moderator}>
+        <Stack.Screen name="community/drop-new" options={{ presentation: "modal", headerShown: false }} />
+        <Stack.Screen name="community/group-buy-broadcast" options={{ presentation: "modal", headerShown: false }} />
+        <Stack.Screen name="community/safety" options={{ headerShown: false }} />
       </Stack.Protected>
     </Stack>
     {me.can.orders ? <LiveOrders /> : null}

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MeResponse, StoreChoice, TokenPair } from "@contract";
+import type { LoginResponse, MeResponse, RegisterRequest, StoreChoice, TokenPair } from "@contract";
 import { ApiError, connectAuth, type RefreshOutcome } from "@/api/client";
 import { authApi, meApi } from "@/api/endpoints";
 import { forgetPushToken } from "@/notifications/push";
@@ -50,6 +50,8 @@ type SessionApi = {
    * stores when this login opens more than one — nothing is signed in then.
    */
   signIn: (email: string, password: string, store?: string) => Promise<StoreChoice[] | null>;
+  /** Create a customer account on a store; signs it straight in. */
+  signUp: (details: RegisterRequest) => Promise<void>;
   signOut: (notice?: string) => Promise<void>;
   reloadMe: () => Promise<void>;
   retry: () => void;
@@ -199,22 +201,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [reloadMe]);
 
-  const signIn = useCallback(
-    async (email: string, password: string, store?: string): Promise<StoreChoice[] | null> => {
-      await flushPendingLogout();
-      const res = await authApi.login(store ? { store, email, password } : { email, password });
-      if ("chooseStore" in res) return res.chooseStore;
-      const { me, ...pair } = res;
+  /** Take over a session the server just issued (sign-in or sign-up). */
+  const adopt = useCallback(
+    async ({ me, ...pair }: LoginResponse, email: string) => {
       epoch.current += 1;
       const at = epoch.current;
       queryClient.clear();
       tokens.current = pair;
-      await writeTokens(pair);
-      await rememberEmail(email);
+      // The server already signed us in: a keychain hiccup must not show the
+      // login as failed. The session works now; it just won't survive a restart.
+      await writeTokens(pair).catch((e: unknown) => console.warn("[session] could not save sign-in:", e));
+      await rememberEmail(email.trim());
       await applyMe(me, at);
-      return null;
     },
     [applyMe, queryClient],
+  );
+
+  const signIn = useCallback(
+    async (email: string, password: string, store?: string): Promise<StoreChoice[] | null> => {
+      // Never make the login wait on an old sign-out retry (up to ~40s offline).
+      void flushPendingLogout();
+      const res = await authApi.login(store ? { store, email, password } : { email, password });
+      if ("chooseStore" in res) return res.chooseStore;
+      await adopt(res, email);
+      return null;
+    },
+    [adopt],
+  );
+
+  const signUp = useCallback(
+    async (details: RegisterRequest): Promise<void> => {
+      void flushPendingLogout();
+      await adopt(await authApi.register(details), details.email);
+    },
+    [adopt],
   );
 
   const value = useMemo<SessionApi>(
@@ -222,6 +242,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       state,
       lastSignedIn,
       signIn,
+      signUp,
       signOut,
       reloadMe,
       retry: () => {
@@ -229,7 +250,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setBootAttempt((n) => n + 1);
       },
     }),
-    [state, lastSignedIn, signIn, signOut, reloadMe],
+    [state, lastSignedIn, signIn, signUp, signOut, reloadMe],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

@@ -223,6 +223,10 @@ export type ListResult = {
   caps: GroupBuyCapabilities;
   settings: GroupBuySettings;
   content: GroupBuyContent;
+  /** Absent on a server that predates the live strip. */
+  liveBanner?: GroupBuyLiveBanner;
+  /** Pay-after-close invoices (invoice.ts). Absent on older servers. */
+  invoice?: unknown;
 };
 
 export type DashboardResult = {
@@ -346,6 +350,41 @@ export function normalizeGroupBuyContent(input: unknown): GroupBuyContent {
 }
 
 export const renderGbCopy = (text: string, eta: string): string => text.split("{eta}").join(eta || "after the round closes");
+
+// ── live strip (src/lib/storefront/gb-live-banner.ts) ────────────────────────
+// Blank = automatic text from the round. npm run test:gb-live-banner pins parity.
+
+export type GroupBuyLiveBanner = { enabled: boolean; headline: string; message: string; ctaLabel: string };
+export type GroupBuyLiveBannerText = { headline: string; message: string; ctaLabel: string };
+
+export const GB_LIVE_BANNER_LIMITS = { headline: 60, message: 140, ctaLabel: 20 } as const;
+
+const oneLine = (value: unknown, max: number): string =>
+  typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
+
+export function normalizeGroupBuyLiveBanner(input: unknown): GroupBuyLiveBanner {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  return {
+    enabled: raw.enabled !== false,
+    headline: oneLine(raw.headline, GB_LIVE_BANNER_LIMITS.headline),
+    message: oneLine(raw.message, GB_LIVE_BANNER_LIMITS.message),
+    ctaLabel: oneLine(raw.ctaLabel, GB_LIVE_BANNER_LIMITS.ctaLabel),
+  };
+}
+
+export function renderGroupBuyLiveBanner(
+  config: unknown,
+  round: { name: string; description: string; deliveryEta: string },
+): GroupBuyLiveBannerText | null {
+  const c = normalizeGroupBuyLiveBanner(config);
+  if (!c.enabled) return null;
+  const fill = (text: string) => renderGbCopy(text, round.deliveryEta).split("{name}").join(round.name);
+  return {
+    headline: fill(c.headline) || `${round.name} is live`,
+    message: fill(c.message) || round.description.trim() || "Lock your slot at the group price.",
+    ctaLabel: c.ctaLabel || "Join now",
+  };
+}
 
 // ── dates (AdminGroupBuys isoToLocal/localToIso — datetime-local as text) ────
 

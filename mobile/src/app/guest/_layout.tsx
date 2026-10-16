@@ -21,6 +21,7 @@ export default function GuestLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: "" }} />
+      <Stack.Screen name="group-buy" options={{ title: "Group buy" }} />
       <Stack.Screen name="cart" options={{ title: "Cart" }} />
     </Stack>
   );

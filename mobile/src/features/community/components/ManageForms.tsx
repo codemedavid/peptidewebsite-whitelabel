@@ -4,7 +4,7 @@ import { Alert, ScrollView, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { CommunityChannel, CommunityTopic } from "@contract";
+import type { ChannelAudience, CommunityChannel, CommunityTopic } from "@contract";
 import { useChannelMutations, useTopicMutations } from "../hooks/useCommunityData";
 import { pickImage, PickError, uploadDraft } from "../hooks/usePickers";
 import type { ImageDraft } from "../lib/attachments";
@@ -19,6 +19,12 @@ import { ModalHeader } from "./Headers";
 const CHANNEL_EMOJIS = ["💬", "🧬", "🛒", "✨", "⚖️", "💪", "🧠", "🩹", "📣", "☕", "🔬", "🌸"];
 const TOPIC_EMOJIS = ["#", "🧵", "❓", "📦", "🔁", "🧪", "🌱", "⚖️", "💧", "📸", "🚚", "🎉"];
 const NAME_MAX = 60;
+/** What a new hub starts with; the team can change any of it. */
+const HUB_PRESET = {
+  name: "Verified Resellers Hub",
+  description: "Verified resellers post what they have on hand. Members post what they're looking for.",
+  emoji: "🤝",
+};
 const DESCRIPTION_MAX = 200;
 const withCurrent = (list: string[], current: string) => (list.includes(current) ? list : [current, ...list]);
 
@@ -76,21 +82,36 @@ export function ChannelForm({ channel }: { channel?: CommunityChannel }) {
   const [description, setDescription] = useState(channel?.description ?? "");
   const [emoji, setEmoji] = useState(channel?.emoji ?? "💬");
   const [postRole, setPostRole] = useState<"everyone" | "admins">(channel?.postRole ?? "everyone");
+  const [audience, setAudience] = useState<ChannelAudience>(channel?.audience ?? "everyone");
   const picture = usePicture(channel?.imageUrl ?? null);
   const [busy, setBusy] = useState(false);
   const valid = name.trim().length >= 2;
+  const hub = audience === "hub";
+
+  const chooseHub = () => {
+    setAudience("hub");
+    setPostRole("everyone");
+    // Fill a blank new channel with the hub's starter wording.
+    if (!channel && !name.trim()) {
+      setName(HUB_PRESET.name);
+      if (!description.trim()) setDescription(HUB_PRESET.description);
+      setEmoji(HUB_PRESET.emoji);
+    }
+  };
 
   const save = async () => {
     if (!valid) return;
     setBusy(true);
     try {
-      const body = { name: name.trim(), description: description.trim(), emoji, imageUrl: await picture.resolve(), postRole };
+      const body = { name: name.trim(), description: description.trim(), emoji, imageUrl: await picture.resolve(), postRole, audience };
       if (channel) {
         await m.update.mutateAsync({ id: channel.id, body });
         router.back();
       } else {
         const created = await m.create.mutateAsync(body);
-        router.replace({ pathname: "/community/topic/[id]", params: { id: created.generalTopicId } });
+        // A hub opens on its topic list (On hand + Looking for); any other channel on its chat.
+        if (created.audience === "hub") router.replace({ pathname: "/community/channel/[id]", params: { id: created.id } });
+        else router.replace({ pathname: "/community/topic/[id]", params: { id: created.generalTopicId } });
       }
     } catch (e) {
       Alert.alert("Couldn't save the channel", e instanceof Error ? e.message : "Try again.");
@@ -106,7 +127,9 @@ export function ChannelForm({ channel }: { channel?: CommunityChannel }) {
         <ChatText variant="title" numberOfLines={1} color={name ? CHAT.ink : CHAT.inkFaint}>
           {name.trim() || "Channel name"}
         </ChatText>
-        <ChatText variant="footnote">{postRole === "admins" ? "Announcements · the store posts" : "Group · everyone can post"}</ChatText>
+        <ChatText variant="footnote">
+          {hub ? "Resellers hub · On hand + Looking for" : postRole === "admins" ? "Announcements · the store posts" : "Group · everyone can post"}
+        </ChatText>
       </View>
       <FormCard title="Details">
         <Field label="Name" value={name} onChangeText={setName} maxLength={NAME_MAX} counter placeholder="e.g. Recovery & healing" autoFocus={!channel} />
@@ -116,10 +139,22 @@ export function ChannelForm({ channel }: { channel?: CommunityChannel }) {
         <EmojiGrid options={withCurrent(CHANNEL_EMOJIS, emoji)} value={emoji} onChange={setEmoji} />
       </FormCard>
       <PictureField picture={picture} busy={busy} />
-      <FormCard title="Who can post">
-        <RadioOption icon="people" title="Everyone" body="A group chat. Members can start topics and reply." active={postRole === "everyone"} onPress={() => setPostRole("everyone")} />
-        <RadioOption icon="megaphone" title="Store team only" body="An announcements channel. Members read." active={postRole === "admins"} onPress={() => setPostRole("admins")} />
+      <FormCard title="Channel type">
+        <RadioOption icon="chatbubbles" title="Regular channel" body="Every member sees it. You choose who posts below." active={!hub} onPress={() => setAudience("everyone")} />
+        <RadioOption
+          icon="shield-checkmark"
+          title="Verified Resellers Hub"
+          body="Every member sees it. Verified resellers post their on-hand products in On hand; members post what they need in Looking for."
+          active={hub}
+          onPress={chooseHub}
+        />
       </FormCard>
+      {hub ? null : (
+        <FormCard title="Who can post">
+          <RadioOption icon="people" title="Everyone" body="A group chat. Members can start topics and reply." active={postRole === "everyone"} onPress={() => setPostRole("everyone")} />
+          <RadioOption icon="megaphone" title="Store team only" body="An announcements channel. Members read." active={postRole === "admins"} onPress={() => setPostRole("admins")} />
+        </FormCard>
+      )}
       {channel ? (
         <ChatButton
           label="Delete channel"

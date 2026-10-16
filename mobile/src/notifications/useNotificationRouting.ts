@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import { router } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { useSignedIn } from "@/auth/SessionProvider";
@@ -18,6 +19,10 @@ import { pushTarget, resolvePushRoute, type PushRoute } from "@/features/communi
  */
 
 const handled = new Set<string>();
+
+// expo-notifications has no web module (the call throws), and a browser gets no taps.
+const useLastResponse: typeof Notifications.useLastNotificationResponse =
+  Platform.OS === "web" ? () => null : Notifications.useLastNotificationResponse;
 
 function go(route: PushRoute): void {
   switch (route.pathname) {
@@ -41,7 +46,7 @@ function go(route: PushRoute): void {
  * open lands on the mode's home tab instead.
  */
 export function useNotificationRouting(enabled: boolean): void {
-  const response = Notifications.useLastNotificationResponse();
+  const response = useLastResponse();
   const { me } = useSignedIn();
   const mode = me.mode;
   const canOrders = me.can.orders;

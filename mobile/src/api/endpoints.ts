@@ -1,4 +1,7 @@
 import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
+  GroupBuyBroadcastRequest,
+  GroupBuyBroadcastResponse,
+  LiveGroupBuyResponse,
   ChannelDetailResponse,
   ChannelInput,
   CommunityChannel,
@@ -11,6 +14,19 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   MarkReadRequest,
   MembersResponse,
   MemberStatus,
+  FlagActionRequest,
+  FlagStatus,
+  MemberSanctionRequest,
+  ModerationResponse,
+  ModerationSettingsRequest,
+  ModerationSettingsView,
+  SavedRepliesResponse,
+  SavedReplyRequest,
+  MemberUpdateRequest,
+  WelcomeMessage,
+  WelcomeRequest,
+  VideoConfirmRequest,
+  VideoUploadTicket,
   MessagesResponse,
   OpenDmResponse,
   ProfileResponse,
@@ -46,8 +62,11 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   ProductRow,
   ProductUpdateRequest,
   RegisterDeviceRequest,
+  RegisterRequest,
   StorePreview,
   TokenPair,
+  CommunityTagsResponse,
+  CommunityTagsUpdateRequest,
 } from "@contract";
 import { api, apiUpload, type UploadFile } from "./client";
 
@@ -64,6 +83,9 @@ export const authApi = {
       retryable: true,
       timeoutMs: 45_000,
     }),
+  /** Never retried: a resend after a lost answer would meet "email taken". */
+  register: (body: RegisterRequest) =>
+    api<LoginResponse>("/auth/register", { method: "POST", body, auth: false, timeoutMs: 45_000 }),
   refresh: (refreshToken: string) =>
     api<TokenPair>("/auth/refresh", { method: "POST", body: { refreshToken }, auth: false }),
   logout: (accessToken: string | null, refreshToken: string | null) =>
@@ -201,17 +223,45 @@ export const communityApi = {
   updateProfile: (body: ProfileUpdateRequest) => api<ProfileResponse>("/community/profile", { method: "PATCH", body }),
   profileOf: (key: string) => api<ProfileResponse>(`/community/profiles/${enc(key)}`),
   upload: (file: UploadFile, signal?: AbortSignal) => apiUpload<UploadResponse>("/community/uploads", "file", file, signal),
+  /** Team only: a signed ticket to upload a video straight to the media host (or "inline"). */
+  videoTicket: (name: string) => api<VideoUploadTicket>("/community/uploads/video", { method: "POST", body: { name } }),
+  /** Team only: record a direct video upload once the server has checked it. */
+  confirmVideo: (body: VideoConfirmRequest) => api<UploadResponse>("/community/uploads/video/confirm", { method: "POST", body }),
 
   drops: () => api<DropsResponse>("/community/drops").then((r) => r.drops),
   createDrop: (body: DropInput) => api<CommunityDrop>("/community/drops", { method: "POST", body }),
   endDrop: (id: string) => api<EndDropResponse>(`/community/drops/${enc(id)}/end`, { method: "POST" }),
+  liveGroupBuy: () => api<LiveGroupBuyResponse>("/community/group-buy"),
+  /** Idempotent on body.clientId (per channel), so a retry never posts twice. */
+  broadcastGroupBuy: (body: GroupBuyBroadcastRequest) =>
+    api<GroupBuyBroadcastResponse>("/community/group-buy/broadcast", { method: "POST", body, retryable: true }),
 
   members: (status: MemberStatus) => api<MembersResponse>(`/community/members?status=${status}`),
   review: (customerId: string, body: ReviewMemberRequest) =>
     api<{ reviewed: true }>(`/community/members/${enc(customerId)}/review`, { method: "POST", body }),
   setJoinMode: (joinMode: JoinMode) => api<{ joinMode: JoinMode }>("/community/members", { method: "PATCH", body: { joinMode } }),
+  /** The DMs sent once, in order, to each new member. */
+  setWelcome: (welcome: WelcomeRequest["welcome"]) => api<{ welcome: WelcomeMessage }>("/community/members", { method: "PATCH", body: { welcome } }),
+  /** Verified resellers see channels whose audience is "resellers"; admins help run the community. */
+  updateMember: (customerId: string, body: MemberUpdateRequest) =>
+    api<{ customerId: string; verifiedReseller?: boolean; isAdmin?: boolean }>(`/community/members/${enc(customerId)}`, { method: "PATCH", body }),
+  /** The look of the Admin and Verified reseller tags (the team and community admins). */
+  updateTags: (tags: CommunityTagsUpdateRequest["tags"]) => api<CommunityTagsResponse>("/community/tags", { method: "PATCH", body: { tags } }),
   reapply: (body: ReapplyRequest) => api<{ membership: "pending" | "approved" }>("/community/reapply", { method: "POST", body }),
   protocols: () => api<ProtocolsResponse>("/community/protocols").then((r) => r.protocols),
+  /** Safety bot (moderators): the flagged-message queue and its settings. */
+  moderation: (status: FlagStatus) => api<ModerationResponse>(`/community/moderation?status=${status}`),
+  setModeration: (body: ModerationSettingsRequest) => api<ModerationSettingsView>("/community/moderation", { method: "PATCH", body }),
+  reviewFlag: (flagId: string, body: FlagActionRequest) =>
+    api<{ status: FlagStatus }>(`/community/moderation/flags/${enc(flagId)}`, { method: "POST", body }),
+  /** ban = out of the community AND the login is refused; unban gives both back. */
+  sanction: (customerId: string, body: MemberSanctionRequest) =>
+    api<{ customerId: string; muted: boolean; banned: boolean }>(`/community/members/${enc(customerId)}/sanction`, { method: "POST", body }),
+  /** The store team's shared quick answers (moderators). Every write answers with the whole list. */
+  savedReplies: () => api<SavedRepliesResponse>("/community/saved-replies"),
+  createSavedReply: (body: SavedReplyRequest) => api<SavedRepliesResponse>("/community/saved-replies", { method: "POST", body }),
+  updateSavedReply: (id: string, body: SavedReplyRequest) => api<SavedRepliesResponse>(`/community/saved-replies/${enc(id)}`, { method: "PATCH", body }),
+  deleteSavedReply: (id: string) => api<SavedRepliesResponse>(`/community/saved-replies/${enc(id)}`, { method: "DELETE" }),
 };
 
 /**
@@ -242,7 +292,11 @@ export const qk = {
     [scope, "community", "shared", type, id, tab] as const,
   communityProfile: (scope: string, key: string) => [scope, "community", "profile", key] as const,
   communityDrops: (scope: string) => [scope, "community", "drops"] as const,
+  communityGroupBuy: (scope: string) => [scope, "community", "group-buy"] as const,
   communityProtocols: (scope: string) => [scope, "community", "protocols"] as const,
   communityMembers: (scope: string, status: MemberStatus) => [scope, "community", "members", status] as const,
   communityMembersAll: (scope: string) => [scope, "community", "members"] as const,
+  communityModeration: (scope: string, status: FlagStatus) => [scope, "community", "moderation", status] as const,
+  communityModerationAll: (scope: string) => [scope, "community", "moderation"] as const,
+  communitySavedReplies: (scope: string) => [scope, "community", "saved-replies"] as const,
 };

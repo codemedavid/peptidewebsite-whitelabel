@@ -6,10 +6,20 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://app.pepweb.store",
+        "EXPO_PUBLIC_ROOT_DOMAIN": "pepweb.store",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://pepweb.store"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://app.pepweb.store",
+        "EXPO_PUBLIC_ROOT_DOMAIN": "pepweb.store",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://pepweb.store"
+      }
     },
     "production": {
       "autoIncrement": true,
@@ -17,12 +27,29 @@
         "EXPO_PUBLIC_API_URL": "https://app.pepweb.store",
         "EXPO_PUBLIC_ROOT_DOMAIN": "pepweb.store",
         "EXPO_PUBLIC_SUPPORT_URL": "https://pepweb.store"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "apk": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       }
     }
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {
+        "ascAppId": "6818043518",
+        "appleTeamId": "KBC9YTF93U"
+      },
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
     }
   }
 }

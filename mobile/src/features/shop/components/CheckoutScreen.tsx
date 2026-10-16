@@ -16,6 +16,7 @@ import { buyableLines } from "../lib/cart";
 import {
   checkoutError,
   emptyForm,
+  isPayLater,
   newAttemptId,
   orderRequest,
   pickCourier,
@@ -29,6 +30,7 @@ import { useShop } from "../ShopProvider";
 import { ContactSection, DeliverySection, NoteSection, PromoSection } from "./CheckoutSections";
 import { OrderSummary } from "./OrderSummary";
 import { PaymentSection } from "./PaymentSection";
+import { PayLaterSection } from "./PayLaterSection";
 import { CatalogError, ClosedBanner } from "./ShopStates";
 import { FormSection, Notice } from "./ShopUI";
 
@@ -87,7 +89,9 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
     );
   }
 
-  const formError = checkoutError(form, checkout);
+  // Pay-after-close group buy: no payment step, the invoice comes at close.
+  const payLater = isPayLater(quote.data, catalog.groupBuy, lines);
+  const formError = checkoutError(form, checkout, payLater);
   const quoteError = quote.isError ? quote.error.message : null;
   const promoError = form.promoCode && quoteError ? quoteError : null;
   const canPlace = catalog.open && online && !formError && !!quote.data && !quote.isStale && !quoteError && !place.isPending;
@@ -98,7 +102,7 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
       return;
     }
     setSubmitError(null);
-    place.mutate(orderRequest(attemptId.current, lines, form, checkout, quote.data), {
+    place.mutate(orderRequest(attemptId.current, lines, form, checkout, quote.data, payLater), {
       onSuccess: ({ order }) => {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
         shop.clear();
@@ -114,7 +118,8 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
     });
   }
 
-  const buttonLabel = quote.data && !quote.isStale ? `Place order · ${money(quote.data.total, currency)}` : "Place order";
+  const verb = payLater ? (quote.data?.invoice?.addOn ? "Add to my order" : "Place order") : "Place order";
+  const buttonLabel = quote.data && !quote.isStale ? `${verb} · ${money(quote.data.total, currency)}` : verb;
   const hint = !catalog.open ? "The shop is closed right now." : !online ? "You're offline." : formError;
 
   return (
@@ -130,21 +135,36 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
         ) : null}
         <ContactSection form={form} set={set} />
         <DeliverySection form={form} set={set} onCourier={(id) => { setSubmitError(null); setForm((f) => pickCourier(withDefaults(f, checkout), checkout, id)); }} checkout={checkout} currency={currency} />
-        <PaymentSection
-          checkout={checkout}
-          methodId={form.paymentMethodId}
-          onMethod={(paymentMethodId) => set({ paymentMethodId })}
-          proofUrl={form.proofUrl}
-          onProof={(proofUrl) => set({ proofUrl })}
-          proofRequired={proofRequired(checkout)}
-        />
+        {payLater ? (
+          <PayLaterSection
+            roundName={quote.data?.invoice?.roundName || catalog.groupBuy?.name || ""}
+            shippingFee={catalog.groupBuy?.invoice?.shippingFee ?? 0}
+            addOn={quote.data?.invoice?.addOn === true}
+            currency={currency}
+          />
+        ) : (
+          <PaymentSection
+            checkout={checkout}
+            methodId={form.paymentMethodId}
+            onMethod={(paymentMethodId) => set({ paymentMethodId })}
+            proofUrl={form.proofUrl}
+            onProof={(proofUrl) => set({ proofUrl })}
+            proofRequired={proofRequired(checkout)}
+          />
+        )}
         <PromoSection applied={form.promoCode} error={promoError} onApply={(promoCode) => set({ promoCode })} />
         {checkout.customerNoteEnabled ? (
           <NoteSection label={checkout.customerNoteLabel} value={form.customerNote} onChange={(customerNote) => set({ customerNote })} />
         ) : null}
         <FormSection title="Order summary">
           {quote.data ? (
-            <OrderSummary totals={quote.data} currency={currency} updating={quote.isStale} shippingPending={checkout.couriers.length > 0 && !form.courierId} />
+            <OrderSummary
+              totals={quote.data}
+              currency={currency}
+              updating={quote.isStale}
+              shippingPending={checkout.couriers.length > 0 && !form.courierId}
+              invoice={quote.data.invoice ?? null}
+            />
           ) : quoteError ? null : (
             <AppText variant="body" color="muted">Working out your total…</AppText>
           )}

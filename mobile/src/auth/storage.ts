@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "./secure-store";
 import type { MeResponse, StorePreview, TokenPair } from "@contract";
 
 /**

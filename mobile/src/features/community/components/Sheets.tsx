@@ -6,8 +6,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import type { CommunityMessage } from "@contract";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { attachmentLabel, type Attachment } from "../lib/attachments";
+import { saveAsReplyFrom } from "../lib/savedReplies";
 import { isSearchable } from "../lib/search";
 import { pickDocument, pickImage, PickError, type ImageSource } from "../hooks/usePickers";
+import { useLiveGroupBuy } from "../hooks/useCommunityData";
 import type { InChatSearch } from "../hooks/useSearch";
 import { CHAT, GUTTER, INTER, RADII, useChatBrand } from "../theme";
 import { ChatText } from "./ChatText";
@@ -18,11 +20,12 @@ import { Sheet } from "./Surfaces";
 
 // ── Attach menu ──────────────────────────────────────────────────────────────
 
-type Choice = "product" | "protocol" | "document" | ImageSource;
+type Choice = "groupbuy" | "product" | "protocol" | "document" | ImageSource;
 type Option = { key: Choice; label: string; hint: string; icon: IconName; tint: string };
 
 // Same order as the inspiration: things from the store first, then media.
 const OPTIONS: Option[] = [
+  { key: "groupbuy", label: "Group buy", hint: "The live round", icon: "people", tint: "#0E6E5C" },
   { key: "product", label: "Product", hint: "A listing from the shop", icon: "pricetag", tint: "#B8325A" },
   { key: "protocol", label: "Protocol", hint: "A dosing guide", icon: "clipboard", tint: "#7A3FB8" },
   { key: "camera", label: "Camera", hint: "Take a photo", icon: "camera", tint: "#C43A24" },
@@ -43,7 +46,10 @@ export function AttachMenu({ visible, onClose, onAttach }: { visible: boolean; o
   // choice waits for the menu's onDismiss there.
   const [pending, setPending] = useState<Choice | null>(null);
   const menuVisible = visible && picker === null && pending === null;
-  const options = OPTIONS.filter((o) => o.key !== "product" || canPickProducts);
+  // Only while a round is open — the server refuses anything else.
+  const live = useLiveGroupBuy(visible);
+  const round = live.data?.groupBuy?.status === "open" ? live.data.groupBuy : null;
+  const options = OPTIONS.filter((o) => (o.key !== "product" || canPickProducts) && (o.key !== "groupbuy" || !!round));
 
   const finish = () => {
     setPicker(null);
@@ -67,6 +73,10 @@ export function AttachMenu({ visible, onClose, onAttach }: { visible: boolean; o
       return;
     }
     finish();
+    if (choice === "groupbuy") {
+      if (round) onAttach({ type: "groupbuy", groupBuy: round });
+      return;
+    }
     if (choice === "document") void attach(pickDocument, "Document");
     else void attach(() => pickImage(choice), "Photo");
   };
@@ -126,7 +136,15 @@ type MessageActionsProps = {
   onViewProduct: (productId: string) => void;
   /** Image / file protocol guides: open the guide. */
   onViewProtocol: (m: CommunityMessage) => void;
+  /** Someone else's message: send it to the safety inbox. */
+  onReport: (m: CommunityMessage) => void;
+  /** Set when the sender is a member you can block (never yourself or the store team). */
+  onBlock?: (m: CommunityMessage) => void;
+  /** Store team: keep this message's text as a saved reply. */
+  onSaveReply?: (m: CommunityMessage) => void;
   onClose: () => void;
+  /** iOS: the menu has finished closing (Modal onDismiss). */
+  onDismiss?: () => void;
 };
 
 /** A protocol whose guide opens somewhere (text guides show everything on the card). */
@@ -136,7 +154,7 @@ export function protocolOpens(m: CommunityMessage): boolean {
 }
 
 /** Long-press menu: a quoted preview and a grouped action list (server decides edit/delete). */
-export function MessageActions({ message, canReply, onReply, onEdit, onDelete, onCopy, onViewProduct, onViewProtocol, onClose }: MessageActionsProps) {
+export function MessageActions({ message, canReply, onReply, onEdit, onDelete, onCopy, onViewProduct, onViewProtocol, onReport, onBlock, onSaveReply, onClose, onDismiss }: MessageActionsProps) {
   const b = useChatBrand();
   const actions: Action[] = [];
   if (canReply) actions.push({ key: "reply", label: "Reply", icon: "arrow-undo-outline", run: onReply });
@@ -144,10 +162,17 @@ export function MessageActions({ message, canReply, onReply, onEdit, onDelete, o
   if (productId) actions.push({ key: "listing", label: "View listing", icon: "bag-handle-outline", run: () => onViewProduct(productId) });
   if (message && protocolOpens(message)) actions.push({ key: "protocol", label: "Read protocol", icon: "book-outline", run: onViewProtocol });
   if (message?.body) actions.push({ key: "copy", label: "Copy text", icon: "copy-outline", run: onCopy });
+  if (message && onSaveReply && saveAsReplyFrom(message)) actions.push({ key: "save-reply", label: "Save as reply", icon: "chatbox-ellipses-outline", run: onSaveReply });
   if (message?.canEdit) actions.push({ key: "edit", label: "Edit", icon: "pencil-outline", run: onEdit });
   if (message?.canDelete) actions.push({ key: "delete", label: "Delete for everyone", icon: "trash-outline", destructive: true, run: onDelete });
+  if (message && !message.mine && message.kind !== "system" && message.kind !== "order") {
+    actions.push({ key: "report", label: "Report message", icon: "flag-outline", destructive: true, run: onReport });
+  }
+  if (message && onBlock) {
+    actions.push({ key: "block", label: `Block ${message.sender?.name ?? "this member"}`, icon: "ban-outline", destructive: true, run: onBlock });
+  }
   return (
-    <Sheet visible={message != null} onClose={onClose} fit>
+    <Sheet visible={message != null} onClose={onClose} onDismiss={onDismiss} fit>
       {message ? (
         <View style={{ paddingHorizontal: GUTTER, paddingTop: 12, gap: 12 }}>
           <View style={{ backgroundColor: CHAT.surface, borderRadius: RADII.md, padding: 12, gap: 2 }}>

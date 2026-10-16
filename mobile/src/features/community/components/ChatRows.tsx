@@ -33,6 +33,8 @@ type ChatRowProps = {
   /** Hue seed for the avatar gradient. */
   seed: string;
   broadcast?: boolean;
+  /** The Verified Resellers Hub — marked with a verified shield. */
+  hub?: boolean;
   square?: boolean;
   pinned?: boolean;
   /** Small brand-coloured prefix, e.g. the topic count. */
@@ -50,7 +52,7 @@ type ChatRowProps = {
 };
 
 /** One WhatsApp/Telegram chat-list row. */
-export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, broadcast = false, square = false, pinned = false, context, preview, fallback, time, unread, onPress, onLongPress, avatar, oneToOne = false }: ChatRowProps) {
+export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, broadcast = false, hub = false, square = false, pinned = false, context, preview, fallback, time, unread, onPress, onLongPress, avatar, oneToOne = false }: ChatRowProps) {
   const b = useChatBrand();
   const author = preview?.author && (!oneToOne || preview.author === "You") ? preview.author : null;
   const line = preview?.text ?? fallback;
@@ -60,7 +62,7 @@ export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, bro
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}${hasUnread ? `, ${unread} unread` : ""}. ${author ? `${author}: ` : ""}${line}`}
+      accessibilityLabel={`${title}${hub ? ", verified resellers hub" : ""}${hasUnread ? `, ${unread} unread` : ""}. ${author ? `${author}: ` : ""}${line}`}
       accessibilityHint={onLongPress ? "Long press for options" : undefined}
       style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingLeft: GUTTER, backgroundColor: pressed ? CHAT.surfacePressed : CHAT.surface })}
     >
@@ -68,6 +70,7 @@ export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, bro
       <View style={{ flex: 1, marginLeft: 12, paddingVertical: 10, paddingRight: GUTTER, borderBottomWidth: 1, borderBottomColor: CHAT.hairline, gap: 3, minHeight: 74, justifyContent: "center" }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
           {broadcast ? <Ionicons name="megaphone" size={14} color={CHAT.inkSoft} /> : null}
+          {hub ? <Ionicons name="shield-checkmark" size={14} color={CHAT.inkSoft} /> : null}
           <ChatText numberOfLines={1} style={{ flexShrink: 1, fontFamily: INTER.semibold, fontSize: 16, lineHeight: 21 }}>
             {title}
           </ChatText>
@@ -108,6 +111,7 @@ export const ChannelRowItem = memo(function ChannelRowItem({ channel: ch, onMenu
       seed={ch.id}
       title={ch.name}
       broadcast={ch.postRole === "admins"}
+      hub={ch.audience === "hub"}
       // Like the inspiration: which topic the latest message is in, in brand colour.
       context={multi ? (ch.preview && ch.previewTopic ? ch.previewTopic : pluralize(ch.topicCount, "topic")) : null}
       preview={ch.preview}

@@ -7,9 +7,8 @@ import { ApiError } from "@/api/client";
 import { communityApi, qk } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { appendOlder, fromFirstPage, mergePoll, newestConfirmed, type ThreadState } from "../lib/messages";
+import { nextPollDelay } from "../lib/poll";
 
-/** An open thread polls for new messages and edits this often (foreground + focused only). */
-export const THREAD_POLL_MS = 3_000;
 /** How many older pages a search jump may pull in to reach a hit. */
 const MAX_JUMP_PAGES = 10;
 
@@ -51,36 +50,64 @@ export function useThread(type: ThreadType, id: string) {
     [qc, key],
   );
 
-  const poll = useCallback(async () => {
+  // Polls in a row that brought nothing — stretches the wait (lib/poll.ts).
+  const quietPolls = useRef(0);
+  // Re-arms the poll timer at the fast pace (set while the screen is focused).
+  const kick = useRef<(() => void) | null>(null);
+
+  /** One poll; true when it brought new messages or changes. */
+  const poll = useCallback(async (): Promise<boolean> => {
     const current = read();
-    if (!current || polling.current || gone) return;
+    if (!current || polling.current || gone) return false;
     polling.current = true;
     try {
       const res = await communityApi.messages(type, id, { after: current.pollCursor });
       write((s) => mergePoll(s, res));
+      return res.messages.length > 0 || res.changed.length > 0;
     } catch (e) {
       // A thread that was deleted or closed to us stops polling; anything
       // else (offline, a slow server) is retried on the next tick.
       if (e instanceof ApiError && GONE.has(e.code)) setGone(e.message);
+      return false;
     } finally {
       polling.current = false;
     }
   }, [read, write, type, id, gone]);
 
-  // Poll every 3 s while this screen is focused AND the app is in front.
+  // Poll while this screen is focused AND the app is in front: every 3 s
+  // while people are talking, backing off to 12 s while the chat is quiet.
   useFocusEffect(
     useCallback(() => {
       let active = AppState.currentState === "active";
+      let stopped = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        if (!stopped && active) timer = setTimeout(() => void tick(), nextPollDelay(quietPolls.current));
+      };
+      const tick = async () => {
+        const changed = await poll();
+        quietPolls.current = changed ? 0 : quietPolls.current + 1;
+        schedule();
+      };
       const sub = AppState.addEventListener("change", (s) => {
         active = s === "active";
-        if (active) void poll();
+        quietPolls.current = 0;
+        if (active) void tick();
+        else schedule(); // clears the timer
       });
-      const timer = setInterval(() => {
-        if (active) void poll();
-      }, THREAD_POLL_MS);
+      kick.current = () => {
+        quietPolls.current = 0;
+        schedule();
+      };
+      quietPolls.current = 0;
+      schedule();
       return () => {
-        clearInterval(timer);
+        stopped = true;
+        if (timer) clearTimeout(timer);
         sub.remove();
+        kick.current = null;
       };
     }, [poll]),
   );
@@ -119,6 +146,12 @@ export function useThread(type: ThreadType, id: string) {
 
   // Everything visible counts as read, including messages that land while open.
   const newest = newestConfirmed(query.data?.messages ?? []);
+  // A new message from anyone — including this person's own send — means the
+  // chat is live again: back to the fast pace straight away.
+  useEffect(() => {
+    kick.current?.();
+  }, [newest?.id]);
+
   const lastMarked = useRef<string | null>(null);
   useEffect(() => {
     if (!newest || lastMarked.current === newest.id) return;

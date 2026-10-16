@@ -39,4 +39,17 @@ export function access() {
   assert.equal(staffNoModule.adminChatsTab, false);
   const disabledStore = communityAccess({ mode: "admin", community: community("moderator", { enabled: false }) });
   assert.equal(disabledStore.adminChatsTab, false);
+  assert.equal(mod.runsCommunity, true);
+  assert.equal(mod.communityAdmin, false);
+
+  // Community admins: approved customers the team promoted.
+  const admin = communityAccess({ mode: "customer", community: community("approved", { isAdmin: true }) });
+  assert.equal(admin.communityAdmin, true);
+  assert.equal(admin.runsCommunity, true);
+  assert.equal(admin.moderator, false, "store-team tools stay hidden");
+  assert.equal(admin.customerChatsTab, true);
+  assert.equal(approved.runsCommunity, false);
+  assert.equal(approved.communityAdmin, false, "older servers omit isAdmin");
+  const revokedAdmin = communityAccess({ mode: "customer", community: community("revoked", { isAdmin: true }) });
+  assert.equal(revokedAdmin.runsCommunity, false);
 }

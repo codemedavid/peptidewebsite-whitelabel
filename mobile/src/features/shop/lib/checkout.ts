@@ -3,6 +3,7 @@ import type {
   ShopCartLine,
   ShopCheckoutConfig,
   ShopCourier,
+  ShopGroupBuy,
   ShopQuote,
   ShopQuoteRequest,
   ShopShippingLocation,
@@ -82,8 +83,23 @@ export function proofRequired(checkout: ShopCheckoutConfig): boolean {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Is this cart a pay-after-close group-buy order (no payment now, invoice at
+ * close)? The server's quote decides once it has answered; until then, guess
+ * from the catalog — the live round takes invoices and every line is in it.
+ */
+export function isPayLater(
+  quote: Pick<ShopQuote, "invoice"> | undefined,
+  groupBuy: Pick<ShopGroupBuy, "invoice" | "ordering" | "productIds"> | null | undefined,
+  lines: readonly Pick<ShopCartLine, "productId">[],
+): boolean {
+  if (quote) return !!quote.invoice;
+  if (!groupBuy?.invoice || groupBuy.ordering !== "open" || lines.length === 0) return false;
+  return lines.every((l) => groupBuy.productIds.includes(l.productId));
+}
+
 /** The first thing still missing, in form order; null = ready to place. */
-export function checkoutError(form: CheckoutForm, checkout: ShopCheckoutConfig): string | null {
+export function checkoutError(form: CheckoutForm, checkout: ShopCheckoutConfig, payLater = false): string | null {
   if (!form.name.trim()) return "Please enter your name.";
   if (form.email.trim() && !EMAIL.test(form.email.trim())) return "Please check your email address.";
   if (checkout.couriers.length > 0) {
@@ -94,6 +110,7 @@ export function checkoutError(form: CheckoutForm, checkout: ShopCheckoutConfig):
     }
   }
   if (!form.address.trim() || !form.city.trim()) return "Please enter your delivery address.";
+  if (payLater) return null;
   if (checkout.paymentMethods.length > 0 && !checkout.paymentMethods.some((m) => m.id === form.paymentMethodId)) {
     return "Please choose a payment method.";
   }
@@ -120,6 +137,7 @@ export function orderRequest(
   form: CheckoutForm,
   checkout: ShopCheckoutConfig,
   quote: ShopQuote,
+  payLater = false,
 ): PlaceShopOrderRequest {
   const courier = courierById(checkout, form.courierId);
   const trimmedNote = form.customerNote.trim();
@@ -136,8 +154,8 @@ export function orderRequest(
       ...(courier?.needsLocation && form.locationId ? { locationId: form.locationId } : {}),
     },
     courier: courier?.id ?? "",
-    paymentMethod: checkout.paymentMethods.length > 0 ? form.paymentMethodId : "",
-    ...(form.proofUrl ? { paymentProof: form.proofUrl } : {}),
+    paymentMethod: !payLater && checkout.paymentMethods.length > 0 ? form.paymentMethodId : "",
+    ...(!payLater && form.proofUrl ? { paymentProof: form.proofUrl } : {}),
     ...(form.promoCode.trim() ? { promoCode: form.promoCode.trim() } : {}),
     ...(checkout.customerNoteEnabled && trimmedNote ? { customerNote: trimmedNote } : {}),
     shown: { adminFee: quote.adminFee?.amount ?? 0, paymentFee: quote.paymentFee?.amount ?? 0 },

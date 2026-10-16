@@ -6,7 +6,12 @@ export type MembershipCard = "none" | "pending" | "rejected" | "revoked";
 export type CommunityAccess = {
   /** May open chats at all (approved member, or a moderator). */
   inCommunity: boolean;
+  /** The store team (owner, or staff with the community module). */
   moderator: boolean;
+  /** A member the store team made a community admin. */
+  communityAdmin: boolean;
+  /** Creates channels and reviews members: the team or a community admin. */
+  runsCommunity: boolean;
   /** Admin app: show the Chats tab. */
   adminChatsTab: boolean;
   /** Customer app: show the Chats tab. */
@@ -35,6 +40,7 @@ export function communityAccess(
   const moderator = c.enabled && c.isModerator;
   const approved = c.enabled && c.membership === "approved";
   const inCommunity = approved || moderator;
+  const communityAdmin = approved && c.isAdmin === true;
   let membershipCard: MembershipCard | null = null;
   if (me.mode === "customer" && !approved) {
     const m = c.membership;
@@ -43,6 +49,8 @@ export function communityAccess(
   return {
     inCommunity,
     moderator,
+    communityAdmin,
+    runsCommunity: moderator || communityAdmin,
     adminChatsTab: me.mode === "admin" && moderator,
     customerChatsTab: me.mode === "customer" && approved,
     membershipCard,

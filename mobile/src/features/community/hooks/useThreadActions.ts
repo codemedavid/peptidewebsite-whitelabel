@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CommunityMessage, Participant, SendMessageRequest, ThreadType, UploadResponse } from "@contract";
+import type { CommunityMessage, Participant, SavedReplyImage, SendMessageRequest, ThreadType, UploadResponse } from "@contract";
 import { ApiError } from "@/api/client";
 import { communityApi, qk } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
@@ -74,6 +74,7 @@ export function useThreadActions(type: ThreadType, id: string) {
             replyTo,
             product: attachment?.type === "product" ? attachment.product : null,
             protocol: attachment?.type === "protocol" ? attachment.protocol : null,
+            groupBuy: attachment?.type === "groupbuy" ? attachment.groupBuy : null,
             image: image ? { uri: image.uri, width: image.width, height: image.height } : null,
             file: file ? { uri: file.uri, name: file.name, size: file.size, mime: file.mimeType } : null,
           }),
@@ -98,6 +99,7 @@ export function useThreadActions(type: ThreadType, id: string) {
             ? { productId: attachment.product.id, ...(attachment.product.variationId ? { variationId: attachment.product.variationId } : {}) }
             : {}),
           ...(attachment?.type === "protocol" ? { protocolId: attachment.protocol.id } : {}),
+          ...(attachment?.type === "groupbuy" ? { groupBuyId: attachment.groupBuy.id } : {}),
           ...(upload ? { upload } : {}),
           ...(replyTo ? { replyToId: replyTo.id } : {}),
         };
@@ -110,6 +112,46 @@ export function useThreadActions(type: ThreadType, id: string) {
         // Cancelled because the person left the chat — nothing to report.
         if (e instanceof ApiError && e.code === "aborted") return null;
         return messageOf(e, "Your message wasn't sent. Try again.");
+      }
+    },
+    [write, type, id, me, refreshInbox],
+  );
+
+  /**
+   * A saved reply's photo: already a store-team upload, so it goes straight
+   * into a photo message (the server looks the upload up — no re-upload).
+   */
+  const sendSavedImage = useCallback(
+    async (image: SavedReplyImage): Promise<string | null> => {
+      const clientId = newClientId();
+      write((s) =>
+        addOptimistic(
+          s,
+          makeOptimistic({
+            clientId,
+            threadType: type,
+            threadId: id,
+            sender: me,
+            body: null,
+            now: new Date().toISOString(),
+            replyTo: null,
+            product: null,
+            protocol: null,
+            groupBuy: null,
+            image: { uri: image.url, width: image.width, height: image.height },
+            file: null,
+          }),
+        ),
+      );
+      try {
+        const upload: UploadResponse = { kind: "image", url: image.url, name: "", size: 0, mime: "", width: image.width, height: image.height };
+        const server = await communityApi.send(type, id, { clientId, kind: "image", upload });
+        write((s) => resolveOptimistic(s, clientId, server));
+        refreshInbox();
+        return null;
+      } catch (e) {
+        write((s) => removeOptimistic(s, clientId));
+        return messageOf(e, "A saved photo wasn't sent. Try again.");
       }
     },
     [write, type, id, me, refreshInbox],
@@ -162,5 +204,5 @@ export function useThreadActions(type: ThreadType, id: string) {
     [write, qc, scope, refreshInbox],
   );
 
-  return { send, edit, remove, endDrop };
+  return { send, sendSavedImage, edit, remove, endDrop };
 }

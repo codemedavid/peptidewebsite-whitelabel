@@ -1,9 +1,11 @@
-import type { ColorValue } from "react-native";
+import { View, type ColorValue } from "react-native";
 import { Tabs } from "expo-router";
+import { BottomTabBar, type BottomTabBarProps } from "expo-router/js-tabs";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useCommunityAccess, useUnreadChats } from "@/features/community/hooks/useInbox";
 import { CHAT, INTER, useChatBrand } from "@/features/community/theme";
 import { cartCount } from "@/features/shop/lib/cart";
+import { LiveGroupBuyStrip } from "@/features/shop/components/group-buy/LiveGroupBuyStrip";
 import { useShop } from "@/features/shop/ShopProvider";
 import type { IconName } from "@/ui/primitives";
 
@@ -13,9 +15,20 @@ function tabIcon(name: IconName, active: IconName) {
   };
 }
 
+/** The stock tab bar with the live group-buy strip docked on top (every tab). */
+function TabBarWithLiveStrip(props: BottomTabBarProps) {
+  return (
+    <View>
+      <LiveGroupBuyStrip />
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
+
 /**
  * The customer app: Chats (approved members only) · Shop · Orders · Me.
  * Anyone not approved yet lands on Me, which shows their membership status.
+ * While a group buy is open, a LIVE strip sits above the tab bar on every tab.
  */
 export default function CustomerTabsLayout() {
   const b = useChatBrand();
@@ -26,6 +39,7 @@ export default function CustomerTabsLayout() {
   return (
     <Tabs
       initialRouteName={access.customerChatsTab ? "community" : "me"}
+      tabBar={TabBarWithLiveStrip}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: b.brandText,

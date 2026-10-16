@@ -17,7 +17,8 @@ import { AppText, Button } from "@/ui/primitives";
 export async function pickAndUploadImage(onUploading?: () => void): Promise<{ url: string; name: string } | null> {
   let draft;
   try {
-    draft = await pickImage("library");
+    // Store images (banners, certificates, QR codes) keep their full detail.
+    draft = await pickImage("library", { lighten: false });
   } catch (e) {
     Alert.alert("Couldn't use that photo", e instanceof PickError ? e.message : "Please try another one.");
     return null;

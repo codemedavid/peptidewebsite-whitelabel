@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Href } from "expo-router";
 import { useSession } from "@/auth/SessionProvider";
+import { GUEST_BROWSING } from "@/config";
 import { useStoreLink } from "@/store-link/StoreLinkProvider";
 import type { ShopWho } from "./api";
 import { addLine, parseStoredCart, removeLine, serializeCart, setLineQty, type AddResult, type CartLine } from "./lib/cart";
@@ -37,7 +38,7 @@ type ShopApi = {
   replace: (lines: CartLine[]) => void;
   clear: () => void;
   /** Screen paths for this mode (guest screens live under /guest). */
-  paths: { home: Href; cart: Href; product: (id: string) => Href };
+  paths: { home: Href; cart: Href; product: (id: string) => Href; groupBuy: Href };
   /** Guest tapped Checkout: continue to the cart once they're signed in. */
   markResume: () => void;
   takeResume: () => boolean;
@@ -50,11 +51,13 @@ const GUEST_PATHS = {
   home: "/guest" as Href,
   cart: "/guest/cart" as Href,
   product: (id: string) => ({ pathname: "/guest/product/[id]", params: { id } }) as Href,
+  groupBuy: "/guest/group-buy" as Href,
 };
 const CUSTOMER_PATHS = {
   home: "/shop" as Href,
   cart: "/cart" as Href,
   product: (id: string) => ({ pathname: "/product/[id]", params: { id } }) as Href,
+  groupBuy: "/group-buy" as Href,
 };
 
 function useShopIdentity(): { mode: ShopMode; slug: string | null; scope: string } {
@@ -65,7 +68,7 @@ function useShopIdentity(): { mode: ShopMode; slug: string | null; scope: string
       ? { mode: "customer", slug: state.me.store.slug, scope: state.scope }
       : { mode: "off", slug: null, scope: state.scope };
   }
-  if (linked?.customerSignIn) return { mode: "guest", slug: linked.slug, scope: `guest:${linked.slug}` };
+  if (GUEST_BROWSING && linked?.customerSignIn) return { mode: "guest", slug: linked.slug, scope: `guest:${linked.slug}` };
   return { mode: "off", slug: null, scope: "guest:none" };
 }
 
@@ -170,6 +173,7 @@ const PREVIEW_PATHS = {
   home: "/storefront" as Href,
   cart: "/storefront" as Href,
   product: (id: string) => ({ pathname: "/storefront-product/[id]", params: { id } }) as Href,
+  groupBuy: "/storefront-group-buy" as Href,
 };
 const NO_ADD: AddResult = { lines: EMPTY, added: 0, capped: false };
 
