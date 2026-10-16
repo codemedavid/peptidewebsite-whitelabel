@@ -25,8 +25,9 @@ import { Categories } from "./components/Categories";
 import { Catalog } from "./components/Catalog";
 import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
-import { buildCategoryTiles } from "@/lib/storefront/boutique-home";
-import { isBoutiqueLayout, isEditorialLayout } from "@/lib/storefront/home-layout";
+import { buildCategoryTiles, normalizeAssurances } from "@/lib/storefront/boutique-home";
+import { isBoutiqueLayout, isEditorialLayout, isShowcaseLayout } from "@/lib/storefront/home-layout";
+import { promiseBarVars } from "@/lib/storefront/showcase-home";
 import { Footer } from "./components/Footer";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
@@ -63,6 +64,12 @@ const BoutiqueHome = dynamic(() => import("./components/BoutiqueHome").then((m) 
 // Opt-in left-rail "editorial" home (brand.homeLayout === "editorial"). Same
 // treatment again — classic tenants never download it.
 const EditorialHome = dynamic(() => import("./components/EditorialHome").then((m) => m.EditorialHome), { ssr: false, loading: BrandPageLoader });
+// Opt-in merchandised "showcase" home (brand.homeLayout === "showcase"). Same
+// treatment — classic tenants never download it.
+const ShowcaseHome = dynamic(() => import("./components/ShowcaseHome").then((m) => m.ShowcaseHome), { ssr: false, loading: BrandPageLoader });
+// The showcase promise bar is chrome above the header on every route, so like
+// the editorial rail it renders with no loading fallback.
+const ShowcasePromiseBar = dynamic(() => import("./components/ShowcasePromiseBar").then((m) => m.ShowcasePromiseBar), { ssr: false });
 // The rail is this layout's CHROME: it persists across every route, so unlike
 // the home above it is not code-split — a spinner where the nav should be is
 // worse than the few KB it costs the tenants who chose it.
@@ -188,9 +195,10 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
   };
   const boutique = isBoutiqueLayout(brand.homeLayout);
   const editorial = isEditorialLayout(brand.homeLayout);
-  // Both owner-selectable layouts end the home at discovery, so "go to the
-  // catalog" is a ROUTE on either of them rather than a scroll down the home.
-  const catalogIsOwnScreen = boutique || editorial;
+  const showcase = isShowcaseLayout(brand.homeLayout);
+  // Every owner-selectable layout keeps the full grid off the home, so "go to
+  // the catalog" is a ROUTE on each of them rather than a scroll down the home.
+  const catalogIsOwnScreen = boutique || editorial || showcase;
   const scrollToCatalog = () => {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -226,10 +234,10 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
       case "external":
         return () => window.open(target.url, "_blank", "noopener,noreferrer");
       case "catalog":
-        return () => {
-          if (page !== "home") goHome();
-          setTimeout(scrollToCatalog, 50);
-        };
+        // Same rule as goToRoute: where the catalog is its own screen there is
+        // no #catalog section on the home to scroll to, so a hero "Shop now"
+        // pointed at the catalog would do nothing at all.
+        return () => goToRoute("catalog");
       case "home":
         return goHome;
       case "route":
@@ -300,6 +308,13 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
             setQuery(q);
             if (activePage !== "catalog") goToRoute("catalog");
           }}
+        />
+      )}
+
+      {showcase && (
+        <ShowcasePromiseBar
+          assurances={normalizeAssurances(brand.boutique?.assurances)}
+          colorVars={promiseBarVars(brand)}
         />
       )}
 
@@ -388,6 +403,27 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
         <EditorialHome
           view={activePage === "catalog" ? "catalog" : "home"}
           onShopAll={() => goToRoute("catalog")}
+          brand={brand}
+          products={visibleProducts}
+          category={category}
+          query={query}
+          onQueryChange={setQuery}
+          onCategoryChange={setCategory}
+          onAddToCart={addToCart}
+          openProductSlug={productKey}
+          onHeroPrimary={heroCtaHandler(1)}
+          onHeroSecondary={heroCtaHandler(2)}
+          onHeroMedia={heroMediaHandler}
+          gbScope={gbScope}
+          onGbScope={setGbScope}
+        />
+      )}
+
+      {(activePage === "home" || activePage === "catalog") && showcase && (
+        <ShowcaseHome
+          view={activePage === "catalog" ? "catalog" : "home"}
+          onShopAll={() => goToRoute("catalog")}
+          onRoute={goToRoute}
           brand={brand}
           products={visibleProducts}
           category={category}
@@ -496,7 +532,9 @@ export function StorefrontApp({
           ? "boutique"
           : isEditorialLayout(brand?.homeLayout)
             ? "editorial"
-            : undefined
+            : isShowcaseLayout(brand?.homeLayout)
+              ? "showcase"
+              : undefined
       }
     >
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>

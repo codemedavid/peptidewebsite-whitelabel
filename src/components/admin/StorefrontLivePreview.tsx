@@ -11,8 +11,10 @@ import { useState } from "react";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
 import "@/storefront/editorial.css";
+import "@/storefront/showcase.css";
 import { StoreProvider } from "@/storefront/store";
 import type { Brand } from "@/storefront/types";
+import { fontStack } from "@/lib/theme/tokens";
 import { SEED_CATEGORIES, SEED_PRODUCTS } from "@/storefront/data";
 import { Header } from "@/storefront/components/Header";
 import { Hero } from "@/storefront/components/Hero";
@@ -42,11 +44,11 @@ export function brandVars(b: Brand): React.CSSProperties {
     // Only emit header overrides when set, so the CSS var() fallbacks apply.
     ...(b.headerBg ? { "--brand-header": b.headerBg } : {}),
     ...(b.headerText ? { "--brand-header-text": b.headerText } : {}),
-    "--brand-heading-font": `"${b.headingFont}", Georgia, serif`,
-    "--brand-body-font": `"${b.bodyFont}", system-ui, sans-serif`,
+    "--brand-heading-font": fontStack(b.headingFont, "Georgia, serif"),
+    "--brand-body-font": fontStack(b.bodyFont, "system-ui, sans-serif"),
     // Only emit a button-font override when set, so the CSS default
     // (--brand-button-font: var(--brand-body-font)) applies otherwise.
-    ...(b.buttonFont ? { "--brand-button-font": `"${b.buttonFont}", system-ui, sans-serif` } : {}),
+    ...(b.buttonFont ? { "--brand-button-font": fontStack(b.buttonFont, "system-ui, sans-serif") } : {}),
   } as React.CSSProperties;
 }
 

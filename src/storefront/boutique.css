@@ -393,6 +393,37 @@
   color: var(--brand-text);
 }
 
+/* Details hidden (the default): a plain one-line button — the channel name
+   and an arrow, no phone number / handle / address on the page. */
+.sf-root[data-sf-home="boutique"] .bq-contact__link[data-details="0"] {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 22px;
+}
+
+.sf-root[data-sf-home="boutique"] .bq-contact__link[data-details="0"] .bq-contact__channel {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--brand-text);
+}
+
+.sf-root[data-sf-home="boutique"] .bq-contact__arrow {
+  color: var(--brand-accent);
+  transition: transform 200ms var(--bq-ease);
+}
+
+.sf-root[data-sf-home="boutique"] .bq-contact__link:hover .bq-contact__arrow {
+  transform: translateX(3px);
+}
+
+.sf-root[data-sf-home="boutique"] .bq-contact__link:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
 /* ── The catalog, re-spaced to the boutique rhythm ────────────────────────── */
 
 .sf-root[data-sf-home="boutique"] .catalog {
@@ -453,13 +484,15 @@
   .sf-root[data-sf-home="boutique"] .bq-tile__btn,
   .sf-root[data-sf-home="boutique"] .bq-tile__img,
   .sf-root[data-sf-home="boutique"] .bq-tile__caption,
-  .sf-root[data-sf-home="boutique"] .bq-contact__link {
+  .sf-root[data-sf-home="boutique"] .bq-contact__link,
+  .sf-root[data-sf-home="boutique"] .bq-contact__arrow {
     transition: none;
   }
   .sf-root[data-sf-home="boutique"] .bq-tile__btn:hover,
   .sf-root[data-sf-home="boutique"] .bq-tile__btn:hover .bq-tile__img,
   .sf-root[data-sf-home="boutique"] .bq-tile__btn:hover .bq-tile__caption,
-  .sf-root[data-sf-home="boutique"] .bq-contact__link:hover {
+  .sf-root[data-sf-home="boutique"] .bq-contact__link:hover,
+  .sf-root[data-sf-home="boutique"] .bq-contact__link:hover .bq-contact__arrow {
     transform: none;
   }
 }

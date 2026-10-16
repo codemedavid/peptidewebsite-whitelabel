@@ -424,6 +424,19 @@
 }
 .sf-root .sf-cart__select:disabled { opacity: 0.55; cursor: not-allowed; }
 .sf-root .sf-cart__select[aria-invalid="true"] { border-color: #d23; }
+/* The owner's note for the selected courier (coverage, pick-up point). Sits
+   directly under the courier picker so it reads as part of that choice. */
+.sf-root .sf-cart__courier-note {
+  margin: -4px 0 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--brand-main);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--brand-main) 7%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-line;
+  color: color-mix(in srgb, var(--brand-text) 85%, transparent);
+}
 /* COD/no-location courier — no location selector, just a note that there's no
    shipping fee (the customer pays on delivery). */
 .sf-root .sf-cart__ship-cod-note {
@@ -617,10 +630,13 @@
 .sf-root .site-header__nav {
   display: flex;
   align-items: center;
-  gap: 36px;
+  /* Tightens before the burger takes over (≤900px), so a 6-link nav fits
+     ~1000px screens without a two-word label breaking onto two lines. */
+  gap: clamp(18px, 2.6vw, 36px);
   margin-inline: auto;
 }
 .sf-root .site-header__navlink {
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 500;
   color: var(--brand-header-text, var(--brand-text));
@@ -1645,7 +1661,17 @@
   .sf-root .site-footer__inner { grid-template-columns: 1fr; gap: 40px; }
 }
 .sf-root .site-footer__inner[data-brand="0"] { grid-template-columns: 1fr; }
-.sf-root .site-footer__inner[data-cols="0"] { grid-template-columns: 1fr; max-width: 600px; }
+/* Columns switched off: the brand block is the whole footer, so it sits in the
+   middle. Left-aligned inside the centred 600px box it landed just left of
+   centre and read as a broken layout. */
+.sf-root .site-footer__inner[data-cols="0"] {
+  grid-template-columns: 1fr;
+  max-width: 600px;
+  justify-items: center;
+  text-align: center;
+}
+.sf-root .site-footer__inner[data-cols="0"] .site-footer__brand-row,
+.sf-root .site-footer__inner[data-cols="0"] .site-footer__socials { justify-content: center; }
 
 /* ---------------------------------------------------------------
    Compact footer (footerStyle: "compact") — HP Glow, Image #2.
@@ -4433,6 +4459,60 @@
   flex-shrink: 0;
 }
 .sf-root .admin-cat-row__handle:active { cursor: grabbing; }
+/* Category picture: the round badge the storefront shows for this category.
+   Click to upload; × resets to the automatic product photo ("Auto"). */
+.sf-root .admin-cat-img { position: relative; flex-shrink: 0; }
+.sf-root .admin-cat-img__pick {
+  position: relative;
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--brand-background);
+  border: 1.5px dashed var(--brand-border);
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.sf-root .admin-cat-img.is-custom .admin-cat-img__pick { border-style: solid; border-color: var(--brand-accent); }
+.sf-root .admin-cat-img__pick:hover,
+.sf-root .admin-cat-img__pick:focus-within {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 22%, transparent);
+}
+.sf-root .admin-cat-img__pick img { width: 100%; height: 100%; object-fit: cover; }
+.sf-root .admin-cat-img__pick input[type="file"] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+}
+.sf-root .admin-cat-img__empty { font-size: 20px; line-height: 1; color: var(--brand-text-muted); }
+.sf-root .admin-cat-img__tag {
+  position: absolute; left: 50%; bottom: 2px;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-text) 72%, transparent);
+  color: var(--brand-surface);
+  font-size: 8.5px; font-weight: 700; letter-spacing: .04em; line-height: 14px;
+  pointer-events: none;
+}
+.sf-root .admin-cat-img__busy {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--brand-surface) 70%, transparent);
+  color: var(--brand-text); font-weight: 700;
+}
+.sf-root .admin-cat-img__clear {
+  position: absolute; top: -4px; right: -4px;
+  display: grid; place-items: center;
+  width: 18px; height: 18px;
+  padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--brand-text);
+  color: var(--brand-surface);
+  font-size: 13px; line-height: 1;
+  cursor: pointer;
+}
+.sf-root .admin-cat-img__clear:hover { background: var(--brand-accent); }
 .sf-root .admin-cat-row__id { font-size: 13px; color: var(--brand-text-muted); font-family: ui-monospace, monospace; flex-shrink: 0; }
 .sf-root .admin-cat-row__name { flex: 1; min-width: 0; }
 /* Scope to the NAME text input only — a bare `.admin-cat-row input` also matched
@@ -8371,6 +8451,55 @@
   color: color-mix(in srgb, var(--brand-text) 82%, transparent);
   white-space: pre-line;
 }
+/* The picked option's packing list ("Complete Set includes: …"). Only mounted
+   while an option that has one is selected, so it reads as part of the choice:
+   a soft brand-tinted panel directly under the pills, bullets in the brand
+   colour. The card variant is smaller so a grid row doesn't balloon. */
+.sf-root .sf-includes {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-main) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-main) 18%, transparent);
+  color: color-mix(in srgb, var(--brand-text) 85%, transparent);
+}
+.sf-root .sf-includes__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-main);
+}
+.sf-root .sf-includes__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.sf-root .sf-includes__list li {
+  position: relative;
+  padding-left: 16px;
+}
+.sf-root .sf-includes__list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-main);
+}
+.sf-root .sf-includes--card {
+  padding: 9px 11px;
+  border-radius: 10px;
+}
+.sf-root .sf-includes--card .sf-includes__title { font-size: 10.5px; margin-bottom: 4px; }
+.sf-root .sf-includes--card .sf-includes__list { font-size: 12.5px; gap: 2px; }
 /* Testimonials the owner connected to this product, shown directly under the
    description. A review can name several products, so the same one may appear
    in more than one product's modal. The description text carries the owner's
@@ -10130,6 +10259,46 @@
   margin-left: 58px;
   border: 1px dashed var(--brand-border);
   border-radius: 10px;
+}
+/* Per-variation "What's included" — indented under its option row like the
+   photo strip, so it reads as belonging to that option. */
+.sf-root .admin-includes__add,
+.sf-root .admin-includes__remove {
+  justify-self: start;
+  align-self: flex-start;
+  margin-left: 58px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-main);
+  cursor: pointer;
+}
+.sf-root .admin-includes__add:hover,
+.sf-root .admin-includes__remove:hover { text-decoration: underline; }
+.sf-root .admin-includes__add:focus-visible,
+.sf-root .admin-includes__remove:focus-visible {
+  outline: 2px solid var(--brand-main);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.sf-root .admin-includes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-left: 58px;
+  border: 1px solid color-mix(in srgb, var(--brand-main) 22%, var(--brand-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-main) 4%, transparent);
+}
+.sf-root .admin-includes .admin-includes__remove { margin-left: 0; color: var(--brand-text-muted); }
+.sf-root .admin-includes__text { min-height: 96px; }
+@media (max-width: 640px) {
+  .sf-root .admin-includes,
+  .sf-root .admin-includes__add { margin-left: 0; }
 }
 
 /* ── customer-accounts:start ─────────────────────────────────────────────────

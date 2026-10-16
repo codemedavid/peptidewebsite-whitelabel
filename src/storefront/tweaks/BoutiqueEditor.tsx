@@ -15,7 +15,15 @@
 
 import type { Brand } from "../types";
 import type { SetTweak } from "./BrandTweaksForm";
-import { TweakSection, TweakRow, TweakSelect, TweakText, TweakButton } from "./controls";
+import {
+  TweakSection,
+  TweakRow,
+  TweakSelect,
+  TweakText,
+  TweakToggle,
+  TweakButton,
+  ColorField,
+} from "./controls";
 import {
   EDIT_COLUMNS_LABEL,
   EDIT_COLUMNS_OPTIONS,
@@ -29,7 +37,10 @@ import {
   ASSURANCE_LABEL_MAX,
   ASSURANCE_NOTE_MAX,
   normalizeAssurances,
+  normalizeBoutiqueContact,
+  CONTACT_HEADING_MAX,
   type BoutiqueAssurance,
+  type BoutiqueContact,
 } from "@/lib/storefront/boutique-home";
 
 /** The layouts an OWNER may pick for themselves. "two-ways" is deliberately
@@ -39,11 +50,21 @@ const OWNER_LAYOUTS: Record<string, Brand["homeLayout"]> = {
   "Classic — hero, category chips, catalog": "classic",
   "Boutique — banner, category tiles, catalog": "boutique",
   "Editorial — side menu, category index, catalog": "editorial",
+  "Showcase — promise bar, split hero, featured shelf": "showcase",
 };
 
 /** Shown, but not selectable, for a tenant the operator granted it to — so
  *  opening this panel can never silently downgrade their home. */
 const TWO_WAYS_LABEL = "Two ways to order (granted by your provider)";
+
+/** What each layout calls the owner's promise lines. One list, three ways of
+ *  showing it — the showcase layout puts it in the bar above the header, the
+ *  hero's trust row and the closing strip. */
+const ASSURANCE_SECTION_LABEL: Record<string, string> = {
+  boutique: "Boutique: assurance strip",
+  editorial: "Editorial: notices strip",
+  showcase: "Showcase: promise bar + trust strip",
+};
 
 function layoutLabel(layout: Brand["homeLayout"]): string {
   if (layout === "two-ways") return TWO_WAYS_LABEL;
@@ -69,6 +90,10 @@ export function BoutiqueEditor({
 
   const edit = (index: number, patch: Partial<BoutiqueAssurance>) =>
     write(assurances.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+
+  const contact = normalizeBoutiqueContact(t.boutique?.contact);
+  const editContact = (patch: Partial<BoutiqueContact>) =>
+    setTweak("boutique", { ...(t.boutique ?? {}), contact: { ...contact, ...patch } });
 
   return (
     <>
@@ -97,11 +122,36 @@ export function BoutiqueEditor({
         </>
       )}
 
-      {(layout === "boutique" || layout === "editorial") && (
+      {layout === "boutique" && (
         <>
-          <TweakSection
-            label={layout === "editorial" ? "Editorial: notices strip" : "Boutique: assurance strip"}
+          {/* "Questions before you order?" — the buttons open the store's
+              active contact channels (set under checkout contact). */}
+          <TweakSection label="Boutique: contact block" />
+          <TweakToggle
+            label="Show contact block"
+            value={contact.show}
+            onChange={(v) => editContact({ show: v })}
           />
+          {contact.show && (
+            <>
+              <TweakText
+                label="Heading"
+                value={contact.heading}
+                onChange={(v) => editContact({ heading: v.slice(0, CONTACT_HEADING_MAX) })}
+              />
+              <TweakToggle
+                label="Show number / handle on buttons"
+                value={contact.showDetails}
+                onChange={(v) => editContact({ showDetails: v })}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {(layout === "boutique" || layout === "editorial" || layout === "showcase") && (
+        <>
+          <TweakSection label={ASSURANCE_SECTION_LABEL[layout]} />
           {assurances.length === 0 && (
             <TweakRow label="Assurances">
               <span style={{ fontSize: 12, opacity: 0.7 }}>
@@ -139,6 +189,33 @@ export function BoutiqueEditor({
                 ])
               }
             />
+          )}
+
+          {layout === "showcase" && (
+            <>
+              {/* The bar above the header. Unset = brand text colour behind
+                  brand background text (always readable on any palette). */}
+              <ColorField
+                label="Promise bar background"
+                value={t.promiseBarBg}
+                optional
+                fallback={t.text}
+                inheritLabel="Inheriting Text colour"
+                onChange={(v) => setTweak("promiseBarBg", v)}
+                onClear={() => setTweak("promiseBarBg", undefined)}
+                options={[t.text, t.main, t.button, t.accent].filter(Boolean)}
+              />
+              <ColorField
+                label="Promise bar text"
+                value={t.promiseBarText}
+                optional
+                fallback={t.background}
+                inheritLabel="Inheriting Background"
+                onChange={(v) => setTweak("promiseBarText", v)}
+                onClear={() => setTweak("promiseBarText", undefined)}
+                options={["#FFFFFF", t.background, t.text].filter(Boolean)}
+              />
+            </>
           )}
         </>
       )}

@@ -1,0 +1,1223 @@
+/* SHOWCASE home layout — the merchandised storefront: promise bar, a hero
+   (split beside the uploaded hero image, else text-only), round category badges, a buyable
+   featured shelf and promo cards.
+
+   Three rules govern this file, and npm run test:showcase-home enforces them:
+
+   1. EVERY selector is scoped to .sf-root[data-sf-home="showcase"]. storefront.css
+      has already produced one silent same-specificity override (a later
+      small-screen block re-declared the image hero's padding), so scoping to a
+      class + an attribute puts every rule here above the base sheet's
+      .sf-root .x selectors regardless of which sheet the bundler emits first.
+
+   2. NO colour literals. Everything resolves through --brand-* or a color-mix
+      over them: a hex here would be one tenant's palette baked into every
+      tenant's storefront. The soft "blush" panels are the tenant's ACCENT
+      mixed into their own background, so a pink brand gets pink panels and a
+      teal brand gets teal ones.
+
+   3. Only tokens that EXIST. var(--brand-invented) passes a literal check and
+      paints nothing; the test cross-checks every --brand-* read here against
+      storefront.css's own definitions.
+
+   The one guaranteed-readable pair on any palette is --brand-text on
+   --brand-background (the whole storefront depends on it), so the one
+   inverted surface — the promise bar — defaults to exactly that pair swapped.
+   An owner can recolour it (Brand.promiseBarBg / promiseBarText), which
+   ShowcasePromiseBar sets inline on the bar, overriding these defaults. */
+
+.sf-root[data-sf-home="showcase"] {
+  --sc-section: clamp(44px, 6vw, 96px);
+  --sc-gap: clamp(14px, 1.8vw, 26px);
+  --sc-radius: 26px;
+  --sc-radius-lg: 34px;
+  --sc-blush: color-mix(in oklab, var(--brand-accent) 8%, var(--brand-background));
+  --sc-blush-strong: color-mix(in oklab, var(--brand-accent) 16%, var(--brand-background));
+  --sc-blush-edge: color-mix(in oklab, var(--brand-accent) 22%, transparent);
+  --sc-ink-soft: color-mix(in oklab, var(--brand-text) 70%, transparent);
+  --sc-hair: color-mix(in oklab, var(--brand-text) 12%, transparent);
+  --sc-shadow: 0 22px 48px -28px color-mix(in oklab, var(--brand-text) 55%, transparent);
+  --sc-shadow-sm: 0 10px 24px -16px color-mix(in oklab, var(--brand-text) 50%, transparent);
+  --sc-track: 0.28em;
+  --sc-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sc-promise-bg: var(--brand-text);
+  --sc-promise-text: var(--brand-background);
+}
+
+/* ── Promise bar (chrome, above the header) ───────────────────────────────── */
+
+.sf-root[data-sf-home="showcase"] .sc-promise {
+  background: var(--sc-promise-bg);
+  color: var(--sc-promise-text);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promise__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 3vw, 44px);
+  margin-block: 0;
+  padding-block: 9px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promise__row::-webkit-scrollbar { display: none; }
+
+.sf-root[data-sf-home="showcase"] .sc-promise__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promise__item + .sc-promise__item {
+  padding-left: clamp(18px, 3vw, 44px);
+  border-left: 1px solid color-mix(in oklab, var(--sc-promise-text) 28%, transparent);
+}
+
+/* ── Header: centred nav with an accent underline ─────────────────────────── */
+
+@media (min-width: 1000px) {
+  .sf-root[data-sf-home="showcase"] .site-header__nav {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+.sf-root[data-sf-home="showcase"] .site-header__navlink {
+  position: relative;
+}
+
+.sf-root[data-sf-home="showcase"] .site-header__navlink::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: -6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-accent);
+  transition: left 240ms var(--sc-ease), right 240ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .site-header__navlink:hover::after,
+.sf-root[data-sf-home="showcase"] .site-header__navlink:focus-visible::after {
+  left: 0;
+  right: 0;
+}
+
+/* ── Shared pill buttons ──────────────────────────────────────────────────── */
+
+.sf-root[data-sf-home="showcase"] .sc-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 14px 30px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--sc-shadow-sm);
+  transition: transform 220ms var(--sc-ease), box-shadow 220ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-pill svg {
+  transition: transform 220ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sc-shadow);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-pill:hover svg { transform: translateX(3px); }
+
+.sf-root[data-sf-home="showcase"] .sc-pill:active { transform: translateY(0); }
+
+.sf-root[data-sf-home="showcase"] .sc-pill:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-pill--ghost {
+  border: 1.5px solid color-mix(in oklab, var(--brand-text) 22%, transparent);
+  background: transparent;
+  color: var(--brand-text);
+  box-shadow: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-pill--ghost:hover {
+  border-color: var(--brand-accent);
+  color: var(--brand-accent);
+  box-shadow: none;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+
+.sf-root[data-sf-home="showcase"] .sc-hero {
+  position: relative;
+  overflow: hidden;
+  padding-block: clamp(36px, 6vw, 88px) clamp(40px, 6vw, 84px);
+  /* One soft glow behind the photography, fading to the page colour on every
+     side — a second glow anchored to a corner would end in a hard line where
+     the section does. */
+  background: radial-gradient(55% 75% at 82% 40%, var(--sc-blush-strong), transparent 72%);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__eyebrow {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: var(--sc-track);
+  text-transform: uppercase;
+  color: var(--sc-ink-soft);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__title {
+  margin: 0;
+  font-size: clamp(2.5rem, 1.3rem + 3.6vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  color: var(--brand-text);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__line1 {
+  display: block;
+  font-weight: 700;
+}
+
+/* The accent line: the store's display face in italic, in their accent. An
+   owner who picked a script (or any) font for "line 2" in the hero editor gets
+   it through the inline per-field style, which wins over this rule. */
+.sf-root[data-sf-home="showcase"] .sc-hero__line2 {
+  display: block;
+  margin-top: 0.06em;
+  font-family: var(--brand-heading-font);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.04em;
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__sub {
+  max-width: 36ch;
+  margin: 24px 0 0;
+  font-size: clamp(1rem, 0.94rem + 0.35vw, 1.2rem);
+  line-height: 1.6;
+  color: var(--sc-ink-soft);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+/* One frosted panel, cells split by hairlines (the 1px grid gap shows the
+   panel's edge colour through), so the promises read as a single proof block
+   instead of loose icons with wrapping caps. */
+.sf-root[data-sf-home="showcase"] .sc-hero__trust {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1px;
+  margin: clamp(28px, 4vw, 44px) 0 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid var(--sc-blush-edge);
+  border-radius: 20px;
+  background: var(--sc-blush-edge);
+  box-shadow: var(--sc-shadow-sm);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__trust-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: color-mix(in oklab, var(--brand-surface) 88%, var(--brand-background));
+}
+
+/* Beside an uploaded hero image the copy column is half width: four cells
+   across leave ~100px per label, so the icon sits above it instead of beside
+   it (otherwise long words split mid-word). */
+@media (min-width: 820px) {
+  .sf-root[data-sf-home="showcase"] .sc-hero:not(.sc-hero--text) .sc-hero__trust-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__trust-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--sc-blush-strong);
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__trust-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__trust-label {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--brand-text);
+  overflow-wrap: break-word;
+}
+
+/* The owner's uploaded hero image, framed on the right of the copy. */
+.sf-root[data-sf-home="showcase"] .sc-hero__visual {
+  position: relative;
+  isolation: isolate;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__visual::before {
+  content: "";
+  position: absolute;
+  inset: 8% -6% -6% 10%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--sc-blush-strong), transparent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__shot {
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 1 / 1.02;
+  border-radius: var(--sc-radius-lg);
+  background: var(--brand-surface);
+  box-shadow: var(--sc-shadow);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* No uploaded image: a text-only hero. The copy takes the full width, its
+   paragraph kept to a readable measure. */
+.sf-root[data-sf-home="showcase"] .sc-hero--text .sc-hero__inner {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero--text .sc-hero__sub {
+  max-width: 60ch;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero--text .sc-hero__trust {
+  max-width: 920px;
+}
+
+/* Banner hero: the owner's banner fills the hero (pinned by their focus point)
+   and the copy sits on the left over a wash in the page colour, so it stays
+   readable whatever the picture. Phones stack the picture above the copy. */
+.sf-root[data-sf-home="showcase"] .sc-hero--banner {
+  /* The share of the hero the copy may take. Banners put the product on the
+     right (focus point), so the copy must stop before it — a fixed 560px column
+     ran into the vials on ~1000px screens. */
+  --sc-banner-copy: 46%;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: clamp(460px, 40vw, 640px);
+  overflow: hidden;
+  background: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero--banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* The wash ends just past the copy column (--sc-banner-copy), so the
+     product side of the picture is never dimmed and the copy side is always
+     calm enough to read, at any width. */
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--brand-background) 92%, transparent) 0%,
+    color-mix(in oklab, var(--brand-background) 78%, transparent) calc(var(--sc-banner-copy) * 0.75),
+    transparent calc(var(--sc-banner-copy) + 12%)
+  );
+  pointer-events: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  margin: 0;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero__backdrop img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__inner {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__copy {
+  /* Percent of the inner row, which is the container width less its gutters. */
+  max-width: min(560px, calc(var(--sc-banner-copy) + 2%));
+}
+
+/* Mid-size screens (tablet landscape, small laptops): a 16:9 banner is not
+   cropped at all, so the product spans most of the frame and meets the copy.
+   Start the picture a third of the way in, fade its left edge into the page
+   colour, and let cover + the owner's focus point crop it to the product. */
+@media (min-width: 820px) and (max-width: 1279px) {
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__backdrop {
+    inset-inline-start: 30%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 22%);
+    mask-image: linear-gradient(90deg, transparent 0%, black 22%);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner {
+    --sc-banner-copy: 40%;
+    background: var(--brand-background);
+  }
+}
+
+/* The headline scales with the copy column, not the window, so it wraps
+   inside the column instead of reaching across the picture. */
+.sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__title {
+  font-size: clamp(2.5rem, 1rem + 3.3vw, 4.4rem);
+}
+
+/* Four promises in a ~500px column cramp into three-line labels; two by two
+   keeps every label on one or two lines with the icon beside it. */
+@media (min-width: 820px) {
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__trust {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* .sc-hero twice-qualified to outrank the stacked-icon rule above. */
+  .sf-root[data-sf-home="showcase"] .sc-hero.sc-hero--banner .sc-hero__trust-item {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+}
+
+/* ── Category badges ──────────────────────────────────────────────────────── */
+
+/* Open row, no boxed panel: a framed strip clipped its own badges at the
+   rounded edge and read as a broken carousel. Desktop centres the badges;
+   phones fit up to three across and turn longer lists into a full-bleed swipe
+   row whose next badge peeks in from the edge. */
+.sf-root[data-sf-home="showcase"] .sc-circles {
+  --sc-circle: clamp(96px, 8.5vw, 132px);
+  --sc-cats: 3; /* overridden inline by ShowcaseCircles with the real count */
+  padding-top: var(--sc-section);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circles__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(16px, 2.2vw, 28px);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circles__title {
+  margin: 0;
+  font-size: clamp(1.45rem, 1.15rem + 1.2vw, 2.1rem);
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--brand-text);
+}
+
+/* Desktop centres the badges, so the heading centres over them. */
+@media (min-width: 820px) {
+  .sf-root[data-sf-home="showcase"] .sc-circles__head {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circles__hint {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sc-ink-soft);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circles__hint svg { width: 14px; height: 14px; }
+
+.sf-root[data-sf-home="showcase"] .sc-circles__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(20px, 3.4vw, 56px);
+  margin: 0;
+  padding: 6px 0 4px;
+  list-style: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circles__row > li {
+  flex: 0 0 auto;
+  width: calc(var(--sc-circle) + 24px);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-text);
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Gradient ring → white gap → photo, so a pale product shot never melts into
+   the page background. */
+.sf-root[data-sf-home="showcase"] .sc-circle__ring {
+  display: block;
+  width: var(--sc-circle);
+  aspect-ratio: 1;
+  margin-bottom: 8px;
+  padding: 2px;
+  border-radius: 50%;
+  background: linear-gradient(
+    145deg,
+    var(--sc-blush-edge),
+    color-mix(in oklab, var(--brand-accent) 55%, transparent)
+  );
+  box-shadow: var(--sc-shadow-sm);
+  transition: transform 260ms var(--sc-ease), box-shadow 260ms var(--sc-ease),
+    background-color 260ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle__media {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 3px solid var(--brand-surface);
+  border-radius: 50%;
+  background: var(--sc-blush);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 420ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle__mono {
+  font-size: calc(var(--sc-circle) * 0.36);
+  font-style: italic;
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle:focus-visible { outline: none; }
+
+.sf-root[data-sf-home="showcase"] .sc-circle:focus-visible .sc-circle__ring {
+  box-shadow: 0 0 0 3px var(--brand-background), 0 0 0 5px var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle:active .sc-circle__ring {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) {
+  .sf-root[data-sf-home="showcase"] .sc-circle:hover .sc-circle__ring {
+    transform: translateY(-4px);
+    background: linear-gradient(145deg, var(--brand-accent), var(--brand-button, var(--brand-accent)));
+    box-shadow: var(--sc-shadow);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-circle:hover .sc-circle__media img {
+    transform: scale(1.06);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-circle:hover .sc-circle__label {
+    color: var(--brand-accent);
+  }
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle__label {
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  transition: color 200ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-circle__count {
+  font-size: 12.5px;
+  color: var(--sc-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 819px) {
+  .sf-root[data-sf-home="showcase"] .sc-circles { --sc-circle: min(92px, 24vw); }
+
+  /* Up to three: share the width evenly, nothing to swipe. */
+  .sf-root[data-sf-home="showcase"] .sc-circles__row {
+    display: grid;
+    grid-template-columns: repeat(var(--sc-cats, 3), minmax(0, 1fr));
+    justify-content: start; /* centred overflow would strand badge 1 off-screen */
+    gap: 12px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__row > li { width: auto; }
+
+  /* Four or more: full-bleed swipe row; the next badge peeks in at the edge so
+     it reads as scrollable without a scrollbar. */
+  .sf-root[data-sf-home="showcase"] .sc-circles { --sc-circle-peek: 76px; }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__row[data-scroll] {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: calc(var(--sc-circle-peek) + 16px);
+    gap: 10px;
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--gutter);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__row[data-scroll]::-webkit-scrollbar { display: none; }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__row[data-scroll] > li { scroll-snap-align: start; }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__row[data-scroll] .sc-circle__ring {
+    width: var(--sc-circle-peek);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-circles__hint { display: inline-flex; }
+
+  .sf-root[data-sf-home="showcase"] .sc-circle__label { font-size: 14px; }
+
+  .sf-root[data-sf-home="showcase"] .sc-circle__count { font-size: 12px; }
+}
+
+/* ── Featured shelf ───────────────────────────────────────────────────────── */
+
+.sf-root[data-sf-home="showcase"] .sc-shelf {
+  padding-top: var(--sc-section);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-shelf__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(20px, 2.6vw, 32px);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-shelf__title {
+  margin: 0;
+  font-size: clamp(1.9rem, 1.3rem + 2vw, 3rem);
+  font-weight: 600;
+  line-height: 1.05;
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-shelf__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 10px 18px;
+  border: 1px solid var(--sc-blush-edge);
+  border-radius: 999px;
+  background: var(--sc-blush);
+  color: var(--brand-accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 200ms var(--sc-ease), transform 200ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-shelf__all:hover {
+  background: var(--sc-blush-strong);
+  transform: translateX(2px);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-shelf__all:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
+/* One row of cards at full width. The catalog's own card design still owns the
+   card itself; this only sets how many sit side by side. */
+.sf-root[data-sf-home="showcase"] .sc-shelf__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sc-gap);
+}
+
+/* ── Promo cards ──────────────────────────────────────────────────────────── */
+
+.sf-root[data-sf-home="showcase"] .sc-promos {
+  padding-top: var(--sc-section);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promos__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--sc-gap);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promos__grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A lone card spans the page; it should read as a banner, not a box. */
+.sf-root[data-sf-home="showcase"] .sc-promos__grid--single .sc-promo {
+  min-height: 0;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 240px;
+  overflow: hidden;
+  isolation: isolate;
+  padding: clamp(24px, 3.4vw, 44px);
+  border: 1px solid var(--sc-blush-edge);
+  border-radius: var(--sc-radius-lg);
+  background: linear-gradient(120deg, var(--sc-blush-strong), var(--sc-blush) 70%);
+  box-shadow: var(--sc-shadow-sm);
+  transition: transform 320ms var(--sc-ease), box-shadow 320ms var(--sc-ease),
+    border-color 320ms var(--sc-ease);
+}
+
+/* A fine dot texture fading in from the top-right corner — atmosphere that
+   reads as "printed card", never as pattern. */
+.sf-root[data-sf-home="showcase"] .sc-promo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--brand-accent) 22%, transparent) 1px,
+    transparent 1.4px
+  );
+  background-size: 16px 16px;
+  -webkit-mask-image: radial-gradient(120% 90% at 100% 0%, var(--brand-text), transparent 62%);
+  mask-image: radial-gradient(120% 90% at 100% 0%, var(--brand-text), transparent 62%);
+  pointer-events: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo:focus-within {
+  transform: translateY(-4px);
+  border-color: color-mix(in oklab, var(--brand-accent) 38%, transparent);
+  box-shadow: var(--sc-shadow);
+}
+
+/* Hover only where there is a real pointer — on touch screens :hover sticks
+   after a tap and would leave one card floating above its neighbour. */
+@media (hover: hover) {
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--brand-accent) 38%, transparent);
+    box-shadow: var(--sc-shadow);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover .sc-promo__art,
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover .sc-promo__photo {
+    transform: rotate(0deg) scale(1.04);
+  }
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 5px 11px 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand-surface) 78%, transparent);
+  box-shadow: inset 0 0 0 1px var(--sc-blush-edge);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__watermark {
+  position: absolute;
+  right: -84px;
+  bottom: -110px;
+  z-index: -1;
+  color: var(--brand-accent);
+  opacity: 0.06;
+  transform: rotate(-18deg);
+  pointer-events: none;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo--shop {
+  background: linear-gradient(120deg, var(--sc-blush), var(--brand-surface) 80%);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__copy {
+  position: relative;
+  z-index: 1;
+  max-width: 30ch;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__title {
+  margin: 0;
+  font-size: clamp(1.7rem, 1.2rem + 1.6vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--brand-accent);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__body {
+  margin: 12px 0 22px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--sc-ink-soft);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo .sc-pill {
+  min-height: 46px;
+  padding: 11px 24px;
+  font-size: 15px;
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__art {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: clamp(120px, 14vw, 180px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--brand-surface) 70%, transparent);
+  color: var(--brand-accent);
+  transform: rotate(-8deg);
+  box-shadow: var(--sc-shadow-sm);
+  transition: transform 420ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__photo {
+  flex: 0 0 auto;
+  width: clamp(120px, 14vw, 190px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 5px solid var(--brand-surface);
+  border-radius: var(--sc-radius);
+  box-shadow: var(--sc-shadow);
+  transform: rotate(4deg);
+  transition: transform 420ms var(--sc-ease);
+}
+
+.sf-root[data-sf-home="showcase"] .sc-promo__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── Smaller screens ──────────────────────────────────────────────────────── */
+
+@media (max-width: 999px) {
+  .sf-root[data-sf-home="showcase"] .sc-shelf__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 819px) {
+  /* One promise at a time, centred, so none is ever clipped off the edge.
+     Every promise sits in the same grid cell; ShowcasePromiseBar rotates
+     `is-active` and only that one is shown. */
+  .sf-root[data-sf-home="showcase"] .sc-promise__row {
+    display: grid;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promise__item,
+  .sf-root[data-sf-home="showcase"] .sc-promise__item + .sc-promise__item {
+    grid-area: 1 / 1;
+    justify-content: center;
+    padding-left: 0;
+    border-left: 0;
+    white-space: normal;
+    text-align: center;
+    opacity: 0;
+    visibility: hidden;
+    /* Leaving: fade out quickly, then hide. */
+    transition: opacity 200ms var(--sc-ease), visibility 0s linear 200ms;
+  }
+
+  /* Arriving: wait for the outgoing line to clear, so the two never overlap. */
+  .sf-root[data-sf-home="showcase"] .sc-promise__item.is-active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 320ms var(--sc-ease) 220ms, visibility 0s linear 200ms;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__visual {
+    max-width: 520px;
+    width: 100%;
+    margin-inline: auto;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* An odd last promise spans the row, so no empty hairline cell shows. */
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  /* Banner hero on phones: the banner stays behind the WHOLE hero and the copy
+     sits on top of it, as on desktop. A phone is too narrow for a side wash,
+     so the page colour washes over the picture top-to-bottom instead — light
+     at the top so the product shows through, firm behind the copy. */
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner {
+    --sc-banner-copy: 100%;
+    min-height: 0;
+    padding-block: 44px 40px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner .sc-hero__copy {
+    max-width: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero--banner::before {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--brand-background) 38%, transparent) 0%,
+      color-mix(in oklab, var(--brand-background) 70%, transparent) 30%,
+      color-mix(in oklab, var(--brand-background) 82%, transparent) 100%
+    );
+  }
+
+  /* The promo pair stays side by side on phones — but as BANNERS, never as
+     look-alikes of the product cards above (white box, picture on top, wide
+     pink button). So: a filled brand panel / a full-bleed photo, the copy
+     anchored low, a small round arrow in the corner instead of a wide button,
+     and the whole card as the tap target. A lone card keeps its banner. */
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The copy column dissolves (display: contents) so its eyebrow, title,
+     line and button can sit in the card's own grid beside the art tile. */
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto 1fr auto auto auto;
+    grid-template-areas:
+      "art arrow"
+      "space space"
+      "eyebrow eyebrow"
+      "title title"
+      "body body";
+    align-items: start;
+    gap: 0;
+    min-height: 212px;
+    padding: 16px;
+    border-color: transparent;
+    border-radius: var(--sc-radius);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__copy {
+    display: contents;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__art {
+    grid-area: art;
+    width: 44px;
+    border-radius: 14px;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__art svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__eyebrow {
+    grid-area: eyebrow;
+    justify-self: start;
+    margin: 0 0 8px;
+    padding: 4px 9px;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__eyebrow svg {
+    display: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__title {
+    grid-area: title;
+    font-size: clamp(1.15rem, 0.9rem + 1.3vw, 1.45rem);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__body {
+    grid-area: body;
+    display: -webkit-box;
+    margin: 6px 0 0;
+    overflow: hidden;
+    font-size: 12.5px;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+
+  /* The button shrinks to a round arrow in the top corner; its ::after
+     stretches over the whole card, so a tap anywhere follows it. */
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo .sc-pill {
+    grid-area: arrow;
+    justify-self: end;
+    position: static;
+    width: 38px;
+    height: 38px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
+    transform: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo .sc-pill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: var(--sc-radius);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-pill__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__watermark {
+    right: -34px;
+    bottom: -44px;
+    opacity: 0.14;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo__watermark svg {
+    width: 150px;
+    height: 150px;
+  }
+
+  /* Protocols hub: a filled panel in the store's own button colours (the
+     pair every store already keeps readable), white-on-pink here. */
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn {
+    background: linear-gradient(150deg, var(--brand-button), var(--brand-button-2));
+    color: var(--brand-button-text);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn::before {
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--brand-button-text) 26%, transparent) 1px,
+      transparent 1.4px
+    );
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-promo__title,
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-promo__watermark {
+    color: var(--brand-button-text);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-promo__body {
+    color: color-mix(in oklab, var(--brand-button-text) 88%, transparent);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-promo__eyebrow,
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-promo__art {
+    background: color-mix(in oklab, var(--brand-button-text) 20%, transparent);
+    box-shadow: none;
+    color: var(--brand-button-text);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--learn .sc-pill {
+    background: var(--brand-button-text);
+    color: var(--brand-button);
+  }
+
+  /* Shop the collection: the product photo fills the card, darkened at the
+     foot so the title reads in the page colour on top of it. */
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo::before {
+    display: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo .sc-promo__photo {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    width: auto;
+    aspect-ratio: auto;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo .sc-promo__photo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--brand-text) 8%, transparent) 0%,
+      color-mix(in oklab, var(--brand-text) 62%, transparent) 46%,
+      color-mix(in oklab, var(--brand-text) 92%, transparent) 100%
+    );
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo .sc-promo__title {
+    color: var(--brand-background);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo .sc-promo__body {
+    color: color-mix(in oklab, var(--brand-background) 90%, transparent);
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promos__grid:not(.sc-promos__grid--single) .sc-promo--has-photo .sc-promo__eyebrow {
+    background: color-mix(in oklab, var(--brand-background) 88%, transparent);
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 559px) {
+  .sf-root[data-sf-home="showcase"] .sc-hero__ctas .sc-pill { flex: 1 1 100%; }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-item {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-label { font-size: 13px; }
+}
+
+/* Smallest phones: two columns leave too little room beside the icon. */
+@media (max-width: 359px) {
+  .sf-root[data-sf-home="showcase"] .sc-hero__trust-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-shelf__grid { gap: 12px; }
+}
+
+/* Phones + reduced motion: no rotation — every promise shown, two per row. */
+@media (max-width: 819px) and (prefers-reduced-motion: reduce) {
+  .sf-root[data-sf-home="showcase"] .sc-promise__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 14px;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promise__item,
+  .sf-root[data-sf-home="showcase"] .sc-promise__item + .sc-promise__item {
+    grid-area: auto;
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root[data-sf-home="showcase"] .sc-pill,
+  .sf-root[data-sf-home="showcase"] .sc-pill svg,
+  .sf-root[data-sf-home="showcase"] .sc-circle__ring,
+  .sf-root[data-sf-home="showcase"] .sc-circle__media img,
+  .sf-root[data-sf-home="showcase"] .sc-shelf__all,
+  .sf-root[data-sf-home="showcase"] .site-header__navlink::after,
+  .sf-root[data-sf-home="showcase"] .sc-promo,
+  .sf-root[data-sf-home="showcase"] .sc-promo__art,
+  .sf-root[data-sf-home="showcase"] .sc-promo__photo {
+    transition: none;
+  }
+
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover,
+  .sf-root[data-sf-home="showcase"] .sc-promo:focus-within,
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover .sc-promo__art,
+  .sf-root[data-sf-home="showcase"] .sc-promo:hover .sc-promo__photo {
+    transform: none;
+  }
+}

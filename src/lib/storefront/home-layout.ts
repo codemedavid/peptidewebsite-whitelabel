@@ -1,7 +1,7 @@
 // The storefront's selectable HOME LAYOUTS — the single source of truth shared
 // by the store-admin picker, the branding.config allow-list and resolveHomeLayout.
 //
-// The four values are not the same KIND of thing, and the difference is what
+// The five values are not the same KIND of thing, and the difference is what
 // resolveHomeLayout (./two-ways-home) encodes:
 //
 //   • "classic"   — the original hero → category chips → catalog scroll.
@@ -13,12 +13,15 @@
 //   • "editorial" — a LAYOUT CHOICE too: a left-rail storefront whose discovery
 //                   is a typographic index of the tenant's categories rather
 //                   than a tile grid. Same deal — owner-selectable, no grant.
+//   • "showcase"  — a LAYOUT CHOICE too: the merchandised home — promise bar,
+//                   split hero, round category badges, a buyable featured
+//                   shelf, promo cards, trust strip. Owner-selectable, no grant.
 //
 // This module is deliberately tiny and dependency-free: every layout module
 // imports the enum, so anything heavier here would pull the whole storefront
 // view-model into the branding-update path.
 
-export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial"] as const;
+export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial", "showcase"] as const;
 
 export type HomeLayout = (typeof HOME_LAYOUTS)[number];
 
@@ -31,4 +34,9 @@ export function isBoutiqueLayout(value: unknown): boolean {
 /** As above, for the editorial layout. */
 export function isEditorialLayout(value: unknown): boolean {
   return value === "editorial";
+}
+
+/** As above, for the showcase layout. */
+export function isShowcaseLayout(value: unknown): boolean {
+  return value === "showcase";
 }

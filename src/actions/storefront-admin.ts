@@ -25,6 +25,7 @@ import { normalizeCoaReports } from "@/lib/storefront/coa";
 import { normalizeReviews } from "@/lib/storefront/reviews";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { categoryImage } from "@/lib/storefront/categories";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
 import { normalizeProductOrder } from "@/lib/storefront/product-order";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
@@ -46,6 +47,7 @@ import { readResellerPageCopy, readResellerPageCopyPatch } from "@/lib/storefron
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 import { resolveResellerCaps } from "@/lib/storefront/reseller-caps";
 import { safeExternalUrl } from "@/lib/storefront/courier-booking";
+import { cleanCourierNote } from "@/lib/storefront/courier-note";
 import { saveResellerSession, clearResellerSession } from "@/lib/auth/reseller-session";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -227,7 +229,8 @@ export async function savePaymentMethodsAction(methods: unknown): Promise<Action
  * Coerce untrusted client input into clean Category rows, and always guarantee
  * the synthetic "all" tab is present exactly once and first (the storefront's
  * "All Products" filter). Duplicate ids are dropped, blank labels fall back to
- * the id so a row can never render empty.
+ * the id so a row can never render empty, and an `image` survives only if it is
+ * a plain image URL (categoryImage).
  */
 function normalizeCategories(input: unknown): Category[] {
   const rows = Array.isArray(input) ? input : [];
@@ -239,7 +242,10 @@ function normalizeCategories(input: unknown): Category[] {
     if (!id || id === "all" || seen.has(id)) continue;
     seen.add(id);
     const label = String(o.label ?? "").slice(0, 120).trim() || id;
-    out.push({ id, label });
+    // The owner's uploaded tile picture rides along — sanitised, never dropped
+    // (a bare {id,label} rebuild here would silently erase every upload).
+    const image = categoryImage(o.image);
+    out.push(image ? { id, label, image } : { id, label });
   }
   return [{ id: "all", label: "All Products" }, ...out];
 }
@@ -482,6 +488,9 @@ function normalizeCouriers(input: unknown): Courier[] {
       // COD/no-location couriers (Lalamove, Maxim) need no shipping location or
       // fee — only persist the flag when set so legacy rows stay unchanged.
       ...(o.noLocation === true ? { noLocation: true } : {}),
+      // Owner's checkout note (coverage / pick-up point). Plain text, capped;
+      // only persisted when set so legacy rows stay unchanged.
+      ...(cleanCourierNote(o.note) ? { note: cleanCourierNote(o.note) } : {}),
     });
   }
   return out;

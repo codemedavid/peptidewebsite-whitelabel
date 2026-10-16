@@ -48,6 +48,9 @@ export type Variation = {
   gbPrice?: number;
   image?: string;
   extraImages?: string[];
+  /** What THIS option ships with, one item per line ("10 pcs syringes"). Shown
+   *  only while the option is selected — see selectedIncludes. */
+  includes?: string;
 };
 
 /** An option offered on the product card. `variation` is absent on the product's
@@ -238,4 +241,58 @@ export function unpricedVariationNames(
       return !Number.isFinite(n) || n <= 0;
     })
     .map((it) => it.name.trim());
+}
+
+// ── What's included, per option ─────────────────────────────────────────────
+
+/**
+ * Longest `includes` text a variation may store. A packing list is a handful of
+ * short lines; the cap only stops a pasted essay from bloating product metadata.
+ */
+export const MAX_INCLUDES_LENGTH = 1000;
+
+/**
+ * Normalize a variation's `includes` for storage: trimmed and capped, or
+ * `undefined` when there is nothing to keep — so a blank field never persists
+ * as an empty key. Shared by the input normalizer and the DB mapping layer.
+ */
+export function cleanIncludes(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const text = raw.trim().slice(0, MAX_INCLUDES_LENGTH);
+  return text || undefined;
+}
+
+/** A leading list marker the seller typed themselves ("• ", "- ", "* "). */
+const BULLET_PREFIX = /^[•\-*–·]\s*/;
+
+/**
+ * The lines of an `includes` text, ready to render as a list.
+ *
+ * Sellers paste these from their own notes, so each line may already carry a
+ * bullet — it is stripped, otherwise the storefront list would show "• • 10ml".
+ * Blank lines are dropped.
+ */
+export function parseIncludes(text: string | undefined): string[] {
+  if (typeof text !== "string") return [];
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(BULLET_PREFIX, "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * What the currently picked option includes, or `[]`.
+ *
+ * WHY (peppylab, 2026-10-17): the "Complete Set includes: syringes, pads, case"
+ * list lived in the product description, so a customer who picked "Vial only"
+ * was still told all of that came with it. Keyed off the selection, the list
+ * appears only for the option that actually ships it. Nothing picked, a
+ * "Standard" base option, or an option without a list all yield `[]`.
+ */
+export function selectedIncludes(
+  options: readonly ProductOption[],
+  selectedIndex: number,
+): string[] {
+  if (selectedIndex < 0 || selectedIndex >= options.length) return [];
+  return parseIncludes(options[selectedIndex].variation?.includes);
 }

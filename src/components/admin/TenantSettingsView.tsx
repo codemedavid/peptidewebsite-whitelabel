@@ -18,6 +18,7 @@ import {
   saveAdminFeeAction,
   saveAdminPasswordAction,
   saveRequirePaymentProofAction,
+  saveCheckoutHideEmailAction,
   saveNoticeModalGrantAction,
 } from "@/actions/branding";
 import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
@@ -89,6 +90,7 @@ type Props = {
   initialMetaDescription: string;
   /** Whether checkout requires a proof-of-payment upload. */
   initialRequireProofOfPayment: boolean;
+  initialCheckoutHideEmail: boolean;
   /** Whether the super admin has granted the Storefront Notice Modal for this tenant. */
   initialNoticeModalGranted: boolean;
   /** Checkout admin-fee config + the store's currency symbol for display. */
@@ -128,6 +130,7 @@ export function TenantSettingsView({
   initialCheckoutNote,
   initialMetaDescription,
   initialRequireProofOfPayment,
+  initialCheckoutHideEmail,
   initialNoticeModalGranted,
   initialAdminFee,
   adminFeeEntitled,
@@ -146,6 +149,7 @@ export function TenantSettingsView({
   /* ---------- channels + checkout copy ---------- */
   const [channels, setChannels] = useState<ContactChannel[]>(initialChannels);
   const [requireProof, setRequireProof] = useState(initialRequireProofOfPayment);
+  const [hideEmail, setHideEmail] = useState(initialCheckoutHideEmail);
   // Notice Modal grant — a standalone per-tenant operator switch (default OFF).
   // Saved immediately on toggle (its own flow, never marks a section dirty), with
   // optimistic state + revert on failure, mirroring the admin-fee master toggle.
@@ -187,6 +191,7 @@ export function TenantSettingsView({
     digits: format.digits,
     channels: JSON.stringify(initialChannels),
     requireProof: initialRequireProofOfPayment,
+    hideEmail: initialCheckoutHideEmail,
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
     metaDescription: initialMetaDescription,
@@ -214,7 +219,8 @@ export function TenantSettingsView({
     scheme !== baseline.current.scheme ||
     digits !== baseline.current.digits;
   const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
-  const proofDirty = requireProof !== baseline.current.requireProof;
+  const proofDirty =
+    requireProof !== baseline.current.requireProof || hideEmail !== baseline.current.hideEmail;
   const copyDirty =
     title !== baseline.current.title ||
     note !== baseline.current.note ||
@@ -299,10 +305,17 @@ export function TenantSettingsView({
   async function saveProof(): Promise<boolean> {
     setSaving("proof");
     setErrors((e) => ({ ...e, proof: undefined }));
-    const res = await saveRequirePaymentProofAction(slug, requireProof);
+    // Two independent flags share this card; save only the one(s) changed.
+    let res: Awaited<ReturnType<typeof saveRequirePaymentProofAction>> = { ok: true };
+    if (requireProof !== baseline.current.requireProof) {
+      res = await saveRequirePaymentProofAction(slug, requireProof);
+    }
+    if ("ok" in res && hideEmail !== baseline.current.hideEmail) {
+      res = await saveCheckoutHideEmailAction(slug, hideEmail);
+    }
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, requireProof };
+      baseline.current = { ...baseline.current, requireProof, hideEmail };
       setSaved((s) => ({ ...s, proof: true }));
       return true;
     }
@@ -401,6 +414,7 @@ export function TenantSettingsView({
     setDigits(b.digits);
     setChannels(JSON.parse(b.channels));
     setRequireProof(b.requireProof);
+    setHideEmail(b.hideEmail);
     setTitle(b.title);
     setNote(b.note);
     setMetaDescription(b.metaDescription);
@@ -778,10 +792,10 @@ export function TenantSettingsView({
             <div className="set-card-head">
               <div>
                 <span className="set-eyebrow">Checkout</span>
-                <h2>Payment proof</h2>
+                <h2>Payment proof &amp; fields</h2>
                 <p className="set-desc">
                   Whether customers must upload a proof-of-payment screenshot to complete checkout
-                  when payment methods are configured.
+                  when payment methods are configured, and whether checkout asks for an email.
                 </p>
               </div>
               <span className={"badge " + (requireProof ? "badge-success" : "badge-neutral")}>
@@ -818,6 +832,35 @@ export function TenantSettingsView({
                   />
                 </div>
               </div>
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Hide the Email field</div>
+                  <div className="set-row-help">
+                    For stores that confirm every order in chat. Customers check out with name,
+                    phone and address only; the order message leaves the email line out.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (hideEmail ? " on" : "")}
+                    role="switch"
+                    aria-checked={hideEmail}
+                    aria-label="Hide the Email field at checkout"
+                    tabIndex={0}
+                    onClick={() => {
+                      setHideEmail((v) => !v);
+                      setSaved((s) => ({ ...s, proof: false }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setHideEmail((v) => !v);
+                        setSaved((s) => ({ ...s, proof: false }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -835,6 +878,7 @@ export function TenantSettingsView({
                   disabled={!proofDirty || saving !== null}
                   onClick={() => {
                     setRequireProof(baseline.current.requireProof);
+                    setHideEmail(baseline.current.hideEmail);
                     setErrors((e) => ({ ...e, proof: undefined }));
                   }}
                 >

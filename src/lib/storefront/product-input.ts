@@ -11,6 +11,7 @@
 import { toProductClass } from "@/lib/storefront/product-class";
 import { normalizeHostedImageUrl } from "@/lib/storefront/product-image";
 import { cleanExtraImages } from "@/lib/storefront/product-photos";
+import { cleanIncludes } from "@/lib/storefront/variations";
 import type { Product } from "@/storefront/types";
 
 /** Coerce to a string and cap its length. */
@@ -62,12 +63,15 @@ export function normalizeProductInput(input: unknown): Product {
       const image = normalizeHostedImageUrl(x.image);
       // The option's further photos — same trap, same rule.
       const extraImages = cleanExtraImages(x.extraImages, image);
+      // The option's packing list — same trap: name it here or a save drops it.
+      const includes = cleanIncludes(x.includes);
       return {
         ...base,
         ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
         ...(gb > 0 ? { gbPrice: gb } : {}),
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
+        ...(includes ? { includes } : {}),
       };
     })
     .filter((v) => v.name);

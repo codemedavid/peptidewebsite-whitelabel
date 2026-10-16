@@ -1,8 +1,113 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Brand, Category } from "../types";
+import type { Brand, Category, Product } from "../types";
 import { useStore } from "../store";
+import { uploadStorefrontImageAction } from "@/actions/media";
+import { imageUrl } from "@/lib/media/image-url";
+import { categoryImage, withCategoryImage } from "@/lib/storefront/categories";
+import { isShowcaseLayout } from "@/lib/storefront/home-layout";
+
+/** Matches the server's cap (uploadStorefrontImageAction), checked here first so
+ *  an oversized pick fails instantly instead of after a long upload. */
+const MAX_CATEGORY_IMAGE_BYTES = 10 * 1024 * 1024;
+const THUMB_PX = 96;
+
+/**
+ * The round picture a category shows on the SHOWCASE home (its badge). Click
+ * to upload the owner's own; × goes back to automatic — the first product photo
+ * in the category, which is also what is previewed (tagged "Auto") until then.
+ */
+function CategoryImagePicker({
+  category,
+  autoImage,
+  onChange,
+}: {
+  category: Category;
+  autoImage: string | undefined;
+  onChange: (image: string | undefined) => void;
+}) {
+  const { toast } = useStore();
+  const [uploading, setUploading] = useState(false);
+  const custom = categoryImage(category.image);
+  const shown = custom ?? autoImage;
+  const name = category.label || category.id;
+
+  const upload = async (file: File | undefined | null) => {
+    if (!file || uploading) return;
+    if (file.size > MAX_CATEGORY_IMAGE_BYTES) {
+      toast("That image is over 10 MB — please pick a smaller one.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "category");
+      const res = await uploadStorefrontImageAction(fd);
+      if ("error" in res) {
+        toast(`Couldn't upload the image: ${res.error}`);
+        return;
+      }
+      const url = categoryImage(res.url);
+      if (!url) {
+        toast("That image is too large to store for this store. Please pick a smaller file.");
+        return;
+      }
+      onChange(url);
+      toast(`Image set for “${name}”.`);
+    } catch {
+      toast("Upload failed — please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className={`admin-cat-img${custom ? " is-custom" : ""}${uploading ? " is-busy" : ""}`}>
+      <label
+        className="admin-cat-img__pick"
+        title={custom ? `Change the image for ${name}` : `Upload an image for ${name}`}
+      >
+        {shown ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl(shown, { width: THUMB_PX })} alt="" width={THUMB_PX} height={THUMB_PX} />
+        ) : (
+          <span className="admin-cat-img__empty" aria-hidden="true">+</span>
+        )}
+        {!custom && shown && <span className="admin-cat-img__tag">Auto</span>}
+        {uploading && <span className="admin-cat-img__busy">…</span>}
+        <input
+          type="file"
+          accept="image/*"
+          aria-label={custom ? `Change the image for ${name}` : `Upload an image for ${name}`}
+          disabled={uploading}
+          onChange={(e) => {
+            void upload(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {custom && (
+        <button
+          type="button"
+          className="admin-cat-img__clear"
+          aria-label={`Remove the image for ${name} (use the product photo)`}
+          title="Remove — use the product photo"
+          onClick={() => onChange(undefined)}
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The photo a category shows when the owner has uploaded none: its first
+ *  product photo (same rule as the storefront's buildCategoryTiles). */
+function autoCategoryImage(products: readonly Product[], id: string): string | undefined {
+  return products.find((p) => p.category === id && !!p.image)?.image || undefined;
+}
 
 export function AdminCategoriesManager({
   brand,
@@ -123,6 +228,9 @@ export function AdminCategoriesManager({
     persist(next);
   };
 
+  const setImage = (id: string, image: string | undefined) =>
+    commit(withCategoryImage(cats, id, image));
+
   const removeCat = (id: string) => {
     if (!confirm(`Delete this category?${orphanNote(count(id))}`)) return;
     commit(cats.filter((c) => c.id !== id));
@@ -131,7 +239,8 @@ export function AdminCategoriesManager({
   const count = (id: string) =>
     products.filter((p) => p.category === id).length;
 
-  void brand;
+  // Only the Showcase home draws category pictures, so only it gets the picker.
+  const showImages = isShowcaseLayout(brand.homeLayout);
 
   return (
     <div className="admin">
@@ -250,6 +359,13 @@ export function AdminCategoriesManager({
                   <circle cx="15" cy="18" r="1.5" />
                 </svg>
               </span>
+              {showImages && (
+                <CategoryImagePicker
+                  category={c}
+                  autoImage={autoCategoryImage(products, c.id)}
+                  onChange={(image) => setImage(c.id, image)}
+                />
+              )}
               <div className="admin-cat-row__name">
                 <input
                   ref={(el) => {

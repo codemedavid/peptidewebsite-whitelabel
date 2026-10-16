@@ -20,7 +20,7 @@
 // Covered by npm run test:boutique-home.
 
 import type { Category, Product } from "@/storefront/types";
-import { ALL_CATEGORY_ID } from "./categories";
+import { ALL_CATEGORY_ID, categoryImage } from "./categories";
 
 // The layout enum and its predicates live in ./home-layout — they are shared by
 // four layouts now, so the boutique module is no longer the right owner.
@@ -101,6 +101,9 @@ export function buildCategoryTiles(
   products: readonly Product[] | null | undefined,
   categories: readonly Category[] | null | undefined,
   defaultProductImage?: string | null,
+  /** Showcase only: let an owner-uploaded category image lead. Other layouts
+   *  keep the automatic product photo even if one was uploaded. */
+  options: { categoryImages?: boolean } = {},
 ): CategoryTile[] {
   const list = products ?? [];
   const tiles: CategoryTile[] = [];
@@ -121,7 +124,13 @@ export function buildCategoryTiles(
       id,
       label,
       count: members.length,
-      image: members.find((p) => !!p.image)?.image || defaultProductImage || null,
+      // (Showcase) the owner's uploaded category picture first, then the first
+      // product photo in it, then the store's default product image.
+      image:
+        (options.categoryImages ? categoryImage(category.image) : undefined) ||
+        members.find((p) => !!p.image)?.image ||
+        defaultProductImage ||
+        null,
       initial: label.charAt(0).toUpperCase(),
     });
   }
@@ -151,6 +160,25 @@ export type BoutiqueAssurance = {
  *  layout renders comes from config that already existed. */
 export type BoutiqueConfig = {
   assurances?: BoutiqueAssurance[];
+  contact?: BoutiqueContact;
+};
+
+// ── Contact block ────────────────────────────────────────────────────────────
+
+/** The heading the contact block has always carried — the default when the
+ *  owner has not typed their own. */
+export const CONTACT_HEADING_DEFAULT = "Questions before you order?";
+export const CONTACT_HEADING_MAX = 80;
+
+/** The "Questions before you order?" block, owner-editable from the admin. */
+export type BoutiqueContact = {
+  /** false hides the whole block. */
+  show: boolean;
+  heading: string;
+  /** Print the number / handle / address under each button. OFF by default:
+   *  the button already opens the chat, and a raw phone number or email on the
+   *  home page is just there to be scraped. */
+  showDetails: boolean;
 };
 
 function trimTo(value: unknown, max: number): string {
@@ -183,10 +211,31 @@ export function normalizeAssurances(value: unknown): BoutiqueAssurance[] {
   return out;
 }
 
-/** Untrusted branding.config.boutique → a safe, fully-normalized config. */
-export function normalizeBoutiqueConfig(value: unknown): BoutiqueConfig {
-  const raw = value && typeof value === "object" && !Array.isArray(value)
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-  return { assurances: normalizeAssurances(raw.assurances) };
+}
+
+/**
+ * Untrusted branding.config.boutique.contact → the contact block. Only a real
+ * boolean flips either switch, so a malformed save can neither hide the block
+ * nor start printing the owner's phone number.
+ */
+export function normalizeBoutiqueContact(value: unknown): BoutiqueContact {
+  const raw = asRecord(value);
+  return {
+    show: raw.show !== false,
+    heading: trimTo(raw.heading, CONTACT_HEADING_MAX) || CONTACT_HEADING_DEFAULT,
+    showDetails: raw.showDetails === true,
+  };
+}
+
+/** Untrusted branding.config.boutique → a safe, fully-normalized config. */
+export function normalizeBoutiqueConfig(value: unknown): BoutiqueConfig {
+  const raw = asRecord(value);
+  return {
+    assurances: normalizeAssurances(raw.assurances),
+    contact: normalizeBoutiqueContact(raw.contact),
+  };
 }

@@ -119,8 +119,8 @@ function brand(b: Partial<Brand>): Brand {
 // ── The layout enum ──────────────────────────────────────────────────────────
 console.log("\nhome-layout — the four selectable layouts");
 
-check("HOME_LAYOUTS carries editorial alongside the existing three", () => {
-  assert.deepEqual([...HOME_LAYOUTS], ["classic", "two-ways", "boutique", "editorial"]);
+check("HOME_LAYOUTS carries editorial (and the later showcase) alongside the existing three", () => {
+  assert.deepEqual([...HOME_LAYOUTS], ["classic", "two-ways", "boutique", "editorial", "showcase"]);
 });
 
 check("isEditorialLayout matches the stored value exactly and fails closed", () => {

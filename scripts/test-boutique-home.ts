@@ -24,6 +24,10 @@ import {
   ASSURANCE_LABEL_MAX,
   ASSURANCE_NOTE_MAX,
   boutiqueSections,
+  normalizeBoutiqueContact,
+  normalizeBoutiqueConfig,
+  CONTACT_HEADING_DEFAULT,
+  CONTACT_HEADING_MAX,
 } from "../src/lib/storefront/boutique-home";
 import { HOME_LAYOUTS, isBoutiqueLayout } from "../src/lib/storefront/home-layout";
 import { resolveHomeLayout } from "../src/lib/storefront/two-ways-home";
@@ -384,6 +388,76 @@ check("an unknown layout is rejected rather than written through", () => {
 
 check("a non-string layout is rejected", () => {
   assert.ok(patchLayout(42).errors.length > 0);
+});
+
+// ── Contact block — "Questions before you order?" ───────────────────────────
+// Owner-editable from the admin. By default the buttons carry only the channel
+// name: a phone number, Telegram handle or email address printed on the home
+// page is harvestable, and the button already opens the chat.
+console.log("\nnormalizeBoutiqueContact — the contact block");
+
+check("unset config → shown, default heading, details HIDDEN", () => {
+  assert.deepEqual(normalizeBoutiqueContact(undefined), {
+    show: true,
+    heading: CONTACT_HEADING_DEFAULT,
+    showDetails: false,
+  });
+});
+
+check("the default heading is the existing copy", () => {
+  assert.equal(CONTACT_HEADING_DEFAULT, "Questions before you order?");
+});
+
+check("the owner's heading is kept, trimmed", () => {
+  assert.equal(normalizeBoutiqueContact({ heading: "  Need help? " }).heading, "Need help?");
+});
+
+check("a blank heading falls back to the default rather than an empty title", () => {
+  assert.equal(normalizeBoutiqueContact({ heading: "   " }).heading, CONTACT_HEADING_DEFAULT);
+});
+
+check("an over-long heading is capped", () => {
+  const long = "x".repeat(CONTACT_HEADING_MAX + 40);
+  assert.equal(normalizeBoutiqueContact({ heading: long }).heading.length, CONTACT_HEADING_MAX);
+});
+
+check("show:false hides the block; only a real boolean false does", () => {
+  assert.equal(normalizeBoutiqueContact({ show: false }).show, false);
+  assert.equal(normalizeBoutiqueContact({ show: "false" }).show, true);
+});
+
+check("showDetails is opt-in — only a real boolean true reveals the details", () => {
+  assert.equal(normalizeBoutiqueContact({ showDetails: true }).showDetails, true);
+  assert.equal(normalizeBoutiqueContact({ showDetails: "yes" }).showDetails, false);
+});
+
+check("garbage input fails to the safe default", () => {
+  for (const bad of [null, 42, "x", [], [1]]) {
+    assert.deepEqual(normalizeBoutiqueContact(bad), {
+      show: true,
+      heading: CONTACT_HEADING_DEFAULT,
+      showDetails: false,
+    });
+  }
+});
+
+check("normalizeBoutiqueConfig carries contact through (a save must not be dropped)", () => {
+  const cfg = normalizeBoutiqueConfig({
+    assurances: [{ id: "a", label: "Lab tested" }],
+    contact: { show: false, heading: "Ask us", showDetails: true },
+  });
+  assert.deepEqual(cfg.contact, { show: false, heading: "Ask us", showDetails: true });
+  assert.equal(cfg.assurances?.length, 1);
+});
+
+check("the home renders the destination only behind showDetails", () => {
+  const src = readFileSync(join(ROOT, "src/storefront/components/BoutiqueHome.tsx"), "utf8");
+  assert.ok(src.includes("contact.heading"), "heading must come from config, not a literal");
+  assert.ok(
+    /contact\.showDetails\s*&&[\s\S]{0,80}bq-contact__dest/.test(src),
+    "bq-contact__dest must be gated on contact.showDetails",
+  );
+  assert.ok(!src.includes("Questions before you order?"), "no hardcoded heading in the component");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

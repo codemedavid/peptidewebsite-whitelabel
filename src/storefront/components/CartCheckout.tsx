@@ -36,6 +36,14 @@ import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-b
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
 import { DIRECT_CONTACT_METHOD, isDirectHandoff } from "@/lib/storefront/checkout-handoff";
 import { rememberRecentOrder } from "@/lib/storefront/recent-order";
+import { checkoutFields } from "@/lib/storefront/checkout-fields";
+import { courierNote } from "@/lib/storefront/courier-note";
+import {
+  forgetSavedDetails,
+  mergeSavedDetails,
+  recallSavedDetails,
+  rememberSavedDetails,
+} from "@/lib/storefront/saved-details";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildWholesaleScope, wholesaleRemaining } from "@/lib/storefront/wholesale";
 import {
@@ -61,23 +69,15 @@ import {
 } from "../checkout";
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import { useCustomerAccount } from "../customer-account-client";
+import "./remember-details.css";
 
 type Step = "cart" | "details" | "payment";
-
-const FIELDS: { key: keyof CheckoutCustomer; label: string; required: boolean; type?: string }[] = [
-  { key: "name", label: "Full name", required: true },
-  { key: "email", label: "Email", required: true, type: "email" },
-  { key: "phone", label: "Phone", required: true, type: "tel" },
-  { key: "address", label: "Address", required: true },
-  { key: "barangay", label: "Barangay", required: true },
-  { key: "city", label: "City / Municipality", required: true },
-  { key: "province", label: "Province / State", required: true },
-  { key: "postal", label: "Postal code", required: false },
-];
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
   const [step, setStep] = useState<Step>("cart");
+  // Per store: a store that never emails buyers can drop the Email field.
+  const fields = checkoutFields(brand);
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   // A signed-in shopper (customer accounts) gets their contact fields prefilled.
   // Only EMPTY fields are filled, so nothing the buyer typed is ever overwritten.
@@ -93,6 +93,28 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       phone: c.phone || account.phone,
     }));
   }, [account]);
+  // A returning shopper's details, remembered in a per-store cookie after their
+  // last successful order (see saved-details.ts). Read after mount so SSR and
+  // the first client render agree; like the account prefill, it only fills
+  // EMPTY fields.
+  const [rememberDetails, setRememberDetails] = useState(true);
+  const [hasSavedDetails, setHasSavedDetails] = useState(false);
+  useEffect(() => {
+    const saved = recallSavedDetails();
+    if (!saved) return;
+    setHasSavedDetails(true);
+    setCustomer((c) => mergeSavedDetails(c, saved));
+  }, []);
+  const forgetDetails = () => {
+    forgetSavedDetails();
+    setHasSavedDetails(false);
+    setRememberDetails(false);
+    setCustomer(
+      account
+        ? { ...EMPTY_CUSTOMER, name: account.name, email: account.email, phone: account.phone }
+        : EMPTY_CUSTOMER,
+    );
+  };
   // The buyer's own note. Never required, never a checkout blocker — an empty
   // one simply stores "" and prints nothing anywhere downstream.
   const [customerNote, setCustomerNote] = useState("");
@@ -422,7 +444,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
   }, [appliedPromo, subtotal, currency]);
 
-  const missing = FIELDS.filter((f) => f.required && !customer[f.key].trim());
+  const missing = fields.filter((f) => f.required && !customer[f.key].trim());
   const detailsValid = missing.length === 0;
 
   // Upload the proof screenshot to the tenant's ImageKit folder as soon as it's
@@ -617,6 +639,10 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     // tracker instead of a chat thread — but it costs nothing to keep for every
     // store, so tracking is one tap everywhere.
     rememberRecentOrder(orderNum);
+    // Only now — the order is stored — do the typed details become worth
+    // keeping. Unticking the box erases anything saved earlier, too.
+    if (rememberDetails) rememberSavedDetails(customer);
+    else forgetSavedDetails();
 
     const message = buildOrderMessage(
       brand,
@@ -799,7 +825,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </p>
               )}
               <div className="sf-cart__fields">
-                {FIELDS.map((f) => (
+                {fields.map((f) => (
                   <label key={f.key} className="sf-cart__field">
                     <span>
                       {f.label}
@@ -814,6 +840,21 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     />
                   </label>
                 ))}
+              </div>
+              <div className="sf-cart__remember">
+                <label className="sf-cart__remember-check">
+                  <input
+                    type="checkbox"
+                    checked={rememberDetails}
+                    onChange={(e) => setRememberDetails(e.target.checked)}
+                  />
+                  <span>Remember my details on this device for next time</span>
+                </label>
+                {hasSavedDetails && (
+                  <button type="button" className="sf-cart__remember-forget" onClick={forgetDetails}>
+                    Not you? Clear saved details
+                  </button>
+                )}
               </div>
 
               {shippingEnabled && (
@@ -842,6 +883,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       ))}
                     </select>
                   </label>
+                  {courierNote(selectedCourier) && (
+                    <p className="sf-cart__courier-note">{courierNote(selectedCourier)}</p>
+                  )}
                   {codCourier ? (
                     // COD/no-location courier (Lalamove, Maxim…) — no location to
                     // pick and no shipping fee; the customer pays on delivery.

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders } from "@/lib/demo/fixtures";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/storefront/two-ways-mode";
 import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
 import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
+import { normalizeGroupBuyLiveBanner } from "@/lib/storefront/gb-live-banner";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
@@ -70,6 +72,30 @@ export type StorefrontBrandOptions = {
   isResellerUnlocked: (version: number) => Promise<boolean>;
 };
 
+/**
+ * The tenant's catalog rows, cached across requests. This read was the single
+ * largest source of Supabase egress (every storefront view re-pulled every
+ * product row). Display only: placement re-reads live stock inside its own
+ * transaction (actions/orders.ts), so a stale row can never oversell. Every
+ * product/stock writer already busts `tenant:<id>` via revalidateTenant.
+ * Cached rows come back with createdAt as a string; dbProductToStorefront
+ * accepts both.
+ */
+const loadCatalogRows = (tenantId: string) =>
+  unstable_cache(
+    () =>
+      withTenant(tenantId, (db) =>
+        db.product.findMany({
+          where: { status: { not: "archived" } },
+          orderBy: { createdAt: "asc" },
+        }),
+      ),
+    ["storefront-catalog-rows", tenantId],
+    // 1h: every product/stock writer busts the tag; the timer only catches
+    // direct-DB scripts that can't.
+    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:products`], revalidate: 3600 },
+  )();
+
 export async function loadStorefrontBrand(
   opts: StorefrontBrandOptions,
 ): Promise<{ brand: Brand; products: Product[] }> {
@@ -81,14 +107,7 @@ export async function loadStorefrontBrand(
   // which (outside a React render, e.g. the app API) each re-read the cache.
   const groupBuyCapsP = resolveGroupBuyCaps(tenantId);
   const groupBuysP = groupBuyCapsP.then((caps) => (caps.enabled ? loadGroupBuys(tenantId, slug) : []));
-  const productRowsP = isDemoMode()
-    ? Promise.resolve(null)
-    : withTenant(tenantId, (db) =>
-        db.product.findMany({
-          where: { status: { not: "archived" } },
-          orderBy: { createdAt: "asc" },
-        }),
-      );
+  const productRowsP = isDemoMode() ? Promise.resolve(null) : loadCatalogRows(tenantId);
   // Awaited further down; a failure here must not surface as an unhandled
   // rejection if an earlier await throws first.
   groupBuysP.catch(() => undefined);
@@ -372,6 +391,9 @@ export async function loadStorefrontBrand(
   // resolved (not gated on the GB module) because the two-ways home renders the
   // explainer even between rounds; defaults reproduce the built-in copy.
   brand.groupBuyContent = normalizeGroupBuyContent(config.groupBuyContent);
+  // The app's live strip settings (on/off + owner text); the shop catalog
+  // renders them against the live round (lib/storefront/gb-live-banner).
+  brand.groupBuyLiveBanner = normalizeGroupBuyLiveBanner(config.groupBuyLiveBanner);
 
   brand.groupBuyAllowOnHand = config.groupBuyAllowOnHand !== false;
   // Per-way management: a store may sell only one way (Dragon Peptides is

@@ -24,6 +24,7 @@ import type {
 } from "@/lib/storefront/group-buy";
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import type { GroupBuyContent } from "@/lib/storefront/gb-content";
+import type { GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type { HomeLayout } from "@/lib/storefront/home-layout";
 import type { BoutiqueConfig } from "@/lib/storefront/boutique-home";
@@ -96,7 +97,12 @@ export type Product = {
    *  these into a swipeable gallery (see lib/storefront/product-gallery.ts); a
    *  product whose options carry none renders exactly as it always has.
    *  `extraImages` are that option's further photos after `image`; every one of
-   *  them selects the option when swiped to. */
+   *  them selects the option when swiped to.
+   *
+   *  `includes` is the option's own packing list, one item per line ("10 pcs
+   *  syringes"). The card and detail modal show it only while that option is
+   *  picked, so a "Vial only" buyer is never told the set's extras come with it
+   *  (see selectedIncludes in lib/storefront/variations.ts). */
   variations?: {
     name: string;
     price: number;
@@ -104,6 +110,7 @@ export type Product = {
     gbPrice?: number;
     image?: string;
     extraImages?: string[];
+    includes?: string;
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -153,7 +160,10 @@ export type Product = {
   madeToOrder?: boolean;
 };
 
-export type Category = { id: string; label: string };
+/** `image` is the owner's uploaded picture for the category's storefront tile /
+ *  badge — optional; absent = the first product photo in it (buildCategoryTiles).
+ *  Only ever a URL that passed categoryImage(). */
+export type Category = { id: string; label: string; image?: string };
 
 /** `productId` links the line back to the catalog so confirming the order can
  *  deduct stock; absent on legacy orders, which fall back to a name match. */
@@ -305,6 +315,10 @@ export type Courier = {
    *  doesn't trigger the "no shipping location" warning in admin. Absent/false →
    *  the courier behaves normally (requires an active linked location). */
   noLocation?: boolean;
+  /** The owner's note shown at checkout under the courier picker while this
+   *  courier is selected (coverage, pick-up point…). Plain text; see
+   *  lib/storefront/courier-note. Absent = no note. */
+  note?: string;
 };
 
 export type CoaReport = {
@@ -446,6 +460,11 @@ export type Brand = {
   // `text` per element), so existing tenants are unaffected. Both are hex.
   headerBg?: string;
   headerText?: string;
+  // SHOWCASE layout promise bar colours — optional. Unset = the bar's default
+  // (brand text colour behind brand background text). Any plain CSS colour;
+  // sanitised by promiseBarVars before it reaches the page.
+  promiseBarBg?: string;
+  promiseBarText?: string;
   // Storefront border overrides — optional. `borderColor` (hex) recolors every
   // --brand-border hairline/panel/card frame; `borderWidth` (px, 1–6) thickens
   // the standard 1px borders via --brand-border-width. Unset = theme default
@@ -713,6 +732,10 @@ export type Brand = {
   // and the group-buy page. Normalized server-side from
   // branding.config.groupBuyContent; absent = the built-in default copy.
   groupBuyContent?: GroupBuyContent;
+  // The Pepweb app's live group-buy strip (on/off + owner headline, message,
+  // button label; blank = automatic). Normalized server-side from
+  // branding.config.groupBuyLiveBanner; rendered only by the app's shop catalog.
+  groupBuyLiveBanner?: GroupBuyLiveBannerConfig;
   // Group buy slice of the Sales Analytics view. Derived server-side from
   // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
   // meaningful while the Sales Analytics module itself is on). Absent/false =
@@ -892,6 +915,9 @@ export type Brand = {
   contactChannels?: ContactChannel[];
   checkoutTitle?: string;
   checkoutNote?: string;
+  /** Drop the Email field from checkout (see lib/storefront/checkout-fields).
+   *  Absent/false = Email shown and required, as before. */
+  checkoutHideEmail?: boolean;
   // Link-preview / SEO description — shown when the storefront URL is shared
   // (WhatsApp, social, search). Falls back to a generic line when blank.
   metaDescription?: string;

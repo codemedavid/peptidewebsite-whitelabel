@@ -23,6 +23,7 @@
 // resolve the same set.
 
 import type { Category } from "@/storefront/types";
+import { safeImageSrc } from "./hero-media";
 
 /** The synthetic storefront filter tab. A filter, never an assignable category. */
 export const ALL_CATEGORY_ID = "all";
@@ -45,4 +46,32 @@ export function resolveSelectableCategories(
     (c): c is Category => !!c && !!c.id && c.id !== ALL_CATEGORY_ID,
   );
   return real.length > 0 ? real : [UNCATEGORIZED_CATEGORY];
+}
+
+// ── Category images ──────────────────────────────────────────────────────────
+// An owner may upload a picture per category for its storefront tile / badge.
+// It is stored on the category itself (branding.config.categories[].image) and
+// is optional: without one the tile keeps showing the first product photo.
+
+/** The stored category image, or undefined when there is none or it is not a
+ *  plain image URL. Same gate as the hero image (safeImageSrc), so a
+ *  javascript: or oversized data: URL in config never reaches <img>. */
+export function categoryImage(raw: unknown): string | undefined {
+  return safeImageSrc(raw) || undefined;
+}
+
+/** A new category list with `id`'s image set — or cleared (key removed) when
+ *  `image` is blank or unsafe. The input list is never mutated. */
+export function withCategoryImage(
+  categories: readonly Category[],
+  id: string,
+  image: string | undefined,
+): Category[] {
+  const clean = categoryImage(image);
+  return categories.map((c) => {
+    if (c.id !== id) return c;
+    const { image: _previous, ...rest } = c;
+    void _previous;
+    return clean ? { ...rest, image: clean } : rest;
+  });
 }

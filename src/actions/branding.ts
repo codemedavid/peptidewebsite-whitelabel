@@ -328,13 +328,32 @@ export async function saveRequirePaymentProofAction(
   slug: string,
   require: boolean,
 ): Promise<SaveResult> {
-  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+  return patchCheckoutConfig(slug, { requireProofOfPayment: require !== false });
+}
 
-  const requireProofOfPayment = require !== false;
+/**
+ * Show or hide the Email field on the tenant's storefront checkout. Stored in
+ * `branding.config` as `checkoutHideEmail` (see lib/storefront/checkout-fields).
+ * Absent/false → Email shown and required (historical default).
+ */
+export async function saveCheckoutHideEmailAction(
+  slug: string,
+  hide: boolean,
+): Promise<SaveResult> {
+  return patchCheckoutConfig(slug, { checkoutHideEmail: hide === true });
+}
+
+/** Operator-only read-modify-write of top-level checkout flags in the shared
+ *  `branding.config` blob — never clobbers the rest of the storefront config. */
+async function patchCheckoutConfig(
+  slug: string,
+  patch: Record<string, boolean>,
+): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, requireProofOfPayment } });
+    saveDemoBranding(slug, { config: { ...current, ...patch } });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -350,7 +369,7 @@ export async function saveRequirePaymentProofAction(
   if (!tenant) return { error: "Tenant not found." };
 
   const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, requireProofOfPayment } as Prisma.InputJsonValue;
+  const config = { ...current, ...patch } as Prisma.InputJsonValue;
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },

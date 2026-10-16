@@ -28,6 +28,7 @@ import {
   boutiqueSections,
   buildCategoryTiles,
   normalizeAssurances,
+  normalizeBoutiqueContact,
   type BoutiqueView,
 } from "@/lib/storefront/boutique-home";
 import { activeChannels, channelUrl, CHANNEL_LABELS } from "../checkout";
@@ -81,6 +82,10 @@ export function BoutiqueHome({
     [brand.boutique?.assurances],
   );
   const channels = useMemo(() => activeChannels(brand), [brand]);
+  const contact = useMemo(
+    () => normalizeBoutiqueContact(brand.boutique?.contact),
+    [brand.boutique?.contact],
+  );
 
   // A tile is a way INTO the catalog: it picks the shelf, then hands over to the
   // catalog screen. The home itself lists no products.
@@ -163,21 +168,27 @@ export function BoutiqueHome({
         </section>
       )}
 
-      {shows("contact") && channels.length > 0 && (
+      {shows("contact") && contact.show && channels.length > 0 && (
         <section className="bq-contact" aria-label="Contact us">
           <div className="container bq-contact__inner">
-            <p className="bq-contact__lead font-display">Questions before you order?</p>
+            <p className="bq-contact__lead font-display">{contact.heading}</p>
             <ul className="bq-contact__links">
               {channels.map((channel) => (
                 <li key={channel.type}>
                   <a
                     className="bq-contact__link"
+                    data-details={contact.showDetails ? "1" : "0"}
                     href={channelUrl(channel, "")}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     <span className="bq-contact__channel">{CHANNEL_LABELS[channel.type]}</span>
-                    <span className="bq-contact__dest">{channel.destination.trim()}</span>
+                    {contact.showDetails && (
+                      <span className="bq-contact__dest">{channel.destination.trim()}</span>
+                    )}
+                    {!contact.showDetails && (
+                      <span className="bq-contact__arrow" aria-hidden="true">→</span>
+                    )}
                   </a>
                 </li>
               ))}

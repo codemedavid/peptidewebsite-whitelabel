@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Brand, Courier } from "../types";
 import { useStore } from "../store";
 import { safeExternalUrl } from "@/lib/storefront/courier-booking";
+import { MAX_COURIER_NOTE_LENGTH } from "@/lib/storefront/courier-note";
 
 // ─── CourierModal ─────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ function CourierModal({
   const [bookingUrl, setBookingUrl] = useState<string>(courier.bookingUrl || "");
   const [active, setActive] = useState<boolean>(courier.active !== false);
   const [noLocation, setNoLocation] = useState<boolean>(courier.noLocation === true);
+  const [note, setNote] = useState<string>(courier.note || "");
 
   const canSave = name.trim().length > 0;
 
@@ -82,6 +84,25 @@ function CourierModal({
           />
           <div className="admin-field__hint">
             Where customers can look up their tracking number.
+          </div>
+        </div>
+
+        <div className="admin-modal__row">
+          <label className="admin-field__label" htmlFor="courier-note">
+            Note shown at checkout (Optional)
+          </label>
+          <textarea
+            id="courier-note"
+            className="admin-textarea"
+            style={{ minHeight: 80 }}
+            value={note}
+            maxLength={MAX_COURIER_NOTE_LENGTH}
+            placeholder="e.g., For NCR and nearby areas only. Pick-up is in Malate, Manila."
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value)}
+          />
+          <div className="admin-field__hint">
+            Shown under the courier choice when a customer picks this courier —
+            coverage area, pick-up point, cut-off time.
           </div>
         </div>
 
@@ -158,6 +179,7 @@ function CourierModal({
                 bookingUrl: safeExternalUrl(bookingUrl),
                 active,
                 noLocation,
+                note: note.trim(),
               })
             }
           >
