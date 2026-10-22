@@ -144,6 +144,7 @@
     "test:income": "tsx scripts/test-income-analytics.ts",
     "test:logo-curve": "tsx scripts/test-logo-curve.ts",
     "test:brand-border": "tsx scripts/test-brand-border.ts",
+    "test:text-colors": "tsx scripts/test-text-colors.ts",
     "test:footer-style": "tsx scripts/test-footer-style.ts",
     "test:footer-links": "tsx scripts/test-footer-links.ts",
     "test:price-font": "tsx scripts/test-price-font.ts",

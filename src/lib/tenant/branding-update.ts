@@ -35,6 +35,7 @@ import { contrastRatio, hexToHslTriple } from "@/lib/theme/color";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { MAX_BORDER_WIDTH } from "@/lib/storefront/brand-border";
 import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
+import { TEXT_COLOR_PARTS, normalizeTextColors, withTextColor } from "@/lib/storefront/text-colors";
 import {
   MAX_SPLASH_TAGLINE,
   SPLASH_DESIGNS,
@@ -79,6 +80,7 @@ export const BRANDING_PATCH_SECTIONS = [
   "identity",
   "catalog",
   "splash",
+  "textColors",
 ] as const;
 
 /** patch key → the flat branding.config key it writes. */
@@ -393,6 +395,38 @@ function applySplash(pass: Pass, raw: Record<string, unknown>): void {
   pass.changed.push(...changed);
 }
 
+/**
+ * Per-part text colours — a NESTED map (part id → hex) like the splash, so it
+ * merges onto the stored map: recolouring the prices must keep the COA colour
+ * someone already set. Parts come from the storefront registry, never restated
+ * here. "" resets one part to the theme colour; the map is dropped entirely
+ * once the last part is reset.
+ */
+function applyTextColors(pass: Pass, raw: Record<string, unknown>): void {
+  rejectUnknownKeys(pass, "textColors", raw, TEXT_COLOR_PARTS.map((p) => p.id));
+
+  let next = normalizeTextColors(pass.next.textColors) as Record<string, string> | undefined;
+  const changed: string[] = [];
+
+  for (const { id } of TEXT_COLOR_PARTS) {
+    if (!(id in raw)) continue;
+    const value = raw[id];
+    if (value !== "" && (typeof value !== "string" || !HEX_RE.test(value))) {
+      pass.errors.push(`textColors.${id} must be a hex color like #5E3591 or #111, or "" to use the theme (got ${JSON.stringify(value)}).`);
+      continue;
+    }
+    const hex = value === "" ? undefined : value;
+    if (next?.[id] === hex) continue;
+    next = withTextColor(next, id, hex);
+    changed.push(`textColors.${id}`);
+  }
+
+  if (!changed.length) return;
+  if (next) pass.next.textColors = next;
+  else delete pass.next.textColors;
+  pass.changed.push(...changed);
+}
+
 function applyLayout(pass: Pass, raw: Record<string, unknown>): void {
   rejectUnknownKeys(pass, "layout", raw, [
     ...LAYOUT_BOOLEANS,
@@ -520,6 +554,7 @@ export function buildTenantBrandingUpdate(
     { key: "identity", run: (raw) => applyStrings(pass, "identity", raw, IDENTITY_FIELDS, MAX_LONG) },
     { key: "catalog", run: (raw) => applyStrings(pass, "catalog", raw, CATALOG_FIELDS, MAX_SHORT) },
     { key: "splash", run: (raw) => applySplash(pass, raw) },
+    { key: "textColors", run: (raw) => applyTextColors(pass, raw) },
   ];
 
   for (const { key, run } of sectionHandlers) {

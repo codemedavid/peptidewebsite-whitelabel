@@ -41,10 +41,12 @@
 //  9. Operator retitles the catalog / rewrites the meta description.
 // 12. Operator restyles the brand splash → nested merge, bounded durations.
 // 13. The tool's JSON schema and this core agree on every field.
+// 14. Operator recolours one part of the site (textColors) → nested merge, hex or "" only.
 
 import { buildTenantBrandingUpdate } from "../src/lib/tenant/branding-update";
 import { THEME_PRESETS } from "../src/lib/theme/presets";
 import { UPDATE_BRANDING_TOOL } from "../src/lib/mcp/update-branding-tool";
+import { TEXT_COLOR_PARTS } from "../src/lib/storefront/text-colors";
 import {
   MAX_SPLASH_TAGLINE,
   SPLASH_MAX_DURATION_CEILING,
@@ -422,7 +424,7 @@ console.log("Journey 13 — the schema and the core cannot drift");
   const BASE = { config: {} };
 
   // Every section the schema advertises must be a section the core accepts.
-  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash", "textColors"]) {
     check(`schema advertises the ${section} section`, Boolean(schema[section]?.properties), Object.keys(schema));
     const rejected = buildTenantBrandingUpdate(BASE, { [section]: {} }).errors.some((e) =>
       e.includes(`Unknown branding section "${section}"`),
@@ -439,7 +441,7 @@ console.log("Journey 13 — the schema and the core cannot drift");
     return "";
   };
 
-  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash", "textColors"]) {
     const props = (schema[section]?.properties ?? {}) as Record<string, { type?: string; enum?: string[] }>;
     for (const [key, spec] of Object.entries(props)) {
       const probe = probeFor(spec);
@@ -457,7 +459,7 @@ console.log("Journey 13 — the schema and the core cannot drift");
   // told it exists. The core already publishes its own allow-list in the
   // unknown-key error, so probe it with a key nothing could legitimately use
   // rather than duplicating the field tables into this test.
-  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash"]) {
+  for (const section of ["colors", "fonts", "layout", "hero", "identity", "catalog", "splash", "textColors"]) {
     const [error] = buildTenantBrandingUpdate(BASE, { [section]: { __drift_probe__: 1 } }).errors;
     const allowed = (error?.match(/Allowed: (.+)\.$/)?.[1] ?? "").split(", ").filter(Boolean);
     check(`${section} publishes its allow-list`, allowed.length > 0, error);
@@ -483,6 +485,45 @@ console.log("Journey 13 — the schema and the core cannot drift");
     const errors = buildTenantBrandingUpdate(BASE, { splash: { design: value } }).errors;
     check(`splash.design="${value}" is accepted by the core`, !errors.some((e) => e.startsWith("splash.design")), errors);
   }
+}
+
+console.log("Journey 14 — per-part text colours");
+{
+  // textColors is a NESTED map (part id → hex) like the splash, so a patch for
+  // one part must keep every other part an operator already set — e.g. the
+  // raw-glow COA purple must survive ChatGPT recolouring the prices.
+  const stored = { ...LIVE_CONFIG, textColors: { coa: "#5E3591" } };
+
+  const add = buildTenantBrandingUpdate({ config: stored }, { textColors: { price: "#112233" } });
+  const addColors = add.config.textColors as Record<string, string> | undefined;
+  check("sets one part", add.errors.length === 0 && addColors?.price === "#112233", add);
+  check("keeps the other stored parts", addColors?.coa === "#5E3591", addColors);
+  check("reports the dotted path", add.changed.includes("textColors.price"), add.changed);
+  check("does not mutate the stored config", (stored.textColors as Record<string, string>).price === undefined);
+  check("untouched commerce data survives", add.config.heroSub === LIVE_CONFIG.heroSub);
+
+  const reset = buildTenantBrandingUpdate({ config: stored }, { textColors: { coa: "" } });
+  check('"" resets a part to the theme colour', reset.errors.length === 0 && reset.config.textColors === undefined, reset.config.textColors);
+  check("reset is reported", reset.changed.includes("textColors.coa"), reset.changed);
+
+  const css = buildTenantBrandingUpdate({ config: stored }, { textColors: { price: "red;}*{x:y" } });
+  check("non-hex rejected (it lands in a <style> tag)", css.errors.some((e) => e.startsWith("textColors.price")), css.errors);
+  check("rejected patch writes nothing", (css.config.textColors as Record<string, string>).price === undefined);
+
+  const unknown = buildTenantBrandingUpdate({ config: stored }, { textColors: { hero: "#000000" } });
+  check("unknown part rejected with the allow-list", unknown.errors.some((e) => e.includes('Unknown textColors field "hero"')), unknown.errors);
+
+  const same = buildTenantBrandingUpdate({ config: stored }, { textColors: { coa: "#5E3591" } });
+  check("no-op patch is refused, not a false success", same.errors.length > 0, same);
+
+  const schemaParts = Object.keys(
+    ((UPDATE_BRANDING_TOOL.inputSchema.properties as Record<string, { properties?: object }>).textColors?.properties) ?? {},
+  );
+  check(
+    "tool advertises exactly the registry parts",
+    schemaParts.length === TEXT_COLOR_PARTS.length && TEXT_COLOR_PARTS.every((p) => schemaParts.includes(p.id)),
+    schemaParts,
+  );
 }
 
 if (failures > 0) {

@@ -41,6 +41,7 @@ import {
 } from "@/actions/storefront-admin";
 import { redeemAppHandoffAction } from "@/actions/app-handoff";
 import { takeAppHandoff } from "./app-embed";
+import { TextColorsStyle } from "./components/TextColorsStyle";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
@@ -302,6 +303,7 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
 
   return (
     <>
+      <TextColorsStyle textColors={brand.textColors} />
       {navKey > 0 && <div key={navKey} className="sf-nav-progress" />}
       {brand.showHeader !== false && editorial && (
         <EditorialRail

@@ -38,6 +38,7 @@ import { LOGO_CURVE_PRESETS, logoCurveLabel } from "@/lib/storefront/logo-curve"
 import { HERO_VARIANTS } from "@/lib/storefront/hero-style";
 import { BoutiqueEditor } from "./BoutiqueEditor";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
+import { withTextColor } from "@/lib/storefront/text-colors";
 import { FooterEditor } from "./FooterEditor";
 import { DESIGN_FONTS_HREF } from "./designFonts";
 
@@ -584,6 +585,15 @@ export function BrandTweaksForm({
       <TweakText label="Empty message" value={t.coaEmptyMsg} onChange={(v) => setTweak("coaEmptyMsg", v)} />
       <TweakText label="Info title" value={t.coaInfoTitle} onChange={(v) => setTweak("coaInfoTitle", v)} />
       <TweakText label="Info body" value={t.coaInfoBody} onChange={(v) => setTweak("coaInfoBody", v)} />
+      <ColorField
+        label="Text color"
+        value={t.textColors?.coa}
+        optional
+        fallback={t.accent}
+        inheritLabel="Inheriting Accent"
+        onChange={(v) => setTweak("textColors", withTextColor(t.textColors, "coa", v))}
+        onClear={() => setTweak("textColors", withTextColor(t.textColors, "coa", undefined))}
+        options={["#5E3591", "#3B1F2A", "#1A1A1A", "#2A6FDB", "#1F8A5B", "#C9A961"]} />
 
       <TweakSection label="Page: Protocols" />
       <TweakText label="Eyebrow" value={t.protocolsEyebrow} onChange={(v) => setTweak("protocolsEyebrow", v)} />

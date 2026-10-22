@@ -885,6 +885,10 @@ export type Brand = {
   coaInfoBody: string;
   coaPartners: { label: string; href: string }[];
   coaBadges: { label: string; icon: string }[];
+  // Per-part text colours: part id → hex (see TEXT_COLOR_PARTS in
+  // @/lib/storefront/text-colors). Unset parts keep the theme colours.
+  // Sanitised by textColorsCss before it reaches the page.
+  textColors?: Record<string, string>;
 
   protocolsEyebrow: string;
   protocolsTitle: string;

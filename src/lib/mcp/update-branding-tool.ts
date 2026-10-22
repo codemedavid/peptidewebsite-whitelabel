@@ -25,6 +25,7 @@ import { normalizeHeroMedia } from "@/lib/storefront/hero-media";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { SPLASH_DESIGNS } from "@/lib/storefront/brand-splash";
 import { HOME_LAYOUTS } from "@/lib/storefront/home-layout";
+import { TEXT_COLOR_PARTS } from "@/lib/storefront/text-colors";
 import { MCP_ASSET_SCHEMA, resolveMcpImage } from "@/lib/mcp/tenant-media";
 import { resolveTenantArg } from "@/lib/mcp/tenant-lookup-tool";
 
@@ -50,6 +51,18 @@ const COLORS_SCHEMA = {
     heroHighlight: { type: "string", description: `Hero chip/accent color. ${HEX_HINT}` },
     borderWidth: { type: "number", description: "Border thickness in px, 1 to 6." },
   },
+};
+
+// Generated from the storefront registry so a new recolourable part reaches
+// ChatGPT without touching this file (test:branding-update pins the match).
+const TEXT_COLORS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  description:
+    "Font color of one part of the website, without changing the rest of the palette. Only the parts you send change. Send \"\" to reset a part to the theme color. Hero lines use layout/hero settings and the header uses colors.headerText, so they are not here.",
+  properties: Object.fromEntries(
+    TEXT_COLOR_PARTS.map((p) => [p.id, { type: "string", description: `${p.label} — ${p.help} ${HEX_HINT}` }]),
+  ),
 };
 
 const FONTS_SCHEMA = {
@@ -143,7 +156,7 @@ export const UPDATE_BRANDING_TOOL = {
   name: "update_whitelabel_branding",
   title: "Update Tenant Branding / Storefront",
   description:
-    "Use this when a platform operator asks ChatGPT to restyle or redesign an EXISTING Pepweb whitelabel tenant — its theme preset, colors, fonts, storefront layout, hero copy, hero image, logo, favicon, default product image, or its branded loading splash. This is a partial update: only the fields you send change, and the tenant's products, orders, payment methods, FAQ, promo codes and other storefront data are never touched. Prefer this over create_whitelabel_tenant for any store that already exists — never re-create a tenant to change how it looks.",
+    "Use this when a platform operator asks ChatGPT to restyle or redesign an EXISTING Pepweb whitelabel tenant — its theme preset, colors, the font color of individual parts of the site (titles, product names, prices, footer, Lab Reports page…), fonts, storefront layout, hero copy, hero image, logo, favicon, default product image, or its branded loading splash. This is a partial update: only the fields you send change, and the tenant's products, orders, payment methods, FAQ, promo codes and other storefront data are never touched. Prefer this over create_whitelabel_tenant for any store that already exists — never re-create a tenant to change how it looks.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -163,6 +176,7 @@ export const UPDATE_BRANDING_TOOL = {
         description: `Theme preset id. One of: ${Object.keys(THEME_PRESETS).join(", ")}.`,
       },
       colors: COLORS_SCHEMA,
+      textColors: TEXT_COLORS_SCHEMA,
       fonts: FONTS_SCHEMA,
       layout: LAYOUT_SCHEMA,
       hero: {
@@ -227,7 +241,7 @@ export const UPDATE_BRANDING_TOOL = {
 };
 
 /** Style sections forwarded to the pure merge; everything else here is I/O. */
-const PATCH_SECTIONS = ["themeId", "colors", "fonts", "layout", "hero", "identity", "catalog", "splash"] as const;
+const PATCH_SECTIONS = ["themeId", "colors", "textColors", "fonts", "layout", "hero", "identity", "catalog", "splash"] as const;
 
 type ToolResult = {
   content: { type: "text"; text: string }[];
@@ -401,6 +415,9 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
       themeId: merged.themeId ?? current?.themeId ?? null,
       changed,
       warnings: merged.warnings,
+      // The whole per-part map after the write, so ChatGPT can see every part
+      // already recoloured (it has no other way to read them back).
+      textColors: plainObject(config.textColors) ?? {},
       assets: {
         logoUrl: logoUrl ?? null,
         faviconUrl: faviconUrl ?? null,

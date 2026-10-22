@@ -27,6 +27,7 @@ import { COAPage } from "@/storefront/pages/COAPage";
 import { ProtocolsPage } from "@/storefront/pages/ProtocolsPage";
 import { ReviewsPage } from "@/storefront/pages/ReviewsPage";
 import { isPageVisible } from "@/storefront/visibility";
+import { TextColorsStyle } from "@/storefront/components/TextColorsStyle";
 
 // Mirror store.tsx's applyBrandStyle, but scoped to the preview's .sf-root so
 // edits re-theme the preview live without touching the admin's own tokens.
@@ -95,6 +96,7 @@ export function StorefrontLivePreview({ brand }: { brand: Brand }) {
       <div className="max-h-[640px] overflow-y-auto overflow-x-hidden rounded-[var(--radius)] border border-border">
         <StoreProvider brand={brand}>
           <div className="sf-root" style={brandVars(brand)} data-sf-frame={brand.siteBorder ? "on" : undefined}>
+            <TextColorsStyle textColors={brand.textColors} />
             {brand.showHeader !== false && (
               <Header brand={brand} cartCount={0} onShopClick={goHome} />
             )}

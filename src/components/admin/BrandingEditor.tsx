@@ -37,6 +37,7 @@ import { StorefrontLivePreview } from "@/components/admin/StorefrontLivePreview"
 import { CardDesignPicker, cardDesignLabel } from "@/components/admin/CardDesignPicker";
 import { CARD_PRESETS } from "@/storefront/cardDesign";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
+import { TEXT_COLOR_PARTS, withTextColor } from "@/lib/storefront/text-colors";
 import { saveBrandingAction } from "@/actions/onboarding";
 import { uploadStorefrontImageAsAdminAction } from "@/actions/branding";
 import { applyBrandingAsset, type BrandingAssetKind } from "@/lib/upload/branding-assets";
@@ -211,6 +212,9 @@ export function BrandingEditor({
     highlightColor: heroHighlight,
     align: heroAlign,
   };
+
+  const customTextColors = Object.keys(cfg.textColors ?? {}).length;
+  const textColorSummary = customTextColors > 0 ? `${customTextColors} customized` : "Theme defaults";
 
   const btnContrast = contrastRatio(triples.buttonText, triples.button);
   const textContrast = contrastRatio(triples.text, triples.background);
@@ -476,6 +480,35 @@ export function BrandingEditor({
                   </div>
                 </div>
               </div>
+
+              {/* Text colors — per-part font colour overrides (Brand.textColors,
+                  rendered by TextColorsStyle). Unset parts inherit the palette
+                  above, so existing tenants are unaffected. Hero lines and the
+                  header have their own colour controls (Hero tab / Header). */}
+              <CollapsibleSection
+                title="Text colors"
+                summary={textColorSummary}
+                badge={`${TEXT_COLOR_PARTS.length} parts`}
+              >
+                <p className="text-xs text-muted-foreground">
+                  Change the font color of one part of the website without touching the rest. Hero
+                  text is set in the Hero tab; header text under Header above.
+                </p>
+                <div className="mt-3 space-y-3">
+                  {TEXT_COLOR_PARTS.map((part) => (
+                    <HeaderColorField
+                      key={part.id}
+                      label={part.label}
+                      help={part.help}
+                      value={cfg.textColors?.[part.id]}
+                      fallback={storefrontBrand.text}
+                      onChange={(v) => setTweak("textColors", withTextColor(cfg.textColors, part.id, v))}
+                      onReset={() => setTweak("textColors", withTextColor(cfg.textColors, part.id, undefined))}
+                      resetLabel="Reset to theme color"
+                    />
+                  ))}
+                </div>
+              </CollapsibleSection>
 
               <div className="space-y-3">
                 <h2 className="text-sm font-semibold">Fonts</h2>
