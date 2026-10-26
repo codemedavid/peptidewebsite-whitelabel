@@ -20,6 +20,8 @@ Plus **GB payment mode** per store: *Pay before checkout* (`pay_first`) or *Pay 
 8. Supplier Excel is available once Bunuan ends; counts only orders under rule 3 minus ligwak'd vials; kits per variation.
 9. Operator-grantable features, default OFF: `groupbuy.bunuan`, `groupbuy.ligwak`. First store: mnm-pepsabuy. Website + PepWorld app fully in sync. NOT Mamamica.
 
+10. (HANDOFF-1A open questions, owner 2026-10-27) **Reopen:** an admin MAY move Closed → Open before the Ligwak lock (audited); never after the lock. **QR PH fee:** on a pay_first refund the processing fee is KEPT as charged (QR PH does not return it), so the refund covers items + shipping only. **Edits after the Ligwak lock:** blocked until the admin presses Recalculate (1A's `editsLocked`). **Bunuan timer:** none; Bunuan ends by admin action or automatically when every kit fills.
+
 ## Waves
 
 | Wave | Brief | Depends on |

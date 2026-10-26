@@ -17,8 +17,9 @@
 import { kitsToOrder, normalizeVialsPerKit, type KitColumns } from "./gb-moq-kits";
 import { orderCountsAsCommitted, orderCountsAsDemand, productLineKey } from "./group-buy";
 
-/** How a round collects money. Mirrors Wave 1B's gb-payment-mode union. */
-export type GbPaymentMode = "pay_first" | "pay_later";
+/** How a round collects money — one definition, owned by gb-payment-mode. */
+import type { GbPaymentMode } from "./gb-payment-mode";
+export type { GbPaymentMode };
 
 /** One order line as the kit rules read it. `cancelledQty` = vials ligwak'd off
  *  this line; `placedAt` = when store-added vials were added (else the order's). */
