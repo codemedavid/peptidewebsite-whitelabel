@@ -42,7 +42,7 @@ recalculateLigwakAction(roundId, reason: string): Promise<LigwakReviewResult>   
 listGbRefundsAction(roundId): Promise<GbRefundsResult>
 setRefundStatusAction(orderId, status: ShopRefundStatus, reference?): Promise<GbRefundResult>
 ```
-Server functions taking a resolved ctx (for tests and 3C) are in `src/modules/bunuan/server` and `src/modules/ligwak/server`.
+Server functions taking a resolved ctx (for tests and 3C) are in `src/modules/bunuan/server` and `src/modules/ligwak/server`. They bust the order / round caches after their own commits.
 
 **Stage moves.** Every move runs in one transaction with the round row locked, and is audited:
 - **Start Bunuan:** blocked (code `blocked`, with `blockers`) while any pay_first order awaits a payment check. It clears `endsAt`, keeps `status: active`, and skips straight to Closed when every kit is already full.
@@ -95,6 +95,12 @@ Recalculate undoes the lock:
 | `test:gb-stage-sync` | 21 | pure: effective stage, row writes, old-editor sync, claims counter, line statuses |
 | `test:bunuan` (1A) | green | re-run with the reopen and QR PH changes |
 
+The full `test:*` sweep (every single-script suite) is green: 224 suites. It needed two small hunks in existing tests:
+- `test:db-read-budget`: lists the new order / round writers, plus an explicit exception for the in-transaction helper `writeStageMove` and a check that every file calling it busts the cache.
+- `test:mobile-shop`: expects the round's new stage fields.
+
+Both `tsc` (root, including scripts, and `mobile/`) are clean.
+
 - Mutation-checked: 37 mutants, all killed.
 - On first run, 3 survived, and each pointed at a test gap. I closed them by adding the non-closing 5-of-7 race, fixing a no-op mutant, and asserting the stored `changedByStore`.
 - The race test also caught a real bug: an order attributed to a round that had just auto-closed was accepted.
@@ -115,5 +121,10 @@ Recalculate undoes the lock:
 3. **Admin edit re-pricing:** the admin fee and discount snapshots are kept as charged. A percentage admin fee isn't re-charged on edits (it is at the Ligwak lock).
 4. **3C:** `setGbStageAction` / `setStage` (it returns `move: { from, to }`), `finishBunuanOrder` and `lockLigwak` are the hook points. 2A sends no notifications and doesn't move `sendGroupBuyInvoices`.
 
-## Live DB
-_(filled in after the owner approves the push — see below)_
+## Live DB (done 2026-10-27, owner-approved)
+1. `prisma migrate diff` (live → schema) before the push: ONLY the additions above, no DROP, no other drift.
+2. Feature rows `groupbuy.bunuan`, `groupbuy.ligwak` inserted by a targeted `INSERT … ON CONFLICT (key) DO NOTHING` (not `db:sync-features`). No plan or tenant override has them, so they're OFF everywhere. To turn a store on, grant both as operator overrides (first store: mnm-pepsabuy).
+3. `prisma db push` from this worktree → in sync. Then `npm run db:gb-allocation` (5 constraints, 2 triggers) and `prisma/lockdown-public-api.sql` re-run: the 3 new tables have RLS enabled and 0 anon/authenticated grants.
+4. The diff again: **empty**. All 10 live rounds read `stage = open`.
+
+The live schema is now AHEAD of production code, which is safe: old code ignores the new nullable columns, never writes `stage`, and never sets `refundStatus`. When this branch deploys, `vercel-build`'s `db push` is a no-op.
