@@ -10,8 +10,7 @@
 
 import { requireAnyStaffPermission, requireStaffPermission, type AdminActorContext } from "@/lib/auth/staff-guard";
 import { isDemoMode } from "@/lib/demo/fixtures";
-import { revalidateOrders } from "@/lib/orders/order-cache";
-import { resolveGroupBuyCaps, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
+import { resolveGroupBuyCaps } from "@/lib/storefront/group-buy-server";
 import type {
   GbBunuanCounterResult,
   GbFail,
@@ -62,10 +61,6 @@ export async function setGbStageAction(
   const g = await admin(["groupbuys"]);
   if ("ok" in g) return g;
   const r = await setStage(g, { roundId, stage, paymentDueAt: opts?.paymentDueAt, reason: opts?.reason });
-  if (r.ok) {
-    revalidateGroupBuys(g.tenantId);
-    revalidateOrders(g.tenantId);
-  }
   if (!r.ok) return r;
   const { move: _move, ...result } = r; // eslint-disable-line @typescript-eslint/no-unused-vars
   return result;
@@ -93,10 +88,6 @@ export async function editOrderLinesAction(
   const g = await admin(["groupbuys", "orders"]);
   if ("ok" in g) return g;
   const r = await editOrderLines(g, { orderId, lines, preview: opts?.preview, expectedUpdatedAt: opts?.expectedUpdatedAt });
-  if (r.ok && r.saved) {
-    revalidateOrders(g.tenantId);
-    if (r.roundClosed) revalidateGroupBuys(g.tenantId);
-  }
   if (!r.ok) return r;
   const { roundClosed: _c, roundId: _r, ...result } = r; // eslint-disable-line @typescript-eslint/no-unused-vars
   return result;

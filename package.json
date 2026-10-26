@@ -251,6 +251,8 @@
     "test:gb-stage-sync": "tsx scripts/test-gb-stage-sync.ts",
     "test:bunuan-db": "tsx scripts/test-bunuan-db.ts",
     "test:bunuan-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-bunuan-flow.ts",
+    "test:ligwak-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-ligwak-flow.ts",
+    "test:gb-order-edit": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-gb-order-edit.ts",
     "test:bunuan": "npm run -s test:gb-kits && npm run -s test:bunuan-core && npm run -s test:ligwak-core && npm run -s test:gb-totals && npm run -s test:gb-stage && npm run -s test:gb-reprice"
   },
   "prisma": {

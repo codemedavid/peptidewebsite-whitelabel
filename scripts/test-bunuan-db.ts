@@ -265,7 +265,7 @@ async function mapping() {
     assert.deepEqual(p.variations?.map((v) => v.kitSize), [5, undefined, undefined]);
   });
   await test("product → DB → product round-trips it", () => {
-    const write = productToDbWrite(normalizeProductInput(input));
+    const write = productToDbWrite(normalizeProductInput(input), "PHP", "₱");
     const back = dbProductToStorefront(
       {
         id: "p1",

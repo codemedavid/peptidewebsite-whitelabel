@@ -2,12 +2,12 @@
 
 // Ligwak's server actions — store-admin doors (website #admin and the app's
 // admin bridge), `groupbuys` module. Results are the shared app contract
-// (lib/mobile/shop-contract).
+// (lib/mobile/shop-contract). The server functions bust the caches after
+// their own commits.
 
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { isDemoMode } from "@/lib/demo/fixtures";
-import { revalidateOrders } from "@/lib/orders/order-cache";
-import { resolveGroupBuyCaps, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
+import { resolveGroupBuyCaps } from "@/lib/storefront/group-buy-server";
 import type { GbFail, GbRefundResult, GbRefundsResult, LigwakReviewResult } from "@/lib/mobile/shop-contract";
 import {
   decideLigwak,
@@ -36,11 +36,6 @@ async function admin(): Promise<LigwakCtx | GbFail> {
   };
 }
 
-function written(tenantId: string) {
-  revalidateOrders(tenantId);
-  revalidateGroupBuys(tenantId);
-}
-
 /** The Ligwak review: suggestions, saved decisions, totals impact. Read-only. */
 export async function previewLigwakAction(roundId: unknown): Promise<LigwakReviewResult> {
   const g = await admin();
@@ -52,21 +47,21 @@ export async function previewLigwakAction(roundId: unknown): Promise<LigwakRevie
 export async function decideLigwakAction(roundId: unknown, decisions: unknown): Promise<LigwakReviewResult> {
   const g = await admin();
   if ("ok" in g) return g;
-  return reviewOrWrite(g.tenantId, await decideLigwak(g, roundId, decisions), false);
+  return decideLigwak(g, roundId, decisions);
 }
 
 /** Lock: writes every order's line results and new total. */
 export async function lockLigwakAction(roundId: unknown): Promise<LigwakReviewResult> {
   const g = await admin();
   if ("ok" in g) return g;
-  return reviewOrWrite(g.tenantId, await lockLigwak(g, roundId), true);
+  return lockLigwak(g, roundId);
 }
 
 /** Undo the lock (reason required, audited) so orders can change and Ligwak re-run. */
 export async function recalculateLigwakAction(roundId: unknown, reason: unknown): Promise<LigwakReviewResult> {
   const g = await admin();
   if ("ok" in g) return g;
-  return reviewOrWrite(g.tenantId, await recalculateLigwak(g, roundId, reason), true);
+  return recalculateLigwak(g, roundId, reason);
 }
 
 /** pay_first refunds of one round, with each one's status trail. */
@@ -80,12 +75,5 @@ export async function listGbRefundsAction(roundId: unknown): Promise<GbRefundsRe
 export async function setRefundStatusAction(orderId: unknown, status: unknown, reference?: unknown): Promise<GbRefundResult> {
   const g = await admin();
   if ("ok" in g) return g;
-  const r = await setRefundStatus(g, { orderId, status, reference });
-  if (r.ok) revalidateOrders(g.tenantId);
-  return r;
-}
-
-function reviewOrWrite(tenantId: string, r: LigwakReviewResult, ordersChanged: boolean): LigwakReviewResult {
-  if (r.ok && ordersChanged) written(tenantId);
-  return r;
+  return setRefundStatus(g, { orderId, status, reference });
 }

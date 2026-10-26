@@ -7,6 +7,7 @@ import "server-only";
 // what the customer paid (and which never includes the QR PH fee).
 
 import { withTenant } from "@/lib/db/tenant-client";
+import { revalidateOrders } from "@/lib/orders/order-cache";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
 import type { GbRefund, GbRefundResult, GbRefundsResult, GbRefundStep, ShopRefundStatus } from "@/lib/mobile/shop-contract";
 import { audit, customerName, gbFail } from "@/modules/bunuan/server";
@@ -96,7 +97,7 @@ export async function setRefundStatus(
   const reference = typeof input.reference === "string" ? input.reference.trim().slice(0, 200) : "";
   if (to === "refunded" && !reference) return gbFail("invalid_input", "Add the refund reference (e.g. the GCash reference number).");
 
-  return withTenant(ctx.tenantId, async (db) => {
+  const result = await withTenant(ctx.tenantId, async (db) => {
     const order = await db.storefrontOrder.findFirst({ where: { ...ACTIVE_ORDERS_WHERE, id: orderId }, select: REFUND_SELECT });
     if (!order) return gbFail("not_found", "Order not found.");
     const from = STATUSES.find((s) => s === order.refundStatus);
@@ -128,4 +129,6 @@ export async function setRefundStatus(
       refund: refundOf({ ...order, refundStatus: to, refundReference: reference || order.refundReference }, events),
     };
   });
+  if (result.ok) revalidateOrders(ctx.tenantId);
+  return result;
 }

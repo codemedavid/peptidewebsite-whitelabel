@@ -10,6 +10,8 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { withTenant } from "@/lib/db/tenant-client";
+import { revalidateOrders } from "@/lib/orders/order-cache";
+import { revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
 import { repriceEditedLines, type EditedLine, type EditedOrderItem } from "@/lib/orders/gb-order-edit";
 import { storedItems } from "@/lib/orders/db-mapping";
 import { applyOrderStockMove } from "@/lib/orders/stock-move-tx";
@@ -104,7 +106,7 @@ export async function editOrderLines(
   const preview = input.preview === true;
   const expected = typeof input.expectedUpdatedAt === "string" ? input.expectedUpdatedAt : null;
 
-  return withTenant(ctx.tenantId, async (db) => {
+  const result = await withTenant(ctx.tenantId, async (db) => {
     const order = await db.storefrontOrder.findFirst({ where: { ...ACTIVE_ORDERS_WHERE, id: orderId } });
     if (!order) return gbFail("not_found", "Order not found.");
     if (!order.groupBuyId) return gbFail("unavailable", "Only group-buy orders can be edited here.");
@@ -190,4 +192,9 @@ export async function editOrderLines(
     const fresh = await db.storefrontOrder.findFirst({ where: { id: order.id }, select: { updatedAt: true } });
     return { ...base, saved: true, updatedAt: (fresh?.updatedAt ?? now).toISOString(), roundClosed, roundId };
   });
+  if (result.ok && result.saved) {
+    revalidateOrders(ctx.tenantId);
+    if ("roundClosed" in result && result.roundClosed) revalidateGroupBuys(ctx.tenantId);
+  }
+  return result;
 }

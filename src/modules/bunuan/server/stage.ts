@@ -7,6 +7,8 @@ import "server-only";
 
 import type { TenantTx } from "@/lib/db/tenant-client";
 import { withTenant } from "@/lib/db/tenant-client";
+import { revalidateOrders } from "@/lib/orders/order-cache";
+import { revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
 import { allowedNextStages, editsLocked, normalizeGbStage, resolveStageMove, stageLabel, canOrder, type GbStage } from "@/lib/storefront/gb-stage";
 import type { GroupBuyCapabilities } from "@/lib/storefront/group-buy";
 import type { ReportKits } from "@/lib/storefront/group-buy-report";
@@ -95,7 +97,9 @@ function parseDueDate(raw: unknown): Date | null | "invalid" {
 
 export type StageMoveDone = { from: GbStage; to: GbStage; skipped: boolean };
 
-/** Apply a validated move to a locked round (shared with the Bunuan auto-close). */
+/** Apply a validated move to a locked round (shared with the Bunuan auto-close).
+ *  Runs INSIDE the caller's transaction, so the CALLER busts the rounds cache
+ *  after its commit (setStage, the order insert, the order edit). */
 export async function writeStageMove(
   db: TenantTx,
   tenantId: string,
@@ -141,7 +145,7 @@ export async function setStage(
   const reason = typeof input.reason === "string" ? input.reason.trim().slice(0, 500) : "";
 
   try {
-    return await withTenant(ctx.tenantId, async (db) => {
+    const result = await withTenant(ctx.tenantId, async (db) => {
       if (!(await lockRound(db, ctx.tenantId, roundId))) return NOT_FOUND;
       const state = await loadRoundState(db, roundId);
       if (!state) return NOT_FOUND;
@@ -176,6 +180,12 @@ export async function setStage(
         move: { from: current, to: move.stage, skipped: move.skipped },
       };
     });
+    // After the commit: the stage changes the round's liveness and its orders' views.
+    if (result.ok) {
+      revalidateGroupBuys(ctx.tenantId);
+      revalidateOrders(ctx.tenantId);
+    }
+    return result;
   } catch (e) {
     // The one-live-round index refuses a reopen while another round is live.
     if ((e as { code?: string }).code === "P2002") {

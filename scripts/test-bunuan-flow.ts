@@ -238,8 +238,15 @@ async function main() {
     const r = await place("Dan", "30mg", 1);
     assert.ok("error" in r && /isn't open/.test(r.error), JSON.stringify(r));
   });
-  await test("5 of the 7 is sold — counted at once, pending its payment check", async () => {
-    await placed("Dan", "15mg", 5);
+  await test("two buyers ask for 5 of the 7 at once — one is sold, the other told only 2 are left", async () => {
+    const [d, g] = await Promise.all([place("Dan", "15mg", 5), place("Gil", "15mg", 5)]);
+    const wins = [d, g].filter((r) => "ok" in r);
+    const losses = [d, g].filter((r) => "error" in r) as { error: string }[];
+    assert.equal(wins.length, 1, JSON.stringify([d, g]));
+    assert.match(losses[0].error, /Only 2 vials/);
+    assert.equal((await roundRow()).stage, "bunuan", "2 still open — the round stays in Bunuan");
+  });
+  await test("the 5 sold are counted at once, pending their payment check", async () => {
     const r = await B.getBunuanCounter(ctx, round.id);
     assert.ok(r.ok);
     if (!r.ok) return;

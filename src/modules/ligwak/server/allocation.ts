@@ -20,6 +20,8 @@ import "server-only";
 // number of queries (no per-order loop — tx-round-trip-budget).
 
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
+import { revalidateOrders } from "@/lib/orders/order-cache";
+import { revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
 import { recalculateOrder, type GbRecalc, type TotalsOrder } from "@/lib/orders/gb-totals";
 import { storedItems, normalizeStatusHistory } from "@/lib/orders/db-mapping";
 import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
@@ -371,7 +373,7 @@ async function moveLigwakStock(
 export async function lockLigwak(ctx: LigwakCtx, roundId: unknown): Promise<LigwakReviewResult> {
   if (!ctx.caps.ligwak) return NO_LIGWAK;
   if (typeof roundId !== "string" || !ID_RE.test(roundId)) return NOT_FOUND;
-  return withTenant(ctx.tenantId, async (db) => {
+  const result = await withTenant(ctx.tenantId, async (db) => {
     if (!(await lockRound(db, ctx.tenantId, roundId))) return NOT_FOUND;
     const state = await loadRoundState(db, roundId);
     if (!state) return NOT_FOUND;
@@ -432,14 +434,21 @@ export async function lockLigwak(ctx: LigwakCtx, roundId: unknown): Promise<Ligw
       review: reviewOf(lockedState, plan, { ...draft, lockedAt: now, lockedBy: ctx.actor }, decisions),
     };
   });
+  // After the commit: orders were re-totalled and the round re-stamped.
+  if (result.ok) {
+    revalidateOrders(ctx.tenantId);
+    revalidateGroupBuys(ctx.tenantId);
+  }
+  return result;
 }
+
 
 export async function recalculateLigwak(ctx: LigwakCtx, roundId: unknown, rawReason: unknown): Promise<LigwakReviewResult> {
   if (!ctx.caps.ligwak) return NO_LIGWAK;
   if (typeof roundId !== "string" || !ID_RE.test(roundId)) return NOT_FOUND;
   const reason = typeof rawReason === "string" ? rawReason.trim().slice(0, 500) : "";
   if (reason.length < 3) return gbFail("invalid_input", "Say why you're recalculating (it's kept in the round's history).");
-  return withTenant(ctx.tenantId, async (db) => {
+  const result = await withTenant(ctx.tenantId, async (db) => {
     if (!(await lockRound(db, ctx.tenantId, roundId))) return NOT_FOUND;
     const state = await loadRoundState(db, roundId);
     if (!state) return NOT_FOUND;
@@ -498,4 +507,10 @@ export async function recalculateLigwak(ctx: LigwakCtx, roundId: unknown, rawRea
     });
     return { ok: true as const, review: reviewOf(base, plan, next, decisions) };
   });
+  // After the commit: orders were re-totalled and the round re-stamped.
+  if (result.ok) {
+    revalidateOrders(ctx.tenantId);
+    revalidateGroupBuys(ctx.tenantId);
+  }
+  return result;
 }
