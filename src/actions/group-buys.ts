@@ -55,6 +55,13 @@ import {
   normalizeGroupBuyInvoice,
   type GroupBuyInvoiceConfig,
 } from "@/lib/storefront/gb-invoice";
+import {
+  gbPaymentModeFor,
+  normalizeGbPaymentMode,
+  syncGbPaymentModeToInvoice,
+  withGbPaymentMode,
+  type GbPaymentMode,
+} from "@/lib/storefront/gb-payment-mode";
 import { sendGroupBuyInvoices, type InvoiceSendResult } from "@/lib/community/gb-invoice.server";
 import {
   detectAssignmentDrift,
@@ -130,6 +137,8 @@ export type ListGroupBuysResult =
       heroCountdown: HeroCountdownConfig;
       /** Pay-after-close invoices: fee, template, payment options. */
       invoice: GroupBuyInvoiceConfig;
+      /** When customers pay for a group-buy order (gb-payment-mode.ts). */
+      paymentMode: GbPaymentMode;
     }
   | { error: string };
 
@@ -212,6 +221,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
     const liveBanner = normalizeGroupBuyLiveBanner(config.groupBuyLiveBanner);
     const heroCountdown = normalizeHeroCountdown(config.heroCountdown);
     const invoice = normalizeGroupBuyInvoice(config.groupBuyInvoice);
+    const paymentMode = gbPaymentModeFor(config);
 
     // One query for every candidate order, then resolve per round in memory —
     // never one query per round, which would be an N+1 on the list page.
@@ -226,7 +236,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
       ),
     );
 
-    return { ok: true, groupBuys, rows, caps, settings, content, liveBanner, heroCountdown, invoice };
+    return { ok: true, groupBuys, rows, caps, settings, content, liveBanner, heroCountdown, invoice, paymentMode };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load group buys." };
   }
@@ -815,7 +825,7 @@ export async function saveGroupBuyInvoiceAction(
     if (isDemoMode()) {
       const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
       const invoice = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
-      saveDemoBranding(slug, { config: { ...current, groupBuyInvoice: invoice } });
+      saveDemoBranding(slug, { config: syncGbPaymentModeToInvoice({ ...current, groupBuyInvoice: invoice }) });
       return { ok: true, invoice };
     }
     // Row-locked read-modify-write: enabledAt is merged from what is stored,
@@ -825,7 +835,9 @@ export async function saveGroupBuyInvoiceAction(
       const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
       const current = (row?.config ?? {}) as Record<string, unknown>;
       const merged = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
-      const config = { ...current, groupBuyInvoice: merged } as Prisma.InputJsonValue;
+      // The payment mode follows the switch (gb-payment-mode.ts), so the two
+      // never disagree about whether a round order is paid now.
+      const config = syncGbPaymentModeToInvoice({ ...current, groupBuyInvoice: merged }) as Prisma.InputJsonValue;
       await tx.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
       return merged;
     });
@@ -833,6 +845,44 @@ export async function saveGroupBuyInvoiceAction(
     return { ok: true, invoice };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't save the invoice settings." };
+  }
+}
+
+/**
+ * Save when customers pay for group-buy orders (branding.config.groupBuyPayment
+ * .mode): "pay_first" (pay + proof at checkout) or "pay_later" (pay after the
+ * round closes). The invoice switch follows it (withGbPaymentMode), so the
+ * website checkout, the app checkout and the invoice sender all agree.
+ */
+export async function saveGroupBuyPaymentModeAction(
+  input: unknown,
+): Promise<{ ok: true; mode: GbPaymentMode; invoice: GroupBuyInvoiceConfig } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const mode = normalizeGbPaymentMode(input);
+  if (!mode) return { error: "Choose how customers pay." };
+
+  try {
+    if (isDemoMode()) {
+      const next = withGbPaymentMode(getDemoBranding(slug).config ?? {}, mode);
+      saveDemoBranding(slug, { config: next });
+      return { ok: true, mode, invoice: normalizeGroupBuyInvoice(next.groupBuyInvoice) };
+    }
+    // Row-locked like the invoice save: the invoice's enabledAt is merged from
+    // what is stored, and a concurrent config save must not be overwritten.
+    const next = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
+      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
+      const merged = withGbPaymentMode(row?.config ?? {}, mode);
+      const config = merged as Prisma.InputJsonValue;
+      await tx.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
+      return merged;
+    });
+    revalidateTenant(tenantId, slug);
+    return { ok: true, mode, invoice: normalizeGroupBuyInvoice(next.groupBuyInvoice) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save how customers pay." };
   }
 }
 

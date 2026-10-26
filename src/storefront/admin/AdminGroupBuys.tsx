@@ -28,9 +28,15 @@ import {
   getGroupBuySupplierReportAction,
   saveGroupBuyAllowOnHandAction,
   saveTwoWaysModeAction,
+  saveGroupBuyPaymentModeAction,
   saveGroupBuyContentAction,
   type GroupBuyCustomerLine,
 } from "@/actions/group-buys";
+import {
+  GB_PAYMENT_MODES,
+  GB_PAYMENT_MODE_COPY,
+  type GbPaymentMode,
+} from "@/lib/storefront/gb-payment-mode";
 import {
   normalizeTwoWaysMode,
   setWayAcceptOrders,
@@ -1092,6 +1098,12 @@ export function AdminGroupBuys({
   );
   const [savingWays, setSavingWays] = useState(false);
 
+  // When customers pay for a group-buy order (lib/storefront/gb-payment-mode),
+  // saved via saveGroupBuyPaymentModeAction — the same setting the app and the
+  // operator console edit.
+  const [payMode, setPayMode] = useState<GbPaymentMode>(brand.gbPaymentMode ?? "pay_first");
+  const [savingPayMode, setSavingPayMode] = useState(false);
+
   // Owner-editable storefront copy ("How group buys work" + live-round terms) —
   // loaded with the list, saved via saveGroupBuyContentAction into
   // branding.config.groupBuyContent.
@@ -1142,6 +1154,7 @@ export function AdminGroupBuys({
         setRows(res.rows);
         setSettings(res.settings);
         setContent(res.content);
+        setPayMode(res.paymentMode);
         maybeAutoReport(res.groupBuys);
       }
       setLoaded(true);
@@ -1222,6 +1235,21 @@ export function AdminGroupBuys({
     // comes back corrected rather than silently diverging from what's stored.
     setWays(res.mode);
     toast("Ways to order saved.");
+  };
+
+  const savePayMode = async (next: GbPaymentMode) => {
+    if (next === payMode) return;
+    const prev = payMode;
+    setPayMode(next); // optimistic
+    setSavingPayMode(true);
+    const res = await saveGroupBuyPaymentModeAction(next);
+    setSavingPayMode(false);
+    if ("error" in res) {
+      setPayMode(prev); // revert
+      return toast(res.error);
+    }
+    setPayMode(res.mode);
+    toast(next === "pay_later" ? "Customers now pay after the group buy closes." : "Customers now pay at checkout.");
   };
 
   const saveContent = async (next: GroupBuyContent) => {
@@ -1483,6 +1511,49 @@ export function AdminGroupBuys({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {tab === "rounds" && (
+          <div
+            style={{
+              margin: "4px 0 14px",
+              padding: "12px 14px",
+              border: "1px solid var(--brand-border, rgba(0,0,0,.12))",
+              borderRadius: 10,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ fontWeight: 600 }} id="gb-pay-mode-label">
+                How customers pay
+              </span>
+              <div role="group" aria-labelledby="gb-pay-mode-label" style={{ display: "flex", gap: 6 }}>
+                {GB_PAYMENT_MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`admin-btn${payMode === m ? "" : " admin-btn--ghost"}`}
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    aria-pressed={payMode === m}
+                    disabled={savingPayMode}
+                    onClick={() => savePayMode(m)}
+                  >
+                    {GB_PAYMENT_MODE_COPY[m].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="admin-field__hint" style={{ display: "block", marginTop: 6 }}>
+              {GB_PAYMENT_MODE_COPY[payMode].hint} Applies on the website and in the app.
+            </span>
           </div>
         )}
 

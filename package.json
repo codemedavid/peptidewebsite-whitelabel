@@ -68,6 +68,7 @@
     "test:hero-countdown": "tsx scripts/test-hero-countdown.ts",
     "test:gb-invoice": "tsx scripts/test-gb-invoice.ts",
     "test:gb-invoice-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-gb-invoice-flow.ts",
+    "test:gb-payment-mode": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-gb-payment-mode.ts",
     "test:group-buy-page": "tsx scripts/test-group-buy-page.ts",
     "test:gb-cart-doses": "tsx scripts/test-gb-cart-doses.ts",
     "test:group-buy-pricing": "tsx scripts/test-group-buy-pricing.ts",

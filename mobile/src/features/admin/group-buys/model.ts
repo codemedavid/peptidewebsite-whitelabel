@@ -229,6 +229,8 @@ export type ListResult = {
   heroCountdown?: HeroCountdownConfig;
   /** Pay-after-close invoices (invoice.ts). Absent on older servers. */
   invoice?: unknown;
+  /** When customers pay (payment-mode.ts). Absent on servers before it. */
+  paymentMode?: unknown;
 };
 
 export type DashboardResult = {

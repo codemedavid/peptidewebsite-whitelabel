@@ -425,6 +425,7 @@ export const STORE_ACTION_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   saveGroupBuyContentAction: "[content] — 'How group buys work' copy.",
   saveGroupBuyLiveBannerAction: "[banner] — app LIVE strip.",
   saveGroupBuyInvoiceAction: "[invoice] — group-buy invoice settings.",
+  saveGroupBuyPaymentModeAction: "[mode] — \"pay_first\" (pay at checkout) or \"pay_later\" (pay after the round closes).",
 });
 
 export function isAllowedStoreAction(name: unknown): name is string {

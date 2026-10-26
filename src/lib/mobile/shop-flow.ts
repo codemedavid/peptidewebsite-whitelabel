@@ -2,7 +2,7 @@ import "server-only";
 
 import { placeStorefrontOrderAction, quoteStorefrontOrderAction } from "@/actions/orders";
 import { getTenantContext } from "@/lib/tenant/context";
-import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
+import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
 import type { ApiErrorCode } from "./contract";
 import type { OrderItem } from "@/storefront/types";
 import type { ShopOrder, ShopQuote } from "./shop-contract";
@@ -71,12 +71,12 @@ export async function quoteShopOrder(store: ShopStore, body: Row): Promise<FlowR
 
 /**
  * Will placement treat this cart as a pay-after-close group-buy order? Only
- * stores with the invoice switch on pay for the answer, and the answer is the
+ * pay-after-close stores (gb-payment-mode.ts) pay for the answer, and the answer is the
  * action's own (the quote runs the same validateLiveOrder placement does).
  */
 async function isInvoiceCart(store: ShopStore, items: OrderItem[], shipping: ShippingChoice): Promise<boolean> {
   const { branding } = await getTenantContext(store.tenantId);
-  if (!normalizeGroupBuyInvoice(((branding?.config ?? {}) as Row).groupBuyInvoice).enabled) return false;
+  if (gbPaymentModeFor(branding?.config) !== "pay_later") return false;
   const draft = buildOrderDraft({
     id: "",
     items,

@@ -20,6 +20,7 @@ import {
   saveRequirePaymentProofAction,
   saveCheckoutHideEmailAction,
   saveNoticeModalGrantAction,
+  saveGbPaymentModeAction,
 } from "@/actions/branding";
 import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
@@ -39,6 +40,11 @@ import {
   type OrderNumberScheme,
 } from "@/lib/orders/order-number-format";
 import type { ContactChannel, ContactChannelType } from "@/storefront/types";
+import {
+  GB_PAYMENT_MODES,
+  GB_PAYMENT_MODE_COPY,
+  type GbPaymentMode,
+} from "@/lib/storefront/gb-payment-mode";
 
 const CHECKOUT_TITLE_MAX = 60;
 const CHECKOUT_NOTE_MAX = 200;
@@ -102,6 +108,8 @@ type Props = {
   initialAdminEmail: string;
   /** Whether a password hash exists. The password itself is never sent here. */
   initialHasAdminPassword: boolean;
+  /** When this store's customers pay for group-buy orders. Saves instantly. */
+  initialGbPaymentMode: GbPaymentMode;
   lastSaved?: string;
   /** Plan & status card, rendered first in the sections column (its own save flow). */
   planStatus?: React.ReactNode;
@@ -114,6 +122,7 @@ const SECTIONS = [
   { id: "channels", label: "Checkout channels" },
   { id: "proof", label: "Payment proof" },
   { id: "notice", label: "Notice modal" },
+  { id: "gbpay", label: "Group buy payment" },
   { id: "fee", label: "Admin fee" },
   { id: "copy", label: "Checkout copy" },
   { id: "admin", label: "Admin access" },
@@ -136,6 +145,7 @@ export function TenantSettingsView({
   adminFeeEntitled,
   initialAdminEmail,
   initialHasAdminPassword,
+  initialGbPaymentMode,
   lastSaved,
   planStatus,
   domains,
@@ -155,6 +165,8 @@ export function TenantSettingsView({
   // optimistic state + revert on failure, mirroring the admin-fee master toggle.
   const [noticeGranted, setNoticeGranted] = useState(initialNoticeModalGranted);
   const [noticeSaving, setNoticeSaving] = useState(false);
+  const [gbPayMode, setGbPayMode] = useState<GbPaymentMode>(initialGbPaymentMode);
+  const [gbPaySaving, setGbPaySaving] = useState(false);
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
@@ -207,6 +219,7 @@ export function TenantSettingsView({
     channels: false,
     proof: false,
     notice: false,
+    gbpay: false,
     fee: false,
     copy: false,
     admin: false,
@@ -379,6 +392,23 @@ export function TenantSettingsView({
     }
   }
 
+  async function saveGbPayMode(next: GbPaymentMode) {
+    if (gbPaySaving || next === gbPayMode) return;
+    const prev = gbPayMode;
+    setGbPayMode(next); // optimistic
+    setGbPaySaving(true);
+    setErrors((e) => ({ ...e, gbpay: undefined }));
+    const res = await saveGbPaymentModeAction(slug, next);
+    setGbPaySaving(false);
+    if (!("ok" in res)) {
+      setGbPayMode(prev); // revert
+      setErrors((e) => ({
+        ...e,
+        gbpay: res.error === "FORBIDDEN" ? "You don't have permission to change this." : res.error,
+      }));
+    }
+  }
+
   async function saveAdminPassword(): Promise<boolean> {
     setSaving("admin");
     setErrors((e) => ({ ...e, admin: undefined }));
@@ -432,6 +462,7 @@ export function TenantSettingsView({
     channels: useRef<HTMLElement>(null),
     proof: useRef<HTMLElement>(null),
     notice: useRef<HTMLElement>(null),
+    gbpay: useRef<HTMLElement>(null),
     fee: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
     admin: useRef<HTMLElement>(null),
@@ -459,6 +490,7 @@ export function TenantSettingsView({
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
     proof: requireProof ? "On" : "Off",
     notice: noticeGranted ? "On" : "Off",
+    gbpay: gbPayMode === "pay_later" ? "After" : "Before",
     fee: feeEnabled ? "On" : "Off",
     copy: "3",
     admin: hasAdminPassword && baseline.current.adminEmail ? "Set" : "Not set",
@@ -950,6 +982,54 @@ export function TenantSettingsView({
               {errors.notice && (
                 <div role="alert" className="set-err">
                   {errors.notice}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ---------- group buy payment ---------- */}
+          <section className="set-card" ref={refs.gbpay} data-section="gbpay">
+            <div className="set-card-head">
+              <div>
+                <span className="set-eyebrow">Group buys</span>
+                <h2>Group buy payment</h2>
+                <p className="set-desc">
+                  When this store&apos;s customers pay for a group-buy order — on the website and in
+                  the PepWorld app alike. The store owner can change it too, under Group Buys.
+                </p>
+              </div>
+              <span className={"badge " + (gbPayMode === "pay_later" ? "badge-success" : "badge-neutral")}>
+                {GB_PAYMENT_MODE_COPY[gbPayMode].label}
+              </span>
+            </div>
+            <div className="set-card-body">
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Customers pay</div>
+                  <div className="set-row-help">{GB_PAYMENT_MODE_COPY[gbPayMode].hint}</div>
+                </div>
+                <div className="set-row-control">
+                  <div className="set-select-wrap">
+                    <select
+                      className="set-select"
+                      aria-label="When customers pay for group-buy orders"
+                      aria-busy={gbPaySaving}
+                      disabled={gbPaySaving}
+                      value={gbPayMode}
+                      onChange={(e) => saveGbPayMode(e.target.value as GbPaymentMode)}
+                    >
+                      {GB_PAYMENT_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {GB_PAYMENT_MODE_COPY[m].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              {errors.gbpay && (
+                <div role="alert" className="set-err">
+                  {errors.gbpay}
                 </div>
               )}
             </div>

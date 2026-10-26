@@ -69,6 +69,7 @@ import {
   type CheckoutCustomer,
 } from "../checkout";
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
+import { PAY_LATER_CHECKOUT_NOTE, isPayLaterCart } from "@/lib/storefront/gb-payment-mode";
 import { useCustomerAccount } from "../customer-account-client";
 import "./remember-details.css";
 
@@ -173,6 +174,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     return b ? { coversAll: b.coversAll, productIds: b.productIds } : null;
   }, [brand.groupBuyBanner]);
   const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
+  // Pay-after-close group buy (brand.gbPaymentMode): a round cart is placed
+  // without paying — no payment step, no proof — and settled after the round
+  // closes. The server re-decides at placement (orders.ts stampGroupBuyInvoice);
+  // this only picks the steps the customer walks through.
+  const payLater = useMemo(
+    () => isPayLaterCart(brand.gbPaymentMode, groupBuyScope, lines.map((l) => baseProductId(l.product))),
+    [brand.gbPaymentMode, groupBuyScope, lines],
+  );
   // Wholesale (MOQ) pricing is measured across the WHOLE cart, per parent
   // product: 250 Red + 250 Black + 250 Blue + 250 Yellow is 1,000 Vial Caps, not
   // four lines of 250. One scope is built here and passed to every price, badge
@@ -240,8 +249,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const selectedLocation = courierLocations.find((l) => l.id === locationId);
   const cartHasFreeShipping = useMemo(() => hasFreeShippingLine(lines), [lines]);
   const shippingBaseFee = codCourier ? 0 : selectedLocation?.price ?? 0;
-  const shippingFee = effectiveShippingFee(shippingBaseFee, cartHasFreeShipping);
-  const shippingWaived = cartHasFreeShipping && shippingBaseFee > 0;
+  // Pay-after-close charges the round's flat fee instead of the courier's (the
+  // server waives it on a signed-in shopper's add-on order).
+  const flatShipping = payLater ? brand.gbPayLaterShippingFee : undefined;
+  const shippingFee = flatShipping ?? effectiveShippingFee(shippingBaseFee, cartHasFreeShipping);
+  const shippingWaived = flatShipping === undefined && cartHasFreeShipping && shippingBaseFee > 0;
   // Shipping is required to proceed only when the store actually offers it. A COD
   // courier just needs to be picked; a location-based one also needs a location.
   const shippingValid =
@@ -377,7 +389,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
   // The store collects payment up-front only when it has methods configured;
   // otherwise checkout hands off to a channel straight from the details step.
-  const requiresPayment = payMethods.length > 0;
+  // A pay-after-close round cart is paid later, so it skips the step too.
+  const requiresPayment = payMethods.length > 0 && !payLater;
   // The super admin can turn off the mandatory proof-of-payment upload per
   // tenant (brand.requireProofOfPayment). Absent → required (historical default).
   const requiresProof = brand.requireProofOfPayment !== false;
@@ -1179,6 +1192,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </a>
               </div>
             )}
+            {payLater && (
+              <p className="sf-cart__notice" role="status">
+                {PAY_LATER_CHECKOUT_NOTE} Once the round closes, you&apos;ll get your total and the
+                ways to pay.
+              </p>
+            )}
             <div className="sf-cart__totals">
               {(adminFee ||
                 paymentFee ||
@@ -1206,7 +1225,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     <div className="sf-cart__total sf-cart__total--sub">
                       <span>
                         Shipping
-                        {selectedLocation ? ` · ${selectedLocation.name}` : ""}
+                        {flatShipping !== undefined
+                          ? " · once per group buy"
+                          : selectedLocation
+                            ? ` · ${selectedLocation.name}`
+                            : ""}
                       </span>
                       <span>
                         {shippingWaived ? (
@@ -1241,7 +1264,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 </>
               )}
               <div className="sf-cart__total">
-                <span>Total</span>
+                <span>{payLater ? "Due after close" : "Total"}</span>
                 <strong>
                   {currency}
                   {total.toLocaleString()}

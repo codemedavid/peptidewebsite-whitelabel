@@ -68,6 +68,7 @@ import {
 import { groupBuyForOrder } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
 import { INVOICE_PAYMENT_METHOD, invoiceShippingFee, normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
+import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
 import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { resolveResellerCaps, type ResellerCapabilities } from "@/lib/storefront/reseller-caps";
@@ -551,20 +552,21 @@ async function stampGroupBuy(
  * the shipping fee becomes the owner's flat fee — or 0 when this customer
  * already has an order in the round (an add-on to the same invoice) — and the
  * order is taken unpaid, since payment is settled on the invoice sent at close.
- * Null when the switch is off, the order isn't in a round, or it came from the
- * website (which still takes payment at checkout).
+ * Keyed on the store's payment mode (gb-payment-mode.ts), which the website and
+ * the app checkout both read. Null when the store pays first or the order isn't
+ * in a round.
  */
 async function stampGroupBuyInvoice(
   config: Record<string, unknown>,
   p: Order,
   tenantId: string,
 ): Promise<GroupBuyInvoiceStamp | null> {
+  if (gbPaymentModeFor(config) !== "pay_later" || !p.groupBuyId) return null;
+  // A website tab opened before the store switched to pay-after-close still
+  // shows the payment step: a buyer who already paid keeps that payment (the
+  // invoice sender skips an order paid the ordinary way) instead of losing it.
+  if (currentAppShopperScope() === null && p.paymentProof) return null;
   const settings = normalizeGroupBuyInvoice(config.groupBuyInvoice);
-  if (!settings.enabled || !p.groupBuyId) return null;
-  // App checkouts only: the app shows the pay-later step and the invoice lands
-  // in its chat. The website checkout still collects payment + proof up front,
-  // so stamping it here would discard a proof the buyer just uploaded.
-  if (currentAppShopperScope() === null) return null;
   const addOn = await hasOrderInRound(tenantId, p.groupBuyId);
   p.shipping.fee = invoiceShippingFee(settings, addOn);
   p.paymentMethod = INVOICE_PAYMENT_METHOD;

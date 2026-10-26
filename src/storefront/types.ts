@@ -1,3 +1,4 @@
+import type { GbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import type { BrandSplash } from "@/lib/storefront/brand-splash";
 
 // Domain types for the white-label storefront + its admin.
@@ -739,6 +740,13 @@ export type Brand = {
   // products to the cart? Store-admin choice, persisted in
   // branding.config.groupBuyAllowOnHand. Absent = true (on-hand stays buyable).
   groupBuyAllowOnHand?: boolean;
+  // When group-buy orders are paid (lib/storefront/gb-payment-mode): before
+  // checkout, or after the round closes (the checkout then skips the payment
+  // step for a round cart). Set only with the Group Buy module; absent = pay first.
+  gbPaymentMode?: GbPaymentMode;
+  // Pay-after-close's flat shipping fee, charged once per customer per round
+  // (groupBuyInvoice.shippingFee). The server re-stamps the real fee.
+  gbPayLaterShippingFee?: number;
   // Per-way management of the two order paths — the EFFECTIVE states, already
   // folded with groupBuyAllowOnHand and the live round server-side (see
   // lib/storefront/two-ways-mode.resolveWays). A store that sells only one way

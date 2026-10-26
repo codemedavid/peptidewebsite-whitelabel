@@ -39,6 +39,8 @@ import {
 } from "@/features/admin/group-buys/StoreSettings";
 import { InvoiceCard, InvoiceEditor, confirmSendInvoices, useSendInvoices } from "@/features/admin/group-buys/InvoiceSettings";
 import { normalizeGroupBuyInvoice, type GroupBuyInvoiceConfig } from "@/features/admin/group-buys/invoice";
+import { PaymentModeCard } from "@/features/admin/group-buys/PaymentModeCard";
+import { gbPaymentModeFor, normalizeGbPaymentMode, type GbPaymentMode } from "@/features/admin/group-buys/payment-mode";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
 import { Segmented } from "@/ui/inputs";
 import { AppText, Button } from "@/ui/primitives";
@@ -90,6 +92,7 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
   const [countdownOverride, setCountdownOverride] = useState<{ base: unknown; value: HeroCountdownConfig } | null>(null);
   const [editingCountdown, setEditingCountdown] = useState(false);
   const [invoiceOverride, setInvoiceOverride] = useState<{ base: unknown; value: GroupBuyInvoiceConfig } | null>(null);
+  const [payModeOverride, setPayModeOverride] = useState<{ base: unknown; value: GbPaymentMode } | null>(null);
   const [editingInvoice, setEditingInvoice] = useState(false);
   const sendInvoices = useSendInvoices();
   const [showArchived, setShowArchived] = useState(false);
@@ -117,6 +120,13 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
   const invoice =
     invoiceOverride && invoiceOverride.base === data?.invoice ? invoiceOverride.value : normalizeGroupBuyInvoice(data?.invoice);
   const overrideInvoice = (value: GroupBuyInvoiceConfig) => setInvoiceOverride({ base: data?.invoice, value });
+  // Absent on a server that predates the setting: the invoice switch is the mode there.
+  const hasPayMode = data?.paymentMode !== undefined;
+  const payMode =
+    payModeOverride && payModeOverride.base === data?.paymentMode
+      ? payModeOverride.value
+      : (normalizeGbPaymentMode(data?.paymentMode) ?? gbPaymentModeFor({ groupBuyInvoice: invoice }));
+  const overridePayMode = (value: GbPaymentMode) => setPayModeOverride({ base: data?.paymentMode, value });
   const previewRound = useMemo(() => {
     const live = data?.groupBuys.find((gb) => effectiveGroupBuyStatus(gb, data.caps.scheduled) === "active");
     return live ?? { name: "GB #1", description: "", deliveryEta: "" };
@@ -207,8 +217,17 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
                 onEdit={() => setEditingCountdown(true)}
               />
             ) : null}
-            {data.invoice !== undefined ? (
-              <InvoiceCard value={invoice} setValue={overrideInvoice} currency={currency} onEdit={() => setEditingInvoice(true)} />
+            {hasPayMode ? <PaymentModeCard value={payMode} setValue={overridePayMode} onInvoice={overrideInvoice} /> : null}
+            {/* With the payment-mode card above, the invoice card only edits
+                the pay-after-close details — its switch IS that card's choice. */}
+            {data.invoice !== undefined && (!hasPayMode || payMode === "pay_later") ? (
+              <InvoiceCard
+                value={invoice}
+                setValue={overrideInvoice}
+                currency={currency}
+                onEdit={() => setEditingInvoice(true)}
+                showSwitch={!hasPayMode}
+              />
             ) : null}
             <RoundsList
               data={data}
