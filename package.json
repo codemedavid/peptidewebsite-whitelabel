@@ -239,7 +239,14 @@
     "test:legacy-store": "tsx scripts/test-legacy-store.ts",
     "test:articles": "tsx scripts/test-articles.ts",
     "test:assessment": "tsx scripts/test-assessment.ts",
-    "test:trust-strip": "tsx scripts/test-trust-strip.ts"
+    "test:trust-strip": "tsx scripts/test-trust-strip.ts",
+    "test:gb-kits": "tsx scripts/test-gb-kits.ts",
+    "test:bunuan-core": "tsx scripts/test-bunuan-core.ts",
+    "test:ligwak-core": "tsx scripts/test-ligwak-core.ts",
+    "test:gb-totals": "tsx scripts/test-gb-totals.ts",
+    "test:gb-stage": "tsx scripts/test-gb-stage.ts",
+    "test:gb-reprice": "tsx scripts/test-gb-reprice.ts",
+    "test:bunuan": "npm run -s test:gb-kits && npm run -s test:bunuan-core && npm run -s test:ligwak-core && npm run -s test:gb-totals && npm run -s test:gb-stage && npm run -s test:gb-reprice"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -476,8 +476,14 @@ export function orderCountsAsDemand(status: string): boolean {
 function isDemand(o: ReportOrder): boolean {
   return orderCountsAsDemand(o.status);
 }
+/** Whether an order is COMMITTED: payment marked paid, or a fulfilled status.
+ *  Exported so the kit counter's pay-first rule (gb-kits) and this report can
+ *  never disagree. Callers still exclude cancelled orders via DEMAND. */
+export function orderCountsAsCommitted(status: string, paymentStatus?: string): boolean {
+  return paymentStatus?.toLowerCase() === "paid" || COMMITTED_STATUSES.has(status.toLowerCase());
+}
 function isCommitted(o: ReportOrder): boolean {
-  return o.paymentStatus?.toLowerCase() === "paid" || COMMITTED_STATUSES.has(o.status.toLowerCase());
+  return orderCountsAsCommitted(o.status, o.paymentStatus);
 }
 
 /**
