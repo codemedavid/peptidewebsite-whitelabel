@@ -95,7 +95,7 @@ Recalculate undoes the lock:
 | `test:gb-stage-sync` | 21 | pure: effective stage, row writes, old-editor sync, claims counter, line statuses |
 | `test:bunuan` (1A) | green | re-run with the reopen and QR PH changes |
 
-The full `test:*` sweep (every single-script suite) is green: 224 suites. It needed two small hunks in existing tests:
+The full `test:*` sweep (every single-script suite) is green: 226 suites. It needed two small hunks in existing tests:
 - `test:db-read-budget`: lists the new order / round writers, plus an explicit exception for the in-transaction helper `writeStageMove` and a check that every file calling it busts the cache.
 - `test:mobile-shop`: expects the round's new stage fields.
 
