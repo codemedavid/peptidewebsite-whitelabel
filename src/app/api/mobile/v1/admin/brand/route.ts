@@ -1,4 +1,5 @@
 import { ok, withMobile } from "@/lib/mobile/http";
+import { ADMIN_VIEWER } from "@/lib/storefront/gb-access.server";
 import { asAppActor } from "@/lib/mobile/admin-bridge";
 import { loadStorefrontBrand } from "@/lib/storefront/storefront-brand";
 
@@ -8,7 +9,7 @@ import { loadStorefrontBrand } from "@/lib/storefront/storefront-brand";
 export async function GET(req: Request) {
   return withMobile(req, { route: "admin/brand" }, async (ctx) => {
     const { brand } = await asAppActor(ctx, () =>
-      loadStorefrontBrand({ tenantId: ctx.tenantId, slug: ctx.slug, isResellerUnlocked: async () => false }),
+      loadStorefrontBrand({ tenantId: ctx.tenantId, slug: ctx.slug, isResellerUnlocked: async () => false, groupBuyViewer: async () => ADMIN_VIEWER }),
     );
     return ok({ brand });
   });

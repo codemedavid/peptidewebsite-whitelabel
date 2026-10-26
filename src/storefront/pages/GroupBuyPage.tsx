@@ -28,6 +28,8 @@ import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
 import { isStoreClosed } from "@/lib/storefront/store-status";
+import { roundKitProgress, type KitProgress } from "@/lib/storefront/gb-moq-kits";
+import { KitProgressBar } from "../components/KitProgress";
 import { ShareProductButton } from "../components/ShareProductButton";
 
 export function GroupBuyPage({
@@ -151,6 +153,7 @@ export function GroupBuyPage({
               storeClosed={storeClosed}
               viewOnly={view.viewOnly}
               storeName={brand.name}
+              kit={roundKitProgress(line.product, brand.groupBuyBanner)}
             />
           ))}
         </div>
@@ -215,8 +218,11 @@ function GbProductCard({
   storeClosed,
   viewOnly,
   storeName,
+  kit,
 }: {
   line: GroupBuyPageLine<Product>;
+  /** Live kit progress for this product (roundKitProgress); null = no bar. */
+  kit: KitProgress | null;
   image: string | null;
   cart: Product[];
   addToCart: (product: Product, qty?: number, variation?: { name: string; price: number }) => void;
@@ -288,6 +294,7 @@ function GbProductCard({
             <ShareProductButton product={p} storeName={storeName} variant="row" />
           </div>
           <div className="gbpage__card-note">COA ✓ · third-party tested</div>
+          {kit && <KitProgressBar kit={kit} />}
         </div>
         {showOptions && (
           <select

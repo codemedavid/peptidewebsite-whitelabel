@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { TenantTx } from "@/lib/db/tenant-client";
-import { endedGroupBuyCard, groupBuyCardFrom } from "@/lib/mobile/group-buy-share";
+import { endedGroupBuyCard, groupBuyCardFrom, teaserGroupBuyCard } from "@/lib/mobile/group-buy-share";
 import { loadShopCatalog } from "@/lib/mobile/shop-catalog";
 import type { CommunityMessage, GroupBuyCard } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
@@ -30,8 +30,11 @@ const liveCache = new Map<string, { at: number; card: Promise<GroupBuyCard | nul
 
 async function fetchLiveCard(actor: CommunityActor): Promise<GroupBuyCard | null> {
   try {
+    // Loaded as an ANONYMOUS shopper on purpose: the card is cached per store
+    // and shown to every member, so a paid round comes back as its teaser.
     const catalog = await loadShopCatalog({ tenantId: actor.tenantId, slug: actor.slug, customer: null });
-    return catalog.groupBuy ? groupBuyCardFrom(catalog.groupBuy, catalog.store.currency) : null;
+    if (catalog.groupBuy) return groupBuyCardFrom(catalog.groupBuy, catalog.store.currency);
+    return catalog.groupBuyTeaser ? teaserGroupBuyCard(catalog.groupBuyTeaser, catalog.store.currency) : null;
   } catch (e) {
     console.error(`[community] group buy card failed: ${e instanceof Error ? e.name : "Error"}`);
     return null;

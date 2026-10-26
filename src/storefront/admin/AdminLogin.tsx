@@ -74,8 +74,12 @@ export function AdminLogin({
         <p className="admin-login__sub">
           {brand.adminLoginSub || `Sign in to manage ${brand.name || "this store"}`}
         </p>
+        {/* type="text", not "email": the browser's own email check blocks the
+            submit on a stray pasted space before the server (which strips it,
+            see normalizeLoginEmail) ever sees it. inputMode keeps the email
+            keyboard on phones. */}
         <input
-          type="email"
+          type="text"
           className={`admin-login__input ${error ? "is-error" : ""}`}
           value={email}
           placeholder="Email address"

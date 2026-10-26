@@ -37,13 +37,28 @@ export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook>
   // Products to Order — THE sheet the supplier order is placed from. Cancelled
   // orders are excluded completely, so these numbers can be sent as-is.
   const toOrder = wb.addWorksheet("Products to Order");
+  // Kit columns only when some product carries a vials-per-kit (gb-moq-kits);
+  // a store that doesn't order by the kit keeps the three-column sheet.
+  const byKit = prep.productsToOrder.some((p) => p.vialsPerKit !== null);
   toOrder.columns = [
     { header: "Product", width: 42 },
     { header: "Total Vials to Order", width: 20 },
     { header: "Orders", width: 10 },
+    ...(byKit
+      ? [
+          { header: "Vials per Kit", width: 14 },
+          { header: "Kits to Order", width: 14 },
+          { header: "Short of a Full Kit", width: 18 },
+        ]
+      : []),
   ];
   toOrder.getRow(1).font = { bold: true };
-  for (const p of prep.productsToOrder) toOrder.addRow([p.product, p.vials, p.orders]);
+  for (const p of prep.productsToOrder) {
+    const kitCells = byKit
+      ? [p.vialsPerKit ?? "—", p.kits ?? "—", p.shortBy === null ? "—" : p.shortBy === 0 ? "Full" : `${p.shortBy} vials short`]
+      : [];
+    toOrder.addRow([p.product, p.vials, p.orders, ...kitCells]);
+  }
   toOrder.addRow([]);
   toOrder.addRow(["TOTAL VIALS TO ORDER", prep.counts.totalVials, prep.counts.activeOrders]).font = {
     bold: true,

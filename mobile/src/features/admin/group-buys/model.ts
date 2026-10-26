@@ -225,6 +225,8 @@ export type ListResult = {
   content: GroupBuyContent;
   /** Absent on a server that predates the live strip. */
   liveBanner?: GroupBuyLiveBanner;
+  /** Storefront hero countdown settings. Absent on a server that predates it. */
+  heroCountdown?: HeroCountdownConfig;
   /** Pay-after-close invoices (invoice.ts). Absent on older servers. */
   invoice?: unknown;
 };
@@ -383,6 +385,26 @@ export function renderGroupBuyLiveBanner(
     headline: fill(c.headline) || `${round.name} is live`,
     message: fill(c.message) || round.description.trim() || "Lock your slot at the group price.",
     ctaLabel: c.ctaLabel || "Join now",
+  };
+}
+
+// ── hero countdown (src/lib/storefront/hero-countdown.ts) ────────────────────
+// The website hero's "opens in / closes in" timer. Blank heading = automatic
+// text. npm run test:hero-countdown pins parity.
+
+export type HeroCountdownConfig = { enabled: boolean; showHeading: boolean; closingHeading: string; openingHeading: string };
+
+export const HERO_COUNTDOWN_LIMITS = { heading: 80 } as const;
+
+export const HERO_COUNTDOWN_AUTO_HEADING = { closing: "{name} closes in", opening: "{name} opens in" } as const;
+
+export function normalizeHeroCountdown(input: unknown): HeroCountdownConfig {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  return {
+    enabled: raw.enabled === true,
+    showHeading: raw.showHeading !== false,
+    closingHeading: oneLine(raw.closingHeading, HERO_COUNTDOWN_LIMITS.heading),
+    openingHeading: oneLine(raw.openingHeading, HERO_COUNTDOWN_LIMITS.heading),
   };
 }
 

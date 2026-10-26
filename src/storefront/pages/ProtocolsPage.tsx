@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import { BackLink } from "../components/BackLink";
+import { ShareLinkButton } from "../components/ShareProductButton";
 import {
   resolveProtocolImages,
   PROTOCOL_THUMB_WIDTH,
@@ -16,6 +17,11 @@ import {
   sortProtocolsByName,
   type ProtocolSort,
 } from "@/lib/storefront/protocol-sort";
+import {
+  findProtocolIndexByLinkKey,
+  protocolLinkKeys,
+  protocolShareUrl,
+} from "@/lib/storefront/protocol-link";
 
 type ViewerImage = { src: string; alt: string };
 
@@ -99,14 +105,46 @@ function ProtocolImageViewer({ image, onClose }: { image: ViewerImage; onClose: 
   );
 }
 
-export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+/** DOM id of a protocol's accordion row — the scroll target of its link. */
+const protocolAnchorId = (key: string) => `protocol-${key}`;
+
+export function ProtocolsPage({
+  brand,
+  onBack,
+  openKey,
+}: {
+  brand: Brand;
+  onBack: () => void;
+  /** Link key from /protocols/<key> or #protocols/<key>: open and scroll to
+   *  that protocol. A key that no longer matches (renamed or removed) shows the
+   *  guide as usual — see lib/storefront/protocol-link.ts. */
+  openKey?: string | null;
+}) {
   const { protocols: all } = useStore();
+  // Keyed on the SOURCE list, so sort/filter never change a protocol's link.
+  const linkKeys = useMemo(() => protocolLinkKeys(all), [all]);
+  const linkedIndex = useMemo(() => findProtocolIndexByLinkKey(all, openKey), [all, openKey]);
   const cats = Array.from(new Set(all.map((p) => p.category))).filter(Boolean);
   const [cat, setCat] = useState("all");
   const [sort, setSort] = useState<ProtocolSort>("az");
   const [viewer, setViewer] = useState<ViewerImage | null>(null);
   const filtered = cat === "all" ? all : all.filter((p) => p.category === cat);
   const sorted = sortProtocolsByName(filtered, sort);
+
+  // Arriving on a protocol link: clear any category filter that would hide it,
+  // then bring its row into view. Reruns when the hash moves to another
+  // protocol while the page is already open.
+  useEffect(() => {
+    if (linkedIndex < 0) return;
+    setCat("all");
+    const frame = requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document
+        .getElementById(protocolAnchorId(linkKeys[linkedIndex]))
+        ?.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [linkedIndex, linkKeys]);
 
   return (
     <section className="page" id="protocols">
@@ -205,18 +243,36 @@ export function ProtocolsPage({ brand, onBack }: { brand: Brand; onBack: () => v
               // single `image` and the new `images[]` both render.
               const images = resolveProtocolImages(p);
               const imageOnly = (p.mode ?? "details") === "image" && images.length > 0;
+              const index = all.indexOf(p);
+              const linkKey = linkKeys[index];
+              const isLinked = index === linkedIndex;
               return (
               // Key by position in the source list (stable across sort/filter)
-              // so each <details>' open state stays with its protocol.
-              <details key={all.indexOf(p)} className="protocols__item" open={i === 0}>
+              // so each <details>' open state stays with its protocol. A linked
+              // protocol opens instead of the first one.
+              <details
+                key={index}
+                id={protocolAnchorId(linkKey)}
+                className="protocols__item"
+                data-linked={isLinked ? "" : undefined}
+                open={linkedIndex >= 0 ? isLinked : i === 0}
+              >
                 <summary className="protocols__item-head">
                   <div>
                     <div className="eyebrow">{p.category}</div>
                     <h3>{p.name}</h3>
                   </div>
-                  <svg className="faq__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
+                  <span className="protocols__item-actions">
+                    <ShareLinkButton
+                      buildUrl={(origin) => protocolShareUrl(origin, linkKey)}
+                      title={brand.name ? `${p.name} · ${brand.name}` : p.name}
+                      noun="protocol"
+                      variant="row"
+                    />
+                    <svg className="faq__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </span>
                 </summary>
                 <div className="protocols__item-body">
                   {imageOnly ? (

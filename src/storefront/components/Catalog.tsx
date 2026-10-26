@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Brand, Product, Review } from "../types";
-import { cardDesignAttrs, type CardDesign } from "../cardDesign";
+import { cardDesignAttrs, isTextOnlyCard, type CardDesign } from "../cardDesign";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import {
@@ -26,6 +26,8 @@ import {
 } from "@/lib/storefront/variations";
 import { isOptionOutOfStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
+import { roundKitProgress, type KitProgress } from "@/lib/storefront/gb-moq-kits";
+import { KitProgressBar } from "./KitProgress";
 import { buildProductCta } from "@/lib/storefront/product-cta";
 import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
@@ -397,9 +399,13 @@ export function ProductCard({
   defaultImage,
   storeName,
   preselectOption,
+  kit,
 }: {
   product: Product;
   onAdd: (qty: number, variation?: { name: string; price: number }) => void;
+  /** Live group-buy kit progress for this product (roundKitProgress). Null /
+   *  absent = no bar — no round, not in it, or no vials per kit set. */
+  kit?: KitProgress | null;
   /** Start on the first option (Brand.variationPreselect). Default: nothing picked. */
   preselectOption?: boolean;
   /** Open the full-detail quick-view modal for this product. Optional so the
@@ -521,8 +527,10 @@ export function ProductCard({
           other product keeps the exact single-image markup below, so nothing
           changes for tenants that never uploaded per-variation images. The
           outer .product-card__media box is kept either way — the Card Studio
-          [data-cd-layout] rules (horizontal, overlay, inset) all target it. */}
-      {hasGallery(slides) ? (
+          [data-cd-layout] rules (horizontal, overlay, inset) all target it.
+          A "text" design renders no media at all — not even the placeholder —
+          so the card downloads no image; the name stays the detail trigger. */}
+      {isTextOnlyCard(design) ? null : hasGallery(slides) ? (
         <div className="product-card__media product-card__media--gallery">
           <ProductGallery
             slides={slides}
@@ -632,6 +640,7 @@ export function ProductCard({
         {showSelector && !poa && (
           <OptionIncludes options={options} selectedIndex={optIdx} variant="card" />
         )}
+        {kit && <KitProgressBar kit={kit} />}
       </div>
 
       <hr className="hairline" />
@@ -1196,6 +1205,7 @@ export function Catalog({
               storeClosed={storeClosed}
               storeName={brand.name}
               preselectOption={brand.variationPreselect}
+              kit={roundKitProgress(p, brand.groupBuyBanner)}
               onAdd={(qty, variation) => onAddToCart(p, qty, variation)}
               onOpenDetail={() => openDetail(p)}
             />

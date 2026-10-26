@@ -65,7 +65,7 @@ async function lookupTenantByHost(host: string): Promise<ResolvedTenant | null> 
  * - `slug.<ROOT>` and `slug.localhost` → platform subdomain
  * - anything else → custom domain stored in the Domain table
  *
- * Cached across requests with a 5 min TTL and a per-host tag. Actions that
+ * Cached across requests with a 1h TTL and a per-host tag. Actions that
  * mutate domain/tenant state (see actions/admin.ts, actions/onboarding.ts)
  * already call `revalidateTag(`tenant-host:<host>`)` to bust the entry.
  */
@@ -74,6 +74,6 @@ export async function resolveTenantByHost(host: string): Promise<ResolvedTenant 
   return unstable_cache(
     () => lookupTenantByHost(h),
     ["tenant-host", h],
-    { tags: [`tenant-host:${h}`], revalidate: 300 },
+    { tags: [`tenant-host:${h}`], revalidate: 3600 },
   )();
 }

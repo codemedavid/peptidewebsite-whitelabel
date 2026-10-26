@@ -20,6 +20,7 @@ import {
   type CardDesign,
   type CardPreset,
   type CardTemplate,
+  isTextOnlyCard,
 } from "../cardDesign";
 
 const SAMPLE_RATING = { value: 4.8, count: 126 };
@@ -719,25 +720,32 @@ export function AdminCardStudio({
                       { value: "vertical", label: "Standard" },
                       { value: "horizontal", label: "Side image" },
                       { value: "overlay", label: "BG image" },
+                      { value: "text", label: "Text only" },
                     ]}
                     value={design.layout}
                     onChange={(v) => patch({ layout: v })}
                   />
                 </Row>
-                <Row label="Image ratio">
-                  <Seg
-                    ariaLabel="Image ratio"
-                    options={[
-                      { value: "square", label: "1:1" },
-                      { value: "landscape", label: "4:3" },
-                      { value: "portrait", label: "3:4" },
-                      { value: "wide", label: "16:9" },
-                    ]}
-                    value={design.imageRatio}
-                    onChange={(v) => patch({ imageRatio: v })}
-                  />
-                </Row>
-                <Toggle label="Inset image (bento)" value={design.mediaInset} onChange={(v) => patch({ mediaInset: v })} />
+                {/* A text-only card has no image, so its image controls would
+                    change nothing on screen. */}
+                {!isTextOnlyCard(design) && (
+                  <>
+                    <Row label="Image ratio">
+                      <Seg
+                        ariaLabel="Image ratio"
+                        options={[
+                          { value: "square", label: "1:1" },
+                          { value: "landscape", label: "4:3" },
+                          { value: "portrait", label: "3:4" },
+                          { value: "wide", label: "16:9" },
+                        ]}
+                        value={design.imageRatio}
+                        onChange={(v) => patch({ imageRatio: v })}
+                      />
+                    </Row>
+                    <Toggle label="Inset image (bento)" value={design.mediaInset} onChange={(v) => patch({ mediaInset: v })} />
+                  </>
+                )}
               </Group>
 
               <Group title="Typography">

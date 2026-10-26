@@ -13,12 +13,13 @@
 
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import { formatGbMoney } from "@/lib/storefront/group-buy-page";
+import { formatMoney } from "@/lib/storefront/currency";
 import { normalizeGroupBuyContent, renderGbCopy, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { renderGroupBuyLiveBanner } from "@/lib/storefront/gb-live-banner";
 import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import type { GroupBuyCard } from "./contract";
-import type { ShopGroupBuy, ShopProduct } from "./shop-contract";
+import type { ShopGroupBuy, ShopGroupBuyTeaser, ShopProduct } from "./shop-contract";
 
 const MAX_IMAGES = 4;
 
@@ -88,6 +89,34 @@ export function groupBuyCardFrom(gb: ShopGroupBuy, currency: string): GroupBuyCa
     fromPriceLabel: gb.fromPrice === null ? null : formatGbMoney(currency, gb.fromPrice),
     images: [...gb.images],
     terms: gb.terms,
+  };
+}
+
+/** "₱500" / "₱499.50" — centavos kept only when there are any. */
+export function joinFeeLabel(currency: string, cents: number): string {
+  const safe = Math.max(0, Math.floor(cents || 0));
+  return formatMoney(safe / 100, currency, { decimals: safe % 100 !== 0 });
+}
+
+/** A paid round as a chat card (gb-access). The card is cached per store and
+ *  shown to every member, so it is the teaser for everyone: no photos, no
+ *  prices, no product count — the shop shows approved members the rest.
+ *  Null unless the round is live (an upcoming/closed round isn't sendable). */
+export function teaserGroupBuyCard(teaser: ShopGroupBuyTeaser, currency: string): GroupBuyCard | null {
+  if (teaser.state !== "live") return null;
+  return {
+    id: teaser.id,
+    name: teaser.name,
+    description: "",
+    deliveryEta: "",
+    endsAt: teaser.endsAt,
+    status: "open",
+    slotGoal: 0,
+    filled: 0,
+    productCount: 0,
+    fromPriceLabel: null,
+    images: [],
+    terms: `Members only · ${joinFeeLabel(currency, teaser.joinFeeCents)} join fee. Join in the shop to see this group buy.`,
   };
 }
 

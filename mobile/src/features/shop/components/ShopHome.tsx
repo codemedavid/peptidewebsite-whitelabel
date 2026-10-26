@@ -17,6 +17,7 @@ import { GridSkeleton } from "./GridSkeleton";
 import { CartButton, ProductImage } from "./ShopUI";
 import { CatalogError, ClosedBanner, goToSignIn } from "./ShopStates";
 import { GroupBuyBanner } from "./group-buy/GroupBuyBanner";
+import { GroupBuyJoinBanner } from "./group-buy/GroupBuyJoin";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -186,6 +187,8 @@ function Controls({
       {!catalog.open ? <ClosedBanner message={catalog.closedMessage} /> : null}
       {catalog.groupBuy ? (
         <GroupBuyBanner round={catalog.groupBuy} currency={catalog.store.currency} onPress={() => router.push(paths.groupBuy)} />
+      ) : catalog.groupBuyTeaser ? (
+        <GroupBuyJoinBanner teaser={catalog.groupBuyTeaser} currency={catalog.store.currency} onPress={() => router.push(paths.groupBuy)} />
       ) : null}
       <View style={[styles.search, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         <Ionicons name="search" size={18} color={t.colors.textFaint} />

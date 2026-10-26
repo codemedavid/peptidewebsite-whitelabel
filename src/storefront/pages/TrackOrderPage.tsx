@@ -5,9 +5,11 @@ import type { Brand, Order } from "../types";
 import { TrackedOrderDetail, STATUS_LABELS, formatDate } from "../components/TrackedOrderDetail";
 import { BackLink } from "../components/BackLink";
 import { TrackNoteCard } from "../components/TrackNoteCard";
+import { TimelineCard } from "../components/TimelineCard";
 import { useStore } from "../store";
 import { trackStorefrontOrderAction, type TrackedOrder } from "@/actions/orders";
 import { isTrackNoteVisible } from "@/lib/storefront/track-note";
+import { isTimelineVisible } from "@/lib/storefront/timeline";
 import { recallRecentOrder } from "@/lib/storefront/recent-order";
 import { toTrackedOrder } from "@/lib/orders/tracked-order";
 
@@ -107,6 +109,10 @@ export function TrackOrderPage({ brand, onBack }: { brand: Brand; onBack: () => 
 
         {isTrackNoteVisible(brand.trackNote) && brand.trackNote && (
           <TrackNoteCard config={brand.trackNote} />
+        )}
+
+        {isTimelineVisible(brand.timeline, "track") && brand.timeline && (
+          <TimelineCard config={brand.timeline} />
         )}
 
         {myOrders.length > 0 && (

@@ -14,6 +14,7 @@ import { toProductClass, type ProductClass } from "./product-class";
 import { normalizeHostedImageUrl } from "./product-image";
 import { cleanExtraImages, photoList } from "./product-photos";
 import { cleanIncludes } from "./variations";
+import { normalizeVialsPerKit } from "./gb-moq-kits";
 
 /** The subset of the Prisma `Product` row this layer reads. */
 export type DbProductRow = {
@@ -99,6 +100,8 @@ export type ProductMetadata = {
   /** Manufactured per order, so never stock-gated — see Product.madeToOrder.
    *  Persisted only as `true` (absent = an ordinary stocked product). */
   madeToOrder?: true;
+  /** Vials per supplier kit — see Product.vialsPerKit. Absent = not set. */
+  vialsPerKit?: number;
 };
 
 /** One persisted variation. See ProductMetadata.variations. */
@@ -246,6 +249,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     priceOnRequest: meta.priceOnRequest === true,
     freeShipping: meta.freeShipping === true,
     madeToOrder: meta.madeToOrder === true,
+    vialsPerKit: normalizeVialsPerKit(meta.vialsPerKit),
   };
 }
 
@@ -413,6 +417,7 @@ export function productToDbWrite(
       priceOnRequest: p.priceOnRequest ? true : undefined,
       freeShipping: p.freeShipping ? true : undefined,
       madeToOrder: p.madeToOrder ? true : undefined,
+      vialsPerKit: normalizeVialsPerKit(p.vialsPerKit),
     }),
   };
 }

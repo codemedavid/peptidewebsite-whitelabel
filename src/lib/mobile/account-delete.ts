@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
+import { revalidateOrders } from "@/lib/orders/order-cache";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { customerKey } from "@/lib/community/keys";
 import { isSupabaseMarker, supabaseTokenOwnsAccount } from "./exchange";
@@ -171,6 +172,7 @@ async function purgeCustomer(ctx: CustomerContext): Promise<void> {
     // to sign up again). The website session stops resolving with it.
     await db.storefrontCustomer.deleteMany({ where: { id } });
   });
+  revalidateOrders(tenantId);
 }
 
 /**

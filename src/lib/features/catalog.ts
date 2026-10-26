@@ -69,6 +69,9 @@ export const FEATURES = {
   // Track-page delivery note (region → estimate card). Business/Automated
   // exclusive per the trial system; operator-grantable for legacy Starter stores.
   STORE_TRACK_NOTE: "storefront.track_note",
+  // Owner-written Timeline (steps + current step) on the Track page and/or the
+  // hero. Operator-grantable, default OFF (outside every plan ceiling).
+  STORE_TIMELINE: "storefront.timeline",
   STORE_STAFF_ACCOUNTS: "storefront.staff_accounts",
   // Pepweb app community: customers sign in to the mobile app, and approved
   // members chat in channels / DMs with the store (docs/mobile-admin/COMMUNITY.md).
@@ -113,6 +116,10 @@ export const FEATURES = {
   // design "K Glow Store.dc.html"). Operator-grantable per tenant, default OFF —
   // turns the storefront home into the two-ways layout (resolveHomeLayout).
   GB_TWO_WAYS_HOME: "groupbuy.two_ways_home",
+  // Paid, admin-approved join (lib/storefront/gb-membership.ts). Operator-
+  // grantable per tenant, default OFF; inert until the owner also turns on
+  // "Require paid join" for a round. Revoking it reopens every paid round.
+  GB_PAID_ACCESS: "groupbuy.paid_access",
   // Excel & Supplier Reports — granular controls under "Supplier reports"
   GB_REPORT_EXCEL: "groupbuy.reports.excel",
   GB_REPORT_CSV: "groupbuy.reports.csv",
@@ -345,6 +352,9 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // (resolveGroupBuyCaps ANDs every capability with the module switch).
   FEATURES.GB_SCHEDULED,
   FEATURES.GB_REPORT_AUTO_ON_CLOSE,
+  // Paid group-buy join. Changes what customers PAY and who may see a round,
+  // so — like Wholesale pricing — it lives outside every plan ceiling.
+  FEATURES.GB_PAID_ACCESS,
   // QR PH processing fee. Outside every plan ceiling (default OFF) for the same
   // reason as Wholesale pricing: granting it changes what customers PAY. A grant
   // alone is still inert — the store owner must also tag one of their payment
@@ -355,6 +365,9 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_COURIER_BOOKING,
   // Customer accounts. Default OFF and granted per tenant — see the key above.
   FEATURES.STORE_CUSTOMER_ACCOUNTS,
+  // Timeline. Default OFF; a grant is inert until the owner writes steps and
+  // switches it on in the store admin's Timeline editor.
+  FEATURES.STORE_TIMELINE,
   // Made-to-order catalog. Outside every plan ceiling (default OFF) because
   // granting it REMOVES a safety gate rather than adding a surface: a marked
   // product can be ordered in any quantity and never deducts stock. A grant is
@@ -439,6 +452,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_CUSTOMER_ACCOUNTS]: { label: "Customer accounts", description: "Shoppers can create an account on the storefront (name, email, password), sign in, and open My Account to see their own order history, statuses and tracking. Orders placed while signed in are linked to the account; guest checkout keeps working. The store owner gets a Customers list in the store admin (with disable/enable). Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.STORE_COURIER_BOOKING]: { label: "Courier booking link", description: "Lets the store owner put a booking / delivery form URL on a courier (Couriers \u2192 edit \u2192 Booking form link, e.g. a Lalamove form). At checkout, picking that courier shows a card linking to the form before the customer places their order; picking any other courier hides it. Not an API integration \u2014 nothing is booked or quoted automatically. Operator-grantable, default OFF; inert until a URL is saved.", group: "Ecommerce" },
   [FEATURES.STORE_TRACK_NOTE]: { label: "Delivery note", description: "The Track Order page's delivery-estimates card (region → estimate rows), edited by the store owner in the store admin. Business/Automated exclusive; off locks the editor tile and hides the card. Operator-grantable for legacy Starter stores.", group: "Ecommerce" },
+  [FEATURES.STORE_TIMELINE]: { label: "Timeline", description: "An owner-written timeline (e.g. a group-buy schedule: orders open → close → arrives → ships) with the current step highlighted. The store owner edits the steps in the store admin's Timeline editor and picks where it shows: the Track Order page, the hero section, or both. Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.MOBILE_COMMUNITY]: { label: "App community", description: "Customers sign in to the Pepweb app with their storefront account and, once the store owner approves them, chat with the store and other members in channels, topics and DMs, and see product drops. Moderated from the app by the owner and staff with the Community module. Operator-grantable, default OFF. Revoking signs every customer out of the app.", group: "Ecommerce" },
   [FEATURES.STORE_STAFF_ACCOUNTS]: { label: "Staff Accounts", description: "Owner-managed staff sub-accounts with per-module permissions in the store admin. Included with Business and Automated plans; operator-grantable on Starter. Off hides the Staff Accounts manager and blocks staff sign-in and management.", group: "Ecommerce" },
 
@@ -466,6 +480,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.GB_REPORT_CSV]: { label: "CSV export", description: "Download group-buy reports as CSV files. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_PDF]: { label: "PDF export", description: "Download group-buy reports as print-ready PDFs. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_AUTO_ON_CLOSE]: { label: "Auto report on close", description: "Generate the report automatically the moment a group buy closes.", group: "Group Buy" },
+  [FEATURES.GB_PAID_ACCESS]: { label: "Paid group-buy access", description: "Customers pay a join fee per group buy (receipt + reference) and wait for admin approval before they can see the round or order.", group: "Group Buy" },
   [FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN]: { label: "Customer breakdown", description: "Reports include a per-customer section: each customer's items, quantities and totals.", group: "Group Buy" },
   [FEATURES.GB_REPORT_PRODUCT_BREAKDOWN]: { label: "Product breakdown", description: "Reports include a per-product section: units sold, order count and revenue per product.", group: "Group Buy" },
   [FEATURES.GB_REPORT_SUPPLIER_SUMMARY]: { label: "Supplier summary", description: "Reports include the consolidated order list for the supplier — aggregate quantity per product.", group: "Group Buy" },

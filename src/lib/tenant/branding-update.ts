@@ -170,6 +170,10 @@ const LAYOUT_ENUMS: Record<string, readonly string[]> = {
   // grant at render (resolveHomeLayout) — the allow-list only decides what may
   // be STORED. A value missing here is dropped silently on save.
   homeLayout: [...HOME_LAYOUTS],
+  // The two-ways home's hero: built-in text hero, or the store's own <Hero>.
+  twoWaysHero: ["simple", "store"],
+  // The two-ways "Ships today" shelf: compact rows, or the catalog photo cards.
+  twoWaysOnHandStyle: ["rows", "cards"],
 };
 
 /** Layout keys taking a bounded number: [min, max]. */

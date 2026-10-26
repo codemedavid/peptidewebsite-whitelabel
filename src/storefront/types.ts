@@ -16,6 +16,7 @@ import type { ArticleSummary } from "@/lib/storefront/articles";
 import type { AssessmentConfig } from "@/lib/storefront/assessment";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
+import type { TimelineConfig } from "@/lib/storefront/timeline";
 import type { BrandTrial } from "@/lib/trial/trial-state";
 import type { BrandSubscription } from "@/lib/subscription/subscription-state";
 import type { FeatureSpotlight } from "@/lib/features/feature-spotlight";
@@ -25,8 +26,10 @@ import type {
   GroupBuyStorefrontGate,
 } from "@/lib/storefront/group-buy";
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
+import type { GroupBuyTeaser } from "@/lib/storefront/gb-access";
 import type { GroupBuyContent } from "@/lib/storefront/gb-content";
 import type { GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
+import type { HeroCountdown, HeroCountdownConfig } from "@/lib/storefront/hero-countdown";
 import type { CardDesign, CardTemplate } from "./cardDesign";
 import type { HomeLayout } from "@/lib/storefront/home-layout";
 import type { BoutiqueConfig } from "@/lib/storefront/boutique-home";
@@ -160,6 +163,10 @@ export type Product = {
    *  `metadata.madeToOrder`; gated on FEATURES.STORE_MADE_TO_ORDER and stripped
    *  fail-closed when the tenant isn't entitled. See lib/storefront/made-to-order. */
   madeToOrder?: boolean;
+  /** Vials the supplier packs in one kit of this product (group-buy-only
+   *  stores). Drives the group buy's kit progress and the supplier report's
+   *  kits-to-order. Absent = not set. See lib/storefront/gb-moq-kits. */
+  vialsPerKit?: number;
 };
 
 /** `image` is the owner's uploaded picture for the category's storefront tile /
@@ -520,6 +527,14 @@ export type Brand = {
   // trial system: the editor tile locks via trackNoteEntitled (visibility.ts).
   trackNote?: TrackNoteConfig;
 
+  // Timeline — owner-written steps with the current one highlighted, shown on
+  // the Track page and/or in the hero (timeline.placement). Two gates: the
+  // operator grant (FEATURES.STORE_TIMELINE → timelineEntitled, which also gates
+  // the store-admin editor) and the owner's timeline.enabled. Unentitled tenants
+  // keep their saved steps but get enabled forced false (storefront-brand.ts).
+  timeline?: TimelineConfig;
+  timelineEntitled?: boolean;
+
   // ── Trial system (server-projected, page.tsx) ──────────────────────────────
   // JSON-safe trial window for the admin countdown banner + expiry gates.
   // Absent for every tenant not governed by a trial (legacy brands unchanged).
@@ -746,6 +761,11 @@ export type Brand = {
   // exemption + no mixed on-hand/GB carts) as a UX hint — the server re-derives
   // the same scope at placement, so it still never decides what can be bought.
   groupBuyBanner?: GroupBuyBanner;
+  // Paid group-buy access (lib/storefront/gb-access): set ONLY when this viewer
+  // is locked out of the governing round. The banner is then absent and the
+  // round's products / gb prices were stripped server-side; this is all the
+  // page may say about the round (name, dates, fee, the viewer's own request).
+  groupBuyTeaser?: GroupBuyTeaser;
   // How many gb-TAGGED, available products the catalog holds. Computed
   // server-side (page.tsx) and 0 without the Group Buy module. Decides whether
   // the group buy page stays reachable BETWEEN rounds as a view-only pricing
@@ -762,6 +782,12 @@ export type Brand = {
   // button label; blank = automatic). Normalized server-side from
   // branding.config.groupBuyLiveBanner; rendered only by the app's shop catalog.
   groupBuyLiveBanner?: GroupBuyLiveBannerConfig;
+  // Hero group-buy countdown. `heroCountdownConfig` is the owner's setting
+  // (on/off + optional heading, branding.config.heroCountdown) for the admin
+  // editor; `heroCountdown` is the resolved timer the hero renders — absent when
+  // switched off, the GB module is off, or no round is closing/opening.
+  heroCountdownConfig?: HeroCountdownConfig;
+  heroCountdown?: HeroCountdown;
   // Group buy slice of the Sales Analytics view. Derived server-side from
   // FEATURES.SA_SECTION_GROUP_BUYS (default-on in every plan ceiling, but only
   // meaningful while the Sales Analytics module itself is on). Absent/false =
@@ -851,6 +877,15 @@ export type Brand = {
    *  listings above the multi-vial kits (K Glow). Nothing is hidden either way.
    *  Normalized server-side via normalizeOnHandOrder. */
   onHandOrder?: "catalog" | "per-vial-first";
+
+  /** Which hero the "two ways to order" home renders — "simple" (default) is its
+   *  built-in text hero; "store" uses the store's own <Hero> (variant, logo,
+   *  countdown, CTAs). Normalized server-side via normalizeTwoWaysHero. */
+  twoWaysHero?: "simple" | "store";
+  /** How the two-ways home lays out "Ships today" — "rows" (default) compact
+   *  thumbnail rows; "cards" the catalog's own photo <ProductCard>s.
+   *  Normalized server-side via normalizeTwoWaysOnHandStyle. */
+  twoWaysOnHandStyle?: "rows" | "cards";
 
   /** Footer layout — "columns" (default) is today's link-column footer;
    *  "compact" is the dark, single-row footer (logo + tagline + pill

@@ -3,6 +3,7 @@
 // lib/storefront/group-buy.ts so that file stays importable from client
 // components — everything here touches entitlements, the DB or the demo files.
 
+import { revalidateTag, unstable_cache } from "next/cache";
 import { getEntitlements } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { withTenant } from "@/lib/db/tenant-client";
@@ -31,6 +32,7 @@ export async function resolveGroupBuyCaps(tenantId: string): Promise<GroupBuyCap
     scheduled: has(FEATURES.GB_SCHEDULED),
     productAssignment: has(FEATURES.GB_PRODUCT_ASSIGNMENT),
     supplierReports: has(FEATURES.GB_SUPPLIER_REPORTS),
+    paidAccess: has(FEATURES.GB_PAID_ACCESS),
     reports: {
       excel: has(FEATURES.GB_REPORT_EXCEL),
       csv: has(FEATURES.GB_REPORT_CSV),
@@ -54,8 +56,42 @@ export async function loadGroupBuys(tenantId: string, demoSlug: string): Promise
       .map(normalizeGroupBuy)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
+  return readGroupBuys(tenantId);
+}
+
+async function readGroupBuys(tenantId: string): Promise<GroupBuy[]> {
   const rows = await withTenant(tenantId, (db) =>
     db.groupBuy.findMany({ orderBy: { createdAt: "desc" } }),
   );
   return rows.map((r) => dbGroupBuyToStorefront(r as DbGroupBuyRow));
+}
+
+/** Cache tag for the tenant's group-buy rounds. */
+export function groupBuysTag(tenantId: string): string {
+  return `tenant:${tenantId}:group-buys`;
+}
+
+/** Call after ANY write to a tenant's group_buys rows. */
+export function revalidateGroupBuys(tenantId: string): void {
+  revalidateTag(groupBuysTag(tenantId));
+}
+
+/** Outer bound only: every round writer busts `groupBuysTag`. */
+const GROUP_BUYS_REVALIDATE_SECONDS = 3600;
+
+/**
+ * The rounds for DISPLAY — the storefront render and the app shop, which read
+ * them on every page view. Cached as mapped GroupBuys (plain JSON, so no
+ * Date→string surprise on a hit); liveness is still derived per request from
+ * `now`, so a scheduled round opens and closes on time without a write.
+ *
+ * Anything that DECIDES (checkout, the paid-access gate, the admin writers)
+ * keeps calling loadGroupBuys, which always reads live.
+ */
+export async function loadGroupBuysForDisplay(tenantId: string, demoSlug: string): Promise<GroupBuy[]> {
+  if (isDemoMode()) return loadGroupBuys(tenantId, demoSlug);
+  return unstable_cache(() => readGroupBuys(tenantId), ["storefront-group-buys", tenantId], {
+    tags: [`tenant:${tenantId}`, groupBuysTag(tenantId)],
+    revalidate: GROUP_BUYS_REVALIDATE_SECONDS,
+  })();
 }

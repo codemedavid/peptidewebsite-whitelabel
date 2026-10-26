@@ -16,6 +16,14 @@ import {
   formatDashboardMoney,
   type DashboardCaps,
 } from "@/lib/storefront/admin-dashboard";
+import type { GroupBuy } from "@/lib/storefront/group-buy";
+import {
+  buildGroupBuyAlerts,
+  GB_VIEW_JOINS,
+  GB_VIEW_MANAGE,
+  GB_VIEW_ROUND,
+} from "@/lib/storefront/admin-dashboard-gb";
+import { GroupBuyPanel, useGroupBuyPanel } from "./DashboardGroupBuy";
 
 /**
  * The redesigned dashboard body (Tenant Admin Redesign → 1A). Every number comes
@@ -52,14 +60,39 @@ export function AdminDashboard({
   greetingName,
   onOpen,
   onAddProduct,
+  canGroupBuys = false,
+  onOpenGroupBuyJoins,
+  onOpenGroupBuyRound,
 }: {
   brand: Brand;
   caps: DashboardCaps;
   greetingName: string;
   onOpen: (view: string) => void;
   onAddProduct: () => void;
+  /** Group Buys module on AND granted to this actor — swaps "Stock levels"
+   *  for the live-round panel (lib/storefront/admin-dashboard-gb). */
+  canGroupBuys?: boolean;
+  /** Group Buys, landed on the Join requests tab (the approval queue). */
+  onOpenGroupBuyJoins?: () => void;
+  /** One round's own dashboard. */
+  onOpenGroupBuyRound?: (gb: GroupBuy) => void;
 }) {
   const { products, categories } = useStore();
+  const gb = useGroupBuyPanel({ enabled: canGroupBuys, products, showMoney: caps.analytics });
+  // A group-buy store always leads with the round (or "start your first one");
+  // its stock list is all pre-order "Out of stock" noise. Others keep stock.
+  const showsGroupBuy = gb.status !== "off";
+
+  // Every click the dashboard emits funnels through here, so the group-buy
+  // shortcuts resolve to real views and still meet AdminPage's view guard.
+  const go = (view: string) => {
+    if (view === GB_VIEW_JOINS && onOpenGroupBuyJoins) return onOpenGroupBuyJoins();
+    if (view === GB_VIEW_ROUND && gb.status === "ready" && onOpenGroupBuyRound) {
+      return onOpenGroupBuyRound(gb.focus.round);
+    }
+    if (view === GB_VIEW_JOINS || view === GB_VIEW_ROUND) return onOpen(GB_VIEW_MANAGE);
+    onOpen(view);
+  };
   const [orders, setOrders] = useState<Order[]>([]);
 
   // Orders back the KPI tiles, the attention list and the recent-orders table.
@@ -88,9 +121,14 @@ export function AdminDashboard({
   const revenue = useMemo(() => buildRevenueSeries({ caps, orders }), [caps, orders]);
   const stock = useMemo(() => buildStockPanel(products), [products]);
   const recent = useMemo(() => buildRecentOrders({ caps, orders }), [caps, orders]);
+  const gbPanel = gb.status === "ready" ? gb.panel : null;
   const alerts = useMemo(
-    () => buildAttentionAlerts({ caps, products, orders, categories }),
-    [caps, products, orders, categories],
+    () => [
+      // Group-buy items first: a join receipt waiting is a customer locked out.
+      ...buildGroupBuyAlerts(gbPanel, brand.currency),
+      ...buildAttentionAlerts({ caps, products, orders, categories }),
+    ],
+    [gbPanel, brand.currency, caps, products, orders, categories],
   );
   const shares = useMemo(() => buildCategoryShares(categories, products), [categories, products]);
 
@@ -140,7 +178,17 @@ export function AdminDashboard({
     </section>
   );
 
-  const stockPanel = stock.length > 0 && (
+  const groupBuyPanel = (
+    <GroupBuyPanel
+      state={gb}
+      currency={brand.currency}
+      onOpenJoins={() => go(GB_VIEW_JOINS)}
+      onOpenRound={() => go(GB_VIEW_ROUND)}
+      onManage={() => go(GB_VIEW_MANAGE)}
+    />
+  );
+
+  const stockPanel = !showsGroupBuy && stock.length > 0 && (
     <section className="adm-panel">
       <header className="adm-panel__head">
         <h2 className="adm-panel__title">Stock levels</h2>
@@ -214,6 +262,7 @@ export function AdminDashboard({
 
       <div className="adm-dash__grid">
         <div className="adm-dash__main">
+          {groupBuyPanel}
           {layout === "analytics" && revenue ? (
             <section className="adm-panel">
               <header className="adm-panel__head">
@@ -283,7 +332,7 @@ export function AdminDashboard({
               <ul className="adm-alerts">
                 {alerts.map((a) => (
                   <li key={a.id}>
-                    <button type="button" className="adm-alert" onClick={() => onOpen(a.view)}>
+                    <button type="button" className="adm-alert" onClick={() => go(a.view)}>
                       <span className="adm-alert__dot" data-tone={a.tone} />
                       <span className="adm-alert__body">
                         <span className="adm-alert__title">{a.title}</span>

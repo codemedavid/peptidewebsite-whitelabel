@@ -44,13 +44,20 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      {
-        // Next emits hashed filenames here; cache forever.
-        source: "/_next/static/:path*",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
+      // Next emits hashed filenames here in a PRODUCTION build; cache forever.
+      // Never in dev: `next dev` serves un-hashed names (chunks/app/…/page.js),
+      // so "immutable" pins a stale bundle in the browser across restarts and
+      // every server action it calls 404s ("Server Action … was not found").
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              source: "/_next/static/:path*",
+              headers: [
+                { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+              ],
+            },
+          ]
+        : []),
       {
         // Optimized image responses are already keyed by URL+params; long cache.
         source: "/_next/image",

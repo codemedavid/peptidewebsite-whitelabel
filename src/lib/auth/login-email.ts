@@ -12,7 +12,10 @@
  * capitalized or space-padded address can never lock a real owner out.
  */
 
-/** Trim + lowercase an email for comparison. Non-strings collapse to "". */
+/** Strip ALL whitespace + lowercase an email for comparison. Non-strings
+ *  collapse to "". An address never contains whitespace, so a space (or the
+ *  non-breaking space a copy-paste brings along) inside it is always noise —
+ *  `\s` covers U+00A0. */
 export function normalizeLoginEmail(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return typeof raw === "string" ? raw.replace(/\s+/g, "").toLowerCase() : "";
 }

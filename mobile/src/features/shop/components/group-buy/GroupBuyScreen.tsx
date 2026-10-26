@@ -22,6 +22,7 @@ import { ProductCard } from "../ProductCard";
 import { CartButton, Notice } from "../ShopUI";
 import { CatalogError } from "../ShopStates";
 import { groupBuyBand, LiveDot, RoundClock, SlotBar, URGENCY_COLOR } from "./GroupBuyParts";
+import { GroupBuyJoinScreen } from "./GroupBuyJoin";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -51,6 +52,15 @@ export function GroupBuyScreen() {
     );
   }
   const round = q.data.groupBuy;
+  // Paid group buy the shopper isn't approved for yet: the join flow instead.
+  if (!round && q.data.groupBuyTeaser) {
+    return (
+      <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
+        {screen}
+        <GroupBuyJoinScreen teaser={q.data.groupBuyTeaser} currency={q.data.store.currency} onRefreshCatalog={() => void q.refetch()} />
+      </View>
+    );
+  }
   if (!round) {
     return (
       <View style={{ flex: 1, backgroundColor: t.colors.bg }}>

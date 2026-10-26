@@ -16,6 +16,9 @@ import {
   heroMediaPosition,
   heroMediaScrimAlpha,
 } from "@/lib/storefront/hero-media";
+import { HeroCountdown } from "./HeroCountdown";
+import { TimelineCard } from "./TimelineCard";
+import { isTimelineVisible } from "@/lib/storefront/timeline";
 
 export function Hero({
   brand,
@@ -127,6 +130,19 @@ export function Hero({
     <p className="hero__sub" style={{ ...subStyle, ...subFieldStyle }}>{brand.heroSub}</p>
   );
 
+  // Owner opt-in GB timer (Group Buys → Hero countdown); resolved server-side,
+  // absent when off or when no round is closing/opening.
+  const countdown = brand.heroCountdown && <HeroCountdown countdown={brand.heroCountdown} />;
+
+  // Owner-written Timeline placed in the hero (store admin → Timeline). It
+  // renders under the hero content rather than inside each variant's copy
+  // column, so every layout keeps its own composition.
+  const timeline = isTimelineVisible(brand.timeline, "hero") && brand.timeline && (
+    <div className="container hero__timeline-below">
+      <TimelineCard config={brand.timeline} variant="hero" />
+    </div>
+  );
+
   const ctas = brand.heroShowCtas !== false && (
     <div className="hero__ctas">
       <button className="btn btn-primary" onClick={onPrimary} style={cta1Style}>
@@ -151,6 +167,7 @@ export function Hero({
           {chip}
           {headline}
           {sub}
+          {countdown}
           {ctas}
         </div>
         <div className="hero__visual">{logoCard}</div>
@@ -164,6 +181,7 @@ export function Hero({
           <span>{brand.heroChipLabel || "Issue 01"}</span>
         </div>
         {headline}
+        {countdown}
         <div className="hero__bottom">
           {sub}
           {ctas}
@@ -178,6 +196,7 @@ export function Hero({
           {chip}
           {headline}
           {sub}
+          {countdown}
           {ctas}
         </div>
       </div>
@@ -189,6 +208,7 @@ export function Hero({
         {chip}
         {headline}
         {sub}
+        {countdown}
         {ctas}
       </div>
     );
@@ -205,6 +225,7 @@ export function Hero({
           {wordmarkText(brand) || brand.name || "Brand"}
         </h1>
         {sub}
+        {countdown}
         {ctas}
       </div>
     );
@@ -218,6 +239,7 @@ export function Hero({
           {chip}
           {headline}
           {sub}
+          {countdown}
           {ctas}
         </div>
       </>
@@ -293,6 +315,8 @@ export function Hero({
             </div>
           )}
         </div>
+        {countdown && <div className="container hero__countdown-below">{countdown}</div>}
+        {timeline}
       </section>
     );
   }
@@ -305,6 +329,7 @@ export function Hero({
       style={sectionStyle}
     >
       {content}
+      {timeline}
     </section>
   );
 }

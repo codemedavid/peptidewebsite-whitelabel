@@ -98,6 +98,16 @@ const LAYOUT_SCHEMA = {
       enum: [...HOME_LAYOUTS],
       description: "Homepage shape. \"two-ways\" additionally needs an operator grant to render.",
     },
+    twoWaysHero: {
+      type: "string",
+      enum: ["simple", "store"],
+      description: "Two-ways home hero: \"simple\" built-in text hero, or \"store\" for the store's own hero.",
+    },
+    twoWaysOnHandStyle: {
+      type: "string",
+      enum: ["rows", "cards"],
+      description: "Two-ways \"Ships today\" shelf: compact \"rows\", or the catalog's photo \"cards\".",
+    },
     footerStyle: { type: "string", enum: ["columns", "compact"] },
     catalogSortStyle: { type: "string", enum: ["classic", "simple"] },
     logoCurve: { type: "number", description: "Logo corner rounding, 0 (square) to 50 (circle)." },

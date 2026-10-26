@@ -13,6 +13,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { withTenant } from "@/lib/db/tenant-client";
 import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
+import { ordersTag } from "@/lib/orders/order-cache";
 import { isDemoMode, getDemoStoreOrders } from "@/lib/demo/fixtures";
 import {
   buildBestSellerCounts,
@@ -20,9 +21,9 @@ import {
   type BestSellerOrderInput,
 } from "./catalog-sort";
 
-/** Long enough to erase the per-render cost, short enough that a new order
- *  shows up in the sort while the owner is still watching for it. */
-const REVALIDATE_SECONDS = 300;
+/** Outer bound only: every order writer busts `ordersTag`, so a new order
+ *  re-ranks the sort straight away. */
+const REVALIDATE_SECONDS = 3600;
 
 const loadCounts = (tenantId: string) =>
   unstable_cache(
@@ -45,7 +46,7 @@ const loadCounts = (tenantId: string) =>
     {
       // Rides the tenant tag every order/branding mutation already busts, plus
       // its own so an order write can invalidate just this.
-      tags: [`tenant:${tenantId}`, `tenant:${tenantId}:orders`],
+      tags: [`tenant:${tenantId}`, ordersTag(tenantId)],
       revalidate: REVALIDATE_SECONDS,
     },
   )();

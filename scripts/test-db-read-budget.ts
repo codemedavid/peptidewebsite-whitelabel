@@ -14,13 +14,17 @@
  *   2. ENTITLEMENTS — 1h window, a platform-wide tag that plan saves bust, and
  *                     a resolver that survives cached Dates coming back as
  *                     strings (the unstable_cache Date→string trap).
- *   3. CATALOG      — display rows cached for 1h (writers already bust).
+ *   3. CATALOG      — display rows cached for 1h (writers already bust); the
+ *                     article summaries and the app's product list ride it too.
+ *   4. ORDERS       — one cached order book shared by the website and the app.
+ *   5. GROUP BUYS   — display rounds cached; every round writer busts them.
  *
  * Run:
  *   npm run test:db-read-budget
  */
 
 import assert from "node:assert";
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -164,6 +168,107 @@ console.log("\n3. CATALOG");
 check("storefront catalog rows cached for at least an hour", () => {
   const m = code("src/lib/storefront/storefront-brand.ts").match(/storefront-catalog-rows[\s\S]{0,200}?revalidate:\s*(\d+)/);
   assert.ok(m && Number(m[1]) >= ONE_HOUR, "revalidate window");
+});
+
+check("storefront article summaries are cached, bodies never re-read per render", () => {
+  const src = code("src/lib/storefront/storefront-brand.ts");
+  assert.match(src, /storefront-article-summaries[\s\S]{0,200}?revalidate:\s*\d+/);
+  const inline = src.slice(src.indexOf("export async function loadStorefrontBrand"));
+  assert.doesNotMatch(inline, /blogPost\.findMany/, "loadStorefrontBrand must not read blog_posts directly");
+});
+
+check("the app's product list reuses the cached catalog rows", () => {
+  const src = code("src/lib/mobile/products.ts");
+  const list = src.slice(src.indexOf("export async function listProducts"), src.indexOf("export async function updateProduct"));
+  assert.match(list, /loadCatalogRows\(/);
+  assert.doesNotMatch(list, /product\.findMany/);
+  assert.match(list, /new Date\(r\.updatedAt\)/, "cached dates are strings — re-hydrate before toISOString");
+});
+
+// ─────────────────────────────── 4. orders ──────────────────────────────────
+console.log("\n4. ORDERS");
+
+check("the order book is cached under the orders tag", () => {
+  const m = code("src/lib/orders/order-list-cache.ts").match(/admin-order-list[\s\S]{0,200}?ordersTag\(tenantId\)/);
+  assert.ok(m, "loadOrderList must read through the orders-tagged cache");
+});
+
+check("the website order list and the app's Insights / Customers share it", () => {
+  assert.match(code("src/actions/orders.ts"), /loadOrderList\(tenantId, view\)/);
+  const reports = code("src/lib/mobile/reports.ts");
+  assert.match(reports, /loadOrderList\(ctx\.tenantId, "active"\)/);
+  assert.doesNotMatch(reports, /storefrontOrder\.findMany/, "Customers search must not re-read every order");
+});
+
+check("app Home order stats are cached under the orders tag", () => {
+  assert.match(code("src/lib/mobile/dashboard.ts"), /mobile-dashboard-orders[\s\S]{0,200}?ordersTag\(ctx\.tenantId\)/);
+});
+
+// A cached order list is only correct if EVERY writer busts it. Any file that
+// writes storefront_orders must call revalidateOrders.
+const ORDER_WRITERS = [
+  "src/actions/orders.ts",
+  "src/lib/orders/apply-status.ts",
+  "src/lib/mobile/orders.ts",
+  "src/lib/mobile/account-delete.ts",
+];
+for (const file of ORDER_WRITERS) {
+  check(`${file} busts the orders cache after writing`, () => {
+    assert.match(code(file), /revalidateOrders\(/);
+  });
+}
+
+check("no unlisted file writes storefront orders", () => {
+  const out = execSync(
+    "grep -rlE 'storefrontOrder\\.(create|update|updateMany|delete|deleteMany|upsert|createMany)' src || true",
+    { encoding: "utf8" },
+  );
+  const writers = out.split("\n").filter((f) => f && !f.includes(".test."));
+  const unlisted = writers.filter((f) => !ORDER_WRITERS.includes(f));
+  assert.deepEqual(unlisted, [], "new order writer — add revalidateOrders and list it here");
+});
+
+// ───────────────────────────── 5. group buys ────────────────────────────────
+console.log("\n5. GROUP BUYS");
+
+check("display rounds are cached under the group-buys tag", () => {
+  const src = code("src/lib/storefront/group-buy-server.ts");
+  assert.match(src, /storefront-group-buys[\s\S]{0,200}?groupBuysTag\(tenantId\)[\s\S]{0,120}?revalidate:/);
+});
+
+check("the storefront render reads the cached rounds, not the live ones", () => {
+  const src = code("src/lib/storefront/storefront-brand.ts");
+  assert.match(src, /loadGroupBuysForDisplay\(tenantId, slug\)/);
+  assert.doesNotMatch(src, /\bloadGroupBuys\(/);
+});
+
+check("checkout still reads rounds live", () => {
+  assert.match(code("src/actions/orders.ts"), /\bloadGroupBuys\(tenantId, demoSlug\)/);
+  assert.doesNotMatch(code("src/actions/orders.ts"), /loadGroupBuysForDisplay/);
+});
+
+// Cached rounds are only correct if EVERY function that writes group_buys busts
+// them — revalidateGroupBuys, or revalidateTenant (the loader carries the
+// tenant tag too).
+const ROUND_WRITERS = ["src/actions/group-buys.ts", "src/lib/storefront/gb-review.server.ts"];
+for (const file of ROUND_WRITERS) {
+  check(`${file}: every group_buys writer busts the rounds cache`, () => {
+    const fns = code(file).split(/\n(?=export async function |async function )/);
+    const unbusted = fns
+      .filter((fn) => /groupBuy\.(create|update|updateMany|delete|deleteMany|upsert)\(/.test(fn))
+      .filter((fn) => !/revalidateGroupBuys\(|revalidateTenant\(/.test(fn))
+      .map((fn) => fn.match(/function (\w+)/)?.[1] ?? "?");
+    assert.deepEqual(unbusted, []);
+  });
+}
+
+check("no unlisted file writes group_buys", () => {
+  const out = execSync(
+    "grep -rlE 'groupBuy\\.(create|update|updateMany|delete|deleteMany|upsert|createMany)\\(' src || true",
+    { encoding: "utf8" },
+  );
+  const unlisted = out.split("\n").filter((f) => f && !ROUND_WRITERS.includes(f));
+  assert.deepEqual(unlisted, [], "new round writer — bust revalidateGroupBuys and list it here");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

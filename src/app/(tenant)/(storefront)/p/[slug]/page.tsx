@@ -17,7 +17,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { getTenantId, getTenantIdOrNull } from "@/lib/tenant/headers";
+import { getTenantId, getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
 import { isDemoMode, findDemoProduct } from "@/lib/demo/fixtures";
@@ -28,6 +28,7 @@ import {
 } from "@/lib/storefront/product-image";
 import { formatPrice } from "@/lib/utils";
 import { StorefrontHome } from "../../storefront-home";
+import { productVisibleToPublic } from "@/lib/storefront/gb-access.server";
 
 /** Facebook/WhatsApp render link previews around a 1.91:1 card. */
 const OG_WIDTH = 1200;
@@ -35,6 +36,8 @@ const OG_HEIGHT = 630;
 
 /** The columns the preview needs — deliberately not the whole row. */
 type PreviewProduct = {
+  id: string;
+  metadata: unknown;
   name: string;
   description: string | null;
   priceCents: number;
@@ -62,6 +65,8 @@ async function loadProduct(
     db.product.findFirst({
       where: { status: "active", OR: [{ slug: key }, { id: key }] },
       select: {
+        id: true,
+        metadata: true,
         name: true,
         description: true,
         priceCents: true,
@@ -88,6 +93,16 @@ export async function generateMetadata({
 
   const { tenant, branding, settings } = await getTenantContext(tenantId);
   const storeName = settings?.storeName ?? tenant.name;
+
+  // Paid group-buy access: a product inside a paid round is the round's
+  // content, and a link-preview crawler is always an anonymous visitor — so the
+  // card names the store only (no product name, photo, price or blurb).
+  const meta = (product.metadata ?? {}) as { productType?: unknown };
+  const visible = await productVisibleToPublic(tenantId, (await getTenantSlug()) ?? tenantId, {
+    id: product.id,
+    productType: meta.productType === "gb" ? "gb" : undefined,
+  });
+  if (!visible) return { title: storeName, openGraph: { title: storeName, type: "website", siteName: storeName } };
   const config = (branding?.config ?? {}) as { defaultProductImage?: unknown };
   const defaultImage = normalizeDefaultProductImage(config.defaultProductImage);
 

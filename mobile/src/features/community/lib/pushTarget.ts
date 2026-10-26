@@ -8,7 +8,11 @@ export type PushTarget =
   | { screen: "dm"; id: string }
   | { screen: "topic"; id: string }
   /** The safety bot hid a message — the moderators' review queue. */
-  | { screen: "safety" };
+  | { screen: "safety" }
+  /** A customer paid to join a group buy — the team's join-request queue. */
+  | { screen: "gb_join_request" }
+  /** The store decided the shopper's join request — their store chat, else the group buy. */
+  | { screen: "gb_join_update"; threadId: string | null };
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const ORDER_NUMBER_RE = /^[A-Za-z0-9#_-]{1,40}$/;
@@ -22,6 +26,8 @@ export function pushTarget(data: unknown): PushTarget | null {
     return orderId ? { screen: "order", id: orderId } : null;
   }
   if (d.type === "safety") return { screen: "safety" };
+  if (d.type === "gb_join_request") return { screen: "gb_join_request" };
+  if (d.type === "gb_join_update") return { screen: "gb_join_update", threadId: id(d.threadId) };
   const threadId = id(d.threadId);
   if (!threadId) return null;
   if (d.type === "order_update") {
@@ -41,7 +47,8 @@ export type PushRoute =
   | { pathname: "/order/[id]"; params: { id: string }; method: "push" }
   | { pathname: "/my-order/[number]"; params: { number: string }; method: "push" }
   | { pathname: "/community/dm/[id]" | "/community/topic/[id]"; params: { id: string }; method: "navigate" }
-  | { pathname: "/" | "/community" | "/me" | "/community/safety"; params?: undefined; method: "navigate" };
+  | { pathname: "/" | "/community" | "/me" | "/community/safety"; params?: undefined; method: "navigate" }
+  | { pathname: "/manage/join-requests" | "/group-buy"; params?: undefined; method: "push" };
 
 /** The mode's home tab — where a tap lands when its target isn't open to this account. */
 export function homeRoute(access: PushAccess): PushRoute {
@@ -63,6 +70,15 @@ export function resolvePushRoute(target: PushTarget | null, access: PushAccess):
   }
   if (target.screen === "safety") {
     return access.mode === "admin" && access.inCommunity ? { pathname: "/community/safety", method: "navigate" } : homeRoute(access);
+  }
+  if (target.screen === "gb_join_request") {
+    return access.mode === "admin" ? { pathname: "/manage/join-requests", method: "push" } : homeRoute(access);
+  }
+  if (target.screen === "gb_join_update") {
+    if (access.mode !== "customer") return homeRoute(access);
+    return access.inCommunity && target.threadId
+      ? { pathname: "/community/dm/[id]", params: { id: target.threadId }, method: "navigate" }
+      : { pathname: "/group-buy", method: "push" };
   }
   if (target.screen === "order_update") {
     if (access.mode !== "customer") return homeRoute(access);

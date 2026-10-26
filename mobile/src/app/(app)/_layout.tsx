@@ -107,6 +107,7 @@ export default function AppLayout() {
         <Stack.Screen name="manage/order-ratio" />
         <Stack.Screen name="manage/group-buys" />
         <Stack.Screen name="manage/group-buys-detail" />
+        <Stack.Screen name="manage/join-requests" />
         <Stack.Screen name="manage/reseller" />
         <Stack.Screen name="manage/staff" />
         <Stack.Screen name="manage/billing" />

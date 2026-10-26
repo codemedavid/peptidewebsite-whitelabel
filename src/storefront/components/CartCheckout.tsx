@@ -32,6 +32,7 @@ import {
 } from "@/lib/storefront/checkout-rules";
 import { CUSTOMER_NOTE_MAX } from "@/lib/orders/customer-note";
 import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
+import { groupBuyMoqViolation } from "@/lib/storefront/gb-moq-kits";
 import { normalizeGroupBuyRules, ratioViolation } from "@/lib/storefront/group-buy-rules";
 import { CONFIRM_HANDOFF_KEY } from "@/lib/storefront/order-confirmation";
 import { DIRECT_CONTACT_METHOD, isDirectHandoff } from "@/lib/storefront/checkout-handoff";
@@ -347,9 +348,24 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     () => cartStockViolations(lines, groupBuyScope),
     [lines, groupBuyScope],
   );
+  // Group-buy MOQ — the round's per-customer minimum, in vials across every
+  // product in the round (gb-moq-kits). Always blocking; placeStorefrontOrderAction
+  // re-checks it against the round it attributes the order to.
+  const moqV = useMemo(() => {
+    const message = groupBuyMoqViolation(
+      lines.map((l) => ({
+        id: baseProductId(l.product),
+        productType: l.product.productType,
+        qty: l.qty,
+      })),
+      groupBuyScope,
+      brand.groupBuyBanner?.moqVials,
+    );
+    return message ? { rule: "moq", message, blocking: true } : null;
+  }, [lines, groupBuyScope, brand.groupBuyBanner?.moqVials]);
   const violations = useMemo(
-    () => [...checkoutViolations, ...(ratioV ? [ratioV] : []), ...stockV],
-    [checkoutViolations, ratioV, stockV],
+    () => [...checkoutViolations, ...(ratioV ? [ratioV] : []), ...(moqV ? [moqV] : []), ...stockV],
+    [checkoutViolations, ratioV, moqV, stockV],
   );
   // The owner closed the shop while this cart was sitting open. Kept out of
   // `violations` on purpose: that list models the owner's CHECKOUT RULES, and a

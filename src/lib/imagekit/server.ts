@@ -126,3 +126,44 @@ export async function listTenantMedia(tenantId: string, limit = 100) {
   const folder = await tenantMediaFolder(tenantId);
   return getImageKit().listFiles({ path: folder, limit });
 }
+
+/** Are real ImageKit credentials present (not blank / placeholder)? */
+export function isImageKitConfigured(): boolean {
+  const bad = (v?: string) => !v || v.trim() === "" || v.toLowerCase().includes("placeholder");
+  return (
+    !bad(process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY) &&
+    !bad(process.env.IMAGEKIT_PRIVATE_KEY) &&
+    !bad(process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT)
+  );
+}
+
+/**
+ * Server-side upload of a PRIVATE file into a sub-folder of the tenant's own
+ * folder. ImageKit refuses the original URL of a private file without a valid
+ * signature, so the stored `filePath` is useless on its own — callers hand out
+ * short-lived links via signedPrivateUrl, and only after their own access check.
+ */
+export async function uploadPrivateTenantFile(opts: {
+  tenantId: string;
+  subfolder: string;
+  file: Buffer;
+  fileName: string;
+  tags?: string[];
+}): Promise<{ fileId: string; filePath: string }> {
+  if (!/^[a-z0-9-]+$/.test(opts.subfolder)) throw new Error("uploadPrivateTenantFile: bad subfolder");
+  const folder = `${await tenantMediaFolder(opts.tenantId)}/${opts.subfolder}`;
+  const res = await getImageKit().upload({
+    file: opts.file,
+    fileName: opts.fileName,
+    folder,
+    useUniqueFileName: true,
+    isPrivateFile: true,
+    tags: opts.tags,
+  });
+  return { fileId: res.fileId, filePath: res.filePath };
+}
+
+/** A signed link to a private file that stops working after `expireSeconds`. */
+export function signedPrivateUrl(filePath: string, expireSeconds: number): string {
+  return getImageKit().url({ path: filePath, signed: true, expireSeconds });
+}

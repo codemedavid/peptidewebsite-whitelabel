@@ -25,6 +25,7 @@ import { normalizeCoaReports } from "@/lib/storefront/coa";
 import { normalizeReviews } from "@/lib/storefront/reviews";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { normalizeTimeline } from "@/lib/storefront/timeline";
 import { categoryImage } from "@/lib/storefront/categories";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
 import { normalizeProductOrder } from "@/lib/storefront/product-order";
@@ -749,6 +750,38 @@ export async function saveTrackNoteAction(input: unknown): Promise<ActionResult>
   return { ok: true };
 }
 
+/**
+ * Persist the store owner's Timeline (steps, current step, and where it shows:
+ * Track page / hero / both) into branding.config.timeline (read-modify-write).
+ * OWNER-ONLY, and only while the operator grant FEATURES.STORE_TIMELINE is on —
+ * the storefront forces the timeline off without it, so a write would be dead.
+ */
+export async function saveTimelineAction(input: unknown): Promise<ActionResult> {
+  const tenantId = await requireStoreOwner();
+  if (!tenantId) return { error: NO_ACCESS };
+
+  if (!isDemoMode() && !(await hasFeature(tenantId, FEATURES.STORE_TIMELINE))) {
+    return { error: "Timeline isn't enabled for this store. Ask your platform admin to turn it on." };
+  }
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, timeline: normalizeTimeline(input) };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
 // ── Hero copy (homepage hero section) ────────────────────────────────────────
 
 // Hero CTA link normalization (whitelist + http(s)-only URL sanitizing) lives in
@@ -1142,7 +1175,7 @@ function normalizeCardDesign(input: unknown): CardDesign {
   const d = DEFAULT_CARD_DESIGN;
   return {
     preset: String(o.preset ?? "custom").slice(0, 64),
-    layout: cdEnum(o.layout, ["vertical", "horizontal", "overlay"] as const, d.layout),
+    layout: cdEnum(o.layout, ["vertical", "horizontal", "overlay", "text"] as const, d.layout),
     surface: cdEnum(o.surface, ["flat", "glass", "neumorphic", "gradient"] as const, d.surface),
     borderEnabled: o.borderEnabled !== false,
     borderColor: cdColor(o.borderColor),

@@ -4,6 +4,7 @@ import { runAsAppActor } from "@/lib/auth/app-actor-scope";
 import * as storefrontAdmin from "@/actions/storefront-admin";
 import * as products from "@/actions/products";
 import * as groupBuys from "@/actions/group-buys";
+import * as gbReview from "@/actions/gb-review";
 import * as staff from "@/actions/storefront-staff";
 import * as orders from "@/actions/orders";
 import * as media from "@/actions/media";
@@ -55,6 +56,7 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   saveOrderNotificationsAction: storefrontAdmin.saveOrderNotificationsAction,
   saveNoticeModalAction: storefrontAdmin.saveNoticeModalAction,
   saveTrackNoteAction: storefrontAdmin.saveTrackNoteAction,
+  saveTimelineAction: storefrontAdmin.saveTimelineAction,
   saveHeroContentAction: storefrontAdmin.saveHeroContentAction,
   saveBannerAction: storefrontAdmin.saveBannerAction,
   saveCheckoutRulesAction: storefrontAdmin.saveCheckoutRulesAction,
@@ -78,11 +80,17 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   listGroupBuysAction: groupBuys.listGroupBuysAction,
   getGroupBuyDashboardAction: groupBuys.getGroupBuyDashboardAction,
   saveGroupBuyAction: groupBuys.saveGroupBuyAction,
+  // Paid group-buy access (actions/gb-review.ts — requireStaffPermission("groupbuys")).
+  saveGroupBuyPaidJoinAction: gbReview.saveGroupBuyPaidJoinAction,
+  listGroupBuyJoinRequestsAction: gbReview.listGroupBuyJoinRequestsAction,
+  reviewGroupBuyJoinRequestAction: gbReview.reviewGroupBuyJoinRequestAction,
+  getGroupBuyJoinReceiptAction: gbReview.getGroupBuyJoinReceiptAction,
   addOrderedProductsToRoundAction: groupBuys.addOrderedProductsToRoundAction,
   saveGroupBuyAllowOnHandAction: groupBuys.saveGroupBuyAllowOnHandAction,
   saveTwoWaysModeAction: groupBuys.saveTwoWaysModeAction,
   saveGroupBuyContentAction: groupBuys.saveGroupBuyContentAction,
   saveGroupBuyLiveBannerAction: groupBuys.saveGroupBuyLiveBannerAction,
+  saveHeroCountdownAction: groupBuys.saveHeroCountdownAction,
   saveGroupBuyInvoiceAction: groupBuys.saveGroupBuyInvoiceAction,
   sendGroupBuyInvoicesAction: groupBuys.sendGroupBuyInvoicesAction,
   duplicateGroupBuyAction: groupBuys.duplicateGroupBuyAction,

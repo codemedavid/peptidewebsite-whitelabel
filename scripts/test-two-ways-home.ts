@@ -20,6 +20,8 @@ import {
   buildTwoWaysHomeView,
   resolveHomeLayout,
   groupBuyCtaTarget,
+  normalizeTwoWaysHero,
+  normalizeTwoWaysOnHandStyle,
 } from "../src/lib/storefront/two-ways-home";
 import type { GroupBuyBanner } from "../src/lib/storefront/group-buy-banner";
 import type { Product } from "../src/storefront/types";
@@ -536,8 +538,17 @@ check("the storefront page never deletes the banner to hide the group-buy way", 
     join(__dirname, "..", "src/lib/storefront/storefront-brand.ts"),
     "utf8",
   );
+  // One marked exception: paid group-buy access drops the banner for a locked
+  // viewer, but only in the same step that removes the round's products from
+  // the catalog (lockGroupBuyCatalog via applyGroupBuyAccess), so there is
+  // nothing left to spill. Everything outside that block stays forbidden.
+  const begin = src.indexOf("// gb-access:begin");
+  const end = src.indexOf("// gb-access:end");
+  assert.ok(begin >= 0 && end > begin, "paid-access block markers");
+  const block = src.slice(begin, end);
+  assert.match(block, /products = access\.products;[\s\S]*delete brand\.groupBuyBanner/, "products are replaced before the banner goes");
   assert.doesNotMatch(
-    src,
+    src.slice(0, begin) + src.slice(end),
     /delete\s*\(?[^\n]*groupBuyBanner/,
     "deleting the banner would spill the round's pre-orders onto the on-hand shelf",
   );
@@ -597,6 +608,64 @@ check("TwoWaysHome renders no group-buy item rows and routes to the group-buy pa
   assert.doesNotMatch(src, /sf-twh__gb-items/, "the home must not render a group-buy item list");
   assert.doesNotMatch(src, /GbItemRow/, "the home must not render group-buy product rows");
   assert.match(src, /onOpenGroupBuy/, "the live round must link out to the group-buy page");
+});
+
+// HERO STYLE: brand.twoWaysHero picks the two-ways home's hero. "simple" (the
+// built-in text hero, K Glow) is the default; "store" swaps in the store's own
+// <Hero> (variant, logo, countdown, CTAs) so switching layouts keeps the hero.
+check("normalizeTwoWaysHero defaults to simple and accepts only simple|store", () => {
+  assert.strictEqual(normalizeTwoWaysHero(undefined), "simple");
+  assert.strictEqual(normalizeTwoWaysHero(null), "simple");
+  assert.strictEqual(normalizeTwoWaysHero("store"), "store");
+  assert.strictEqual(normalizeTwoWaysHero("simple"), "simple");
+  assert.strictEqual(normalizeTwoWaysHero("STORE"), "simple");
+  assert.strictEqual(normalizeTwoWaysHero(1), "simple");
+});
+
+check("TwoWaysHome takes a hero slot and keeps its built-in hero as the fallback", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/storefront/components/TwoWaysHome.tsx"),
+    "utf8",
+  );
+  assert.match(src, /hero\?: ReactNode/, "TwoWaysHome must accept an optional hero slot");
+  assert.match(src, /sf-twh__hero/, "the built-in hero must remain for stores on \"simple\"");
+});
+
+check("StorefrontApp passes the store <Hero> into the two-ways home on \"store\"", () => {
+  const src = readFileSync(join(__dirname, "..", "src/storefront/StorefrontApp.tsx"), "utf8");
+  assert.match(src, /twoWaysHero === "store"/, "the hero slot must be keyed on brand.twoWaysHero");
+});
+
+check("storefront-brand projects twoWaysHero through the normalizer", () => {
+  const src = readFileSync(join(__dirname, "..", "src/lib/storefront/storefront-brand.ts"), "utf8");
+  assert.match(src, /brand\.twoWaysHero = normalizeTwoWaysHero\(config\.twoWaysHero\)/);
+});
+
+// ON-HAND STYLE: brand.twoWaysOnHandStyle picks the "Ships today" shelf. "rows"
+// (compact thumbnail rows, K Glow) is the default; "cards" renders the
+// catalog's own <ProductCard>s — big photo, Card Studio design, same buy rules.
+check("normalizeTwoWaysOnHandStyle defaults to rows and accepts only rows|cards", () => {
+  assert.strictEqual(normalizeTwoWaysOnHandStyle(undefined), "rows");
+  assert.strictEqual(normalizeTwoWaysOnHandStyle("cards"), "cards");
+  assert.strictEqual(normalizeTwoWaysOnHandStyle("rows"), "rows");
+  assert.strictEqual(normalizeTwoWaysOnHandStyle("grid"), "rows");
+  assert.strictEqual(normalizeTwoWaysOnHandStyle(null), "rows");
+});
+
+check("TwoWaysHome renders the catalog ProductCard on \"cards\" and keeps rows otherwise", () => {
+  const src = readFileSync(
+    join(__dirname, "..", "src/storefront/components/TwoWaysHome.tsx"),
+    "utf8",
+  );
+  assert.match(src, /twoWaysOnHandStyle === "cards"/, "the shelf must branch on brand.twoWaysOnHandStyle");
+  assert.match(src, /<ProductCard/, "cards mode must reuse the catalog ProductCard");
+  assert.match(src, /isOnHandBlocked\(/, "cards must honour the on-hand gate like the catalog");
+  assert.match(src, /<OnHandRow/, "rows mode must remain the default shelf");
+});
+
+check("storefront-brand projects twoWaysOnHandStyle through the normalizer", () => {
+  const src = readFileSync(join(__dirname, "..", "src/lib/storefront/storefront-brand.ts"), "utf8");
+  assert.match(src, /brand\.twoWaysOnHandStyle = normalizeTwoWaysOnHandStyle\(config\.twoWaysOnHandStyle\)/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

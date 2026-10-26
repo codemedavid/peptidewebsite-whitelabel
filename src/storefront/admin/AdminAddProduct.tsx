@@ -6,6 +6,7 @@ import { useStore } from "../store";
 import { saveProductAction, uploadProductImageAction } from "@/actions/products";
 import { RESELLER_MIN_QTY } from "../checkout";
 import {
+  isGroupBuyOnlyStore,
   isGroupBuyPricingVisible,
   isResellerPricingVisible,
   isWholesalePricingVisible,
@@ -473,6 +474,8 @@ export function AdminAddProduct({
   // either way, so an unentitled owner editing a previously-marked product
   // saves it back unchanged instead of silently clearing the flag.
   const [madeToOrder, setMadeToOrder] = useState<boolean>(initial?.madeToOrder === true);
+  // Vials per supplier kit — group-buy-only stores (gb-moq-kits). Blank = not set.
+  const [vialsPerKit, setVialsPerKit] = useState<number | string>(initial?.vialsPerKit ?? "");
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   // Group Buy product: lists under the storefront's Group Buy section (priced by
@@ -663,6 +666,8 @@ export function AdminAddProduct({
       available,
       freeShipping,
       madeToOrder,
+      // Server re-validates (normalizeVialsPerKit); blank / 0 clears it.
+      vialsPerKit: Number(vialsPerKit) > 0 ? Number(vialsPerKit) : undefined,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
       productType: isGroupBuy ? "gb" : "onhand",
@@ -966,6 +971,21 @@ export function AdminAddProduct({
               </label>
             </div>
           </div>
+          {/* Group-buy-only stores plan per kit: kits differ per product, so the
+              size lives here rather than on the round (gb-moq-kits). */}
+          {isGroupBuyOnlyStore(brand) && (
+            <div className="admin-form__row">
+              <div className="admin-field">
+                <label className="admin-field__label">Vials per kit</label>
+                <NumberField value={vialsPerKit} onChange={setVialsPerKit} min={0} />
+                <div className="admin-field__hint">
+                  How many vials the supplier packs in one kit of this product. Shoppers see
+                  how full the current kit is, and the supplier report counts whole kits.
+                  Leave blank if you don&apos;t order by the kit.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         )}
 

@@ -57,6 +57,9 @@ const TENANT_MODELS = new Set<string>([
   "coupon",
   "mediaAsset",
   "subscriptionPayment",
+  // Paid group-buy join requests + audit trail (lib/storefront/gb-membership.ts)
+  "groupBuyMembership",
+  "groupBuyMembershipEvent",
   // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
   "communityMember",
   "communityChannel",

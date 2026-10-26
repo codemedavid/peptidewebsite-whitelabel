@@ -49,7 +49,7 @@ import {
   type GroupBuySettings,
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
-import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { resolveGroupBuyCaps, loadGroupBuys, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
 import {
   mergeGroupBuyInvoiceSave,
   normalizeGroupBuyInvoice,
@@ -84,7 +84,9 @@ import {
 import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
 import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
+import { normalizeVialsPerKit } from "@/lib/storefront/gb-moq-kits";
 import { normalizeGroupBuyLiveBanner, type GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
+import { normalizeHeroCountdown, type HeroCountdownConfig } from "@/lib/storefront/hero-countdown";
 import { normalizeTwoWaysMode, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import {
   buildCustomerLines,
@@ -124,6 +126,8 @@ export type ListGroupBuysResult =
       content: GroupBuyContent;
       /** The app's live strip settings (blank text = automatic). */
       liveBanner: GroupBuyLiveBannerConfig;
+      /** The storefront hero's countdown settings (on/off + heading text). */
+      heroCountdown: HeroCountdownConfig;
       /** Pay-after-close invoices: fee, template, payment options. */
       invoice: GroupBuyInvoiceConfig;
     }
@@ -206,6 +210,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
     const settings = normalizeGroupBuySettings(config.groupBuySettings);
     const content = normalizeGroupBuyContent(config.groupBuyContent);
     const liveBanner = normalizeGroupBuyLiveBanner(config.groupBuyLiveBanner);
+    const heroCountdown = normalizeHeroCountdown(config.heroCountdown);
     const invoice = normalizeGroupBuyInvoice(config.groupBuyInvoice);
 
     // One query for every candidate order, then resolve per round in memory —
@@ -221,7 +226,7 @@ export async function listGroupBuysAction(): Promise<ListGroupBuysResult> {
       ),
     );
 
-    return { ok: true, groupBuys, rows, caps, settings, content, liveBanner, invoice };
+    return { ok: true, groupBuys, rows, caps, settings, content, liveBanner, heroCountdown, invoice };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load group buys." };
   }
@@ -318,6 +323,27 @@ async function loadProductNames(
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
+/** product id → vials per kit (gb-moq-kits) for the supplier report's kit
+ *  columns. Products without one are simply absent. One query. */
+async function loadKitSizes(tenantId: string, slug: string): Promise<Record<string, number>> {
+  const sizes: Record<string, number> = {};
+  if (isDemoMode()) {
+    for (const p of getDemoStoreProducts(slug) ?? []) {
+      const n = normalizeVialsPerKit(p.vialsPerKit);
+      if (n) sizes[p.id] = n;
+    }
+    return sizes;
+  }
+  const rows = await withTenant(tenantId, (db) =>
+    db.product.findMany({ select: { id: true, metadata: true } }),
+  );
+  for (const r of rows) {
+    const n = normalizeVialsPerKit((r.metadata as { vialsPerKit?: unknown } | null)?.vialsPerKit);
+    if (n) sizes[r.id] = n;
+  }
+  return sizes;
+}
+
 /**
  * Every product id that still exists for the tenant — ids only, one query. Used
  * to spot assignments pointing at deleted products. Returning an EMPTY set is
@@ -371,7 +397,7 @@ export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyD
         items: o.items ?? [],
       })),
     );
-    const prep = prepareReport(round, resolved.orders, report);
+    const prep = prepareReport(round, resolved.orders, report, await loadKitSizes(tenantId, slug));
 
     // Is the assignment still tracking reality? Names for assigned-but-unsold
     // rows come from the catalog lookup we already did; the drift module only
@@ -482,6 +508,7 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
         return n.count ? db.groupBuy.findFirst({ where: { id: gb.id } }) : null;
       });
       if (!row) return { error: "Group buy not found." };
+      revalidateGroupBuys(tenantId);
       const saved = dbGroupBuyToStorefront(row as DbGroupBuyRow);
       // The owner just closed the round → its invoices go out (pay-after-close
       // stores only; every gate is inside, and it never throws).
@@ -498,6 +525,7 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
       }
       return db.groupBuy.create({ data: { ...data, tenantId } });
     });
+    revalidateGroupBuys(tenantId);
     return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
   } catch (e) {
     // The DB partial unique index rejects a second concurrent activation with
@@ -732,6 +760,42 @@ export async function saveGroupBuyLiveBannerAction(
   }
 }
 
+// ── Hero countdown (storefront) ──────────────────────────────────────────────
+
+/**
+ * Persist the storefront hero's group-buy countdown — on/off, heading on/off and
+ * the two heading texts — into branding.config.heroCountdown (read-modify-write,
+ * the rest of the config untouched). Same gate as the storefront copy (store
+ * admin + Group Buy module): the timer only ever counts toward a round.
+ */
+export async function saveHeroCountdownAction(
+  input: unknown,
+): Promise<{ ok: true; countdown: HeroCountdownConfig } | { error: string }> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug } = gate;
+  const countdown = normalizeHeroCountdown(input);
+
+  try {
+    if (isDemoMode()) {
+      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      saveDemoBranding(slug, { config: { ...current, heroCountdown: countdown } });
+    } else {
+      const current = await readTenantConfig(tenantId);
+      const config = { ...current, heroCountdown: countdown } as Prisma.InputJsonValue;
+      await prisma.branding.upsert({
+        where: { tenantId },
+        update: { config },
+        create: { tenantId, config },
+      });
+    }
+    revalidateTenant(tenantId, slug);
+    return { ok: true, countdown };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save the countdown." };
+  }
+}
+
 // ── Invoices (pay after close) ──────────────────────────────────────────────
 
 /**
@@ -830,6 +894,7 @@ export async function duplicateGroupBuyAction(id: unknown): Promise<SaveGroupBuy
         },
       }),
     );
+    revalidateGroupBuys(tenantId);
     return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't duplicate the group buy." };
@@ -866,6 +931,7 @@ export async function setGroupBuyArchivedAction(
       return n.count ? db.groupBuy.findFirst({ where: { id: gbId } }) : null;
     });
     if (!row) return { error: "Group buy not found." };
+    revalidateGroupBuys(tenantId);
     return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't archive the group buy." };
@@ -962,7 +1028,7 @@ export async function getGroupBuySupplierReportAction(
     // fed the SAME resolved orders and the SAME aggregation the screen renders,
     // so the download can never disagree with what the owner just looked at.
     const roundWindow = roundWindows.find((r) => r.id === gbId)!;
-    const prep = prepareReport(roundWindow, resolved.orders, report);
+    const prep = prepareReport(roundWindow, resolved.orders, report, await loadKitSizes(tenantId, slug));
 
     return {
       ok: true,

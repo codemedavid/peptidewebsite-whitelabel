@@ -22,6 +22,13 @@ export type GroupBuyBanner = {
   slotGoal: number; // storefront progress-bar goal; 0 = off (no bar). See two-ways.slotProgress.
   endsAt: string | null; // ISO close boundary — drives the "Closes in N days" countdown. null = open-ended.
   filled: number; // slots taken so far (demand orders on this round). 0 until page.tsx counts them.
+  /** Per-customer minimum order in group-buy vials (gb-moq-kits). null = none.
+   *  Optional: banners built before the field (fixtures) read as "no minimum". */
+  moqVials?: number | null;
+  /** Round demand in vials per product id — the shopper-facing kit progress
+   *  ("7 of 10 vials"). Counts only, no customer data. Empty until
+   *  storefront-brand totals the round's orders. */
+  kitVials?: Record<string, number>;
 };
 
 /**
@@ -53,6 +60,8 @@ export function buildGroupBuyBanner(
     // load — page.tsx counts them (StorefrontOrder.groupBuyId === this round) and
     // overwrites this default so the progress bar reflects real demand.
     filled: 0,
+    moqVials: gb.moqVials ?? null,
+    kitVials: {},
   };
 }
 

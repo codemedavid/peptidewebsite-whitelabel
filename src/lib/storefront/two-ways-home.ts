@@ -151,6 +151,24 @@ export function resolveHomeLayout(
   return configLayout === "classic" ? "classic" : "two-ways";
 }
 
+/** Which hero the two-ways home renders. "simple" (default) is its built-in
+ *  text hero (K Glow); "store" swaps in the store's own configured <Hero> —
+ *  variant, logo, countdown, CTAs — so turning the layout on keeps the hero. */
+export type TwoWaysHero = "simple" | "store";
+
+export function normalizeTwoWaysHero(value: unknown): TwoWaysHero {
+  return value === "store" ? "store" : "simple";
+}
+
+/** How the two-ways home lays out its "Ships today" shelf. "rows" (default) is
+ *  the compact thumbnail list (K Glow); "cards" renders the catalog's own
+ *  <ProductCard>s — big photo, Card Studio design, same buy rules. */
+export type TwoWaysOnHandStyle = "rows" | "cards";
+
+export function normalizeTwoWaysOnHandStyle(value: unknown): TwoWaysOnHandStyle {
+  return value === "cards" ? "cards" : "rows";
+}
+
 /**
  * Where the live group-buy CTA (and the "Open now" way card) on the two-ways home
  * should take the shopper. Both point at the dedicated group-buy page so a click

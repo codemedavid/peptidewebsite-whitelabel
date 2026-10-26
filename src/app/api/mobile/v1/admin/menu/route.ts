@@ -1,4 +1,5 @@
 import { ok, withMobile } from "@/lib/mobile/http";
+import { ADMIN_VIEWER } from "@/lib/storefront/gb-access.server";
 import { asAppActor } from "@/lib/mobile/admin-bridge";
 import { loadStorefrontBrand } from "@/lib/storefront/storefront-brand";
 import { visibleNavGroups } from "@/storefront/admin/admin-nav";
@@ -10,7 +11,7 @@ import { visibleNavGroups } from "@/storefront/admin/admin-nav";
 export async function GET(req: Request) {
   return withMobile(req, { route: "admin/menu" }, async (ctx) => {
     const { brand } = await asAppActor(ctx, () =>
-      loadStorefrontBrand({ tenantId: ctx.tenantId, slug: ctx.slug, isResellerUnlocked: async () => false }),
+      loadStorefrontBrand({ tenantId: ctx.tenantId, slug: ctx.slug, isResellerUnlocked: async () => false, groupBuyViewer: async () => ADMIN_VIEWER }),
     );
     const groups = visibleNavGroups(brand, ctx.actor).map((g) => ({
       id: g.id,

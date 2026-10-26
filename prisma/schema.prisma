@@ -148,6 +148,11 @@ model Tenant {
   // the operator confirms/rejects each on the platform Billing tab.
   subscriptionPayments SubscriptionPayment[]
 
+  // Paid group-buy join requests + their append-only audit trail
+  // (groupbuy.paid_access; lib/storefront/gb-membership.ts).
+  groupBuyMemberships      GroupBuyMembership[]
+  groupBuyMembershipEvents GroupBuyMembershipEvent[]
+
   // Operator-authored calendar entries filed against this tenant. SetNull, not
   // Cascade: deleting a tenant must not wipe the operator's own schedule.
   calendarEvents PlatformCalendarEvent[]
@@ -614,6 +619,9 @@ model StorefrontCustomer {
   orders          StorefrontOrder[]
   // Back-relation Prisma requires for CommunityMember.customer (mobile app community).
   communityMember CommunityMember?
+  // Paid group-buy join requests (SetNull on delete — the paid record outlives
+  // the account; GroupBuyMembership keeps a name/email snapshot).
+  groupBuyMemberships GroupBuyMembership[]
 
   @@unique([tenantId, email])
   @@index([tenantId, createdAt])
@@ -647,6 +655,10 @@ model GroupBuy {
   // planning numbers. Overloading slotGoal would change what shoppers see.
   minVials    Int?
   maxVials    Int?
+  // Per-CUSTOMER minimum order for the round, in group-buy vials, the same for
+  // every product (lib/storefront/gb-moq-kits). NULL = no minimum. Group-buy-only
+  // stores set this instead of minVials/maxVials when opening a round.
+  moqVials    Int?
   // When the round actually closed, stamped on the transition to closed. endsAt
   // is only the *scheduled* close, so it can't answer "when did this finish?".
   closedAt    DateTime?
@@ -656,11 +668,95 @@ model GroupBuy {
   // Storefront slot-goal for the progress bar ("18 of 30 slots filled"). 0 = the
   // goal is off and no bar renders — set/cleared per round by the store owner.
   slotGoal    Int       @default(0)
+  // Paid join (groupbuy.paid_access). When on, customers pay joinFeeCents
+  // (centavos) and wait for admin approval before the round opens to them.
+  // Inert while the tenant lacks the feature. joinFeeCents is copied onto each
+  // request when it is created, so later edits never re-price a request.
+  paidJoin     Boolean  @default(false)
+  joinFeeCents Int      @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
+  memberships GroupBuyMembership[]
+
   @@index([tenantId, status])
   @@map("group_buys")
+}
+
+// One customer's paid request to join one group-buy round. The lifecycle
+// (pending_payment → paid_pending_approval → approved | rejected → refunded,
+// approved → revoked) is decided by lib/storefront/gb-membership.ts AND enforced
+// by Postgres (prisma/group-buy-memberships.sql: transition trigger, one live
+// request per customer per round, immutable tenant/round/customer/amount).
+// ⚠ Apply that SQL file after `db push` (npm run db:gb-memberships).
+model GroupBuyMembership {
+  id         String              @id @default(cuid())
+  tenantId   String
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // NoAction (checked at statement end, unlike Restrict): a round with paid
+  // requests cannot be deleted on its own, yet a whole-store cascade still works.
+  groupBuyId String
+  groupBuy   GroupBuy            @relation(fields: [groupBuyId], references: [id], onDelete: NoAction)
+  // SetNull: deleting the account keeps the payment record for refunds/audit.
+  customerId String?
+  customer   StorefrontCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // Snapshot at request time — survives account deletion and later renames.
+  customerName  String
+  customerEmail String
+
+  status      String @default("pending_payment")
+  // What the store charges, in centavos, copied from GroupBuy.joinFeeCents by the
+  // server. Never taken from the client; immutable once created.
+  amountCents Int
+  currency    String @default("PHP")
+
+  // The customer's receipt: how they paid, their reference number, when, and the
+  // PRIVATE ImageKit file (served only via short-lived signed URLs to the uploader
+  // and the store's admins — never a public URL).
+  method          String    @default("")
+  reference       String    @default("")
+  receiptFileId   String?
+  receiptFilePath String?
+  paidAt          DateTime?
+  submittedAt     DateTime?
+
+  // Review. decidedBy = "owner" | "staff:<id>" | "operator:<id>".
+  decidedAt       DateTime?
+  decidedBy       String?
+  reviewReason    String    @default("") // required for rejected / revoked
+  refundReference String    @default("") // required for refunded
+  refundedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events GroupBuyMembershipEvent[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, groupBuyId, status])
+  @@index([customerId])
+  @@map("group_buy_memberships")
+}
+
+// Append-only audit trail for GroupBuyMembership: who moved a request, from what
+// to what, when and why. UPDATE is refused by a trigger; rows go only with their
+// tenant (offboarding cascade).
+model GroupBuyMembershipEvent {
+  id           String             @id @default(cuid())
+  tenantId     String
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membershipId String
+  membership   GroupBuyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  fromStatus   String?
+  toStatus     String
+  actorKind    String // customer | owner | staff | operator | system
+  actorId      String?
+  reason       String             @default("")
+  createdAt    DateTime           @default(now())
+
+  @@index([tenantId, membershipId])
+  @@index([tenantId, createdAt])
+  @@map("group_buy_membership_events")
 }
 
 // Auth audit trail — security-relevant events on the access gate / tenant admin.

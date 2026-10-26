@@ -6,6 +6,7 @@ import { applyOrderStatusChange } from "@/lib/orders/apply-status";
 import { customerKey } from "@/lib/community/keys";
 import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { ACTIVE_ORDERS_WHERE, TRASHED_ORDERS_WHERE } from "@/lib/orders/trash";
+import { revalidateOrders } from "@/lib/orders/order-cache";
 import { isOrderStatus } from "@/lib/storefront/order-status";
 import type { Order } from "@/storefront/types";
 import { formatMoney } from "@/lib/storefront/currency";
@@ -248,6 +249,7 @@ export async function trashOrder(ctx: MobileContext, id: string): Promise<boolea
   const res = await withTenant(ctx.tenantId, (db) =>
     db.storefrontOrder.updateMany({ where: { ...ACTIVE_ORDERS_WHERE, id }, data: { deletedAt: new Date() } }),
   );
+  revalidateOrders(ctx.tenantId);
   return res.count === 1;
 }
 
@@ -256,5 +258,6 @@ export async function restoreOrder(ctx: MobileContext, id: string): Promise<bool
   const res = await withTenant(ctx.tenantId, (db) =>
     db.storefrontOrder.updateMany({ where: { ...TRASHED_ORDERS_WHERE, id }, data: { deletedAt: null } }),
   );
+  revalidateOrders(ctx.tenantId);
   return res.count === 1;
 }

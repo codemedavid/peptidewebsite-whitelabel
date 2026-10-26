@@ -1,5 +1,6 @@
 import { ok, withMobile } from "@/lib/mobile/http";
 import { loadShopCatalog } from "@/lib/mobile/shop-catalog";
+import { ADMIN_VIEWER } from "@/lib/storefront/gb-access.server";
 
 // GET /api/mobile/v1/admin/storefront → ShopCatalog (lib/mobile/shop-contract.ts)
 // The store team's native "View your store": the SAME catalog shoppers get
@@ -9,6 +10,7 @@ import { loadShopCatalog } from "@/lib/mobile/shop-catalog";
 // the visitor access code would hide the store from a guest.
 export async function GET(req: Request) {
   return withMobile(req, { route: "admin/storefront" }, async (ctx) =>
-    ok(await loadShopCatalog({ tenantId: ctx.tenantId, slug: ctx.slug, customer: null })),
+    // The team sees its own paid rounds in full (gb-access: admins are never locked).
+    ok(await loadShopCatalog({ tenantId: ctx.tenantId, slug: ctx.slug, customer: null }, { viewer: ADMIN_VIEWER })),
   );
 }

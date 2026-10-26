@@ -7,6 +7,7 @@ import { isMadeToOrder } from "@/lib/storefront/made-to-order";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { LOW_STOCK_AT, productUnits } from "@/lib/storefront/admin-dashboard";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { loadCatalogRows } from "@/lib/storefront/storefront-brand";
 import type { Product } from "@/storefront/types";
 import type { ProductRow } from "./contract";
 import type { MobileContext } from "./auth";
@@ -51,12 +52,17 @@ function toRow(p: Product, updatedAt: Date, symbol: string): ProductRow {
   };
 }
 
+// Reads the storefront's cached catalog rows (same non-archived set) instead of
+// re-reading every product per open; every product/stock writer — including
+// updateProduct below — busts that cache. Cached Dates come back as strings.
 export async function listProducts(ctx: MobileContext): Promise<ProductRow[]> {
   const symbol = symbolOf(ctx);
-  const rows = await withTenant(ctx.tenantId, (db) =>
-    db.product.findMany({ where: { status: { not: "archived" } }, orderBy: { name: "asc" } }),
+  const rows = (await loadCatalogRows(ctx.tenantId))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return rows.map((r) =>
+    toRow(dbProductToStorefront(r as DbProductRow, symbol), new Date(r.updatedAt), symbol),
   );
-  return rows.map((r) => toRow(dbProductToStorefront(r as DbProductRow, symbol), r.updatedAt, symbol));
 }
 
 export type ProductUpdateOutcome =

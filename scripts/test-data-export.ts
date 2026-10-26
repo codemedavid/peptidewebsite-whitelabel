@@ -508,7 +508,7 @@ check("the sidebar registers Export My Data as owner-only", () => {
 
 check("AdminPage routes the export view to its panel", () => {
   const p = src("src/storefront/admin/AdminPage.tsx");
-  assert.ok(/\| "export"/.test(p), "the View union knows the view");
+  assert.ok(/const VIEWS = \[[\s\S]*?"export",[\s\S]*?\]/.test(p), "the View union knows the view");
   assert.ok(/AdminDataExport/.test(p), "the panel is rendered");
 });
 

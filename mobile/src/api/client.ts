@@ -178,8 +178,15 @@ export type UploadFile = { uri: string; name: string; type: string };
 /**
  * POST one file as multipart/form-data through the same auth + refresh path
  * as `api`. Never retried automatically (a POST), with a longer timeout.
+ * `fields` ride alongside the file as plain text parts.
  */
-export async function apiUpload<T>(path: string, field: string, file: UploadFile, signal?: AbortSignal): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  field: string,
+  file: UploadFile,
+  signal?: AbortSignal,
+  fields?: Record<string, string>,
+): Promise<T> {
   // Expo's global fetch (expo/fetch) can't send React Native's { uri } file
   // part — it throws before the request leaves the phone, which surfaced as
   // "Can't reach the server". It serializes a part with name/type + bytes().
@@ -190,6 +197,7 @@ export async function apiUpload<T>(path: string, field: string, file: UploadFile
     throw new ApiError("invalid_input", "Couldn't read that photo. Please try another one.", 0);
   }
   const form = new FormData();
+  for (const [key, value] of Object.entries(fields ?? {})) form.append(key, value);
   form.append(field, { name: file.name, type: file.type, bytes: async () => bytes } as unknown as Blob);
   return api<T>(path, { method: "POST", form, timeoutMs: UPLOAD_TIMEOUT_MS, signal });
 }

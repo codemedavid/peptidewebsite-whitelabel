@@ -46,7 +46,9 @@ console.log("Header — logo mark is gated on headerShowLogo !== false");
   // The logo <img> and the letter-tile fallback must both sit behind the gate:
   // find the gate and ensure the logo-mark markup follows within the same block.
   const gateIdx = header.search(/brand\.headerShowLogo\s*!==\s*false/);
-  const after = gateIdx >= 0 ? header.slice(gateIdx, gateIdx + 400) : "";
+  // The gated block runs from the gate to the brand-text toggle that follows it.
+  const endIdx = header.indexOf("brand.headerShowBrand", gateIdx);
+  const after = gateIdx >= 0 ? header.slice(gateIdx, endIdx > gateIdx ? endIdx : gateIdx + 800) : "";
   check("logo img sits behind the gate", /brand\.logoUrl/.test(after), after.slice(0, 80));
   check("letter-tile fallback sits behind the gate", /site-header__logo-mark/.test(after));
 }

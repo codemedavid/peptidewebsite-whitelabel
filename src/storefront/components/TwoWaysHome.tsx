@@ -11,7 +11,7 @@
 // the look while any tenant with the layout on gets the same home. The
 // Header/Footer/cart drawer are owned by the storefront Shell around this.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { imageUrl } from "@/lib/media/image-url";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
@@ -34,13 +34,20 @@ import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { resolveProductImage } from "@/lib/storefront/product-image";
 import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 import { ShareProductButton } from "./ShareProductButton";
+import { ProductCard } from "./Catalog";
+import { isOnHandBlocked } from "@/lib/storefront/group-buy";
 
 export function TwoWaysHome({
   brand,
   onCheckout,
   onOpenGroupBuy,
+  hero,
 }: {
   brand: Brand;
+  /** The store's own hero (brand.twoWaysHero === "store"). Rendered above the
+   *  560px column, in place of the built-in text hero; `false`/`null` = no hero,
+   *  omitted = the built-in hero. */
+  hero?: ReactNode;
   /** Open the cart/checkout drawer (owned by the storefront shell). */
   onCheckout: () => void;
   /** Navigate to the dedicated group-buy page (the open round). */
@@ -84,15 +91,21 @@ export function TwoWaysHome({
   const qtyOf = (id: string) => cart.filter((c) => baseProductId(c) === id).length;
 
   return (
+    <>
+    {/* The store's own hero sits OUTSIDE the 560px column so it keeps the full
+        width it has on every other layout. */}
+    {hero}
     <div className="sf-twh" data-testid="two-ways-home">
       {/* Hero */}
-      <header className="sf-twh__hero">
-        <h1 className="sf-twh__hero-title font-display">
-          <span>{heroLine1}</span>
-          <span className="sf-twh__hero-em">{heroLine2}</span>
-        </h1>
-        <p className="sf-twh__hero-sub">{heroSub}</p>
-      </header>
+      {hero === undefined && (
+        <header className="sf-twh__hero">
+          <h1 className="sf-twh__hero-title font-display">
+            <span>{heroLine1}</span>
+            <span className="sf-twh__hero-em">{heroLine2}</span>
+          </h1>
+          <p className="sf-twh__hero-sub">{heroSub}</p>
+        </header>
+      )}
 
       {/* Ways to order — one card per way the store actually offers. The
           heading comes from the view-model so a one-way store never claims two. */}
@@ -185,6 +198,23 @@ export function TwoWaysHome({
               ? "Nothing on hand right now — everything is in the open group buy."
               : "Nothing on hand right now — follow us for the next drop."}
           </p>
+        ) : brand.twoWaysOnHandStyle === "cards" ? (
+          // The catalog's own cards — big photo, Card Studio design, and the
+          // same on-hand gate / closed-store rules as the Products page.
+          <div className="catalog__grid sf-twh__cards" data-cd-grid={brand.cardDesign?.layout || undefined}>
+            {view.onHand.lines.map((line) => (
+              <ProductCard
+                key={line.product.id}
+                product={line.product}
+                design={brand.cardDesign}
+                defaultImage={brand.defaultProductImage}
+                gbBlocked={isOnHandBlocked(line.product.id, brand.groupBuyGate)}
+                storeClosed={storeClosed}
+                storeName={brand.name}
+                onAdd={(qty, variation) => addToCart(line.product, qty, variation)}
+              />
+            ))}
+          </div>
         ) : (
           <ul className="sf-twh__list">
             {view.onHand.lines.map((line) => (
@@ -270,6 +300,7 @@ export function TwoWaysHome({
 
       <style>{twhCss}</style>
     </div>
+    </>
   );
 }
 

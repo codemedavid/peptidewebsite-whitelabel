@@ -10,11 +10,11 @@ import { stripInlineMedia } from "@/lib/storefront/inline-media";
 // branding/settings mutations can revalidateTag(`tenant:<id>`) and the next
 // request reads fresh data without paying for a full DB round-trip first.
 //
-// One hour, not five minutes: the branding row is 20–84kB of JSON and was a
+// Six hours, not five minutes: the branding row is 20–84kB of JSON and was a
 // top source of Supabase egress. Every writer of these columns (branding,
 // settings, name/slug/status/plan, orderNumberFormat) busts `tenant:<id>`, so
 // the TTL only bounds out-of-band edits (direct-Prisma scripts, SQL console).
-const TENANT_ROW_REVALIDATE_SECONDS = 3600;
+const TENANT_ROW_REVALIDATE_SECONDS = 6 * 3600;
 
 const loadTenant = (tenantId: string) =>
   unstable_cache(

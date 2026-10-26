@@ -79,6 +79,12 @@ check("lowercases so casing never blocks a real owner", () => {
   assert.equal(normalizeLoginEmail("Owner@Gmail.COM"), "owner@gmail.com");
 });
 
+check("drops whitespace INSIDE the address too (a pasted space or NBSP)", () => {
+  assert.equal(normalizeLoginEmail("owner@ gmail.com"), "owner@gmail.com");
+  assert.equal(normalizeLoginEmail("owner@ gmail.com"), "owner@gmail.com");
+  assert.equal(normalizeLoginEmail("owner @gmail.com\t"), "owner@gmail.com");
+});
+
 check("non-string input collapses to empty (never throws)", () => {
   assert.equal(normalizeLoginEmail(undefined), "");
   assert.equal(normalizeLoginEmail(null), "");

@@ -8,6 +8,7 @@
 // `normalizeProductInput → productToDbWrite` can be asserted end to end without
 // a DB or a session (see scripts/test-product-add-gates.ts).
 
+import { normalizeVialsPerKit } from "@/lib/storefront/gb-moq-kits";
 import { toProductClass } from "@/lib/storefront/product-class";
 import { normalizeHostedImageUrl } from "@/lib/storefront/product-image";
 import { cleanExtraImages } from "@/lib/storefront/product-photos";
@@ -117,6 +118,9 @@ export function normalizeProductInput(input: unknown): Product {
     // unrelated edit in the product form silently put the listing back on the
     // stock gate — which for a made-to-order store means back to "Sold out".
     madeToOrder: o.madeToOrder === true,
+    // Vials per supplier kit (group-buy-only stores). Round-tripped for the same
+    // reason as madeToOrder: every admin save funnels through here.
+    vialsPerKit: normalizeVialsPerKit(o.vialsPerKit),
     // The editor's "Order ratio class" tag. Narrowed to a real ProductClass, so
     // an unknown value becomes undefined and Order Ratio Control falls back to
     // its name heuristic — never passed through raw. Dropping this key silently

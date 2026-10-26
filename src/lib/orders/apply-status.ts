@@ -22,6 +22,7 @@ import { after } from "next/server";
 
 import { withTenant } from "@/lib/db/tenant-client";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
+import { revalidateOrders } from "@/lib/orders/order-cache";
 import { planStatusChange } from "@/lib/storefront/order-status";
 import { applyOrderStockMove } from "@/lib/orders/stock-move-tx";
 import {
@@ -159,6 +160,7 @@ export async function applyOrderStatusChange(
     };
   }
   if (!result?.row) return { ok: false, error: "Order not found." };
+  revalidateOrders(tenantId);
   const order = dbOrderToStorefront(result.row as DbOrderRow);
 
   // Fulfillment moved (e.g. confirmed/shipped) → emit order_status_changed so the

@@ -98,13 +98,13 @@ async function customerRecipients(tenantId: string, customerIds: string[], anyMe
 }
 
 /** The store's phones: owner + staff with the Community module. */
-async function storeRecipients(tenantId: string): Promise<Recipient[]> {
+async function storeRecipients(tenantId: string, moduleKey = "community"): Promise<Recipient[]> {
   const out: Recipient[] = [];
   for (const d of await liveDevices(tenantId)) {
     const s = decodeSubject(d.session.subject);
     if (!s || s.kind === "customer") continue;
     const actor = await resolveActor(tenantId, s);
-    if (actor && actor.stamp === d.session.credentialStamp && isModuleAllowed(actor.actor, "community")) out.push(toRecipient(d));
+    if (actor && actor.stamp === d.session.credentialStamp && isModuleAllowed(actor.actor, moduleKey)) out.push(toRecipient(d));
   }
   return out;
 }
@@ -285,5 +285,43 @@ export async function notifySafetyFlag(args: { tenantId: string; storeName: stri
     });
   } catch (e) {
     logFailure("safety", e);
+  }
+}
+
+/**
+ * The store decided a paid group-buy join request: tell the customer's phones.
+ * Like order updates, it reaches them whether or not they're in the community —
+ * it's about their own money. Tap → the store DM thread (or the group buy).
+ */
+export async function notifyGroupBuyJoinUpdate(args: {
+  tenantId: string;
+  customerId: string;
+  conversationId: string | null;
+  roundId: string;
+  body: string;
+  storeName: string;
+}): Promise<void> {
+  try {
+    await send(args.tenantId, await customerRecipients(args.tenantId, [args.customerId], true), {
+      title: args.storeName,
+      body: args.body,
+      data: { type: "gb_join_update", roundId: args.roundId, ...(args.conversationId ? { threadId: args.conversationId } : {}) },
+    });
+  } catch (e) {
+    logFailure("gb_join_update", e);
+  }
+}
+
+/** A paid join request is waiting: the store team members who hold `groupbuys`.
+ *  The push is only a pointer — no amount, reference or receipt. */
+export async function notifyGroupBuyJoinRequest(args: { tenantId: string; storeName: string; customerName: string; roundName: string }): Promise<void> {
+  try {
+    await send(args.tenantId, await storeRecipients(args.tenantId, "groupbuys"), {
+      title: args.storeName,
+      body: `💳 ${firstName(args.customerName) || "A customer"} paid to join ${args.roundName}. Tap to review.`,
+      data: { type: "gb_join_request" },
+    });
+  } catch (e) {
+    logFailure("gb_join_request", e);
   }
 }

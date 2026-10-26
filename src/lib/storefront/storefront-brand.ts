@@ -3,11 +3,9 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { getTenantContext } from "@/lib/tenant/context";
 import { withTenant } from "@/lib/db/tenant-client";
-import { isDemoMode, getDemoProducts, getDemoStoreProducts, getDemoStoreOrders } from "@/lib/demo/fixtures";
-import { orderCountsAsDemand, DEMAND_EXCLUDED_STATUS_LIST } from "@/lib/storefront/group-buy";
+import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { normalizeOrderNumberFormat } from "@/lib/orders/order-number-format";
-import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
 import { dbProductToStorefront, type DbProductRow } from "@/lib/storefront/product-mapping";
 import { resolveShowReviews, resolveEntitledPage, newModulesFor } from "@/storefront/visibility";
 import { getFeatureRegistry } from "@/lib/platform/feature-registry-server";
@@ -17,9 +15,11 @@ import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import { pickFeatureSpotlight } from "@/lib/features/feature-spotlight";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
 import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
+import { normalizeHeroCountdown, resolveHeroCountdown } from "@/lib/storefront/hero-countdown";
 import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
+import { normalizeTimeline } from "@/lib/storefront/timeline";
 import { normalizeReviews, normalizeReviewDescStyle } from "@/lib/storefront/reviews";
 import { ARTICLE_LIMITS, articleFromRow, summarizeArticle } from "@/lib/storefront/articles";
 import { normalizeAssessmentConfig } from "@/lib/storefront/assessment";
@@ -27,8 +27,12 @@ import { getTrialState } from "@/lib/trial/trial-info";
 import { brandTrialFrom, businessExclusiveLocked, isTrialPaused } from "@/lib/trial/trial-state";
 import { getSubscriptionState, getSubscriptionBilling } from "@/lib/subscription/subscription-info";
 import { brandSubscriptionFrom } from "@/lib/subscription/subscription-state";
-import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
-import { resolveHomeLayout } from "@/lib/storefront/two-ways-home";
+import { resolveGroupBuyCaps, loadGroupBuysForDisplay } from "@/lib/storefront/group-buy-server";
+import {
+  normalizeTwoWaysHero,
+  normalizeTwoWaysOnHandStyle,
+  resolveHomeLayout,
+} from "@/lib/storefront/two-ways-home";
 import {
   TWO_WAYS_MODE_DEFAULT,
   normalizeTwoWaysMode,
@@ -42,6 +46,9 @@ import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
+import { applyGroupBuyAccess } from "@/lib/storefront/gb-access.server";
+import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
+import { getRoundDemand } from "@/lib/storefront/gb-round-demand";
 import { resellerCapsFrom } from "@/lib/storefront/reseller-caps";
 import {
   readResellerCredential,
@@ -72,6 +79,11 @@ export type StorefrontBrandOptions = {
   slug: string;
   /** Does THIS request hold a verified reseller session at `version`? */
   isResellerUnlocked: (version: number) => Promise<boolean>;
+  /** Who is viewing, for paid group-buy access (gb-access.server.ts). Required
+   *  on purpose: a caller must say whether it serves a shopper or a store admin,
+   *  so a new public surface can't ship a paid round's prices by omission.
+   *  Called lazily — only when the governing round actually requires paid join. */
+  groupBuyViewer: () => Promise<GroupBuyViewer>;
 };
 
 /**
@@ -83,7 +95,7 @@ export type StorefrontBrandOptions = {
  * Cached rows come back with createdAt as a string; dbProductToStorefront
  * accepts both.
  */
-const loadCatalogRows = (tenantId: string) =>
+export const loadCatalogRows = (tenantId: string) =>
   unstable_cache(
     () =>
       withTenant(tenantId, (db) =>
@@ -93,9 +105,30 @@ const loadCatalogRows = (tenantId: string) =>
         }),
       ),
     ["storefront-catalog-rows", tenantId],
-    // 1h: every product/stock writer busts the tag; the timer only catches
+    // 6h: every product/stock writer busts the tag; the timer only catches
     // direct-DB scripts that can't.
-    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:products`], revalidate: 3600 },
+    { tags: [`tenant:${tenantId}`, `tenant:${tenantId}:products`], revalidate: 21600 },
+  )();
+
+/**
+ * Published article SUMMARIES, cached per tenant. Bodies are read only on a
+ * miss (the summary's read time and derived excerpt come from them) and never
+ * leave this cache; article writers bust `tenant:<id>` via revalidateTenant.
+ */
+const loadArticleSummaries = (tenantId: string) =>
+  unstable_cache(
+    async () => {
+      const rows = await withTenant(tenantId, (db) =>
+        db.blogPost.findMany({
+          where: { status: "published" },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          take: ARTICLE_LIMITS.listed,
+        }),
+      );
+      return rows.map((row) => summarizeArticle(articleFromRow(row)));
+    },
+    ["storefront-article-summaries", tenantId],
+    { tags: [`tenant:${tenantId}`], revalidate: 21600 },
   )();
 
 export async function loadStorefrontBrand(
@@ -108,24 +141,16 @@ export async function loadStorefrontBrand(
   // Entitlements resolve ONCE here; `has` replaces a dozen hasFeature calls,
   // which (outside a React render, e.g. the app API) each re-read the cache.
   const groupBuyCapsP = resolveGroupBuyCaps(tenantId);
-  const groupBuysP = groupBuyCapsP.then((caps) => (caps.enabled ? loadGroupBuys(tenantId, slug) : []));
+  const groupBuysP = groupBuyCapsP.then((caps) => (caps.enabled ? loadGroupBuysForDisplay(tenantId, slug) : []));
   const productRowsP = isDemoMode() ? Promise.resolve(null) : loadCatalogRows(tenantId);
   // Awaited further down; a failure here must not surface as an unhandled
   // rejection if an earlier await throws first.
-  // Published article SUMMARY rows, read in parallel with the catalog. Bodies
+  // Published article summaries, read in parallel with the catalog. Bodies
   // stay out of the storefront payload — a post is fetched when it is opened.
-  const articleRowsP = isDemoMode()
-    ? Promise.resolve([])
-    : withTenant(tenantId, (db) =>
-        db.blogPost.findMany({
-          where: { status: "published" },
-          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-          take: ARTICLE_LIMITS.listed,
-        }),
-      );
+  const articlesP = isDemoMode() ? Promise.resolve([]) : loadArticleSummaries(tenantId);
   groupBuysP.catch(() => undefined);
   productRowsP.catch(() => undefined);
-  articleRowsP.catch(() => undefined);
+  articlesP.catch(() => undefined);
   const [{ tenant, branding, settings }, entitlements, trialState, subscriptionState, subscriptionBilling, registry] =
     await Promise.all([
       getTenantContext(tenantId),
@@ -274,8 +299,7 @@ export async function loadStorefrontBrand(
   // page. A failed read degrades to "no articles" rather than failing the store.
   const articlesEntitled = has(FEATURES.SITE_BLOG);
   brand.articlesEntitled = articlesEntitled;
-  const articleRows = articlesEntitled ? await articleRowsP.catch(() => []) : [];
-  brand.articles = articleRows.map((row) => summarizeArticle(articleFromRow(row)));
+  brand.articles = articlesEntitled ? await articlesP.catch(() => []) : [];
   brand.showPageArticles =
     resolveEntitledPage(articlesEntitled, config.showPageArticles) && brand.articles.length > 0;
 
@@ -345,6 +369,14 @@ export async function loadStorefrontBrand(
   brand.trackNoteEntitled = trackNoteEntitled;
   const savedTrackNote = normalizeTrackNote(config.trackNote);
   brand.trackNote = trackNoteEntitled ? savedTrackNote : { ...savedTrackNote, enabled: false };
+
+  // Timeline (operator grant, default OFF): an unentitled tenant keeps its saved
+  // steps but the public timeline is forced off and the editor is hidden
+  // (visibility.ts) — saveTimelineAction re-checks the same grant on write.
+  const timelineEntitled = has(FEATURES.STORE_TIMELINE);
+  brand.timelineEntitled = timelineEntitled;
+  const savedTimeline = normalizeTimeline(config.timeline);
+  brand.timeline = timelineEntitled ? savedTimeline : { ...savedTimeline, enabled: false };
 
   // Trial system: project the JSON-safe trial window (or nothing) so the store
   // admin can render the countdown banner, lock the Business-exclusive tiles and
@@ -419,6 +451,10 @@ export async function loadStorefrontBrand(
   // listings and drops the multi-vial kits underneath (K Glow). Unset keeps
   // today's catalog order for every other store; nothing is ever hidden.
   brand.onHandOrder = normalizeOnHandOrder(config.onHandOrder);
+  // Two-ways hero — "store" keeps the store's own hero on the two-ways home.
+  brand.twoWaysHero = normalizeTwoWaysHero(config.twoWaysHero);
+  // "cards" swaps the compact on-hand rows for the catalog's photo cards.
+  brand.twoWaysOnHandStyle = normalizeTwoWaysOnHandStyle(config.twoWaysOnHandStyle);
 
   // Owner-editable Group Buy copy ("How group buys work" + terms line) — always
   // resolved (not gated on the GB module) because the two-ways home renders the
@@ -427,6 +463,7 @@ export async function loadStorefrontBrand(
   // The app's live strip settings (on/off + owner text); the shop catalog
   // renders them against the live round (lib/storefront/gb-live-banner).
   brand.groupBuyLiveBanner = normalizeGroupBuyLiveBanner(config.groupBuyLiveBanner);
+  brand.heroCountdownConfig = normalizeHeroCountdown(config.heroCountdown);
 
   brand.groupBuyAllowOnHand = config.groupBuyAllowOnHand !== false;
   // Per-way management: a store may sell only one way (Dragon Peptides is
@@ -449,36 +486,18 @@ export async function loadStorefrontBrand(
     // Public banner + "Explore GB #N" scope filter for the live run. Purely
     // presentational — the on-hand gate above owns what can actually be bought.
     brand.groupBuyBanner = buildGroupBuyBanner(groupBuys, brand.groupBuyCaps) ?? undefined;
+    // Hero "closes in / opens in" timer — owner opt-in, target derived from
+    // the rounds (lib/storefront/hero-countdown).
+    brand.heroCountdown = resolveHeroCountdown(config.heroCountdown, groupBuys, brand.groupBuyCaps) ?? undefined;
     // Slots filled = the round's demand orders (everything except cancelled /
     // refunded), which the pure banner builder can't load. Drives the Group Buy
     // page's "N of GOAL slots filled" progress bar (two-ways.slotProgress).
     const bannerId = brand.groupBuyBanner?.id;
     if (bannerId) {
-      let filled = 0;
-      try {
-        if (isDemoMode()) {
-          filled = activeOrders(getDemoStoreOrders(slug)).filter(
-            (o) => o.groupBuyId === bannerId && orderCountsAsDemand(o.status),
-          ).length;
-        } else {
-          filled = await withTenant(tenantId, (db) =>
-            db.storefrontOrder.count({
-              where: {
-                // A trashed order is not demand — it must not fill the bar.
-                ...ACTIVE_ORDERS_WHERE,
-                tenantId,
-                groupBuyId: bannerId,
-                // Same demand definition the demo path uses (orderCountsAsDemand)
-                // — one shared list so the two never drift.
-                status: { notIn: [...DEMAND_EXCLUDED_STATUS_LIST] },
-              },
-            }),
-          );
-        }
-      } catch {
-        filled = 0; // progress bar just shows 0 — never block the storefront on it
-      }
-      brand.groupBuyBanner = { ...brand.groupBuyBanner!, filled };
+      // One cached read serves both numbers: the slot bar's order count, and
+      // the per-product vial totals behind the kit progress (gb-round-demand).
+      const { filled, kitVials } = await getRoundDemand(tenantId, bannerId, slug);
+      brand.groupBuyBanner = { ...brand.groupBuyBanner!, filled, kitVials };
     }
 
     // EFFECTIVE per-way states: the owner's setting folded with the live-round
@@ -551,6 +570,30 @@ export async function loadStorefrontBrand(
   const madeToOrderEntitled = has(FEATURES.STORE_MADE_TO_ORDER);
   brand.madeToOrderEntitled = madeToOrderEntitled;
   products = stripMadeToOrder(products, madeToOrderEntitled);
+
+  // Paid group-buy access — LAST of the strips, so nothing after it can put a
+  // round's products or prices back. A viewer locked out of the governing round
+  // gets the catalog without that round (no gb listings, no gbPrice anywhere),
+  // no banner, and the teaser instead. No-op without groupbuy.paid_access.
+  // The banner is dropped ONLY together with the round's products (the same
+  // access result), so nothing spills onto the on-hand shelf — the one
+  // exception test:two-ways-home allows, between these markers.
+  // gb-access:begin
+  if (brand.groupBuyCaps.enabled) {
+    const access = await applyGroupBuyAccess({
+      tenantId,
+      rounds: await groupBuysP,
+      caps: brand.groupBuyCaps,
+      viewer: opts.groupBuyViewer,
+      products,
+    });
+    products = access.products;
+    if (access.teaser) {
+      delete brand.groupBuyBanner;
+      brand.groupBuyTeaser = access.teaser;
+    }
+  }
+  // gb-access:end
 
   // How many group-buy listings exist at all, independent of any round. Between
   // rounds there is no round scope to read, so the productType "gb" tag is the

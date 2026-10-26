@@ -888,6 +888,15 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* background-clip:text only paints inside the span's box, and italic glyphs
+     lean past it — the last letter of each wrapped line got sliced ("handlea").
+     Pad the box out and give every line fragment its own padding (clone).
+     inline-block so a smaller line-2 size (Hero → line 2 size) gets its own
+     line-height and balanced wrap instead of the headline's tall strut. */
+  display: inline-block;
+  padding-inline: 0.04em 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .sf-root .hero__sub {
@@ -1894,6 +1903,160 @@
 }
 @media (max-width: 520px) {
   .sf-root .track-note__grid { grid-template-columns: 1fr; }
+}
+
+/* Owner-written Timeline (lib/storefront/timeline). "card" = Track page,
+   "hero" = compact stepper under the hero copy. Vertical by default; the hero
+   variant turns horizontal on wide screens. */
+.sf-root .sf-timeline {
+  margin: 20px 0 24px;
+  background: var(--brand-surface);
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: var(--shadow-sm);
+  color: var(--brand-text);
+  text-align: left;
+}
+.sf-root .sf-timeline__title {
+  margin: 0 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-text-muted);
+}
+.sf-root .sf-timeline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sf-root .sf-timeline__step {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+.sf-root .sf-timeline__marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.sf-root .sf-timeline__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-border);
+  background: var(--brand-surface);
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.sf-root .sf-timeline__dot svg { width: 14px; height: 14px; }
+.sf-root .sf-timeline__line {
+  flex: 1;
+  width: 2px;
+  min-height: 14px;
+  margin: 3px 0;
+  background: var(--brand-border);
+}
+.sf-root .sf-timeline__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px 0 18px;
+}
+.sf-root .sf-timeline__step:last-child .sf-timeline__body { padding-bottom: 0; }
+.sf-root .sf-timeline__label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.sf-root .sf-timeline__badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--brand-button-text);
+  background: var(--brand-accent);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+.sf-root .sf-timeline__date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-accent);
+}
+.sf-root .sf-timeline__note {
+  font-size: 13px;
+  color: var(--brand-text-muted);
+  overflow-wrap: anywhere;
+}
+.sf-root .sf-timeline__step.is-done .sf-timeline__dot,
+.sf-root .sf-timeline__step.is-current .sf-timeline__dot {
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+  color: var(--brand-button-text);
+}
+.sf-root .sf-timeline__step.is-done .sf-timeline__line {
+  background: var(--brand-accent);
+}
+.sf-root .sf-timeline__step.is-current .sf-timeline__dot {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand-accent) 22%, transparent);
+}
+.sf-root .sf-timeline__step.is-upcoming .sf-timeline__label {
+  color: var(--brand-text-muted);
+  font-weight: 500;
+}
+.sf-root .sf-timeline__step.is-upcoming .sf-timeline__date {
+  color: var(--brand-text-muted);
+}
+
+/* Hero placement: sits under the hero content, full container width. */
+.sf-root .hero__timeline-below {
+  padding-top: clamp(8px, 2vw, 16px);
+  padding-bottom: clamp(16px, 3vw, 32px);
+  position: relative;
+  z-index: 1;
+}
+.sf-root .sf-timeline--hero { margin: 0; }
+@media (min-width: 720px) {
+  .sf-root .sf-timeline--hero .sf-timeline__list {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+  }
+  .sf-root .sf-timeline--hero .sf-timeline__step {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sf-root .sf-timeline--hero .sf-timeline__marker {
+    flex-direction: row;
+    width: 100%;
+  }
+  .sf-root .sf-timeline--hero .sf-timeline__line {
+    width: auto;
+    height: 2px;
+    min-height: 0;
+    margin: 0 6px;
+  }
+  .sf-root .sf-timeline--hero .sf-timeline__body {
+    padding: 0 12px 0 0;
+  }
+  .sf-root .sf-timeline--hero .sf-timeline__label { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-timeline__dot { transition: none; }
 }
 
 /* Customer's own recent orders — one-tap tracking (store.myOrders). */
@@ -6513,6 +6676,45 @@
   backdrop-filter: blur(6px);
 }
 
+/* ---------- Layout: text (no image) ---------- */
+/* ProductCard renders no media box at all. A thin accent rule in the button
+   color stands in for the photo as the card's visual anchor, and the badge
+   leaves its photo corner to sit in the flow above the name. */
+.sf-root .product-card[data-cd-layout="text"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--cd-btn);
+  pointer-events: none;
+}
+.sf-root .product-card[data-cd-layout="text"] .product-card__badge {
+  position: static;
+  align-self: flex-start;
+  margin: calc(var(--cd-pad) + 4px) var(--cd-pad) 0;
+}
+.sf-root .product-card[data-cd-layout="text"] .product-card__body {
+  padding-top: calc(var(--cd-pad) + 4px);
+}
+.sf-root .product-card[data-cd-layout="text"]:not([data-cd-badge="hidden"])
+  .product-card__badge + .product-card__body {
+  padding-top: calc(var(--cd-pad) * 0.6);
+}
+/* Keep a long name clear of the share icon pinned top-right. */
+.sf-root .product-card[data-cd-layout="text"] .product-card__name {
+  padding-right: 34px;
+}
+/* The outline badge is white-on-scrim, made for sitting over a photo — on a
+   plain card surface it becomes an outlined chip in the card's text color. */
+.sf-root .product-card[data-cd-layout="text"][data-cd-badge="outline"]
+  .product-card__badge:not(.product-card__badge--sale) {
+  background: transparent;
+  border-color: currentColor;
+  color: var(--cd-heading, var(--brand-main));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* ---------- Responsive: designed cards ---------- */
 /* The card is its own query container — shrink type/padding with the card,
    matching what the classic card does via viewport media queries. */
@@ -9287,6 +9489,150 @@
 .sf-root .adm-bar__fill[data-tone="low"] { background: var(--adm-warn); }
 .sf-root .adm-bar__fill[data-tone="out"] { background: var(--adm-bad); }
 
+/* ── Group buy panel (replaces Stock levels on GB stores) ── */
+.sf-root .adm-gb[data-mode="live"] {
+  border-color: color-mix(in srgb, var(--brand-accent) 35%, var(--adm-line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-accent) 6%, var(--brand-surface)) 0, var(--brand-surface) 120px);
+}
+.sf-root .adm-gb__heading { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sf-root .adm-gb__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.sf-root .adm-gb[data-mode="live"] .adm-gb__eyebrow { color: var(--adm-good); }
+.sf-root .adm-gb[data-mode="live"] .adm-gb__eyebrow::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--adm-good) 20%, transparent);
+}
+.sf-root .adm-gb__timing { font-size: 12px; font-weight: 600; }
+.sf-root .adm-gb__timing[data-tone="neutral"] { color: var(--brand-text-muted); }
+
+/* The approval shortcut — the loudest thing in the panel on purpose. */
+.sf-root .adm-gb__joins {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--adm-bad) 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--adm-bad) 8%, var(--brand-surface));
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s, transform .14s;
+}
+.sf-root .adm-gb__joins:hover { background: color-mix(in srgb, var(--adm-bad) 13%, var(--brand-surface)); }
+.sf-root .adm-gb__joins:active { transform: scale(0.99); }
+.sf-root .adm-gb__joins:focus-visible,
+.sf-root .adm-gb__stat--action:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .adm-gb__joins-count {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 30px; height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--adm-bad);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sf-root .adm-gb__joins-body { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sf-root .adm-gb__joins-title { font-size: 13px; font-weight: 700; color: var(--brand-text); }
+.sf-root .adm-gb__joins-sub { font-size: 11px; color: var(--brand-text-muted); }
+.sf-root .adm-gb__joins-cta { flex: none; font-size: 12px; font-weight: 700; color: var(--adm-bad); }
+
+.sf-root .adm-gb__stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+}
+.sf-root .adm-gb__stats > li { display: flex; }
+.sf-root .adm-gb__stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 12px;
+  border: var(--brand-border-width) solid var(--adm-line);
+  border-radius: 12px;
+  background: var(--brand-surface);
+  font-family: inherit;
+  text-align: left;
+  color: var(--brand-text);
+}
+.sf-root .adm-gb__stat--action { cursor: pointer; transition: background .14s, border-color .14s; }
+.sf-root .adm-gb__stat--action:hover { background: var(--adm-hover); border-color: currentColor; }
+.sf-root .adm-gb__stat-label { font-size: 10.5px; font-weight: 600; color: var(--brand-text-muted); }
+.sf-root .adm-gb__stat-value {
+  font-family: var(--brand-heading-font);
+  font-size: 24px;
+  line-height: 1;
+}
+.sf-root .adm-gb__stat-sub { font-size: 10.5px; color: var(--adm-faint); }
+/* .adm-gb__stat resets color after the global [data-tone] rules, so the
+   action tiles re-apply their tone to the number only. */
+.sf-root .adm-gb__stat--action[data-tone="good"] .adm-gb__stat-value { color: var(--adm-good); }
+.sf-root .adm-gb__stat--action[data-tone="warn"] .adm-gb__stat-value { color: var(--adm-warn); }
+.sf-root .adm-gb__stat--action[data-tone="bad"] .adm-gb__stat-value { color: var(--adm-bad); }
+
+.sf-root .adm-gb__kits { display: flex; flex-direction: column; gap: 10px; }
+.sf-root .adm-gb__kits-title {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.sf-root .adm-gb__kit-note { flex: none; font-size: 11px; font-weight: 600; color: var(--brand-text-muted); }
+.sf-root .adm-gb__kit-note[data-tone="full"] { color: var(--adm-good); }
+.sf-root .adm-gb__kit-note[data-tone="close"] { color: var(--brand-accent); }
+.sf-root .adm-gb__kit-note[data-tone="risk"] { color: var(--adm-warn); }
+.sf-root .adm-bar__fill[data-tone="kit-full"] { background: var(--adm-good); }
+.sf-root .adm-bar__fill[data-tone="kit-close"] { background: var(--brand-accent); }
+.sf-root .adm-bar__fill[data-tone="kit-filling"] { background: color-mix(in srgb, var(--brand-accent) 55%, var(--brand-surface)); }
+.sf-root .adm-bar__fill[data-tone="kit-risk"] { background: var(--adm-warn); }
+
+.sf-root .adm-gb__supplier {
+  margin: 0;
+  padding-top: 11px;
+  border-top: 1px dashed var(--adm-line);
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+.sf-root .adm-gb__supplier strong { color: var(--brand-text); }
+.sf-root .adm-gb__next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 11px;
+  border-top: 1px dashed var(--adm-line);
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+.sf-root .adm-gb__next strong { color: var(--brand-text); }
+@media (max-width: 520px) {
+  .sf-root .adm-gb__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-root .adm-gb__joins-cta { display: none; }
+}
+
 /* ── Needs attention ─────────────────────────────────────── */
 .sf-root .adm-alert {
   display: flex;
@@ -10585,3 +10931,111 @@
 .sf-root .admin-table tbody tr.is-dragging { opacity: .45; }
 .sf-root .admin-table tbody tr.is-drop-above td { box-shadow: inset 0 2px 0 var(--brand-main); }
 .sf-root .admin-table tbody tr.is-drop-below td { box-shadow: inset 0 -2px 0 var(--brand-main); }
+
+/* ---------- HERO GROUP-BUY COUNTDOWN ----------
+   Owner opt-in (Group Buys → Hero countdown). Four tiles in the brand's own
+   palette; tabular digits so the row never jitters as seconds tick.
+------------------------------------------------- */
+.sf-root .hero-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+.sf-root .hero[data-variant="split"] .hero-countdown,
+.sf-root .hero[data-variant="editorial"] .hero-countdown { align-items: flex-start; }
+.sf-root .hero-countdown__heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand-main);
+}
+.sf-root .hero-countdown__clock {
+  display: flex;
+  gap: clamp(6px, 1.4vw, 12px);
+}
+.sf-root .hero-countdown__unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: clamp(58px, 14vw, 78px);
+  padding: 10px 6px 8px;
+  background: var(--brand-surface);
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--brand-main) 45%, transparent);
+}
+.sf-root .hero-countdown__value {
+  font-family: var(--brand-heading-font);
+  font-size: clamp(24px, 4.4vw, 36px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-main);
+}
+.sf-root .hero-countdown__label {
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  /* Derived from the tenant's own text colour: --brand-text-muted is not set
+     per tenant, so the literal default would paint every store's labels pink. */
+  color: color-mix(in srgb, var(--brand-text) 60%, transparent);
+}
+.sf-root .hero-countdown[data-phase="opening"] .hero-countdown__value { color: var(--brand-accent); }
+.sf-root .hero__countdown-below {
+  display: flex;
+  justify-content: center;
+  padding-top: 18px;
+}
+.sf-root .hero[data-variant="spotlight"] .hero-countdown__heading { color: white; }
+
+/* ── Per-protocol links (protocol-link.ts) ───────────────────────────────────
+   The share icon in each protocol row's head, and the ring on the protocol a
+   /protocols/<key> link opened. Appended at the end for the same cascade
+   reason as the share-link block above. Covered by scripts/test-protocol-link.ts. */
+.sf-root .protocols__item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* Clears the sticky header when a link scrolls the row into view. */
+.sf-root .protocols__item { scroll-margin-top: 96px; }
+.sf-root .protocols__item[data-linked] {
+  border-color: color-mix(in srgb, var(--brand-accent) 55%, var(--brand-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 16%, transparent), var(--shadow-sm);
+}
+
+/* ── Group-buy kit progress (components/KitProgress.tsx) ─────────────────────
+   "7 of 10 vials — 3 more to complete the kit". The fill scales on the
+   compositor (transform), never width, so a re-render after an order animates
+   cheaply; a completed kit switches to the success tone. */
+.sf-root .kit-progress { display: grid; gap: 6px; margin-top: 10px; }
+.sf-root .kit-progress__track {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-button) 14%, transparent);
+}
+.sf-root .kit-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-button), var(--brand-button-2, var(--brand-button)));
+  transform-origin: left center;
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sf-root .kit-progress[data-complete] .kit-progress__fill { background: var(--brand-success, #16a34a); }
+.sf-root .kit-progress__label {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--brand-text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .kit-progress__fill { transition: none; }
+}

@@ -6,7 +6,8 @@ import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
 import { formatMoney } from "@/lib/storefront/currency";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
-import type { DashboardResponse } from "./contract";
+import { ordersTag } from "@/lib/orders/order-cache";
+import type { DashboardResponse, OrderSummary } from "./contract";
 import type { MobileContext } from "./auth";
 import { mobileCan } from "./branding";
 import { toOrderSummary } from "./order-view";
@@ -25,9 +26,10 @@ import { listProducts } from "./products";
 const STORE_UTC_OFFSET_MS = 8 * 60 * 60 * 1000; // Asia/Manila, no DST
 const RECENT = 5;
 const LOW_STOCK_ROWS = 5;
-/** The Home screen polls every 20s for new orders; low stock does not need to
- *  move that fast, and every stock writer busts `tenant:<id>` anyway. */
-const LOW_STOCK_REVALIDATE_SECONDS = 300;
+/** Outer bound only: every stock writer busts `tenant:<id>`. */
+const LOW_STOCK_REVALIDATE_SECONDS = 3600;
+/** Outer bound only — every order writer busts `ordersTag`. */
+const ORDER_STATS_REVALIDATE_SECONDS = 600;
 
 type LowStock = Pick<DashboardResponse, "lowStockCount" | "lowStock">;
 
@@ -59,35 +61,59 @@ export function startOfStoreDay(now: Date): Date {
   return new Date(midnightLocal - STORE_UTC_OFFSET_MS);
 }
 
-async function orderStats(ctx: MobileContext, withToday: boolean) {
-  return withTenant(ctx.tenantId, async (db) => {
-    const [counts, recent, today] = await Promise.all([
-      queueCounts(db),
-      db.storefrontOrder.findMany({ where: ACTIVE_ORDERS_WHERE, orderBy: { createdAt: "desc" }, take: RECENT }),
-      withToday
-        ? db.storefrontOrder.findMany({
-            where: {
-              ...ACTIVE_ORDERS_WHERE,
-              status: { not: "cancelled" },
-              createdAt: { gte: startOfStoreDay(new Date()) },
-            },
-          })
-        : Promise.resolve(null),
-    ]);
-    return { newOrders: counts.new, toFulfil: counts.toFulfil, recent, today };
-  });
-}
+type OrderStats = {
+  newOrders: number;
+  toFulfil: number;
+  recent: OrderSummary[];
+  today: OrderSummary[] | null;
+};
+
+/**
+ * The order half of Home, cached per tenant and store day. The app re-reads
+ * Home on a 20s poll from every open phone, so this was re-run ~180 times an
+ * hour per device; now it only re-reads after an order write busts
+ * `ordersTag`. Summaries (plain JSON) are cached, never raw rows.
+ */
+const orderStats = (ctx: MobileContext, withToday: boolean, currency: unknown) => {
+  const dayStart = startOfStoreDay(new Date());
+  return unstable_cache(
+    async (): Promise<OrderStats> =>
+      withTenant(ctx.tenantId, async (db) => {
+        const [counts, recent, today] = await Promise.all([
+          queueCounts(db),
+          db.storefrontOrder.findMany({ where: ACTIVE_ORDERS_WHERE, orderBy: { createdAt: "desc" }, take: RECENT }),
+          withToday
+            ? db.storefrontOrder.findMany({
+                where: {
+                  ...ACTIVE_ORDERS_WHERE,
+                  status: { not: "cancelled" },
+                  createdAt: { gte: dayStart },
+                },
+              })
+            : Promise.resolve(null),
+        ]);
+        const summarize = (r: unknown) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), currency);
+        return {
+          newOrders: counts.new,
+          toFulfil: counts.toFulfil,
+          recent: recent.map(summarize),
+          today: today?.map(summarize) ?? null,
+        };
+      }),
+    ["mobile-dashboard-orders", ctx.tenantId, dayStart.toISOString(), String(withToday), String(currency ?? "")],
+    { tags: [`tenant:${ctx.tenantId}`, ordersTag(ctx.tenantId)], revalidate: ORDER_STATS_REVALIDATE_SECONDS },
+  )();
+};
 
 export async function buildDashboard(ctx: MobileContext): Promise<DashboardResponse> {
   const config = (ctx.tenant.branding?.config ?? {}) as Record<string, unknown>;
   const can = mobileCan(ctx);
-  const summarize = (r: unknown) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), config.currency);
 
   const [orders, low] = await Promise.all([
-    can.orders ? orderStats(ctx, can.analytics) : Promise.resolve(null),
+    can.orders ? orderStats(ctx, can.analytics, config.currency) : Promise.resolve(null),
     can.products || can.inventory ? loadLowStock(ctx) : Promise.resolve<LowStock>({ lowStockCount: 0, lowStock: [] }),
   ]);
-  const todays = orders?.today?.map(summarize) ?? null;
+  const todays = orders?.today ?? null;
 
   return {
     store: { open: normalizeStoreStatus(config.storeStatus).open },
@@ -95,7 +121,7 @@ export async function buildDashboard(ctx: MobileContext): Promise<DashboardRespo
     today: todays
       ? { orders: todays.length, revenueLabel: formatMoney(todays.reduce((s, o) => s + o.total, 0), config.currency) }
       : null,
-    recent: (orders?.recent ?? []).map(summarize),
+    recent: orders?.recent ?? [],
     lowStockCount: low.lowStockCount,
     lowStock: low.lowStock,
   };

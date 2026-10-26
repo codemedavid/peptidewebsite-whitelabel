@@ -44,6 +44,8 @@ import { isResellerUnlocked } from "@/lib/auth/reseller-session";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import type { Product } from "@/storefront/types";
+import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { applyGroupBuyAccess, storefrontGroupBuyViewer } from "@/lib/storefront/gb-access.server";
 import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 
 export type ActionResult = { ok: true } | { error: string };
@@ -146,7 +148,7 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
     const slug = (await getTenantSlug()) ?? tenantId;
     return {
       ok: true,
-      products: stripResellerPricing(demoEffectiveProducts(slug, "₱"), ...stripArgs),
+      products: await withGroupBuyAccess(tenantId, slug, stripResellerPricing(demoEffectiveProducts(slug, "₱"), ...stripArgs)),
     };
   }
 
@@ -162,17 +164,42 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
     );
     return {
       ok: true,
-      products: stripResellerPricing(
-        applyProductOrder(
-          rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
-          normalizeProductOrder(config.productOrder),
+      products: await withGroupBuyAccess(
+        tenantId,
+        (await getTenantSlug()) ?? tenantId,
+        stripResellerPricing(
+          applyProductOrder(
+            rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
+            normalizeProductOrder(config.productOrder),
+          ),
+          ...stripArgs,
         ),
-        ...stripArgs,
       ),
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load products." };
   }
+}
+
+/**
+ * Paid group-buy access for the PUBLIC refresh above — the same strip the
+ * storefront render applies (gb-access.server), or every tab focus would hand a
+ * locked shopper the round's prices back. A signed-in store admin passes
+ * through: this refresh is also what fills the #admin editors after sign-in.
+ * Throws on a failed read, which the caller turns into an error result (no
+ * catalog at all) rather than an unstripped one.
+ */
+async function withGroupBuyAccess(tenantId: string, slug: string, products: Product[]): Promise<Product[]> {
+  const caps = await resolveGroupBuyCaps(tenantId);
+  if (!caps.enabled || !caps.paidAccess) return products;
+  const access = await applyGroupBuyAccess({
+    tenantId,
+    rounds: await loadGroupBuys(tenantId, slug),
+    caps,
+    viewer: () => storefrontGroupBuyViewer(tenantId),
+    products,
+  });
+  return access.products;
 }
 
 // ── Create / update ───────────────────────────────────────────────────────────

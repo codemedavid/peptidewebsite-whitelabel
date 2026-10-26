@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import type { Brand, Order, Product } from "../types";
 import type { GroupBuy } from "@/lib/storefront/group-buy";
 import { useStore } from "../store";
+import { getStorefrontProductsAction } from "@/actions/products";
 import { AdminShell } from "./AdminShell";
 import { AdminDashboard } from "./AdminDashboard";
 import { dashboardCapabilities } from "@/lib/storefront/admin-dashboard";
+import { canSeeGroupBuyPanel } from "@/lib/storefront/admin-dashboard-gb";
 import { AdminAddProduct } from "./AdminAddProduct";
 import { AdminProductsList } from "./AdminProductsList";
 import { AdminCategoriesManager } from "./AdminCategoriesManager";
@@ -25,6 +27,7 @@ import { AdminNoticeModal } from "./AdminNoticeModal";
 import { AdminStoreStatus } from "./AdminStoreStatus";
 import { AdminCurrency } from "./AdminCurrency";
 import { AdminTrackNote } from "./AdminTrackNote";
+import { AdminTimeline } from "./AdminTimeline";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
 import { AdminArticles } from "./AdminArticles";
@@ -95,6 +98,7 @@ const VIEWS = [
   "notice",
   "store-status",
   "tracknote",
+  "timeline",
   "billing",
   "upgrade",
 ] as const;
@@ -124,13 +128,16 @@ export function AdminPage({
   onLogout: () => void;
   onExitToSite: () => void;
 }) {
-  const { toast, toastMsg } = useStore();
+  const { toast, toastMsg, setProducts } = useStore();
   const [view, setView] = useState<View>(initialView);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   // The round whose dedicated dashboard is open. Same master-detail shape as
   // viewingOrder — the list hands the row over, the detail view hands back.
   const [viewingGroupBuy, setViewingGroupBuy] = useState<GroupBuy | null>(null);
+  // Which Group Buys tab to land on — "joins" when the dashboard's
+  // "review join requests" shortcut sent us; every other entry opens Rounds.
+  const [groupBuysTab, setGroupBuysTab] = useState<"rounds" | "joins">("rounds");
   const [editingStaff, setEditingStaff] = useState<StaffListItem | null>(null);
 
   // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
@@ -138,6 +145,12 @@ export function AdminPage({
   const [actor, setActor] = useState<StaffActor | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  // Paid group-buy access: a page rendered for a locked shopper (the admin
+  // session is always cleared on document load) carries a catalog WITHOUT the
+  // round's products and gb prices. The editors must never work from that — a
+  // save would wipe the prices — so the admin waits for its own full catalog.
+  const needsFullCatalog = !!brand.groupBuyTeaser;
+  const [catalog, setCatalog] = useState<"ready" | "loading" | "failed">(needsFullCatalog ? "loading" : "ready");
 
   useEffect(() => {
     let cancelled = false;
@@ -154,15 +167,37 @@ export function AdminPage({
       );
       setDisplayName(info.displayName);
       setSessionLoaded(true);
+      if (!needsFullCatalog) return;
+      // Signed in now, so the refresh passes the admin through gb-access.
+      getStorefrontProductsAction()
+        .then((res) => {
+          if (cancelled) return;
+          if ("ok" in res && res.ok) {
+            setProducts(res.products);
+            setCatalog("ready");
+          } else setCatalog("failed");
+        })
+        .catch(() => !cancelled && setCatalog("failed"));
     });
     return () => {
       cancelled = true;
     };
-  }, [onLogout]);
+  }, [onLogout, needsFullCatalog, setProducts]);
 
   // Don't flash the full menu before we know who the actor is — a staff member
   // must never momentarily see modules they aren't permitted.
-  if (!sessionLoaded || !actor) {
+  if (sessionLoaded && catalog === "failed") {
+    return (
+      <div className="admin">
+        <div className="admin__inner">
+          <div className="admin-field__hint" role="alert" style={{ padding: 48, textAlign: "center" }}>
+            Couldn&apos;t load your full catalog. Reload the page to try again.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!sessionLoaded || !actor || catalog !== "ready") {
     return (
       <div className="admin">
         <div className="admin__inner">
@@ -305,6 +340,7 @@ export function AdminPage({
   if (activeView === "store-status") return <AdminStoreStatus brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "currency") return <AdminCurrency brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "timeline") return <AdminTimeline brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "articles") return <AdminArticles brand={brand} onBack={() => setView("dashboard")} />;
@@ -315,7 +351,9 @@ export function AdminPage({
   if (activeView === "groupbuys") {
     return (
       <AdminGroupBuys
+        key={groupBuysTab}
         brand={brand}
+        initialTab={groupBuysTab}
         onBack={() => setView("dashboard")}
         onOpen={(gb) => {
           setViewingGroupBuy(gb);
@@ -402,6 +440,7 @@ export function AdminPage({
   // id simply bounces back to the dashboard.
   const openView = (next: string) => {
     if (next === "add-product") setEditingProduct(null);
+    if (next === "groupbuys") setGroupBuysTab("rounds");
     setView(next as View);
   };
 
@@ -423,6 +462,16 @@ export function AdminPage({
             caps={caps}
             greetingName={displayName}
             onOpen={openView}
+            canGroupBuys={canSeeGroupBuyPanel(brand, actor)}
+            onOpenGroupBuyJoins={() => {
+              setGroupBuysTab("joins");
+              setView("groupbuys");
+            }}
+            onOpenGroupBuyRound={(gb) => {
+              setGroupBuysTab("rounds"); // "back" from the round lands on Rounds
+              setViewingGroupBuy(gb);
+              setView("groupbuy-detail");
+            }}
             onAddProduct={() => {
               setEditingProduct(null);
               setView("add-product");

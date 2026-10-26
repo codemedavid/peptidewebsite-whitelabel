@@ -8,7 +8,9 @@
 
 import type { CSSProperties } from "react";
 
-export type CardLayout = "vertical" | "horizontal" | "overlay";
+/** "text" drops the media box entirely — a type-led card for stores without
+ *  product photos (or that would rather not show them). */
+export type CardLayout = "vertical" | "horizontal" | "overlay" | "text";
 export type CardSurface = "flat" | "glass" | "neumorphic" | "gradient";
 export type CardShadow = "none" | "sm" | "md" | "lg" | "glow";
 export type CardHover = "none" | "lift" | "grow" | "glow" | "frame" | "tilt";
@@ -234,6 +236,11 @@ export const CARD_PRESETS: CardPreset[] = [
     buttonStyle: "soft", badgeStyle: "mono",
     imageRatio: "landscape", mediaInset: true, spacing: "roomy",
   }),
+  preset("text-only", "Text Only", "No photo — name and price lead", {
+    layout: "text", borderColor: "#E5E7EB", radius: 14, shadow: "none",
+    hover: "frame", titleWeight: 700, titleSize: "lg",
+    buttonStyle: "solid", buttonShape: "rounded", badgeStyle: "soft",
+  }),
   preset("apple", "Apple-Inspired", "Understated precision", {
     background: "#F5F5F7", textColor: "#1D1D1F",
     borderEnabled: false, radius: 18, shadow: "sm", hover: "grow",
@@ -242,6 +249,11 @@ export const CARD_PRESETS: CardPreset[] = [
     spacing: "roomy",
   }),
 ];
+
+/** True when the design renders no product image at all. */
+export function isTextOnlyCard(d: Pick<CardDesign, "layout"> | null | undefined): boolean {
+  return d?.layout === "text";
+}
 
 export function getCardPreset(id: string): CardPreset | undefined {
   return CARD_PRESETS.find((p) => p.id === id);

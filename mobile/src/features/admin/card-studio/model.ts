@@ -13,7 +13,8 @@ import type { AdminBrand } from "@/features/admin/bridge";
  * never store something the website wouldn't.
  */
 
-export type CardLayout = "vertical" | "horizontal" | "overlay";
+/** "text" drops the image entirely (mirrors the website's text-only card). */
+export type CardLayout = "vertical" | "horizontal" | "overlay" | "text";
 export type CardSurface = "flat" | "glass" | "neumorphic" | "gradient";
 export type CardShadow = "none" | "sm" | "md" | "lg" | "glow";
 export type CardHover = "none" | "lift" | "grow" | "glow" | "frame" | "tilt";
@@ -215,6 +216,11 @@ export const CARD_PRESETS: CardPreset[] = [
     buttonStyle: "soft", badgeStyle: "mono",
     imageRatio: "landscape", mediaInset: true, spacing: "roomy",
   }),
+  preset("text-only", "Text Only", "No photo — name and price lead", {
+    layout: "text", borderColor: "#E5E7EB", radius: 14, shadow: "none",
+    hover: "frame", titleWeight: 700, titleSize: "lg",
+    buttonStyle: "solid", buttonShape: "rounded", badgeStyle: "soft",
+  }),
   preset("apple", "Apple-Inspired", "Understated precision", {
     background: "#F5F5F7", textColor: "#1D1D1F",
     borderEnabled: false, radius: 18, shadow: "sm", hover: "grow",
@@ -223,6 +229,11 @@ export const CARD_PRESETS: CardPreset[] = [
     spacing: "roomy",
   }),
 ];
+
+/** True when the design renders no product image at all. */
+export function isTextOnlyCard(d: Pick<CardDesign, "layout">): boolean {
+  return d.layout === "text";
+}
 
 export function getCardPreset(id: string): CardPreset | undefined {
   return CARD_PRESETS.find((p) => p.id === id);
@@ -299,7 +310,7 @@ export function normalizeCardDesign(input: unknown): CardDesign {
   const d = DEFAULT_CARD_DESIGN;
   return {
     preset: String(o.preset ?? "custom").slice(0, 64),
-    layout: oneOf(o.layout, ["vertical", "horizontal", "overlay"] as const, d.layout),
+    layout: oneOf(o.layout, ["vertical", "horizontal", "overlay", "text"] as const, d.layout),
     surface: oneOf(o.surface, ["flat", "glass", "neumorphic", "gradient"] as const, d.surface),
     borderEnabled: o.borderEnabled !== false,
     borderColor: color(o.borderColor),

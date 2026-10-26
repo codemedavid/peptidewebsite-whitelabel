@@ -166,7 +166,9 @@ export default async function StorefrontLayout({
   // that same app (see p/[slug]/page.tsx) — without this they would paint the
   // full storefront INSIDE the legacy header, which is the first thing a
   // customer sees when an owner sends them a product.
-  const isStorefrontHome = pathname === "/" || pathname.startsWith("/p/");
+  // `/protocols/<key>` share links render it too (protocols/[slug]/page.tsx).
+  const isStorefrontHome =
+    pathname === "/" || pathname.startsWith("/p/") || pathname.startsWith("/protocols/");
 
   return (
     <div

@@ -24,6 +24,7 @@ export const MODULE_FEATURE: Record<string, FeatureKey> = {
   proto: FEATURES.STORE_PROTOCOLS,
   articles: FEATURES.SITE_BLOG,
   assessments: FEATURES.STORE_ASSESSMENT,
+  timeline: FEATURES.STORE_TIMELINE,
 };
 
 // Store-admin module ids whose gating feature is currently flagged "New". The
@@ -64,9 +65,13 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // without the Group Buy module, which keeps this widening off every non-GB
   // store. Note it counts the TAG, while a live round is scoped by the round —
   // the same two-regime membership buildGroupBuyPageView applies.
+  //   paid round, viewer locked out → shown as the JOIN page (groupBuyTeaser;
+  //             lib/storefront/gb-access). The banner and the round's listings
+  //             were stripped server-side, so without this the only way in
+  //             would vanish exactly when the shopper needs it.
   groupbuy: (b) =>
     normalizeTwoWaysMode(b.twoWaysMode).groupBuy !== "hidden" &&
-    (!!b.groupBuyBanner || (b.groupBuyListingCount ?? 0) > 0),
+    (!!b.groupBuyBanner || (b.groupBuyListingCount ?? 0) > 0 || !!b.groupBuyTeaser),
   // The on-hand shelf IS the catalog, so hiding that way must also drop its nav
   // link — otherwise a group-buy-only store still advertises "Products" and
   // lands the shopper on an empty page. Only an explicit "hidden" does this:
@@ -162,6 +167,10 @@ const ADMIN_VIEW_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // (branding.config.noticeModal.operatorEnabled, projected to showAdminNotice in
   // page.tsx). Default OFF — hidden until the operator turns the feature on.
   notice: (b) => b.showAdminNotice === true,
+
+  // Timeline editor — owner-only, gated on the operator grant
+  // (FEATURES.STORE_TIMELINE → brand.timelineEntitled). Default OFF.
+  timeline: (b) => b.timelineEntitled === true,
 };
 
 // The two-layer page gate shared by Reviews, Lab Reports (COA) and Protocols:
@@ -250,6 +259,26 @@ export function isResellerPricingVisible(brand: Brand): boolean {
  */
 export function isGroupBuyPricingVisible(brand: Brand): boolean {
   return brand.groupBuyCaps?.enabled === true;
+}
+
+/**
+ * A store that sells ONLY through group buys: the Group Buy module is on and the
+ * owner HID the on-hand way (twoWaysMode.onHand "hidden" — the same setting that
+ * already drops the storefront's Products link, see PAGE_TOGGLE.catalog).
+ *
+ * Such a store plans per product kit, not per round: the product editor offers
+ * "Vials per kit" and opening a round asks for one per-customer MOQ instead of
+ * the round-level Minimum / Maximum vials (lib/storefront/gb-moq-kits).
+ *
+ * Only an explicit "hidden" counts; "closed" (paused) keeps the store a two-way
+ * store. brand.twoWaysMode is the effective state, but the live-round fold only
+ * ever turns "open" into "closed", so "hidden" survives it unchanged.
+ */
+export function isGroupBuyOnlyStore(brand: Brand): boolean {
+  return (
+    brand.groupBuyCaps?.enabled === true &&
+    normalizeTwoWaysMode(brand.twoWaysMode).onHand === "hidden"
+  );
 }
 
 /**

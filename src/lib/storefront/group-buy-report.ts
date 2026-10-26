@@ -37,6 +37,7 @@ import {
   type RoundOrderRow,
   type RoundSummary,
 } from "./group-buy-orders";
+import { withKitColumns, type KitColumns } from "./gb-moq-kits";
 
 /** The round header the workbook labels itself with. */
 export type ReportRound = ReportRoundWindow;
@@ -83,7 +84,8 @@ export type ReportPrep = {
   /** Headline counts, shared with the on-screen summary tiles. */
   counts: RoundSummary;
   /** "Products to Order" — vials to buy per product, cancelled orders excluded. */
-  productsToOrder: ProductToOrder[];
+  /** Each row carries kit columns (null when its product has no vials per kit). */
+  productsToOrder: Array<ProductToOrder & KitColumns>;
   summary: ReportSummaryRow[];
   orderLines: ReportOrderLine[];
   /** Per-buyer rollup for the customer workbook's Customers sheet. */
@@ -161,6 +163,8 @@ export function prepareReport(
   round: ReportRound,
   orders: ReportInputOrder[],
   report: SupplierReport = buildSupplierReport("", orders),
+  /** product id → vials per kit (gb-moq-kits). Empty = no kit columns. */
+  kitSizes: Readonly<Record<string, number>> = {},
 ): ReportPrep {
   const demand = orders.filter((o) => orderCountsAsDemand(o.status));
   const committed = demand.filter(isCommitted);
@@ -193,7 +197,7 @@ export function prepareReport(
 
   // "Products to Order" — the sheet the supplier order is placed from. Cancelled
   // orders are excluded completely (ordering against them means over-buying).
-  const productsToOrder = buildProductsToOrder(orders);
+  const productsToOrder = withKitColumns(buildProductsToOrder(orders), kitSizes);
 
   // Headline counts, from the same summarizer the on-screen tiles use.
   const counts = summarizeRoundOrders(orders);

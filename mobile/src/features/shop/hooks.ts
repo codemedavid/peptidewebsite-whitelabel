@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PlaceShopOrderRequest, ShopCatalog, ShopOrdersResponse, ShopQuoteRequest } from "@shop-contract";
+import type { GroupBuyJoinState, PlaceShopOrderRequest, ShopCatalog, ShopOrdersResponse, ShopQuoteRequest } from "@shop-contract";
 import type { UploadFile } from "@/api/client";
 import { shopApi, shopKeys } from "./api";
 import { reconcileCart, type CartRow } from "./lib/cart";
@@ -92,4 +92,34 @@ export function useUploadProof() {
   return useMutation({
     mutationFn: ({ file, signal }: { file: UploadFile; signal?: AbortSignal }) => shopApi.uploadProof(file, signal),
   });
+}
+
+// ── Paid group-buy join (lib/storefront/gb-join.server.ts) ───────────────────
+
+/** The shopper's join screen for a paid round. Signed-in customers only. */
+export function useGroupBuyJoin(roundId: string | null) {
+  const { scope, mode } = useShop();
+  return useQuery({
+    queryKey: shopKeys.groupBuyJoin(scope, roundId ?? ""),
+    queryFn: () => shopApi.groupBuyJoin(roundId!),
+    enabled: !!roundId && mode === "customer",
+  });
+}
+
+/** Join + send-receipt. Each returns the new state, written straight into the
+ *  cache; the catalog is refetched so the shop's teaser shows the new status. */
+export function useGroupBuyJoinActions(roundId: string) {
+  const qc = useQueryClient();
+  const { scope } = useShop();
+  const settle = (state: GroupBuyJoinState) => {
+    qc.setQueryData(shopKeys.groupBuyJoin(scope, roundId), state);
+    void qc.invalidateQueries({ queryKey: shopKeys.catalog(scope) });
+  };
+  const join = useMutation({ mutationFn: () => shopApi.startGroupBuyJoin(roundId), onSuccess: settle });
+  const sendReceipt = useMutation({
+    mutationFn: ({ file, reference, method, signal }: { file: UploadFile; reference: string; method: string; signal?: AbortSignal }) =>
+      shopApi.sendGroupBuyReceipt(roundId, { reference, method }, file, signal),
+    onSuccess: settle,
+  });
+  return { join, sendReceipt };
 }

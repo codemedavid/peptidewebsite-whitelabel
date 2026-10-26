@@ -30,13 +30,14 @@ import {
   activeOrders,
   isTrashed,
   normalizeTrashScope,
-  ordersWhere,
   trashedOrders,
   type TrashScope,
 } from "@/lib/orders/trash";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { classifyProofFile } from "@/lib/upload/image-file";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { revalidateOrders } from "@/lib/orders/order-cache";
+import { loadOrderList } from "@/lib/orders/order-list-cache";
 import {
   isDemoMode,
   getDemoBranding,
@@ -118,6 +119,7 @@ import {
 } from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
+import { groupBuyMoqViolation, type MoqLine } from "@/lib/storefront/gb-moq-kits";
 import {
   activePaymentFee,
   normalizeOrderPaymentFee,
@@ -154,6 +156,7 @@ import { notifyNewOrder } from "@/lib/mobile/push";
 import { computeOrderTotals, itemCount } from "@/storefront/admin/order-detail";
 import { toTrackedOrder, type TrackedOrder } from "@/lib/orders/tracked-order";
 import { getSignedInCustomer } from "@/lib/auth/customer-session";
+import { paidRoundCheckoutGate } from "@/lib/storefront/gb-access.server";
 import { currentAppShopperScope } from "@/lib/auth/app-shopper-scope";
 import { stockMoveDb, applyOrderStockMove } from "@/lib/orders/stock-move-tx";
 
@@ -264,6 +267,21 @@ function purchasableViolation(
  *  fallback, unmatched lines skipped: the same matching rule stockViolation
  *  uses, so the two-ways mixing re-check judges exactly the lines the other
  *  guards saw. */
+/** The order's lines as the group-buy MOQ rule reads them — matched to the
+ *  catalog exactly like matchedProductIds, so the gb tag comes from the server's
+ *  own product rows, never the client. */
+function moqLines(
+  products: Array<{ id: string; name: string; productType?: MoqLine["productType"] }>,
+  items: OrderItem[],
+): MoqLine[] {
+  return items.flatMap((it) => {
+    const prod = products.find((x) =>
+      it.productId ? x.id === it.productId : x.name === it.name,
+    );
+    return prod ? [{ id: prod.id, productType: prod.productType, qty: it.qty }] : [];
+  });
+}
+
 function matchedProductIds(
   products: Array<{ id: string; name: string }>,
   items: OrderItem[],
@@ -496,7 +514,7 @@ async function stampGroupBuy(
   p: Order,
   tenantId: string,
   demoSlug: string,
-): Promise<GroupBuyPriceScope | null> {
+): Promise<(GroupBuyPriceScope & { moqVials?: number | null }) | null> {
   p.groupBuyId = null;
   p.groupBuyName = null;
   try {
@@ -515,7 +533,9 @@ async function stampGroupBuy(
     // Returned so repriceItems prices exactly the round's products — never an
     // off-round gb product that merely rode along in the same order.
     const coversAll = !caps.productAssignment || gb.productIds.length === 0;
-    return { coversAll, productIds: coversAll ? [] : gb.productIds };
+    // moqVials rides along so placement enforces the per-customer minimum of
+    // THIS round (gb-moq-kits) — the same round the cart read it from.
+    return { coversAll, productIds: coversAll ? [] : gb.productIds, moqVials: gb.moqVials ?? null };
   } catch {
     /* attribution is best-effort — never block checkout on it */
     return null;
@@ -905,6 +925,16 @@ async function validateLiveOrder(
   // round AND returns that round's pricing scope, which drives whether GB
   // products re-price at their gbPrice below.
   const gbScope = await stampGroupBuy(p, tenantId, slug);
+  // Paid group-buy access: an order in a paid round needs the buyer's APPROVED
+  // membership (lib/storefront/gb-access.server). Its own fail-closed read, not
+  // the best-effort stamp above — a hand-rolled request or a stale tab can't
+  // buy into a round the storefront never showed it.
+  const paidError = await paidRoundCheckoutGate(
+    tenantId,
+    slug,
+    p.items.map((it) => it.productId).filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  if (paidError) return { error: paidError };
   // Server-authoritative item prices: re-read each line from the live catalog
   // so a price the owner changed (or a tampered client) can't be stored. When
   // the order belongs to a live round, that round's group-buy products charge
@@ -975,6 +1005,11 @@ async function validateLiveOrder(
   // re-price used) stops a stale/tampered client from sneaking a mix through.
   const mixViolation = twoWaysOrderViolation(matchedProductIds(catalog, p.items), gbScope);
   if (mixViolation) return { error: mixViolation };
+
+  // Group-buy MOQ: the round's per-customer minimum in vials, re-checked here so
+  // a stale/tampered cart can't place a smaller order (gb-moq-kits).
+  const moqViolation = groupBuyMoqViolation(moqLines(catalog, p.items), gbScope, gbScope?.moqVials);
+  if (moqViolation) return { error: moqViolation };
 
   // Smart Checkout rules — reject the order when it violates a blocking rule.
   // Entitlement-gated, same as the demo path above.
@@ -1091,6 +1126,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       demoGbScope,
     );
     if (demoMix) return { error: demoMix };
+    const demoMoq = groupBuyMoqViolation(
+      moqLines(demoProducts, p.items),
+      demoGbScope,
+      demoGbScope?.moqVials,
+    );
+    if (demoMoq) return { error: demoMoq };
     // The admin fee is SERVER-AUTHORITATIVE: re-derived from the tenant's
     // branding config at placement (any client-supplied value is discarded) and
     // snapshotted on the order so a later config change never rewrites it.
@@ -1306,6 +1347,7 @@ async function createStorefrontOrder(
           data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId, customerAccountId },
         }),
       );
+      revalidateOrders(tenantId);
       return { row, created: true };
     } catch (e) {
       if ((e as { code?: string }).code === "P2002") {
@@ -1383,6 +1425,8 @@ export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<
  * the Analytics and Dashboard screens correct without touching them — a trashed
  * order must not reach a revenue figure.
  */
+// The whole list is cached once per tenant (lib/orders/order-list-cache.ts) and
+// shared with the app's Insights / Customers, so neither re-reads every row.
 export async function listStorefrontOrdersAction(scope?: unknown): Promise<ListOrdersResult> {
   const ctx = await requireStaffPermission("orders");
   if (!ctx) return { error: "Not signed in to the store admin." };
@@ -1396,15 +1440,7 @@ export async function listStorefrontOrdersAction(scope?: unknown): Promise<ListO
   }
 
   try {
-    const rows = await withTenant(tenantId, (db) =>
-      db.storefrontOrder.findMany({
-        where: ordersWhere(view),
-        // The trash reads newest-DELETED first, which is the order the owner
-        // undoing a mis-click is looking for.
-        orderBy: view === "trash" ? { deletedAt: "desc" } : { createdAt: "desc" },
-      }),
-    );
-    return { ok: true, orders: rows.map((r) => dbOrderToStorefront(r as DbOrderRow)) };
+    return { ok: true, orders: await loadOrderList(tenantId, view) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load orders." };
   }
@@ -1563,6 +1599,7 @@ export async function trashStorefrontOrdersAction(ids: unknown): Promise<DeleteO
         data: { deletedAt: now },
       }),
     );
+    revalidateOrders(tenantId);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't move the orders to the trash." };
@@ -1603,6 +1640,7 @@ export async function restoreStorefrontOrdersAction(ids: unknown): Promise<Delet
         data: { deletedAt: null },
       }),
     );
+    revalidateOrders(tenantId);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't restore the orders." };
@@ -1643,6 +1681,7 @@ export async function purgeStorefrontOrdersAction(ids: unknown): Promise<DeleteO
     await withTenant(tenantId, (db) =>
       db.storefrontOrder.deleteMany({ where: { ...TRASHED_ORDERS_WHERE, id: { in: list } } }),
     );
+    revalidateOrders(tenantId);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't delete the orders." };
@@ -1844,6 +1883,7 @@ export async function bulkUpdateStorefrontOrderStatusAction(
     // Runs before the failure is reported: the stock of the chunks that DID
     // commit has already moved, so a stale catalog would oversell it.
     if (moved) revalidateTenant(tenantId, slug);
+    if (applied.length > 0) revalidateOrders(tenantId);
     // Only now, with the committed work fully accounted for, surface the failure
     // — including how much of the selection actually changed.
     if (failure) return { error: bulkStatusFailureMessage(applied.length, failure) };

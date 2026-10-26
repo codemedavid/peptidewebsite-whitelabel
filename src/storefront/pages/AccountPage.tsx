@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { Brand } from "../types";
 import { BackLink } from "../components/BackLink";
+import { GB_JOIN_RETURN_KEY } from "../components/GroupBuyJoin";
 import { TrackedOrderDetail, STATUS_LABELS, STATUS_DOT, formatDate } from "../components/TrackedOrderDetail";
 import {
   getCustomerAccountAction,
@@ -42,6 +43,16 @@ export function AccountPage({ brand, onBack }: { brand: Brand; onBack: () => voi
   const onAccount = (a: CustomerAccount | null) => {
     setAccount(a);
     notifyCustomerAccountChanged(a);
+    // Came here from a paid group buy's "Sign in to join": go straight back.
+    if (!a) return;
+    try {
+      if (sessionStorage.getItem(GB_JOIN_RETURN_KEY)) {
+        sessionStorage.removeItem(GB_JOIN_RETURN_KEY);
+        window.location.hash = "#groupbuy";
+      }
+    } catch {
+      /* storage blocked — stay on the account page */
+    }
   };
 
   return (

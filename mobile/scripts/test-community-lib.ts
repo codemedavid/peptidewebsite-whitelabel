@@ -364,6 +364,22 @@ test("push routes respect mode and access, falling back to the mode's home", () 
   assert.equal(resolvePushRoute(null, admin), null);
 });
 
+test("paid group-buy pushes: staff open the join queue; a customer's decision opens their chat or the group buy", () => {
+  const admin: PushAccess = { mode: "admin", canOrders: true, inCommunity: true };
+  const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };
+  const outsider: PushAccess = { mode: "customer", canOrders: false, inCommunity: false };
+  assert.deepEqual(pushTarget({ type: "gb_join_request" }), { screen: "gb_join_request" });
+  assert.deepEqual(resolvePushRoute({ screen: "gb_join_request" }, admin), { pathname: "/manage/join-requests", method: "push" });
+  assert.deepEqual(resolvePushRoute({ screen: "gb_join_request" }, member), { pathname: "/community", method: "navigate" });
+  const decided = pushTarget({ type: "gb_join_update", threadId: "d1", roundId: "gb_1" });
+  assert.deepEqual(decided, { screen: "gb_join_update", threadId: "d1" });
+  assert.deepEqual(resolvePushRoute(decided, member), { pathname: "/community/dm/[id]", params: { id: "d1" }, method: "navigate" });
+  assert.deepEqual(resolvePushRoute(decided, outsider), { pathname: "/group-buy", method: "push" });
+  assert.deepEqual(pushTarget({ type: "gb_join_update" }), { screen: "gb_join_update", threadId: null }, "no chat thread is fine");
+  assert.deepEqual(resolvePushRoute({ screen: "gb_join_update", threadId: null }, member), { pathname: "/group-buy", method: "push" });
+  assert.deepEqual(resolvePushRoute({ screen: "gb_join_update", threadId: "d1" }, admin), { pathname: "/", method: "navigate" });
+});
+
 test("order-bot push: buyers in the community land in the store chat, others on their order", () => {
   const admin: PushAccess = { mode: "admin", canOrders: true, inCommunity: true };
   const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };

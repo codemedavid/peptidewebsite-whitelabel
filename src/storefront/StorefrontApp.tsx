@@ -33,6 +33,7 @@ import { TrustStrip } from "./components/TrustStrip";
 import { CartCheckout } from "./components/CartCheckout";
 import { isPageVisible } from "./visibility";
 import { parseProductHash } from "@/lib/storefront/product-link";
+import { parseProtocolHash } from "@/lib/storefront/protocol-link";
 import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
 import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
 import {
@@ -42,6 +43,7 @@ import {
 import { redeemAppHandoffAction } from "@/actions/app-handoff";
 import { takeAppHandoff } from "./app-embed";
 import { TextColorsStyle } from "./components/TextColorsStyle";
+import { GroupBuyJoinPage, GroupBuyJoinStrip } from "./components/GroupBuyJoin";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
@@ -93,7 +95,16 @@ function pageFromHash(): string {
   // One article (#articles/<slug>) is the Articles page showing that post; the
   // page reads the slug from the hash itself.
   if (h.startsWith("articles/")) return "articles";
+  // One protocol (#protocols/<key>) is the Protocols page with that protocol
+  // opened — see lib/storefront/protocol-link.ts.
+  if (parseProtocolHash(h)) return "protocols";
   return ROUTES.includes(h) ? h : "home";
+}
+
+/** The protocol link key in the current hash, or null. */
+function protocolKeyFromHash(): string | null {
+  if (typeof window === "undefined") return null;
+  return parseProtocolHash(window.location.hash);
 }
 
 /** The product link key in the current hash, or null. */
@@ -102,7 +113,13 @@ function productKeyFromHash(): string | null {
   return parseProductHash(window.location.hash);
 }
 
-function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
+function Shell({
+  initialProductKey,
+  initialProtocolKey,
+}: {
+  initialProductKey?: string | null;
+  initialProtocolKey?: string | null;
+}) {
   const { brand, products, categories, cart, addToCart } = useStore();
   const [category, setCategory] = useState("all");
   // "Explore GB #N" scope toggle — default OFF so the normal view is the full
@@ -112,7 +129,9 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
   // boutique layout, whose header bar searches the same grid; every other layout
   // leaves <Catalog> uncontrolled and this stays an unused "".
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState("home");
+  // A /protocols/<key> share link arrives with no hash, so the server route's
+  // key is what says "this is the Protocols page", from the first render.
+  const [page, setPage] = useState(initialProtocolKey ? "protocols" : "home");
   // "checking" while the server session is being verified, so entering #admin
   // from inside the SPA doesn't flash the login form at an already-signed-in
   // owner. There is no cached client-side hint to short-circuit this — see
@@ -126,6 +145,8 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
   // route (/p/<slug>) so the modal is open on the FIRST paint of a pasted link
   // — waiting for the mount effect below would flash the bare catalog first.
   const [productKey, setProductKey] = useState<string | null>(initialProductKey ?? null);
+  // Which protocol a shared link asked for — same seeding, same reasoning.
+  const [protocolKey, setProtocolKey] = useState<string | null>(initialProtocolKey ?? null);
 
   // A toggled-off sub-page should behave as if it isn't there: treat its hash
   // as "home" so direct visits land on the storefront instead of a blank shell.
@@ -141,10 +162,13 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
 
   // Resolve initial route + auth after mount (avoids SSR hash mismatch).
   useEffect(() => {
-    setPage(pageFromHash());
+    // No hash means "whatever the server route said": "/" and /p/<slug> are
+    // already "home", and /protocols/<key> must not be reset to it.
+    setPage((prev) => (window.location.hash ? pageFromHash() : prev));
     // A #p/<slug> hash present at mount (someone pasted the SPA form of the
     // link) resolves the same way the server route's initialProductKey does.
     setProductKey((prev) => productKeyFromHash() ?? prev);
+    setProtocolKey((prev) => protocolKeyFromHash() ?? prev);
 
     // The admin gate is a REAL server session — always ask the server, never a
     // cached client-side hint. Store-admin sessions are killed on every document
@@ -172,6 +196,7 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
       // product, and navigating away (Back out of #p/<slug>) clears it so the
       // modal doesn't reopen itself on the next render.
       setProductKey(productKeyFromHash());
+      setProtocolKey(protocolKeyFromHash());
       if (next === "admin") verifyAdmin();
       if (next !== "catalog") window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
@@ -368,7 +393,9 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
       {activePage === "order-confirmed" && <OrderConfirmedPage brand={brand} onBack={goHome} />}
       {activePage === "faq" && <FAQPage brand={brand} onBack={goHome} />}
       {activePage === "coa" && <COAPage brand={brand} onBack={goHome} />}
-      {activePage === "protocols" && <ProtocolsPage brand={brand} onBack={goHome} />}
+      {activePage === "protocols" && (
+        <ProtocolsPage brand={brand} onBack={goHome} openKey={protocolKey} />
+      )}
       {activePage === "calculator" && <ReconstitutionPage brand={brand} onBack={goHome} />}
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
@@ -381,8 +408,18 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
           direct #groupbuy link — the way state, not the banner, is the gate
           (the banner has to stay so the round's pre-orders keep off the
           ships-now shelf). */}
-      {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && (
+      {/* Paid group-buy access: a shopper locked out of the round gets the
+          join flow instead (the server already left the round's products and
+          prices out of this page — brand.groupBuyTeaser is all there is). */}
+      {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && brand.groupBuyTeaser && (
+        <GroupBuyJoinPage brand={brand} teaser={brand.groupBuyTeaser} onBack={goHome} onSignIn={() => goToRoute("account")} />
+      )}
+      {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && !brand.groupBuyTeaser && (
         <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
+      )}
+
+      {(activePage === "home" || activePage === "catalog") && brand.groupBuyTeaser && brand.twoWaysMode?.groupBuy !== "hidden" && (
+        <GroupBuyJoinStrip brand={brand} teaser={brand.groupBuyTeaser} onOpen={() => goToRoute("groupbuy")} />
       )}
 
       {/* Opt-in "two ways to order" home — a single scroll (hero + on-hand list +
@@ -457,6 +494,18 @@ function Shell({ initialProductKey }: { initialProductKey?: string | null }) {
           brand={brand}
           onCheckout={() => setCartOpen(true)}
           onOpenGroupBuy={() => goToRoute("groupbuy")}
+          hero={
+            brand.twoWaysHero === "store"
+              ? brand.showHero !== false && (
+                  <Hero
+                    brand={brand}
+                    onPrimary={heroCtaHandler(1)}
+                    onSecondary={heroCtaHandler(2)}
+                    onMedia={heroMediaHandler}
+                  />
+                )
+              : undefined
+          }
         />
       )}
 
@@ -522,6 +571,7 @@ export function StorefrontApp({
   products,
   tenantKey,
   initialProduct,
+  initialProtocol,
 }: {
   brand?: Brand;
   products?: Product[];
@@ -531,6 +581,9 @@ export function StorefrontApp({
    *  so a pasted share link paints with the quick-view already open instead of
    *  flashing the catalog first. Undefined on the plain "/" render. */
   initialProduct?: string | null;
+  /** Link key of the protocol the /protocols/<key> server route was asked for,
+   *  so the Protocols page opens on that protocol. Undefined everywhere else. */
+  initialProtocol?: string | null;
 }) {
   return (
     <div
@@ -552,7 +605,7 @@ export function StorefrontApp({
       }
     >
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
-        <Shell initialProductKey={initialProduct} />
+        <Shell initialProductKey={initialProduct} initialProtocolKey={initialProtocol} />
       </StoreProvider>
     </div>
   );

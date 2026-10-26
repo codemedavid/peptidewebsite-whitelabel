@@ -67,6 +67,9 @@ import {
   type GroupBuyContent,
 } from "@/lib/storefront/gb-content";
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
+import { AdminGroupBuyJoins } from "./AdminGroupBuyJoins";
+import { AdminHeroCountdown } from "./AdminHeroCountdown";
+import { isGroupBuyOnlyStore } from "../visibility";
 import {
   downloadCustomerWorkbook,
   downloadSupplierWorkbook,
@@ -123,6 +126,7 @@ function GroupBuyModal({
   initial,
   caps,
   settings,
+  groupBuyOnly,
   busy,
   error,
   onCancel,
@@ -131,6 +135,10 @@ function GroupBuyModal({
   initial: GroupBuy | null; // null = new
   caps: GroupBuyCapabilities;
   settings: GroupBuySettings;
+  /** Group-buy-only store (isGroupBuyOnlyStore): ask for one per-customer MOQ
+   *  instead of the round-level Minimum / Maximum vials — kit sizes live on
+   *  each product there (gb-moq-kits). */
+  groupBuyOnly: boolean;
   busy: boolean;
   error: string | null;
   onCancel: () => void;
@@ -163,6 +171,7 @@ function GroupBuyModal({
       batchNumber: "",
       minVials: null as number | null,
       maxVials: null as number | null,
+      moqVials: null as number | null,
       closedAt: null as string | null,
       createdAt: "",
       updatedAt: "",
@@ -182,6 +191,7 @@ function GroupBuyModal({
   const [batchNumber, setBatchNumber] = useState<string>(seed.batchNumber ?? "");
   const [minVials, setMinVials] = useState<number>(seed.minVials ?? 0);
   const [maxVials, setMaxVials] = useState<number>(seed.maxVials ?? 0);
+  const [moqVials, setMoqVials] = useState<number>(seed.moqVials ?? 0);
 
   const statusOptions: GroupBuyStatus[] = caps.scheduled
     ? ["draft", "scheduled", "active", "closed"]
@@ -310,6 +320,25 @@ function GroupBuyModal({
           </div>
         </div>
 
+        {groupBuyOnly ? (
+          <div className="admin-modal__row">
+            <label className="admin-field__label">Minimum order (MOQ)</label>
+            <input
+              className="admin-input"
+              type="number"
+              min={0}
+              step={1}
+              value={moqVials || ""}
+              placeholder="No minimum"
+              onChange={(e) => setMoqVials(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            />
+            <div className="admin-field__hint">
+              The fewest vials one customer can order in this group buy, across all products.
+              Vials per kit is set on each product.
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="admin-modal__row" style={{ display: "flex", gap: 10 }}>
           <div style={{ flex: 1 }}>
             <label className="admin-field__label">Minimum vials</label>
@@ -342,6 +371,8 @@ function GroupBuyModal({
           <div className="admin-modal__row" style={{ color: "#d33", fontSize: 12 }}>
             The minimum can&rsquo;t be higher than the maximum.
           </div>
+        )}
+        </>
         )}
 
         {caps.productAssignment && (
@@ -409,6 +440,7 @@ function GroupBuyModal({
                 // normalizeGroupBuy stores "not configured" rather than a real 0.
                 minVials: minVials || null,
                 maxVials: maxVials || null,
+                moqVials: moqVials || null,
               })
             }
           >
@@ -1022,11 +1054,14 @@ export function AdminGroupBuys({
   brand,
   onBack,
   onOpen,
+  initialTab = "rounds",
 }: {
   brand: Brand;
   onBack: () => void;
   /** Open one round's dedicated dashboard. */
   onOpen: (gb: GroupBuy) => void;
+  /** Tab to land on — the dashboard's "review join requests" shortcut opens "joins". */
+  initialTab?: "rounds" | "pricing" | "joins";
 }) {
   const { toast } = useStore();
   const caps = brand.groupBuyCaps ?? GROUP_BUY_CAPS_OFF;
@@ -1070,7 +1105,12 @@ export function AdminGroupBuys({
   // Two tabs: the rounds themselves, and the per-product group-buy pricing.
   // Pricing is a separate panel component — this file is already long, and the
   // two views share only the loaded rounds.
-  const [tab, setTab] = useState<"rounds" | "pricing">("rounds");
+  // A "joins" landing only sticks when the store actually has paid join.
+  const [tab, setTab] = useState<"rounds" | "pricing" | "joins">(
+    initialTab === "joins" && !caps.paidAccess ? "rounds" : initialTab,
+  );
+  // Paid group-buy access: receipts waiting for approval, shown on the tab.
+  const [joinsWaiting, setJoinsWaiting] = useState<number | null>(null);
 
   const [editing, setEditing] = useState<GroupBuy | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1284,7 +1324,26 @@ export function AdminGroupBuys({
           >
             Pricing
           </button>
+          {caps.paidAccess && (
+            <button
+              type="button"
+              role="tab"
+              id="gbtab-joins"
+              aria-selected={tab === "joins"}
+              aria-controls="gbpanel-joins"
+              className={`gbtabs__tab${tab === "joins" ? " is-active" : ""}`}
+              onClick={() => setTab("joins")}
+            >
+              Join requests{joinsWaiting ? ` (${joinsWaiting})` : ""}
+            </button>
+          )}
         </div>
+
+        {tab === "joins" && caps.paidAccess && (
+          <div id="gbpanel-joins" role="tabpanel" aria-labelledby="gbtab-joins">
+            <AdminGroupBuyJoins brand={brand} groupBuys={groupBuys} onGroupBuysChange={setGroupBuys} onWaitingCount={setJoinsWaiting} />
+          </div>
+        )}
 
         {tab === "pricing" && (
           <div id="gbpanel-pricing" role="tabpanel" aria-labelledby="gbtab-pricing">
@@ -1296,6 +1355,8 @@ export function AdminGroupBuys({
             />
           </div>
         )}
+
+        {tab === "rounds" && <AdminHeroCountdown brand={brand} />}
 
         {tab === "rounds" && (
           <div
@@ -1616,6 +1677,7 @@ export function AdminGroupBuys({
             initial={editing}
             caps={caps}
             settings={settings}
+            groupBuyOnly={isGroupBuyOnlyStore(brand)}
             busy={saving}
             error={saveError}
             onCancel={() => {

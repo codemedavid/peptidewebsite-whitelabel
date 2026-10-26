@@ -1,8 +1,6 @@
 import "server-only";
 
-import { withTenant } from "@/lib/db/tenant-client";
-import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
-import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
+import { loadOrderList } from "@/lib/orders/order-list-cache";
 import type { Order } from "@/storefront/types";
 import type {
   CustomerDetailResponse,
@@ -23,10 +21,10 @@ import { buildInsights } from "./insights";
 
 /**
  * Tenant-scoped loaders for the Insights and Customers screens. Both are
- * computed from the store's own (non-trashed) orders inside withTenant(), with
- * the tenant taken from the authenticated session.
+ * computed from the store's own (non-trashed) orders — the tenant-scoped cached
+ * order book, with the tenant taken from the authenticated session.
  *
- * One query, newest first, capped: new-vs-returning and customer history need
+ * One cached read, newest first, capped: new-vs-returning and customer history need
  * the whole book, and even the busiest store is well under the cap today.
  */
 
@@ -39,15 +37,15 @@ function currencyOf(ctx: MobileContext): unknown {
   return config && typeof config === "object" ? (config as Record<string, unknown>).currency : undefined;
 }
 
+// Read through the website's cached order book (lib/orders/order-list-cache)
+// rather than the DB: Insights, Customers and every Customers search used to
+// re-read the whole book. Re-sorted by placed date, the order these screens use.
 async function loadOrders(ctx: MobileContext): Promise<Order[]> {
-  const rows = await withTenant(ctx.tenantId, (db) =>
-    db.storefrontOrder.findMany({
-      where: ACTIVE_ORDERS_WHERE,
-      orderBy: { placedAt: "desc" },
-      take: MAX_ORDERS,
-    }),
-  );
-  return rows.map((r) => dbOrderToStorefront(r as DbOrderRow));
+  const orders = await loadOrderList(ctx.tenantId, "active");
+  return orders
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .slice(0, MAX_ORDERS);
 }
 
 export async function getInsights(ctx: MobileContext, range: InsightsRange): Promise<InsightsResponse> {

@@ -34,6 +34,7 @@
  *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --dry
  *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts
  *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts --active-only
+ *   npx tsx --env-file=.env scripts/mark-mstomato-made-to-order.ts mnm-pepsabuy
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -43,7 +44,9 @@ const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
 });
 
-const TENANT_SLUG = "mstomato";
+/** First non-flag argument; mstomato when omitted (the store this was written
+ *  for). mnm-pepsabuy is group-buy only — pre-orders with no inventory. */
+const TENANT_SLUG = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "mstomato";
 const DRY = process.argv.includes("--dry");
 /** Leave unpublished rows alone. Off by default — see the header. */
 const ACTIVE_ONLY = process.argv.includes("--active-only");

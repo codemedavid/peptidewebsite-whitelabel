@@ -1,4 +1,5 @@
 import type {
+  GroupBuyJoinState,
   PlaceShopOrderRequest,
   PlaceShopOrderResponse,
   ShopCatalog,
@@ -37,6 +38,14 @@ export const shopApi = {
   placeOrder: (body: PlaceShopOrderRequest) =>
     api<PlaceShopOrderResponse>("/shop/orders", { method: "POST", body, retryable: true }),
   myOrders: () => api<ShopOrdersResponse>("/shop/orders"),
+  /** Paid group-buy join (signed-in customers only). The fee is the server's. */
+  groupBuyJoin: (roundId: string) => api<GroupBuyJoinState>(`/shop/group-buy/join?round=${encodeURIComponent(roundId)}`),
+  /** Idempotent server-side: a live request comes back, never a second one. */
+  startGroupBuyJoin: (roundId: string) => api<GroupBuyJoinState>("/shop/group-buy/join", { method: "POST", body: { roundId } }),
+  sendGroupBuyReceipt: (roundId: string, fields: { reference: string; method: string }, file: UploadFile, signal?: AbortSignal) =>
+    apiUpload<GroupBuyJoinState>("/shop/group-buy/receipt", "file", file, signal, { roundId, ...fields }),
+  /** A 10-minute link to the shopper's own receipt. */
+  groupBuyReceiptUrl: (roundId: string) => api<{ url: string }>(`/shop/group-buy/receipt?round=${encodeURIComponent(roundId)}`),
 };
 
 export const shopKeys = {
@@ -44,4 +53,5 @@ export const shopKeys = {
   catalog: (scope: string) => [scope, "shop", "catalog"] as const,
   quote: (scope: string, body: ShopQuoteRequest) => [scope, "shop", "quote", JSON.stringify(body)] as const,
   myOrders: (scope: string) => [scope, "shop", "my-orders"] as const,
+  groupBuyJoin: (scope: string, roundId: string) => [scope, "shop", "gb-join", roundId] as const,
 };

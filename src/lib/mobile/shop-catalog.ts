@@ -18,6 +18,7 @@ import type { ShopCatalog, ShopCategory, ShopProduct, ShopVariation } from "./sh
 import { readCheckoutConfig } from "./shop-checkout";
 import { getTenantContext } from "@/lib/tenant/context";
 import type { ShopStore } from "./shop";
+import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
 
 /**
  * GET /shop/catalog — the store as a SIGNED-OUT website visitor sees it,
@@ -116,12 +117,23 @@ function closedCopy(brand: Brand): { open: boolean; closedMessage: string } {
   return { open: false, closedMessage: copy || STORE_CLOSED_BLOCK_MESSAGE };
 }
 
-export async function loadShopCatalog(store: ShopStore): Promise<ShopCatalog> {
+/** The shopper behind a ShopStore: its signed-in customer, else anonymous. */
+function shopViewer(store: ShopStore): GroupBuyViewer {
+  return store.customer ? { kind: "customer", customerId: store.customer.customer.id } : { kind: "anonymous" };
+}
+
+export async function loadShopCatalog(
+  store: ShopStore,
+  /** Override for the store team's own preview (admin/storefront) only. */
+  opts: { viewer?: GroupBuyViewer } = {},
+): Promise<ShopCatalog> {
+  const viewer = opts.viewer ?? shopViewer(store);
   const { brand, products } = await loadStorefrontBrand({
     tenantId: store.tenantId,
     slug: store.slug,
     // The app never holds a reseller session: public price list only.
     isResellerUnlocked: async () => false,
+    groupBuyViewer: async () => viewer,
   });
   const { branding } = await getTenantContext(store.tenantId);
   const { open, closedMessage } = closedCopy(brand);
@@ -155,5 +167,6 @@ export async function loadShopCatalog(store: ShopStore): Promise<ShopCatalog> {
       ways: ctx.ways,
       products: listed,
     }),
+    groupBuyTeaser: brand.groupBuyTeaser ?? null,
   };
 }

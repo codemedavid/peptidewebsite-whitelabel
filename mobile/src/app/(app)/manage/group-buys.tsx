@@ -13,11 +13,13 @@ import {
   moneyOf,
   normalizeGroupBuyContent,
   normalizeGroupBuyLiveBanner,
+  normalizeHeroCountdown,
   normalizeTwoWaysMode,
   roundsAwaitingReport,
   type GroupBuy,
   type GroupBuyContent,
   type GroupBuyLiveBanner,
+  type HeroCountdownConfig,
   type ListResult,
 } from "@/features/admin/group-buys/model";
 import { CommunityShareCard } from "@/features/admin/group-buys/CommunityShareCard";
@@ -29,6 +31,8 @@ import {
   AllowOnHandCard,
   ContentEditor,
   CopyCard,
+  HeroCountdownCard,
+  HeroCountdownEditor,
   LiveBannerCard,
   LiveBannerEditor,
   WaysCard,
@@ -50,7 +54,15 @@ export default function GroupBuysScreen() {
   const brand = useAdminBrand();
   return (
     <>
-      <Stack.Screen options={{ title: "Group buys" }} />
+      <Stack.Screen
+        options={{
+          title: "Group buys",
+          // Paid group-buy access: the join-request queue (manage/join-requests).
+          headerRight: (brand.data as { groupBuyCaps?: { paidAccess?: boolean } } | undefined)?.groupBuyCaps?.paidAccess
+            ? () => <Button label="Join requests" variant="ghost" icon="people-outline" onPress={() => router.push("/manage/join-requests")} />
+            : undefined,
+        }}
+      />
       <Loadable query={brand}>{(b) => <GroupBuys brand={b} />}</Loadable>
     </>
   );
@@ -75,6 +87,8 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
   // invalidation, or another admin's edit) brings the server's value back.
   const [liveBannerOverride, setLiveBannerOverride] = useState<{ base: unknown; value: GroupBuyLiveBanner } | null>(null);
   const [editingLiveBanner, setEditingLiveBanner] = useState(false);
+  const [countdownOverride, setCountdownOverride] = useState<{ base: unknown; value: HeroCountdownConfig } | null>(null);
+  const [editingCountdown, setEditingCountdown] = useState(false);
   const [invoiceOverride, setInvoiceOverride] = useState<{ base: unknown; value: GroupBuyInvoiceConfig } | null>(null);
   const [editingInvoice, setEditingInvoice] = useState(false);
   const sendInvoices = useSendInvoices();
@@ -95,6 +109,11 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
       ? liveBannerOverride.value
       : normalizeGroupBuyLiveBanner(data?.liveBanner ?? brand.groupBuyLiveBanner);
   const overrideLiveBanner = (value: GroupBuyLiveBanner) => setLiveBannerOverride({ base: data?.liveBanner, value });
+  const countdown =
+    countdownOverride && countdownOverride.base === data?.heroCountdown
+      ? countdownOverride.value
+      : normalizeHeroCountdown(data?.heroCountdown);
+  const overrideCountdown = (value: HeroCountdownConfig) => setCountdownOverride({ base: data?.heroCountdown, value });
   const invoice =
     invoiceOverride && invoiceOverride.base === data?.invoice ? invoiceOverride.value : normalizeGroupBuyInvoice(data?.invoice);
   const overrideInvoice = (value: GroupBuyInvoiceConfig) => setInvoiceOverride({ base: data?.invoice, value });
@@ -179,6 +198,15 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
               round={previewRound}
               onEdit={() => setEditingLiveBanner(true)}
             />
+            {/* Absent on a server that predates the hero countdown. */}
+            {data.heroCountdown !== undefined ? (
+              <HeroCountdownCard
+                value={countdown}
+                setValue={overrideCountdown}
+                roundName={previewRound.name}
+                onEdit={() => setEditingCountdown(true)}
+              />
+            ) : null}
             {data.invoice !== undefined ? (
               <InvoiceCard value={invoice} setValue={overrideInvoice} currency={currency} onEdit={() => setEditingInvoice(true)} />
             ) : null}
@@ -240,6 +268,17 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
           onSaved={(v) => {
             overrideLiveBanner(v);
             setEditingLiveBanner(false);
+          }}
+        />
+      ) : null}
+      {editingCountdown ? (
+        <HeroCountdownEditor
+          initial={countdown}
+          roundName={previewRound.name}
+          onClose={() => setEditingCountdown(false)}
+          onSaved={(v) => {
+            overrideCountdown(v);
+            setEditingCountdown(false);
           }}
         />
       ) : null}

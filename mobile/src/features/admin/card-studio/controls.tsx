@@ -16,6 +16,7 @@ import {
   RADIUS_MIN,
   isDarkColor,
   isHex,
+  isTextOnlyCard,
   type CardDesign,
   type CardTitleWeight,
 } from "./model";
@@ -66,6 +67,7 @@ const LAYOUTS: Choice<CardDesign["layout"]>[] = [
   { key: "vertical", label: "Standard" },
   { key: "horizontal", label: "Side image" },
   { key: "overlay", label: "BG image" },
+  { key: "text", label: "Text only" },
 ];
 const RATIOS: Choice<CardDesign["imageRatio"]>[] = [
   { key: "square", label: "1:1" },
@@ -153,8 +155,13 @@ export function CustomizePanel({ design, patch }: { design: CardDesign; patch: P
 
       <Section title="Layout & image">
         <ChoicePills label="Layout" options={LAYOUTS} value={design.layout} onChange={(layout) => patch({ layout })} />
-        <ChoicePills label="Image ratio" options={RATIOS} value={design.imageRatio} onChange={(imageRatio) => patch({ imageRatio })} />
-        <ToggleRow label="Inset image (bento)" value={design.mediaInset} onChange={(mediaInset) => patch({ mediaInset })} />
+        {/* No image on a text-only card, so its image controls would do nothing. */}
+        {isTextOnlyCard(design) ? null : (
+          <>
+            <ChoicePills label="Image ratio" options={RATIOS} value={design.imageRatio} onChange={(imageRatio) => patch({ imageRatio })} />
+            <ToggleRow label="Inset image (bento)" value={design.mediaInset} onChange={(mediaInset) => patch({ mediaInset })} />
+          </>
+        )}
       </Section>
 
       <Section title="Typography">

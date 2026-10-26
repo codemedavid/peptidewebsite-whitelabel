@@ -39,6 +39,16 @@ export type GroupBuy = {
    *  not configured, which renders as "not set" rather than a misleading 0.
    *  Distinct from slotGoal — that one is the CUSTOMER-facing progress bar. */
   maxVials: number | null;
+  /** Per-customer minimum order in group-buy vials, the same for every product
+   *  in the round (gb-moq-kits). null = no minimum. Optional so fixtures built
+   *  before the field keep compiling; normalizeGroupBuy always sets it. */
+  moqVials?: number | null;
+  /** Paid join (groupbuy.paid_access): customers pay `joinFeeCents` and wait
+   *  for approval before the round opens to them (lib/storefront/gb-access).
+   *  Optional so fixtures built before the fields keep compiling;
+   *  normalizeGroupBuy always sets both. */
+  paidJoin?: boolean;
+  joinFeeCents?: number;
   /** ISO — when the round actually closed. `endsAt` is only the scheduled close. */
   closedAt: string | null;
   createdAt: string;
@@ -71,6 +81,8 @@ export type GroupBuyCapabilities = {
   // unique index and by liveGroupBuys — never widened per tenant.
   productAssignment: boolean;
   supplierReports: boolean;
+  // groupbuy.paid_access — rounds may require a paid, approved join.
+  paidAccess: boolean;
   reports: GroupBuyReportCapabilities;
 };
 
@@ -83,6 +95,7 @@ export const GROUP_BUY_CAPS_OFF: GroupBuyCapabilities = {
   scheduled: false,
   productAssignment: false,
   supplierReports: false,
+  paidAccess: false,
   reports: {
     excel: false,
     csv: false,
@@ -170,6 +183,9 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     batchNumber: str(x.batchNumber, 64).trim(),
     minVials: vialCount(x.minVials),
     maxVials: vialCount(x.maxVials),
+    moqVials: vialCount(x.moqVials),
+    paidJoin: x.paidJoin === true,
+    joinFeeCents: feeCents(x.joinFeeCents),
     closedAt: isoOrNull(x.closedAt),
     createdAt: isoOrNull(x.createdAt) ?? now,
     updatedAt: isoOrNull(x.updatedAt) ?? now,
@@ -184,6 +200,13 @@ function vialCount(v: unknown): number | null {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.min(n, 1000000);
+}
+
+/** Coerce an untrusted join fee (centavos) to a non-negative integer; junk → 0. */
+function feeCents(v: unknown): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 100_000_000);
 }
 
 /** Coerce an untrusted slot goal to a clean count: a non-negative integer, capped
@@ -357,6 +380,9 @@ export type DbGroupBuyRow = {
   batchNumber?: string | null;
   minVials?: number | null;
   maxVials?: number | null;
+  moqVials?: number | null;
+  paidJoin?: boolean | null;
+  joinFeeCents?: number | null;
   closedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -376,6 +402,9 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     batchNumber: row.batchNumber ?? "",
     minVials: row.minVials ?? null,
     maxVials: row.maxVials ?? null,
+    moqVials: row.moqVials ?? null,
+    paidJoin: row.paidJoin ?? false,
+    joinFeeCents: row.joinFeeCents ?? 0,
     closedAt: row.closedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -395,6 +424,7 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
     batchNumber: gb.batchNumber || null,
     minVials: gb.minVials,
     maxVials: gb.maxVials,
+    moqVials: gb.moqVials ?? null,
     // Stamp the real close the first time the round reaches a terminal state,
     // and never overwrite it afterwards — reopening then re-closing keeps the
     // original date rather than silently rewriting history.

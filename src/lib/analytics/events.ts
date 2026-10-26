@@ -18,6 +18,13 @@ export const POSTHOG_EVENTS = {
   // ORDER_PLACED, but the PERSON is the store owner (see buildAdminOrderPayload),
   // so the tenant's PostHog Messaging workflow emails the ADMIN, not the buyer.
   ORDER_PLACED_ADMIN: "admin_order_placed",
+  // Paid group-buy access (lib/storefront/gb-membership.ts). The customer is the
+  // person: a workflow branches on `toStatus` (approved | rejected | refunded |
+  // revoked) to email them the store's decision.
+  GB_JOIN_DECIDED: "gb_join_decided",
+  // A paid join request arrived — the PERSON is the store's notification
+  // address (orderNotifications), like admin_order_placed.
+  GB_JOIN_REQUEST_ADMIN: "admin_gb_join_request",
 } as const;
 
 export type PostHogEventName = (typeof POSTHOG_EVENTS)[keyof typeof POSTHOG_EVENTS];
@@ -338,5 +345,61 @@ export function buildSampleOrder(email?: string): Order {
     ],
     statusHistory: [],
     paymentProof: null,
+  };
+}
+
+/** `gb_join_decided` — the store approved / rejected / refunded / revoked a
+ *  paid group-buy join request. The customer is the messaged person. */
+export function buildGroupBuyJoinDecisionPayload(input: {
+  customerEmail: string;
+  customerName: string;
+  roundName: string;
+  toStatus: string;
+  amountCents: number;
+  reason: string;
+  refundReference: string;
+  brand?: EmailBrand;
+}): CapturePayload {
+  const email = input.customerEmail.trim().toLowerCase();
+  return {
+    event: POSTHOG_EVENTS.GB_JOIN_DECIDED,
+    distinctId: email,
+    properties: {
+      ...input.brand,
+      roundName: input.roundName,
+      toStatus: input.toStatus,
+      joinFee: input.amountCents / 100,
+      reason: input.reason,
+      refundReference: input.refundReference,
+      customerName: input.customerName,
+    },
+    personProperties: { email, name: input.customerName },
+  };
+}
+
+/** `admin_gb_join_request` — a customer paid a join fee and sent a receipt.
+ *  The PERSON is the admin (never the customer), so the email reaches the store. */
+export function buildGroupBuyJoinRequestAdminPayload(input: {
+  adminEmail: string;
+  customerName: string;
+  customerEmail: string;
+  roundName: string;
+  amountCents: number;
+  method: string;
+  brand?: EmailBrand;
+}): CapturePayload {
+  const admin = input.adminEmail.trim().toLowerCase();
+  return {
+    event: POSTHOG_EVENTS.GB_JOIN_REQUEST_ADMIN,
+    distinctId: admin,
+    properties: {
+      ...input.brand,
+      roundName: input.roundName,
+      joinFee: input.amountCents / 100,
+      method: input.method,
+      buyerName: input.customerName,
+      buyerEmail: input.customerEmail.trim().toLowerCase(),
+    },
+    personProperties: { email: admin },
   };
 }

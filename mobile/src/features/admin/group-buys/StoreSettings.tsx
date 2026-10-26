@@ -12,6 +12,9 @@ import { ButtonGroup } from "./parts";
 import {
   GB_CONTENT_LIMITS,
   GB_LIVE_BANNER_LIMITS,
+  HERO_COUNTDOWN_AUTO_HEADING,
+  HERO_COUNTDOWN_LIMITS,
+  normalizeHeroCountdown,
   normalizeGroupBuyContent,
   normalizeGroupBuyLiveBanner,
   renderGbCopy,
@@ -22,6 +25,7 @@ import {
   wayIsVisible,
   type GroupBuyContent,
   type GroupBuyLiveBanner,
+  type HeroCountdownConfig,
   type TwoWaysMode,
   type WayKey,
 } from "./model";
@@ -31,7 +35,8 @@ import {
  * Ways to order (saveTwoWaysModeAction), the on-hand-during-a-round toggle
  * (saveGroupBuyAllowOnHandAction) and the storefront copy
  * (saveGroupBuyContentAction) — plus the app-only live strip
- * (saveGroupBuyLiveBannerAction). Each saves on its own, optimistically, and
+ * (saveGroupBuyLiveBannerAction) and the website hero's countdown
+ * (saveHeroCountdownAction). Each saves on its own, optimistically, and
  * reverts if the server refuses.
  */
 
@@ -334,8 +339,150 @@ export function LiveBannerEditor({
   );
 }
 
+// ── Hero countdown (the website's "opens in / closes in" timer) ─────────────
+
+const PREVIEW_UNITS = [
+  { label: "Days", value: "2" },
+  { label: "Hours", value: "04" },
+  { label: "Mins", value: "11" },
+  { label: "Secs", value: "09" },
+] as const;
+
+/** A still of the website's countdown tiles, in the store's own colours. */
+function CountdownPreview({ heading }: { heading: string | null }) {
+  const t = useTheme();
+  return (
+    <View
+      style={[styles.countdown, { backgroundColor: t.colors.surfaceAlt, borderColor: t.colors.border }]}
+      accessibilityLabel={`Preview: ${heading ?? "countdown without text"}`}
+    >
+      {heading ? (
+        <AppText variant="overline" style={{ color: t.brand.primary }}>
+          {heading}
+        </AppText>
+      ) : null}
+      <View style={styles.countdownRow}>
+        {PREVIEW_UNITS.map((u) => (
+          <View key={u.label} style={[styles.countdownUnit, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+            <AppText variant="heading" style={{ color: t.brand.primary, fontVariant: ["tabular-nums"] }}>
+              {u.value}
+            </AppText>
+            <AppText variant="caption" color="muted">
+              {u.label}
+            </AppText>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const headingFor = (typed: string, auto: string, round: string) => (typed || auto).split("{name}").join(round || "Group buy");
+
+/** Controlled: the screen owns the value so the editor and the switches share it. */
+export function HeroCountdownCard({
+  value,
+  setValue,
+  roundName,
+  onEdit,
+}: {
+  value: HeroCountdownConfig;
+  setValue: (v: HeroCountdownConfig) => void;
+  roundName: string;
+  onEdit: () => void;
+}) {
+  const save = useGroupBuySetting<{ ok: true; countdown: HeroCountdownConfig }>("saveHeroCountdownAction");
+  const apply = (next: HeroCountdownConfig) => {
+    const prev = value;
+    setValue(next);
+    save.mutate(next, { onSuccess: (res) => setValue(res.countdown), onError: () => setValue(prev) });
+  };
+  const heading = value.showHeading ? headingFor(value.closingHeading, HERO_COUNTDOWN_AUTO_HEADING.closing, roundName) : null;
+
+  return (
+    <Section
+      title="Hero countdown (website)"
+      hint="A live timer in your website's hero. While a round is open it counts down to its end date. Between rounds it counts down to the next scheduled round's start date. It hides itself when no round has a date."
+    >
+      <ToggleRow label="Show the countdown" value={value.enabled} disabled={save.isPending} onChange={(enabled) => apply({ ...value, enabled })} />
+      {value.enabled ? (
+        <>
+          <ToggleRow
+            label="Text on top of the countdown"
+            value={value.showHeading}
+            disabled={save.isPending}
+            onChange={(showHeading) => apply({ ...value, showHeading })}
+          />
+          <CountdownPreview heading={heading} />
+          {value.showHeading ? (
+            <Button label="Edit countdown text" variant="secondary" icon="create-outline" onPress={onEdit} />
+          ) : null}
+        </>
+      ) : (
+        <Hint>Customers won&apos;t see a countdown on your website.</Hint>
+      )}
+    </Section>
+  );
+}
+
+/** The two heading texts — blank = the automatic text for that phase. */
+export function HeroCountdownEditor({
+  initial,
+  roundName,
+  onClose,
+  onSaved,
+}: {
+  initial: HeroCountdownConfig;
+  roundName: string;
+  onClose: () => void;
+  onSaved: (v: HeroCountdownConfig) => void;
+}) {
+  const save = useGroupBuySetting<{ ok: true; countdown: HeroCountdownConfig }>("saveHeroCountdownAction");
+  const [closingHeading, setClosingHeading] = useState(initial.closingHeading);
+  const [openingHeading, setOpeningHeading] = useState(initial.openingHeading);
+  const draft = normalizeHeroCountdown({ ...initial, closingHeading, openingHeading });
+  const dirty = draft.closingHeading !== initial.closingHeading || draft.openingHeading !== initial.openingHeading;
+
+  return (
+    <EditorSheet
+      visible
+      title="Countdown text"
+      saveLabel="Save text"
+      canSave
+      dirty={dirty}
+      saving={save.isPending}
+      onCancel={onClose}
+      onSave={() => save.mutate(draft, { onSuccess: (res) => onSaved(res.countdown) })}
+    >
+      <Hint>
+        The line shown on top of the countdown. Use {"{name}"} for the round&apos;s name. Leave a field blank to use the default
+        text shown in it.
+      </Hint>
+      <Field
+        label="While a round is open"
+        value={closingHeading}
+        maxLength={HERO_COUNTDOWN_LIMITS.heading}
+        placeholder={HERO_COUNTDOWN_AUTO_HEADING.closing}
+        onChangeText={setClosingHeading}
+      />
+      <CountdownPreview heading={headingFor(draft.closingHeading, HERO_COUNTDOWN_AUTO_HEADING.closing, roundName)} />
+      <Field
+        label="Before a round opens"
+        value={openingHeading}
+        maxLength={HERO_COUNTDOWN_LIMITS.heading}
+        placeholder={HERO_COUNTDOWN_AUTO_HEADING.opening}
+        onChangeText={setOpeningHeading}
+      />
+      <CountdownPreview heading={headingFor(draft.openingHeading, HERO_COUNTDOWN_AUTO_HEADING.opening, roundName)} />
+    </EditorSheet>
+  );
+}
+
 const styles = StyleSheet.create({
   preview: { borderRadius: 14, overflow: "hidden" },
   step: { flexDirection: "row", alignItems: "flex-end", gap: SPACE.sm },
   remove: { width: 44, height: 48, alignItems: "center", justifyContent: "center" },
+  countdown: { alignItems: "center", gap: SPACE.sm, padding: SPACE.md, borderRadius: 14, borderWidth: 1 },
+  countdownRow: { flexDirection: "row", gap: SPACE.sm },
+  countdownUnit: { minWidth: 58, alignItems: "center", paddingVertical: SPACE.sm, borderRadius: 12, borderWidth: 1 },
 });

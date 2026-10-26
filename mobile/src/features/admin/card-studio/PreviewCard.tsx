@@ -180,6 +180,8 @@ export function PreviewCard({
         {design.surface === "gradient" && layout !== "overlay" ? (
           <LinearGradient colors={[r.bg, r.bg2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         ) : null}
+        {/* Text-only: the accent rule stands in for the photo (clipped to the radius here). */}
+        {layout === "text" ? <View style={[styles.accent, { backgroundColor: r.btn }]} /> : null}
       </View>
       {layout === "overlay" ? (
         <View style={{ aspectRatio: 1 / (RATIO[design.imageRatio] ?? 1), borderRadius: design.radius, overflow: "hidden" }}>
@@ -194,7 +196,7 @@ export function PreviewCard({
         </View>
       ) : (
         <>
-          {media}
+          {layout === "text" ? null : media}
           <View style={{ flex: layout === "horizontal" ? 1 : undefined }}>{body}</View>
         </>
       )}
@@ -255,17 +257,20 @@ function SampleArt() {
   );
 }
 
-function Badge({ design, r }: { design: CardDesign; r: Resolved }) {
+function Badge({ design, r, inline }: { design: CardDesign; r: Resolved; inline?: boolean }) {
   if (design.badgeStyle === "hidden") return null;
   const look: Record<Exclude<CardDesign["badgeStyle"], "hidden">, { bg: string; fg: string; border?: string }> = {
     solid: { bg: r.btn, fg: r.btnText },
     soft: { bg: mix(r.btn, "#FFFFFF", 18), fg: mix(r.btn, "#000000", 80) },
-    outline: { bg: "rgba(0, 0, 0, 0.25)", fg: "#FFFFFF", border: "rgba(255, 255, 255, 0.85)" },
+    // White-on-scrim is made for a photo; in the text flow it is an outlined chip.
+    outline: inline
+      ? { bg: "transparent", fg: r.heading, border: r.heading }
+      : { bg: "rgba(0, 0, 0, 0.25)", fg: "#FFFFFF", border: "rgba(255, 255, 255, 0.85)" },
     mono: r.dark ? { bg: "#FFFFFF", fg: "#111827" } : { bg: "#111827", fg: "#FFFFFF" },
   };
   const c = look[design.badgeStyle];
   return (
-    <View style={[styles.badge, { backgroundColor: c.bg, borderColor: c.border ?? "transparent", borderWidth: c.border ? 1 : 0 }]}>
+    <View style={[inline ? styles.badgeInline : styles.badge, { backgroundColor: c.bg, borderColor: c.border ?? "transparent", borderWidth: c.border ? 1 : 0 }]}>
       <AppText variant="caption" color={c.fg} style={styles.badgeText}>
         Featured
       </AppText>
@@ -289,7 +294,8 @@ function Body({
   const name = design.titleCase === "uppercase" ? sample.name.toUpperCase() : sample.name;
   return (
     <View style={{ flex: layout === "horizontal" ? 1 : undefined, justifyContent: "space-between" }}>
-      <View style={{ padding: r.pad, paddingBottom: r.pad * 0.75, gap: 6 }}>
+      <View style={{ padding: r.pad, paddingTop: layout === "text" ? r.pad + 4 : r.pad, paddingBottom: r.pad * 0.75, gap: 6 }}>
+        {layout === "text" ? <Badge design={design} r={r} inline /> : null}
         {sample.purity ? (
           <AppText variant="overline" color={r.body}>
             {sample.purity} PURITY
@@ -353,6 +359,8 @@ function CtaButton({ design, r }: { design: CardDesign; r: Resolved }) {
 const styles = StyleSheet.create({
   overlayBody: { position: "absolute", left: 0, right: 0, bottom: 0 },
   badge: { position: "absolute", top: 10, left: 10, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  badgeInline: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  accent: { position: "absolute", top: 0, left: 0, right: 0, height: 4 },
   badgeText: { fontSize: 11, lineHeight: 15 },
   rating: { flexDirection: "row", alignItems: "center", gap: 4 },
   foot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

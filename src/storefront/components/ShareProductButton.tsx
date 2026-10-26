@@ -24,6 +24,17 @@ const CONFIRM_MS = 2000;
 
 type ShareState = "idle" | "copied" | "manual";
 
+/** `card`   — the compact icon that rides the classic product card, absolutely
+ *              positioned in its corner.
+ *  `detail` — the labelled button in the quick-view modal, which has room for
+ *              words.
+ *  `row`    — an in-flow icon for the layouts whose cards are list rows and
+ *              clip their overflow (the two-ways shelf, the group-buy page, the
+ *              protocol accordion). Its fallback panel is in-flow too, so an
+ *              `overflow: hidden` parent cannot swallow the one path that
+ *              always works. */
+type ShareVariant = "card" | "detail" | "row";
+
 export function ShareProductButton({
   product,
   storeName,
@@ -33,15 +44,37 @@ export function ShareProductButton({
   /** Used as the share sheet's title, so the target app shows the store, not a
    *  bare URL. Optional — the product name alone is a fine fallback. */
   storeName?: string;
-  /** `card`   — the compact icon that rides the classic product card, absolutely
-   *              positioned in its corner.
-   *  `detail` — the labelled button in the quick-view modal, which has room for
-   *              words.
-   *  `row`    — an in-flow icon for the layouts whose cards are list rows and
-   *              clip their overflow (the two-ways shelf, the group-buy page).
-   *              Its fallback panel is in-flow too, so an `overflow: hidden`
-   *              parent cannot swallow the one path that always works. */
-  variant?: "card" | "detail" | "row";
+  variant?: ShareVariant;
+}) {
+  return (
+    <ShareLinkButton
+      buildUrl={(origin) => productShareUrl(origin, product)}
+      title={storeName ? `${product.name} · ${storeName}` : product.name}
+      noun="product"
+      variant={variant}
+    />
+  );
+}
+
+/**
+ * The share/copy routine itself, independent of WHAT is being linked — the
+ * product wrapper above and the per-protocol link on the Protocols page
+ * (lib/storefront/protocol-link.ts) both render through it, so the share sheet,
+ * clipboard and manual fallback behave identically everywhere.
+ */
+export function ShareLinkButton({
+  buildUrl,
+  title,
+  noun,
+  variant = "card",
+}: {
+  /** Absolute URL from `window.location.origin` ("" during SSR). */
+  buildUrl: (origin: string) => string;
+  /** The share sheet's title. */
+  title: string;
+  /** What the link points at, for the labels: "Copy product link". */
+  noun: string;
+  variant?: ShareVariant;
 }) {
   const [state, setState] = useState<ShareState>("idle");
   // The resolved URL, only needed for the manual fallback panel.
@@ -74,7 +107,7 @@ export function ShareProductButton({
     e.stopPropagation();
 
     const origin = typeof window === "undefined" ? "" : window.location.origin;
-    const shareUrl = productShareUrl(origin, product);
+    const shareUrl = buildUrl(origin);
     setUrl(shareUrl);
 
     // Native share sheet first where it exists — it is strictly better than the
@@ -82,7 +115,7 @@ export function ShareProductButton({
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: storeName ? `${product.name} · ${storeName}` : product.name,
+          title,
           url: shareUrl,
         });
         return;
@@ -97,7 +130,8 @@ export function ShareProductButton({
     confirm((await copyText(shareUrl)) ? "copied" : "manual");
   };
 
-  const label = state === "copied" ? "Link copied" : "Copy product link";
+  const label = state === "copied" ? "Link copied" : `Copy ${noun} link`;
+  const Noun = `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
 
   return (
     <span className="sf-share" data-variant={variant}>
@@ -119,18 +153,26 @@ export function ShareProductButton({
 
       {/* Announced to screen readers without stealing focus from the button. */}
       <span className="sf-share__live" role="status" aria-live="polite">
-        {state === "copied" ? "Product link copied to clipboard" : ""}
+        {state === "copied" ? `${Noun} link copied to clipboard` : ""}
       </span>
 
       {state === "manual" && (
         // Both copy paths refused. Put the link on screen so the owner can still
         // select it by hand — the one thing no browser can block.
-        <span className="sf-share__manual" onClick={(e) => e.stopPropagation()}>
+        // preventDefault as well: inside a <summary> (the protocol accordion) a
+        // click that merely stops propagating still toggles the <details>.
+        <span
+          className="sf-share__manual"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
           <input
             className="sf-share__manual-input"
             value={url}
             readOnly
-            aria-label="Product link — select and copy"
+            aria-label={`${Noun} link — select and copy`}
             onFocus={(e) => e.currentTarget.select()}
           />
           <button

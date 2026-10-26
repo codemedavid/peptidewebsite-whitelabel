@@ -162,6 +162,15 @@ export function AdminIcon({ name }: { name: string }) {
           <path d="M4 19h16" />
         </svg>
       );
+    case "timeline":
+      return (
+        <svg {...props}>
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="6" cy="12" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <path d="M6 7v3M6 14v3M11 5h9M11 12h9M11 19h6" />
+        </svg>
+      );
     default:
       return (
         <svg {...props}>

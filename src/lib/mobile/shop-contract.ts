@@ -155,6 +155,65 @@ export type ShopCatalog = {
   checkout: ShopCheckoutConfig;
   /** The live group-buy round, or null. Older servers omit it. */
   groupBuy?: ShopGroupBuy | null;
+  /** Paid group-buy access: set only when this shopper is locked out of the
+   *  store's governing round. `groupBuy` is then null and the round's products
+   *  and group-buy prices are absent from `products`. */
+  groupBuyTeaser?: ShopGroupBuyTeaser | null;
+};
+
+/** The paid group-buy join screen — ONE shape for the website (#groupbuy) and
+ *  the app (GET/POST /shop/group-buy/join). Built server-side by
+ *  lib/storefront/gb-join.server.ts; the copy in `status` comes from
+ *  gb-membership.membershipStatusView so every surface says the same thing. */
+export type GroupBuyJoinState = {
+  round: ShopGroupBuyTeaser;
+  /** "₱500" / "₱499.50". */
+  joinFeeLabel: string;
+  /** Can this customer start a request right now (paid, open round, no live or
+   *  unrefunded request)? */
+  canJoin: boolean;
+  /** Where to send the fee — the store's active checkout payment methods. */
+  paymentMethods: ShopPaymentMethod[];
+  status: { title: string; detail: string; tone: "neutral" | "pending" | "success" | "danger" };
+  /** The customer's latest request on this round; null = none yet. The
+   *  receipt image itself never rides here — see the receipt endpoint. */
+  request: GroupBuyJoinRequest | null;
+};
+
+export type GroupBuyJoinRequest = {
+  /** The request's own id (the customer's own record). */
+  id: string;
+  status: string;
+  amountCents: number;
+  reference: string;
+  method: string;
+  /** ISO. */
+  paidAt: string | null;
+  submittedAt: string | null;
+  hasReceipt: boolean;
+  /** The store's reason (rejected / revoked); "" otherwise. */
+  reviewReason: string;
+};
+
+export type GroupBuyJoinErrorCode = "unauthenticated" | "invalid_input" | "not_found" | "conflict" | "rate_limited" | "server_error";
+
+export type GroupBuyJoinResult =
+  | { ok: true; state: GroupBuyJoinState }
+  | { ok: false; code: GroupBuyJoinErrorCode; message: string };
+
+/** What a locked shopper is told about a paid round (lib/storefront/gb-access
+ *  GroupBuyTeaser — declared here, not imported, because the Expo app compiles
+ *  this file and must not resolve the website's modules). */
+export type ShopGroupBuyTeaser = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  state: "upcoming" | "live" | "closed";
+  /** Centavos. */
+  joinFeeCents: number;
+  /** The shopper's own latest request on this round; null = none. */
+  membership: { status: string; reviewReason: string } | null;
 };
 
 // ── Cart, quote, place ───────────────────────────────────────────────────────
