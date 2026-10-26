@@ -21,6 +21,7 @@ Plus **GB payment mode** per store: *Pay before checkout* (`pay_first`) or *Pay 
 9. Operator-grantable features, default OFF: `groupbuy.bunuan`, `groupbuy.ligwak`. First store: mnm-pepsabuy. Website + PepWorld app fully in sync. NOT Mamamica.
 
 10. (HANDOFF-1A open questions, owner 2026-10-27) **Reopen:** an admin MAY move Closed → Open before the Ligwak lock (audited); never after the lock. **QR PH fee:** on a pay_first refund the processing fee is KEPT as charged (QR PH does not return it), so the refund covers items + shipping only. **Edits after the Ligwak lock:** blocked until the admin presses Recalculate (1A's `editsLocked`). **Bunuan timer:** none; Bunuan ends by admin action or automatically when every kit fills.
+11. (HANDOFF-2A, owner 2026-10-27: "use your reco") **Bunuan claims:** during Bunuan the cap and the admin counter count every placed, non-cancelled order. A pay_first order awaiting its payment check HOLDS its vials (shown as "pending" on the counter), so two buyers can't be sold the same last vials. Ligwak Lock is blocked while any pay_first order awaits its check. **Fully-ligwak'd order:** keeps its status (no auto-cancel: no emails, no stock move); its lines read Cancelled and its total is 0 (or the kept QR PH fee). **Payment time without Ligwak:** there's no re-total, so "Payment due" shows the order's own total. **Admin order edits:** the admin fee and discount stay as charged at checkout (a percentage admin fee is only re-charged at the Ligwak lock). **Invoices at Payment time:** Wave 3C's job, hooked on `setStage` / `setGbStageAction`.
 
 ## Waves
 
@@ -28,7 +29,7 @@ Plus **GB payment mode** per store: *Pay before checkout* (`pay_first`) or *Pay 
 |---|---|---|
 | 1 | [WAVE-1A-core.md](WAVE-1A-core.md) — pure logic + tests | — |
 | 1 | [WAVE-1B-payment-mode.md](WAVE-1B-payment-mode.md) — payment-mode setting + website pay-later checkout | — |
-| 2 | [WAVE-2A-server.md](WAVE-2A-server.md) — schema, live DB, server actions | 1A + 1B merged |
+| 2 | [WAVE-2A-server.md](WAVE-2A-server.md) — schema, live DB, server actions (**merged; live DB pushed — see [HANDOFF-2A.md](HANDOFF-2A.md)**) | 1A + 1B merged |
 | 3 | [WAVE-3A-admin.md](WAVE-3A-admin.md) — admin UI web + app | 2A merged |
 | 3 | [WAVE-3B-customer.md](WAVE-3B-customer.md) — customer UI web + app | 2A merged |
 | 3 | [WAVE-3C-notify.md](WAVE-3C-notify.md) — notifications + invoice timing | 2A merged |
