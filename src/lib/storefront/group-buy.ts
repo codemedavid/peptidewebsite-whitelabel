@@ -47,6 +47,9 @@ export type GroupBuy = {
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The admin's stage (open | bunuan | closed | payment — lib/storefront/gb-stage).
+   *  Set from the DB row only (dbGroupBuyToStorefront); never parsed from a save. */
+  stage?: string;
 };
 
 /** Report-output entitlements (groupbuy.reports.*) — which export formats and
@@ -77,6 +80,10 @@ export type GroupBuyCapabilities = {
   supplierReports: boolean;
   // groupbuy.paid_access — rounds may require a paid, approved join.
   paidAccess: boolean;
+  // groupbuy.bunuan / groupbuy.ligwak — the kit-fill phase and the leftover-vial
+  // allocation (docs/bunuan). Either one puts the store's rounds on stages.
+  bunuan: boolean;
+  ligwak: boolean;
   reports: GroupBuyReportCapabilities;
 };
 
@@ -90,6 +97,8 @@ export const GROUP_BUY_CAPS_OFF: GroupBuyCapabilities = {
   productAssignment: false,
   supplierReports: false,
   paidAccess: false,
+  bunuan: false,
+  ligwak: false,
   reports: {
     excel: false,
     csv: false,
@@ -369,10 +378,11 @@ export type DbGroupBuyRow = {
   closedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  stage?: string | null;
 };
 
 export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
-  return normalizeGroupBuy({
+  const gb = normalizeGroupBuy({
     id: row.id,
     name: row.name,
     description: row.description,
@@ -390,6 +400,9 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   });
+  // The stage is server authority (stage actions only) — from the row, never
+  // through normalizeGroupBuy, which also parses the admin's save payload.
+  return row.stage && row.stage !== "open" ? { ...gb, stage: row.stage } : gb;
 }
 
 export function groupBuyToDbWrite(gb: GroupBuy) {

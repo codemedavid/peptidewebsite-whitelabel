@@ -33,6 +33,8 @@ export async function resolveGroupBuyCaps(tenantId: string): Promise<GroupBuyCap
     productAssignment: has(FEATURES.GB_PRODUCT_ASSIGNMENT),
     supplierReports: has(FEATURES.GB_SUPPLIER_REPORTS),
     paidAccess: has(FEATURES.GB_PAID_ACCESS),
+    bunuan: has(FEATURES.GB_BUNUAN),
+    ligwak: has(FEATURES.GB_LIGWAK),
     reports: {
       excel: has(FEATURES.GB_REPORT_EXCEL),
       csv: has(FEATURES.GB_REPORT_CSV),

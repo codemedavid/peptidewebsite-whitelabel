@@ -11,6 +11,7 @@
 // Prices are never computed here: fromPrice is the lowest of the prices the
 // catalog already charges (unitPrice with the round's scope applied).
 
+import { normalizeGbStage } from "@/lib/storefront/gb-stage";
 import type { GroupBuyBanner } from "@/lib/storefront/group-buy-banner";
 import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { formatMoney } from "@/lib/storefront/currency";
@@ -69,6 +70,8 @@ export function buildShopGroupBuy({ banner, content, liveBanner, invoice, paymen
     terms: fill(copy.terms),
     liveBanner: renderGroupBuyLiveBanner(liveBanner, banner),
     invoice: invoiceTerms(invoice, paymentMode),
+    ...(banner.stage ? { stage: normalizeGbStage(banner.stage) } : {}),
+    ...(banner.bunuan ? { bunuan: { open: banner.bunuan.open.map((i) => ({ ...i })) } } : {}),
   };
 }
 

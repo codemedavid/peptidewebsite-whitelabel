@@ -5,3 +5,5 @@
  */
 
 export * from "./rules";
+export * from "./counter";
+export * from "./stage-sync";

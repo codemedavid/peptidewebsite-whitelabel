@@ -11,7 +11,9 @@ import { cartDisplayName, makeVariationEntry, unitPrice } from "@/storefront/che
 import type { Order, OrderItem, Product } from "@/storefront/types";
 import { loadRoundRows, scheduledRoundsOn } from "./order-rounds.server";
 import { sortRounds, toShopOrderRound } from "./order-rounds";
-import type { ShopCheckoutConfig, ShopOrder, ShopOrdersResponse } from "./shop-contract";
+import type { ShopCheckoutConfig, ShopOrder, ShopOrderItem, ShopOrdersResponse } from "./shop-contract";
+import { gbLineStatuses } from "@/lib/orders/gb-line-status";
+import { resolveGroupBuyCaps } from "@/lib/storefront/group-buy-server";
 
 /**
  * Turn the app's cart ({ productId, variation?, qty }) into the SAME Order
@@ -199,15 +201,38 @@ export function buildOrderDraft(d: DraftInput): Record<string, unknown> {
 
 // ── My orders ────────────────────────────────────────────────────────────────
 
-export function toShopOrder(o: Order): ShopOrder {
-  const { date, ...tracked } = toTrackedOrder(o);
+/** An order line as the shopper sees it: variation, price, and (Ligwak
+ *  stores) the line status — Pending until the lock, then the outcome. */
+function toShopOrderItems(o: Order, ligwak: boolean): ShopOrderItem[] {
+  const statuses = gbLineStatuses(o, { enabled: ligwak && !!o.groupBuyId });
+  return o.items.map((item, i) => {
+    const s = statuses[i];
+    return {
+      name: item.name,
+      qty: item.qty,
+      price: item.price,
+      ...(item.productId ? { productId: item.productId } : {}),
+      ...(item.variation ? { variation: item.variation } : {}),
+      ...(s ? { lineStatus: s.lineStatus, successQty: s.successQty, cancelledQty: s.cancelledQty, lineStatusLabel: s.label } : {}),
+      ...(item.changedByStore || item.addedBy === "store" ? { changedByStore: true } : {}),
+      ...(item.originalQty ? { originalQty: item.originalQty } : {}),
+    };
+  });
+}
+
+/** `ligwak`: the store runs Ligwak, so un-locked round lines read "Pending". */
+export function toShopOrder(o: Order, opts: { ligwak?: boolean } = {}): ShopOrder {
+  const { date, items: _items, adjustedTotal: _a, gbTotals: _g, originalTotal, changedByStore, ...tracked } = toTrackedOrder(o); // eslint-disable-line @typescript-eslint/no-unused-vars
   return {
     ...tracked,
+    items: toShopOrderItems(o, opts.ligwak === true),
     placedAt: date,
     paymentStatus: o.paymentStatus,
     total: computeOrderTotals(o).total,
     groupBuyId: o.groupBuyId ?? null,
     groupBuyName: o.groupBuyName ?? null,
+    ...(originalTotal != null ? { originalTotal } : {}),
+    ...(changedByStore ? { changedByStore: true } : {}),
   };
 }
 
@@ -217,13 +242,14 @@ export function toShopOrder(o: Order): ShopOrder {
  * them per round.
  */
 export async function listShopOrders(tenantId: string, customerId: string): Promise<ShopOrdersResponse> {
+  const { ligwak } = await resolveGroupBuyCaps(tenantId);
   const { orders, roundRows } = await withTenant(tenantId, async (db) => {
     const rows = await db.storefrontOrder.findMany({
       where: { ...ACTIVE_ORDERS_WHERE, customerAccountId: customerId },
       orderBy: { placedAt: "desc" },
       take: 100,
     });
-    const list = rows.map((r) => toShopOrder(dbOrderToStorefront(r as DbOrderRow)));
+    const list = rows.map((r) => toShopOrder(dbOrderToStorefront(r as DbOrderRow), { ligwak }));
     return { orders: list, roundRows: await loadRoundRows(db, list.flatMap((o) => (o.groupBuyId ? [o.groupBuyId] : []))) };
   });
   const scheduled = await scheduledRoundsOn(tenantId, roundRows);

@@ -18,7 +18,7 @@ import { normalizeOrderPaymentFee } from "@/lib/storefront/payment-fee";
 import { normalizeCustomerNote } from "@/lib/orders/customer-note";
 import { promoLabel } from "@/lib/storefront/promo";
 import { ADMIN_FEE_LABEL_DEFAULT, ADMIN_FEE_LABEL_MAX } from "@/lib/storefront/admin-fee";
-import type { Order, OrderItem, OrderStatusEvent } from "@/storefront/types";
+import type { Order, OrderGbTotals, OrderItem, OrderRefundStatus, OrderStatusEvent } from "@/storefront/types";
 
 // -- Input hardening ---------------------------------------------------------
 
@@ -46,6 +46,82 @@ export function normalizeItems(input: unknown): OrderItem[] {
       ...(x.variation ? { variation: str(x.variation, 80) } : {}),
     };
   });
+}
+
+type LineStamps = Pick<OrderItem, "cancelledQty" | "placedAt" | "addedBy" | "changedByStore" | "originalQty">;
+
+/** The server's stamps on one STORED line (Ligwak cancellations, store edits).
+ *  Read only from a DB row — normalizeItems, which also parses anonymous
+ *  checkout payloads, never accepts them, or a buyer could pre-cancel vials. */
+function readLineStamps(raw: unknown, qty: number): LineStamps {
+  if (!raw || typeof raw !== "object") return {};
+  const x = raw as Record<string, unknown>;
+  const cancelled = Math.floor(num(x.cancelledQty));
+  const original = Math.floor(num(x.originalQty));
+  const placedAt = typeof x.placedAt === "string" && x.placedAt ? str(x.placedAt, 40) : "";
+  return {
+    ...(cancelled > 0 ? { cancelledQty: Math.min(cancelled, qty) } : {}),
+    ...(placedAt ? { placedAt } : {}),
+    ...(x.addedBy === "store" ? { addedBy: "store" as const } : {}),
+    ...(x.changedByStore === true ? { changedByStore: true as const } : {}),
+    ...(original > 0 ? { originalQty: original } : {}),
+  };
+}
+
+/** Stored items with their server stamps kept (index-aligned with normalizeItems). */
+export function storedItems(input: unknown): OrderItem[] {
+  const raw = Array.isArray(input) ? input : [];
+  return normalizeItems(raw).map((item, i) => ({ ...item, ...readLineStamps(raw[i], item.qty) }));
+}
+
+/** The vials an order's stock move covers: what survived Ligwak. A fully
+ *  ligwak'd line moves nothing — its vials went back when the lock ran. */
+export function stockItems(input: unknown): OrderItem[] {
+  return storedItems(input)
+    .map(({ cancelledQty, ...item }) => ({ ...item, qty: item.qty - (cancelledQty ?? 0) }))
+    .filter((item) => item.qty > 0);
+}
+
+const REFUND_STATUSES: readonly OrderRefundStatus[] = ["for_review", "refund_pending", "refunded"];
+
+const centsToMajor = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) ? v / 100 : undefined;
+
+function readGbTotals(input: unknown): OrderGbTotals | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const x = input as Record<string, unknown>;
+  const n = (k: string) => Math.max(0, num(x[k]));
+  return {
+    subtotal: n("subtotal"),
+    successSubtotal: n("successSubtotal"),
+    discount: n("discount"),
+    shipping: n("shipping"),
+    adminFee: n("adminFee"),
+    paymentFee: n("paymentFee"),
+    originalTotal: n("originalTotal"),
+    newTotal: n("newTotal"),
+    amountDue: n("amountDue"),
+    refundDue: n("refundDue"),
+  };
+}
+
+/** The Ligwak re-total fields, from the ROW only (never from checkout input). */
+function rowAllocation(row: DbOrderRow): Partial<Order> {
+  const adjustedTotal = centsToMajor(row.adjustedTotalCents);
+  const gbTotals = adjustedTotal === undefined ? undefined : readGbTotals(row.gbTotals);
+  const amountDue = centsToMajor(row.amountDueCents);
+  const refundDue = centsToMajor(row.refundDueCents);
+  const refundStatus = REFUND_STATUSES.find((s) => s === row.refundStatus);
+  const editedAt = row.storeEditedAt instanceof Date ? row.storeEditedAt.toISOString() : row.storeEditedAt || "";
+  return {
+    ...(adjustedTotal !== undefined ? { adjustedTotal } : {}),
+    ...(gbTotals ? { gbTotals } : {}),
+    ...(amountDue !== undefined ? { amountDue } : {}),
+    ...(refundDue !== undefined ? { refundDue } : {}),
+    ...(refundStatus ? { refundStatus } : {}),
+    ...(row.refundReference ? { refundReference: str(row.refundReference, 200) } : {}),
+    ...(editedAt ? { storeEditedAt: editedAt } : {}),
+  };
 }
 
 /** Coerce a stored/untrusted fee blob into the order's fee, or undefined when
@@ -174,6 +250,14 @@ export type DbOrderRow = {
   orderType?: string | null;
   imported?: boolean;
   deletedAt?: Date | string | null;
+  // Ligwak re-total (all optional: older selects and demo rows don't carry them)
+  adjustedTotalCents?: number | null;
+  amountDueCents?: number | null;
+  refundDueCents?: number | null;
+  refundStatus?: string | null;
+  refundReference?: string | null;
+  gbTotals?: unknown;
+  storeEditedAt?: Date | string | null;
 };
 
 export function dbOrderToStorefront(row: DbOrderRow): Order {
@@ -212,5 +296,8 @@ export function dbOrderToStorefront(row: DbOrderRow): Order {
     row.orderType === "reseller" ? { ...withImported, orderType: "reseller" } : withImported;
   const deletedAt =
     row.deletedAt instanceof Date ? row.deletedAt.toISOString() : row.deletedAt || null;
-  return deletedAt ? { ...withType, deletedAt } : withType;
+  const withDeleted = deletedAt ? { ...withType, deletedAt } : withType;
+  // Server stamps on stored lines and the Ligwak re-total ride the same rule:
+  // from the ROW only. storedItems is index-aligned with normalizeItems.
+  return { ...withDeleted, items: storedItems(row.items), ...rowAllocation(row) };
 }

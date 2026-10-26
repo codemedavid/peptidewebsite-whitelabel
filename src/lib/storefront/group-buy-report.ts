@@ -38,6 +38,43 @@ import {
   type RoundSummary,
 } from "./group-buy-orders";
 import { withKitColumns, type KitColumns } from "./gb-moq-kits";
+import {
+  countedVials,
+  countsTowardKits,
+  kitKey,
+  readKitLines,
+  withLineKitColumns,
+  type GbPaymentMode,
+  type KitProduct,
+} from "./gb-kits";
+
+/** Stores with Bunuan / Ligwak: the supplier sheet counts by the ONE kit rule
+ *  (gb-kits countsTowardKits) and per VARIATION kit size. */
+export type ReportKits = { mode: GbPaymentMode; products: readonly KitProduct[] };
+
+/**
+ * "Products to Order" under the kit rule: only orders the payment mode counts
+ * (pay_first = checked, pay_later = every placed one), each line's vials less
+ * what Ligwak cancelled (success qty only), kits per variation.
+ */
+function productsToOrderByKits(orders: readonly ReportInputOrder[], kits: ReportKits): Array<ProductToOrder & KitColumns> {
+  const byKey = new Map<string, ProductToOrder>();
+  for (const o of orders) {
+    if (!countsTowardKits({ status: o.status, paymentStatus: o.paymentStatus }, kits.mode)) continue;
+    const seen = new Set<string>();
+    for (const line of readKitLines(o.items)) {
+      const vials = countedVials(line);
+      if (vials <= 0) continue;
+      const key = kitKey(line);
+      const row = byKey.get(key) ?? { product: line.name, productId: line.productId ?? null, variation: line.variation ?? null, vials: 0, orders: 0 };
+      const next = { ...row, vials: row.vials + vials, orders: row.orders + (seen.has(key) ? 0 : 1) };
+      seen.add(key);
+      byKey.set(key, next);
+    }
+  }
+  const rows = [...byKey.values()].sort((a, b) => b.vials - a.vials || a.product.localeCompare(b.product));
+  return withLineKitColumns(rows, kits.products);
+}
 
 /** The round header the workbook labels itself with. */
 export type ReportRound = ReportRoundWindow;
@@ -165,6 +202,8 @@ export function prepareReport(
   report: SupplierReport = buildSupplierReport("", orders),
   /** product id → vials per kit (gb-moq-kits). Empty = no kit columns. */
   kitSizes: Readonly<Record<string, number>> = {},
+  /** Stores with Bunuan / Ligwak — count by the kit rule, kits per variation. */
+  kits?: ReportKits,
 ): ReportPrep {
   const demand = orders.filter((o) => orderCountsAsDemand(o.status));
   const committed = demand.filter(isCommitted);
@@ -197,7 +236,9 @@ export function prepareReport(
 
   // "Products to Order" — the sheet the supplier order is placed from. Cancelled
   // orders are excluded completely (ordering against them means over-buying).
-  const productsToOrder = withKitColumns(buildProductsToOrder(orders), kitSizes);
+  const productsToOrder = kits
+    ? productsToOrderByKits(orders, kits)
+    : withKitColumns(buildProductsToOrder(orders), kitSizes);
 
   // Headline counts, from the same summarizer the on-screen tiles use.
   const counts = summarizeRoundOrders(orders);

@@ -113,6 +113,7 @@ type VariationMeta = {
   image?: string;
   extraImages?: string[];
   includes?: string;
+  kitSize?: number;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -338,6 +339,8 @@ function cleanVariations(
       // The option's packing list ("10 pcs syringes" per line), trimmed and
       // capped; blank = no key, so an option without one reads as it always did.
       const includes = cleanIncludes(x?.includes);
+      // The option's own kit size (Bunuan/Ligwak); absent = the product's vialsPerKit.
+      const kitSize = normalizeVialsPerKit(x?.kitSize);
       return {
         name,
         price,
@@ -346,6 +349,7 @@ function cleanVariations(
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
         ...(includes ? { includes } : {}),
+        ...(kitSize ? { kitSize } : {}),
       };
     })
     .filter((x) => x.name);

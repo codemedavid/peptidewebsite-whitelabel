@@ -66,7 +66,8 @@ import {
   normalizeCheckoutRules,
 } from "@/lib/storefront/checkout-rules";
 import { groupBuyForOrder } from "@/lib/storefront/group-buy";
-import { resolveGroupBuyCaps, loadGroupBuys } from "@/lib/storefront/group-buy-server";
+import { resolveGroupBuyCaps, loadGroupBuys, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
+import { bunuanPrecheck, enforceBunuanCap, finishBunuanOrder, type BunuanScope } from "@/modules/bunuan/server/cap";
 import { INVOICE_PAYMENT_METHOD, invoiceShippingFee, normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
 import { evaluateOnHandGate, type OnHandGateItem } from "@/lib/storefront/on-hand-gate";
@@ -144,6 +145,7 @@ import {
   str,
   num,
   normalizeItems,
+  stockItems,
   normalizeOrderFee,
   normalizeOrderDiscount,
   normalizeStatusHistory,
@@ -860,7 +862,14 @@ function demoDisplaySymbol(slug: string): string {
  * exported: every export of a "use server" module is a public endpoint.
  */
 type LiveOrderCheck =
-  | { ok: true; config: Record<string, unknown>; slug: string; invoice: GroupBuyInvoiceStamp | null }
+  | {
+      ok: true;
+      config: Record<string, unknown>;
+      slug: string;
+      invoice: GroupBuyInvoiceStamp | null;
+      /** The attributed round's scope — the Bunuan cap re-checks it inside the insert. */
+      gbScope: BunuanScope;
+    }
   | { error: string };
 
 async function validateLiveOrder(
@@ -1036,7 +1045,13 @@ async function validateLiveOrder(
   const gbOnHand = await groupBuyOnHandViolation(config, tenantId, slug, p.items, catalog);
   if (gbOnHand) return { error: gbOnHand };
 
-  return { ok: true, config, slug, invoice };
+  // Bunuan time: only the vials the round's unfinished kits still need. A fast
+  // no-lock check here (so the quote says it too); the binding one runs inside
+  // the insert with the round row locked (createStorefrontOrder).
+  const bunuanError = await bunuanPrecheck(tenantId, p, gbScope);
+  if (bunuanError) return { error: bunuanError };
+
+  return { ok: true, config, slug, invoice, gbScope };
 }
 
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
@@ -1217,7 +1232,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       (await hasFeature(tenantId, FEATURES.STORE_CUSTOMER_ACCOUNTS))
         ? await getSignedInCustomer(tenantId)
         : null;
-    const { row, created } = await createStorefrontOrder(tenantId, p, account?.id ?? null);
+    const { row, created } = await createStorefrontOrder(tenantId, p, account?.id ?? null, checked.gbScope);
     const placed = dbOrderToStorefront(row as DbOrderRow);
     // Only count the code on a genuinely-new row — an idempotent retry that
     // returned the already-stored order must not double-count.
@@ -1324,6 +1339,7 @@ async function createStorefrontOrder(
   tenantId: string,
   p: Order,
   customerAccountId: string | null,
+  gbScope: BunuanScope = null,
   attempts = 8,
 ) {
   const clientId = p.id || undefined;
@@ -1347,12 +1363,18 @@ async function createStorefrontOrder(
       generateStorefrontOrderNumber(db, tenantId),
     );
     try {
-      const row = await withTenant(tenantId, (db) =>
-        db.storefrontOrder.create({
+      const { row, roundClosed } = await withTenant(tenantId, async (db) => {
+        // Bunuan time: lock the round, recount, refuse what no longer fits
+        // (throws BunuanCapError → the whole insert rolls back).
+        const hold = await enforceBunuanCap(db, tenantId, p, gbScope);
+        const created = await db.storefrontOrder.create({
           data: { ...orderToDbCreate(tenantId, p), orderNumber, clientId, customerAccountId },
-        }),
-      );
+        });
+        // …and the order that fills the last kit closes the round.
+        return { row: created, roundClosed: hold ? await finishBunuanOrder(db, tenantId, hold, created) : false };
+      });
       revalidateOrders(tenantId);
+      if (roundClosed) revalidateGroupBuys(tenantId);
       return { row, created: true };
     } catch (e) {
       if ((e as { code?: string }).code === "P2002") {
@@ -1819,7 +1841,8 @@ export async function bulkUpdateStorefrontOrderStatusAction(
           status: r.status as Order["status"],
           statusHistory: normalizeStatusHistory(r.statusHistory),
           imported: r.imported,
-          items: normalizeItems(r.items),
+          // What survived Ligwak — ligwak'd vials were restocked at the lock.
+          items: stockItems(r.items),
         })),
         status,
         now,

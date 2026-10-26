@@ -28,6 +28,8 @@ const RANGES: { id: RangeId; label: string; prevLabel: string }[] = [
 const MAX_MONTH_BUCKETS = 48;
 
 function totalOf(o: Order): number {
+  // Re-totalled by Ligwak → that is the order's total.
+  if (o.adjustedTotal != null) return o.adjustedTotal;
   return Math.max(
     0,
     (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -

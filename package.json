@@ -40,6 +40,7 @@
     "test:paid-access": "npm run -s test:paid-access-core && npm run -s test:paid-access-db && npm run -s test:paid-access-flow && npm run -s test:paid-access-boundary",
     "test:paid-access-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-paid-access-flow.ts",
     "db:paid-access": "prisma db execute --file src/modules/paid-access/sql/paid-access.sql --schema prisma/schema.prisma",
+    "db:gb-allocation": "prisma db execute --file src/modules/ligwak/sql/gb-allocation.sql --schema prisma/schema.prisma",
     "test:gb-access": "tsx scripts/test-gb-access.ts",
     "test:members-only": "tsx scripts/test-members-only.ts",
     "test:gb-email-pass": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-gb-email-pass.ts",
@@ -247,6 +248,9 @@
     "test:gb-totals": "tsx scripts/test-gb-totals.ts",
     "test:gb-stage": "tsx scripts/test-gb-stage.ts",
     "test:gb-reprice": "tsx scripts/test-gb-reprice.ts",
+    "test:gb-stage-sync": "tsx scripts/test-gb-stage-sync.ts",
+    "test:bunuan-db": "tsx scripts/test-bunuan-db.ts",
+    "test:bunuan-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-bunuan-flow.ts",
     "test:bunuan": "npm run -s test:gb-kits && npm run -s test:bunuan-core && npm run -s test:ligwak-core && npm run -s test:gb-totals && npm run -s test:gb-stage && npm run -s test:gb-reprice"
   },
   "prisma": {

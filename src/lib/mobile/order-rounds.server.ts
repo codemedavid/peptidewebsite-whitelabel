@@ -19,6 +19,9 @@ export async function loadRoundRows(db: TenantTx, ids: string[]): Promise<RoundR
       closedAt: true,
       deliveryEta: true,
       createdAt: true,
+      stage: true,
+      paymentDueAt: true,
+      ligwakLockedAt: true,
     },
   });
 }

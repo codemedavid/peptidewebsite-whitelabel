@@ -1,4 +1,6 @@
 import { effectiveGroupBuyStatus } from "@/lib/storefront/group-buy";
+import { stageLabel } from "@/lib/storefront/gb-stage";
+import { effectiveStage } from "@/modules/bunuan/core/stage-sync";
 import type { OrderRoundFacet, OrderRoundState } from "./contract";
 import { ON_HAND_ROUND } from "./contract";
 import type { ShopOrderRound } from "./shop-contract";
@@ -19,6 +21,10 @@ export type RoundRow = {
   closedAt: Date | null;
   deliveryEta: string;
   createdAt: Date;
+  // Stages (docs/bunuan) — optional: the admin round bar doesn't select them.
+  stage?: string;
+  paymentDueAt?: Date | null;
+  ligwakLockedAt?: Date | null;
 };
 
 export type RoundCount = { groupBuyId: string | null; count: number; snapshotName: string | null };
@@ -69,6 +75,18 @@ export function toShopOrderRound(row: RoundRow, scheduledEnabled: boolean, now =
     deliveryEta: row.deliveryEta.trim(),
     endsAt: row.endsAt?.toISOString() ?? null,
     closedAt: row.closedAt?.toISOString() ?? null,
+    ...stageFields(row, now),
+  };
+}
+
+function stageFields(row: RoundRow, now: Date): Partial<ShopOrderRound> {
+  if (row.stage === undefined) return {};
+  const stage = effectiveStage({ status: row.status, stage: row.stage }, now);
+  return {
+    stage,
+    stageLabel: stageLabel(stage),
+    paymentDueAt: row.paymentDueAt?.toISOString() ?? null,
+    ligwakLocked: !!row.ligwakLockedAt,
   };
 }
 

@@ -41,7 +41,9 @@ DECLARE
     'assessment_responses',
     -- Paid Access entry flows (src/modules/paid-access). paid_access_webhook_events has no
     -- tenant (webhooks arrive before one is known) and stays out on purpose.
-    'paid_access_flows', 'paid_access_memberships', 'paid_access_payments', 'paid_access_events'
+    'paid_access_flows', 'paid_access_memberships', 'paid_access_payments', 'paid_access_events',
+    -- Bunuan + Ligwak (src/modules/bunuan, src/modules/ligwak)
+    'gb_allocations', 'gb_allocation_entries', 'gb_audit_events'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

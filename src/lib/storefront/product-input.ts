@@ -66,6 +66,8 @@ export function normalizeProductInput(input: unknown): Product {
       const extraImages = cleanExtraImages(x.extraImages, image);
       // The option's packing list — same trap: name it here or a save drops it.
       const includes = cleanIncludes(x.includes);
+      // The option's own kit size (Bunuan/Ligwak) — same trap: name it or a save drops it.
+      const kitSize = normalizeVialsPerKit(x.kitSize);
       return {
         ...base,
         ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
@@ -73,6 +75,7 @@ export function normalizeProductInput(input: unknown): Product {
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
         ...(includes ? { includes } : {}),
+        ...(kitSize ? { kitSize } : {}),
       };
     })
     .filter((v) => v.name);

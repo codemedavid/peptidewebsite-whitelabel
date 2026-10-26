@@ -62,6 +62,10 @@ const TENANT_MODELS = new Set<string>([
   "paidAccessMembership",
   "paidAccessPayment",
   "paidAccessEvent",
+  // Bunuan + Ligwak (src/modules/bunuan, src/modules/ligwak)
+  "gbAllocation",
+  "gbAllocationEntry",
+  "gbAuditEvent",
   // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
   "communityMember",
   "communityChannel",

@@ -117,6 +117,9 @@ export type Product = {
     image?: string;
     extraImages?: string[];
     includes?: string;
+    /** Vials per supplier kit for THIS option (Bunuan/Ligwak kits are per
+     *  variation). Absent = the product's vialsPerKit. See lib/storefront/gb-kits. */
+    kitSize?: number;
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -186,7 +189,33 @@ export type OrderItem = {
    *  variation. The `name` already carries it for display; this keeps it as a
    *  structured field for reports. Absent on single-option lines. */
   variation?: string;
+  /** Server stamps on a STORED line (Bunuan/Ligwak — never read from a checkout
+   *  payload; see dbOrderToStorefront). `cancelledQty` = vials ligwak'd off this
+   *  line; `placedAt` = when the store added these vials; `addedBy` marks a line
+   *  the store added; `changedByStore` + `originalQty` mark a line the store
+   *  lowered. All absent on an ordinary line. */
+  cancelledQty?: number;
+  placedAt?: string;
+  addedBy?: "store";
+  changedByStore?: true;
+  originalQty?: number;
 };
+
+/** The Ligwak re-total of a group-buy order, major units (lib/orders/gb-totals). */
+export type OrderGbTotals = {
+  subtotal: number;
+  successSubtotal: number;
+  discount: number;
+  shipping: number;
+  adminFee: number;
+  paymentFee: number;
+  originalTotal: number;
+  newTotal: number;
+  amountDue: number;
+  refundDue: number;
+};
+
+export type OrderRefundStatus = "for_review" | "refund_pending" | "refunded";
 
 export type OrderStatus =
   | "new"
@@ -286,6 +315,19 @@ export type Order = {
    *  excluded from every list, count and report until it is restored — see
    *  lib/orders/trash. Set from the DB row only, never from checkout input. */
   deletedAt?: string;
+  /** Ligwak re-total (src/modules/ligwak), set from the DB row only. Absent =
+   *  never allocated, and the total is computed from the lines as always. When
+   *  set, `adjustedTotal` IS the order's total and `gbTotals` its breakdown. */
+  gbTotals?: OrderGbTotals;
+  adjustedTotal?: number;
+  /** pay_later: still owed at Payment time. */
+  amountDue?: number;
+  /** pay_first: owed back by the store (never the QR PH fee). */
+  refundDue?: number;
+  refundStatus?: OrderRefundStatus;
+  refundReference?: string;
+  /** When the store last changed this order's lines (ISO). */
+  storeEditedAt?: string;
 };
 
 export type ShippingLocation = {

@@ -29,7 +29,15 @@ export type GroupBuyBanner = {
    *  ("7 of 10 vials"). Counts only, no customer data. Empty until
    *  storefront-brand totals the round's orders. */
   kitVials?: Record<string, number>;
+  /** The round's stage (lib/storefront/gb-stage). Absent = "open". */
+  stage?: string;
+  /** Bunuan time only: the options still buyable and how many vials each can
+   *  take ("up to N"). Everything else in the round is closed. The checkout
+   *  re-checks it live (modules/bunuan/server/cap). */
+  bunuan?: { open: BunuanOpenItem[] } | null;
 };
+
+export type BunuanOpenItem = { productId: string; variation: string | null; name: string; allowance: number };
 
 /**
  * Build the banner for the current live round. coversAll is true when the round
@@ -62,6 +70,7 @@ export function buildGroupBuyBanner(
     filled: 0,
     moqVials: gb.moqVials ?? null,
     kitVials: {},
+    ...(gb.stage ? { stage: gb.stage } : {}),
   };
 }
 
