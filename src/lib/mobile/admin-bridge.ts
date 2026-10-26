@@ -95,6 +95,7 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   saveGroupBuyLiveBannerAction: groupBuys.saveGroupBuyLiveBannerAction,
   saveHeroCountdownAction: groupBuys.saveHeroCountdownAction,
   saveGroupBuyInvoiceAction: groupBuys.saveGroupBuyInvoiceAction,
+  saveGroupBuyPaymentModeAction: groupBuys.saveGroupBuyPaymentModeAction,
   sendGroupBuyInvoicesAction: groupBuys.sendGroupBuyInvoicesAction,
   duplicateGroupBuyAction: groupBuys.duplicateGroupBuyAction,
   setGroupBuyArchivedAction: groupBuys.setGroupBuyArchivedAction,

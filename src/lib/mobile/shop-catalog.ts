@@ -19,6 +19,7 @@ import { readCheckoutConfig } from "./shop-checkout";
 import { getTenantContext } from "@/lib/tenant/context";
 import type { ShopStore } from "./shop";
 import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
+import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
 
 /**
  * GET /shop/catalog — the store as a SIGNED-OUT website visitor sees it,
@@ -164,6 +165,7 @@ export async function loadShopCatalog(
       content: brand.groupBuyContent,
       liveBanner: brand.groupBuyLiveBanner,
       invoice: ((branding?.config ?? {}) as Record<string, unknown>).groupBuyInvoice,
+      paymentMode: gbPaymentModeFor(branding?.config),
       ways: ctx.ways,
       products: listed,
     }),

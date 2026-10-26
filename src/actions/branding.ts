@@ -10,6 +10,7 @@ import { forTenant } from "@/lib/db/tenant-client";
 import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
+import { normalizeGbPaymentMode, withGbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 import {
@@ -430,6 +431,44 @@ export async function saveNoticeModalGrantAction(
     where: { tenantId: tenant.id },
     update: { config },
     create: { tenantId: tenant.id, config },
+  });
+
+  revalidatePath("/admin");
+  revalidateTenant(tenant.id, slug);
+  return { ok: true };
+}
+
+/**
+ * Operator side of the group-buy payment mode (lib/storefront/gb-payment-mode):
+ * "pay_first" or "pay_later". The same write the store owner's Group Buys
+ * setting makes (withGbPaymentMode keeps the invoice switch in step), so the
+ * two screens can never store different answers. Super-admin only.
+ */
+export async function saveGbPaymentModeAction(slug: string, input: unknown): Promise<SaveResult> {
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
+  const mode = normalizeGbPaymentMode(input);
+  if (!mode) return { error: "Choose how customers pay." };
+
+  if (isDemoMode()) {
+    saveDemoBranding(slug, { config: withGbPaymentMode(getDemoBranding(slug).config ?? {}, mode) });
+    revalidatePath("/admin");
+    revalidateTenant(slug, slug);
+    return { ok: true };
+  }
+
+  const operator = await getPlatformUser();
+  if (!operator) return { error: "FORBIDDEN" };
+
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  if (!tenant) return { error: "Tenant not found." };
+
+  // Row-locked read-modify-write: the invoice's enabledAt is merged from what
+  // is stored, and a concurrent owner save must not be overwritten.
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenant.id} FOR UPDATE`;
+    const row = await tx.branding.findUnique({ where: { tenantId: tenant.id }, select: { config: true } });
+    const config = withGbPaymentMode(row?.config ?? {}, mode) as Prisma.InputJsonValue;
+    await tx.branding.upsert({ where: { tenantId: tenant.id }, update: { config }, create: { tenantId: tenant.id, config } });
   });
 
   revalidatePath("/admin");

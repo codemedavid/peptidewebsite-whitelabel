@@ -5,6 +5,7 @@ import {
   getTenantAdminFee,
   getTenantStoreAdminCredential,
   getTenantPlanStatus,
+  getTenantGbPaymentMode,
   listTenantDomains,
 } from "@/lib/admin/data";
 import { TenantSettingsView } from "@/components/admin/TenantSettingsView";
@@ -22,13 +23,14 @@ export default async function TenantSettingsPage({
 }) {
   const { slug } = await params;
 
-  const [tenant, contact, adminFee, adminCredential, planStatus, domains] = await Promise.all([
+  const [tenant, contact, adminFee, adminCredential, planStatus, domains, gbPaymentMode] = await Promise.all([
     getTenantOrderFormat(slug),
     getTenantContactChannels(slug),
     getTenantAdminFee(slug),
     getTenantStoreAdminCredential(slug),
     getTenantPlanStatus(slug),
     listTenantDomains(slug),
+    getTenantGbPaymentMode(slug),
   ]);
   if (!tenant || !contact || !adminFee) notFound();
 
@@ -54,6 +56,7 @@ export default async function TenantSettingsPage({
       adminFeeEntitled={adminFee.entitled}
       initialAdminEmail={adminCredential?.email ?? ""}
       initialHasAdminPassword={adminCredential?.hasPassword ?? false}
+      initialGbPaymentMode={gbPaymentMode ?? "pay_first"}
       domains={<DomainManager slug={slug} initialDomains={domains} />}
     />
   );

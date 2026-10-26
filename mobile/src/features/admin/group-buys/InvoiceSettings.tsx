@@ -40,11 +40,14 @@ export function InvoiceCard({
   setValue,
   currency,
   onEdit,
+  showSwitch = true,
 }: {
   value: GroupBuyInvoiceConfig;
   setValue: (v: GroupBuyInvoiceConfig) => void;
   currency: string;
   onEdit: () => void;
+  /** Off when the "How customers pay" card owns the on/off choice. */
+  showSwitch?: boolean;
 }) {
   const save = useGroupBuySetting<SaveResult>("saveGroupBuyInvoiceAction");
   const methods = value.paymentMethods.length;
@@ -53,16 +56,18 @@ export function InvoiceCard({
       title="Invoice after close"
       hint="Customers check out a group buy without paying. When the round closes, each one gets a single invoice in Chats with everything they ordered and how to pay."
     >
-      <ToggleRow
-        label="Pay after the group buy closes"
-        value={value.enabled}
-        disabled={save.isPending}
-        onChange={(enabled) => {
-          const prev = value;
-          setValue({ ...value, enabled });
-          save.mutate({ ...value, enabled }, { onSuccess: (res) => setValue(res.invoice), onError: () => setValue(prev) });
-        }}
-      />
+      {showSwitch ? (
+        <ToggleRow
+          label="Pay after the group buy closes"
+          value={value.enabled}
+          disabled={save.isPending}
+          onChange={(enabled) => {
+            const prev = value;
+            setValue({ ...value, enabled });
+            save.mutate({ ...value, enabled }, { onSuccess: (res) => setValue(res.invoice), onError: () => setValue(prev) });
+          }}
+        />
+      ) : null}
       {value.enabled ? (
         <>
           <View style={{ gap: SPACE.xs }}>

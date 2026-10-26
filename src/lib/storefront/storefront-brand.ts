@@ -2,6 +2,8 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { getTenantContext } from "@/lib/tenant/context";
+import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
+import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import { withTenant } from "@/lib/db/tenant-client";
 import { isDemoMode, getDemoProducts, getDemoStoreProducts } from "@/lib/demo/fixtures";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
@@ -478,6 +480,10 @@ export async function loadStorefrontBrand(
   brand.twoWaysMode = twoWaysMode;
   if (brand.groupBuyCaps.enabled) {
     const groupBuys = await groupBuysP;
+    brand.gbPaymentMode = gbPaymentModeFor(config);
+    if (brand.gbPaymentMode === "pay_later") {
+      brand.gbPayLaterShippingFee = normalizeGroupBuyInvoice((config as Record<string, unknown>).groupBuyInvoice).shippingFee;
+    }
     brand.groupBuyGate = buildGroupBuyGate(
       groupBuys,
       brand.groupBuyCaps,

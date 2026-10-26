@@ -1,4 +1,5 @@
 import "server-only";
+import { gbPaymentModeFor, type GbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/features/entitlements";
@@ -501,6 +502,17 @@ export async function getTenantAdminFee(slug: string): Promise<TenantAdminFee | 
   if (!t) return null;
   const entitled = (await getEntitlements(t.id)).has(FEATURES.STORE_ADMIN_FEE);
   return fromConfig((t.branding?.config ?? {}) as Record<string, unknown>, entitled);
+}
+
+/** The store's group-buy payment mode (lib/storefront/gb-payment-mode), for the
+ *  tenant settings console. Null when the tenant doesn't exist. */
+export async function getTenantGbPaymentMode(slug: string): Promise<GbPaymentMode | null> {
+  if (isDemoMode()) {
+    if (!listDemoTenants().some((t) => t.slug === slug)) return null;
+    return gbPaymentModeFor(getDemoBranding(slug).config);
+  }
+  const t = await prisma.tenant.findUnique({ where: { slug }, select: { branding: { select: { config: true } } } });
+  return t ? gbPaymentModeFor(t.branding?.config) : null;
 }
 
 /** The store's `#admin` sign-in credential, for the tenant settings console.

@@ -17,6 +17,7 @@ import { formatMoney } from "@/lib/storefront/currency";
 import { normalizeGroupBuyContent, renderGbCopy, type GroupBuyContent } from "@/lib/storefront/gb-content";
 import { renderGroupBuyLiveBanner } from "@/lib/storefront/gb-live-banner";
 import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
+import type { GbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import type { TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import type { GroupBuyCard } from "./contract";
 import type { ShopGroupBuy, ShopGroupBuyTeaser, ShopProduct } from "./shop-contract";
@@ -30,6 +31,8 @@ export type ShopGroupBuyInput = {
   liveBanner?: unknown;
   /** branding.config.groupBuyInvoice; absent = pay at checkout. */
   invoice?: unknown;
+  /** The store's resolved payment mode (gbPaymentModeFor); absent = the invoice switch decides. */
+  paymentMode?: GbPaymentMode;
   /** The resolved per-way mode (brand.twoWaysMode); absent = both open. */
   ways: TwoWaysMode | null | undefined;
   /** The catalog's listed products, already mapped (isGroupBuy set). */
@@ -43,7 +46,7 @@ function lowestPrice(products: readonly ShopProduct[]): number | null {
 }
 
 /** The live round as the shop shows it, or null when there's nothing to show. */
-export function buildShopGroupBuy({ banner, content, liveBanner, invoice, ways, products }: ShopGroupBuyInput): ShopGroupBuy | null {
+export function buildShopGroupBuy({ banner, content, liveBanner, invoice, paymentMode, ways, products }: ShopGroupBuyInput): ShopGroupBuy | null {
   if (!banner || ways?.groupBuy === "hidden") return null;
   const inRound = products.filter((p) => p.isGroupBuy);
   if (inRound.length === 0) return null;
@@ -65,13 +68,14 @@ export function buildShopGroupBuy({ banner, content, liveBanner, invoice, ways, 
     steps: copy.steps.map(fill),
     terms: fill(copy.terms),
     liveBanner: renderGroupBuyLiveBanner(liveBanner, banner),
-    invoice: invoiceTerms(invoice),
+    invoice: invoiceTerms(invoice, paymentMode),
   };
 }
 
-function invoiceTerms(raw: unknown): ShopGroupBuy["invoice"] {
+function invoiceTerms(raw: unknown, mode: GbPaymentMode | undefined): ShopGroupBuy["invoice"] {
   const config = normalizeGroupBuyInvoice(raw);
-  return config.enabled ? { shippingFee: config.shippingFee } : null;
+  const payLater = mode ? mode === "pay_later" : config.enabled;
+  return payLater ? { shippingFee: config.shippingFee } : null;
 }
 
 /** The live round as a chat card. */
