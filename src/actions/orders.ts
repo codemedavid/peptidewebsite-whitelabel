@@ -514,6 +514,9 @@ async function stampGroupBuy(
   p: Order,
   tenantId: string,
   demoSlug: string,
+  /** The order's product ids as resolved against the catalog (id OR name, the
+   *  same way pricing resolves lines). Omitted → the client's own productIds. */
+  resolvedIds?: string[],
 ): Promise<(GroupBuyPriceScope & { moqVials?: number | null }) | null> {
   p.groupBuyId = null;
   p.groupBuyName = null;
@@ -521,9 +524,9 @@ async function stampGroupBuy(
     const caps = await resolveGroupBuyCaps(tenantId);
     if (!caps.enabled) return null;
     const groupBuys = await loadGroupBuys(tenantId, demoSlug);
-    const orderedIds = p.items
-      .map((it) => it.productId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    const orderedIds =
+      resolvedIds ??
+      p.items.map((it) => it.productId).filter((id): id is string => typeof id === "string" && id.length > 0);
     const gb = groupBuyForOrder(groupBuys, caps, orderedIds);
     if (!gb) return null;
     p.groupBuyId = gb.id;
@@ -924,16 +927,16 @@ async function validateLiveOrder(
   // Group-buy attribution FIRST — it decides whether this order is in a live
   // round AND returns that round's pricing scope, which drives whether GB
   // products re-price at their gbPrice below.
-  const gbScope = await stampGroupBuy(p, tenantId, slug);
-  // Paid group-buy access: an order in a paid round needs the buyer's APPROVED
-  // membership (lib/storefront/gb-access.server). Its own fail-closed read, not
-  // the best-effort stamp above — a hand-rolled request or a stale tab can't
-  // buy into a round the storefront never showed it.
-  const paidError = await paidRoundCheckoutGate(
-    tenantId,
-    slug,
-    p.items.map((it) => it.productId).filter((id): id is string => typeof id === "string" && id.length > 0),
-  );
+  // Resolved against the catalog the way pricing resolves lines (id, else exact
+  // name) — so a line sent without a productId can't slip past attribution or
+  // the access gate while still being priced and stocked as a round product.
+  const resolvedIds = matchedProductIds(catalog, p.items);
+  const gbScope = await stampGroupBuy(p, tenantId, slug, resolvedIds);
+  // Gated group-buy access (Paid Access): an order in a gated round needs the buyer's
+  // ACTIVE membership (lib/storefront/gb-access.server). Its own fail-closed
+  // read, not the best-effort stamp above — a hand-rolled request or a stale tab
+  // can't buy into a round the storefront never showed it.
+  const paidError = await paidRoundCheckoutGate(tenantId, slug, resolvedIds);
   if (paidError) return { error: paidError };
   // Server-authoritative item prices: re-read each line from the live catalog
   // so a price the owner changed (or a tampered client) can't be stored. When

@@ -1,321 +1,191 @@
 import { useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Stack } from "expo-router";
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { router, Stack, type Href } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { success } from "@/features/admin/setup/data";
-import {
-  JOIN_STATUS_LABEL,
-  receiptUrl,
-  useJoinRequests,
-  usePaidJoinRounds,
-  useReviewJoinRequest,
-  useSavePaidJoin,
-  type JoinRequest,
-  type JoinStatus,
-  type PaidJoinRound,
-  type ReviewAction,
-} from "@/features/admin/group-buys/join-requests";
+import { useGroupBuyList } from "@/features/admin/group-buys/hooks";
+import type { GroupBuy } from "@/features/admin/group-buys/model";
+import { usePaidAccessDecide, usePaidAccessQueue } from "@/features/admin/group-buys/paid-access/hooks";
+import type { PaidAccessDecision, QueueCounts, QueueTab } from "@/features/admin/group-buys/paid-access/model";
+import { QueueCard } from "@/features/admin/group-buys/paid-access/QueueCard";
+import { ReasonSheet, type Prompt } from "@/features/admin/group-buys/paid-access/ReasonSheet";
 import { useTheme } from "@/theme/ThemeProvider";
-import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
+import { RADIUS, SPACE } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
-import { Field } from "@/ui/inputs";
-import { AppText, Button } from "@/ui/primitives";
+import { AppText } from "@/ui/primitives";
 
 /**
- * Paid group-buy join requests (actions/gb-review.ts): each round's paid-join
- * switch and fee, then the queue — open the receipt, approve, reject with a
- * reason, mark refunded with the refund reference, or remove access. Reached
- * from Group buys and from the "paid to join" push.
+ * Paid Access join queue (src/modules/paid-access): proofs of payment to check,
+ * approvals, refunds owed and the waitlist — across every round — plus each
+ * round's "Join settings". Reached from Group buys and from the
+ * `gb_join_request` push. Every decision is decidePaidAccessAction on the server.
  */
 
-type Filter = JoinStatus | "all";
-type Decision = Exclude<ReviewAction, "approve">;
-
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "paid_pending_approval", label: "Waiting" },
-  { key: "pending_payment", label: "Not paid" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Refund owed" },
-  { key: "refunded", label: "Refunded" },
-  { key: "revoked", label: "Removed" },
-  { key: "all", label: "All" },
+const TABS: { key: QueueTab; label: string; count: keyof QueueCounts }[] = [
+  { key: "payments", label: "Payments to check", count: "payments" },
+  { key: "approvals", label: "Approvals", count: "approvals" },
+  { key: "refunds", label: "Refunds", count: "refunds" },
+  { key: "waitlist", label: "Waitlist", count: "waitlist" },
+  { key: "all", label: "Everyone", count: "total" },
 ];
-const TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = {
-  paid_pending_approval: "warning",
-  approved: "success",
-  rejected: "danger",
-  revoked: "danger",
-};
-const OPEN_ROUND = new Set(["draft", "scheduled", "active", "closed"]);
 
-const PROMPT_COPY: Record<Decision, { title: string; label: string; placeholder: string; confirm: string }> = {
-  reject: { title: "Reject this payment", label: "Reason (the customer sees this)", placeholder: "e.g. The amount on the receipt is short", confirm: "Reject · refund owed" },
-  refund: { title: "Mark refunded", label: "Refund reference number", placeholder: "e.g. the GCash reference of your refund", confirm: "Mark refunded" },
-  revoke: { title: "Remove access", label: "Reason (the customer sees this)", placeholder: "e.g. Shared the group-buy prices", confirm: "Remove access" },
+const EMPTY: Record<QueueTab, { title: string; body: string }> = {
+  payments: { title: "No payments to check", body: "Proofs of payment show up here, and you get a push when one arrives." },
+  approvals: { title: "No one waiting for approval", body: "Members who reach the approval step show up here." },
+  refunds: { title: "No refunds owed", body: "Rejected members who paid show up here until you mark them refunded." },
+  waitlist: { title: "The waitlist is empty", body: "When a round is full, new joiners wait here for a slot." },
+  all: { title: "No one has joined yet", body: "Members of every join-gated round show up here." },
 };
 
-const pesos = (cents: number) => `₱${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: cents % 100 ? 2 : 0 })}`;
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+/** Rounds whose join settings still matter. */
+const EDITABLE_ROUND = new Set(["draft", "scheduled", "active"]);
 
-export default function JoinRequestsScreen() {
+const settingsRoute = (gb: GroupBuy): Href =>
+  `/manage/join-settings?id=${encodeURIComponent(gb.id)}&name=${encodeURIComponent(gb.name)}` as Href;
+
+export default function JoinQueueScreen() {
   const t = useTheme();
   const online = useOnline();
-  const [filter, setFilter] = useState<Filter>("paid_pending_approval");
-  const [prompt, setPrompt] = useState<{ row: JoinRequest; action: Decision } | null>(null);
-  const list = useJoinRequests(filter);
-  const review = useReviewJoinRequest();
+  const [tab, setTab] = useState<QueueTab>("payments");
+  const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const queue = usePaidAccessQueue(tab);
+  const rounds = useGroupBuyList();
+  const decide = usePaidAccessDecide();
+  const roundName = (id: string) => rounds.data?.groupBuys.find((g) => g.id === id)?.name ?? "";
 
-  const decide = (row: JoinRequest, action: ReviewAction, text = "") =>
-    review.mutate(
-      { id: row.id, action, ...(action === "refund" ? { refundReference: text } : { reason: text }) },
-      {
-        onSuccess: () => {
-          success();
-          setPrompt(null);
-        },
-        onError: (e) => Alert.alert("Couldn't save", e.message),
+  const run = (decision: PaidAccessDecision) =>
+    decide.mutate(decision, {
+      onSuccess: () => {
+        success();
+        setPrompt(null);
       },
-    );
+      onError: (e) => Alert.alert("Couldn't save", e.message),
+    });
 
-  const approve = (row: JoinRequest) =>
-    Alert.alert(`Approve ${row.customerName}?`, `They'll be let into ${row.roundName} and told right away.`, [
+  const confirmThen = (decision: PaidAccessDecision, confirm?: { title: string; body: string; label: string }) => {
+    if (!confirm) return run(decision);
+    Alert.alert(confirm.title, confirm.body, [
       { text: "Cancel", style: "cancel" },
-      { text: "Approve", onPress: () => decide(row, "approve") },
+      { text: confirm.label, onPress: () => run(decision) },
     ]);
+  };
 
-  const counts = list.data?.counts;
-  const rows = list.data?.requests ?? [];
-  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : null;
+  const fromPrompt = (p: Prompt, text: string) => {
+    if (p.action === "refund") return run({ action: "refund", membershipId: p.row.id, reference: text });
+    if (p.action === "reject_payment") {
+      if (!p.row.payment) return;
+      return run({ action: "reject_payment", paymentId: p.row.payment.id, reason: text });
+    }
+    return run({ action: p.action, membershipId: p.row.id, reason: text });
+  };
+
+  const counts = queue.data?.counts;
+  const editable = (rounds.data?.groupBuys ?? []).filter((g) => EDITABLE_ROUND.has(g.status));
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Stack.Screen options={{ title: "Join requests" }} />
       <OfflineBanner />
       <FlatList
-        data={list.isPending || list.isError ? [] : rows}
+        data={queue.data && !queue.isError ? queue.data.rows : []}
         keyExtractor={(r) => r.id}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: SPACE.md }} />}
-        refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} tintColor={t.brand.link} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={queue.isRefetching}
+            onRefresh={() => {
+              void queue.refetch();
+              void rounds.refetch();
+            }}
+            tintColor={t.brand.link}
+          />
+        }
         ListHeaderComponent={
           <View style={{ gap: SPACE.lg, marginBottom: SPACE.md }}>
-            <PaidJoinSettings />
+            <JoinSettingsList rounds={editable} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} accessibilityRole="tablist">
-              {FILTERS.map((f) => {
-                const on = filter === f.key;
-                const n = f.key === "all" ? total : (counts?.[f.key] ?? null);
+              {TABS.map((f) => {
+                const on = tab === f.key;
+                const n = counts ? counts[f.count] : null;
                 return (
                   <Pressable
                     key={f.key}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: on }}
-                    onPress={() => setFilter(f.key)}
+                    accessibilityLabel={n === null ? f.label : `${f.label}, ${n}`}
+                    onPress={() => setTab(f.key)}
                     style={({ pressed }) => [
                       styles.chip,
                       { borderColor: on ? t.brand.primary : t.colors.border, backgroundColor: on ? t.brand.primary : t.colors.surface, opacity: pressed ? 0.85 : 1 },
                     ]}
                   >
                     <AppText variant="label" color={on ? "onPrimary" : "text"}>
-                      {n === null ? f.label : `${f.label} · ${n}`}
+                      {n === null || n === 0 ? f.label : `${f.label} · ${n}`}
                     </AppText>
                   </Pressable>
                 );
               })}
             </ScrollView>
-            {list.isPending ? <SkeletonList rows={3} /> : null}
-            {list.isError ? <ErrorState message={list.error.message} onRetry={() => void list.refetch()} /> : null}
+            {queue.isPending ? <SkeletonList rows={3} /> : null}
+            {queue.isError ? <ErrorState message={queue.error.message} onRetry={() => void queue.refetch()} /> : null}
           </View>
         }
         ListEmptyComponent={
-          list.isPending || list.isError ? null : (
-            <EmptyState
-              icon="checkmark-done-outline"
-              title={filter === "paid_pending_approval" ? "You're all caught up" : "Nothing here"}
-              body={filter === "paid_pending_approval" ? "New paid join requests show up here, and you get a push when one arrives." : "No join requests with this status."}
-            />
-          )
+          queue.isPending || queue.isError ? null : <EmptyState icon="checkmark-done-outline" title={EMPTY[tab].title} body={EMPTY[tab].body} />
         }
         renderItem={({ item }) => (
-          <RequestCard row={item} busy={review.isPending || !online} onApprove={() => approve(item)} onPrompt={(action) => setPrompt({ row: item, action })} />
+          <QueueCard
+            row={item}
+            roundName={roundName(item.groupBuyId)}
+            busy={decide.isPending || !online}
+            onDecide={confirmThen}
+            onPrompt={(action) => setPrompt({ row: item, action })}
+          />
         )}
       />
-      <PromptSheet prompt={prompt} busy={review.isPending} onCancel={() => setPrompt(null)} onConfirm={(text) => prompt && decide(prompt.row, prompt.action, text)} />
+      <ReasonSheet
+        prompt={prompt}
+        roundName={prompt ? roundName(prompt.row.groupBuyId) : ""}
+        busy={decide.isPending}
+        onCancel={() => setPrompt(null)}
+        onConfirm={(text) => prompt && fromPrompt(prompt, text)}
+      />
     </View>
   );
 }
 
-function RequestCard({ row, busy, onApprove, onPrompt }: { row: JoinRequest; busy: boolean; onApprove: () => void; onPrompt: (a: Decision) => void }) {
+/** One row per live/upcoming round → its Join settings editor. */
+function JoinSettingsList({ rounds }: { rounds: GroupBuy[] }) {
   const t = useTheme();
-  const tone = t.tone(TONE[row.status] ?? "neutral");
-  const warn = t.tone("warning");
-  const [opening, setOpening] = useState(false);
-  const openReceipt = async () => {
-    setOpening(true);
-    try {
-      await Linking.openURL((await receiptUrl(row.id)).url);
-    } catch (e) {
-      Alert.alert("Couldn't open the receipt", e instanceof Error ? e.message : "Please try again.");
-    } finally {
-      setOpening(false);
-    }
-  };
-  const facts: [string, string][] = [["Round", row.roundName], ["Fee", pesos(row.amountCents)]];
-  if (row.method) facts.push(["Paid with", row.method]);
-  if (row.reference) facts.push(["Reference", row.reference]);
-  if (row.submittedAt) facts.push(["Sent", when(row.submittedAt)]);
-  if (row.reviewReason) facts.push(["Reason", row.reviewReason]);
-  if (row.refundReference) facts.push(["Refund ref", row.refundReference]);
+  if (rounds.length === 0) return null;
   return (
     <View style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
-      <View style={styles.cardHead}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <AppText variant="bodyStrong">{row.customerName}</AppText>
-          <AppText variant="caption" color="muted">
-            {row.customerEmail}
-          </AppText>
-        </View>
-        <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-          <AppText variant="caption" color={tone.fg}>
-            {JOIN_STATUS_LABEL[row.status] ?? row.status}
-          </AppText>
-        </View>
+      <View style={{ gap: 2 }}>
+        <AppText variant="heading">Join settings</AppText>
+        <AppText variant="caption" color="muted">
+          How customers get into each round: pay, apply, get approved — or open to everyone.
+        </AppText>
       </View>
-      <View style={styles.facts}>
-        {facts.map(([k, v]) => (
-          <View key={k} style={styles.fact}>
-            <AppText variant="caption" color="muted">
-              {k}
+      {rounds.map((r) => (
+        <Pressable
+          key={r.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Join settings for ${r.name}`}
+          onPress={() => router.push(settingsRoute(r))}
+          style={({ pressed }) => [styles.roundRow, { borderTopColor: t.colors.border, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="bodyStrong" numberOfLines={1}>
+              {r.name}
             </AppText>
-            <AppText variant="body" style={{ flexShrink: 1, textAlign: "right" }} selectable>
-              {v}
+            <AppText variant="caption" color="muted">
+              {r.status === "active" ? "Live" : r.status === "scheduled" ? "Scheduled" : "Draft"}
             </AppText>
           </View>
-        ))}
-      </View>
-      {row.duplicateReference ? (
-        <View style={[styles.warn, { backgroundColor: warn.bg }]}>
-          <Ionicons name="alert-circle-outline" size={16} color={warn.fg} />
-          <AppText variant="caption" color={warn.fg} style={{ flex: 1 }}>
-            This reference number is on another request too — check the receipt carefully.
-          </AppText>
-        </View>
-      ) : null}
-      <View style={styles.actions}>
-        {row.hasReceipt ? <Button label="Receipt" icon="image-outline" variant="secondary" loading={opening} onPress={() => void openReceipt()} style={styles.action} /> : null}
-        {row.status === "paid_pending_approval" ? (
-          <>
-            <Button label="Reject" variant="secondary" disabled={busy} onPress={() => onPrompt("reject")} style={styles.action} />
-            <Button label="Approve" icon="checkmark" disabled={busy} onPress={onApprove} style={styles.action} />
-          </>
-        ) : null}
-        {row.status === "rejected" ? <Button label="Mark refunded" icon="cash-outline" disabled={busy} onPress={() => onPrompt("refund")} style={styles.action} /> : null}
-        {row.status === "approved" ? <Button label="Remove access" variant="danger" disabled={busy} onPress={() => onPrompt("revoke")} style={styles.action} /> : null}
-      </View>
-    </View>
-  );
-}
-
-function PromptSheet({
-  prompt,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  prompt: { row: JoinRequest; action: Decision } | null;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: (text: string) => void;
-}) {
-  const t = useTheme();
-  const insets = useSafeAreaInsets();
-  const [text, setText] = useState("");
-  const copy = prompt ? PROMPT_COPY[prompt.action] : null;
-  const close = () => {
-    setText("");
-    onCancel();
-  };
-  return (
-    <Modal visible={!!prompt} transparent animationType="slide" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetWrap}>
-        <Pressable style={styles.scrim} onPress={close} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { backgroundColor: t.colors.surface, paddingBottom: insets.bottom + SPACE.lg }]}>
-          {copy && prompt ? (
-            <>
-              <AppText variant="heading">{copy.title}</AppText>
-              <AppText variant="caption" color="muted">{`${prompt.row.customerName} · ${prompt.row.roundName}`}</AppText>
-              <Field label={copy.label} value={text} onChangeText={setText} placeholder={copy.placeholder} multiline autoFocus maxLength={prompt.action === "refund" ? 64 : 500} />
-              <View style={styles.actions}>
-                <Button label="Cancel" variant="secondary" onPress={close} style={styles.action} />
-                <Button
-                  label={copy.confirm}
-                  variant={prompt.action === "refund" ? "primary" : "danger"}
-                  loading={busy}
-                  disabled={!text.trim()}
-                  onPress={() => {
-                    onConfirm(text.trim());
-                    setText("");
-                  }}
-                  style={styles.action}
-                />
-              </View>
-            </>
-          ) : null}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function PaidJoinSettings() {
-  const t = useTheme();
-  const rounds = usePaidJoinRounds();
-  const list = (rounds.data ?? []).filter((r) => OPEN_ROUND.has(r.status));
-  if (rounds.isPending || list.length === 0) return null;
-  return (
-    <View style={[styles.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
-      <AppText variant="heading">Paid join, per round</AppText>
-      <AppText variant="caption" color="muted">
-        Customers pay this fee and wait for your approval before they can see the round&apos;s products or order. Each round is separate.
-      </AppText>
-      {list.map((r) => (
-        <PaidJoinRow key={r.id} round={r} />
+          <Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />
+        </Pressable>
       ))}
-    </View>
-  );
-}
-
-function PaidJoinRow({ round }: { round: PaidJoinRound }) {
-  const t = useTheme();
-  const save = useSavePaidJoin();
-  const saved = round.joinFeeCents ? String(round.joinFeeCents / 100) : "";
-  const [on, setOn] = useState(round.paidJoin === true);
-  const [fee, setFee] = useState(saved);
-  const dirty = on !== (round.paidJoin === true) || (on && fee !== saved);
-  return (
-    <View style={[styles.round, { borderTopColor: t.colors.border }]}>
-      <View style={styles.roundHead}>
-        <View style={{ flex: 1 }}>
-          <AppText variant="bodyStrong">{round.name}</AppText>
-          <AppText variant="caption" color="muted">
-            {round.paidJoin && round.joinFeeCents ? `Paid join · ${pesos(round.joinFeeCents)}` : "Open to everyone"}
-          </AppText>
-        </View>
-        <Switch value={on} onValueChange={setOn} accessibilityLabel={`Require paid join for ${round.name}`} trackColor={{ true: t.brand.primary, false: t.colors.border }} />
-      </View>
-      {on && round.productIds.length === 0 ? (
-        <AppText variant="caption" color={t.tone("warning").fg}>
-          No products are assigned, so this round covers your whole catalog — unapproved customers see an empty shop while it&apos;s live.
-        </AppText>
-      ) : null}
-      {on ? <Field label="Join fee (₱)" value={fee} onChangeText={setFee} keyboardType="decimal-pad" placeholder="500" /> : null}
-      {dirty ? (
-        <Button
-          label="Save"
-          loading={save.isPending}
-          onPress={() => save.mutate({ id: round.id, paidJoin: on, joinFee: fee }, { onSuccess: () => success(), onError: (e) => Alert.alert("Couldn't save", e.message) })}
-        />
-      ) : null}
     </View>
   );
 }
@@ -325,16 +195,5 @@ const styles = StyleSheet.create({
   chips: { gap: SPACE.sm, paddingRight: SPACE.lg },
   chip: { minHeight: 40, paddingHorizontal: SPACE.lg, borderRadius: RADIUS.pill, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   card: { padding: SPACE.lg, borderRadius: RADIUS.lg, borderWidth: 1, gap: SPACE.md },
-  cardHead: { flexDirection: "row", alignItems: "flex-start", gap: SPACE.md },
-  pill: { borderRadius: RADIUS.pill, paddingHorizontal: SPACE.sm, paddingVertical: 3 },
-  facts: { gap: SPACE.xs },
-  fact: { flexDirection: "row", justifyContent: "space-between", gap: SPACE.md },
-  warn: { flexDirection: "row", gap: SPACE.sm, alignItems: "flex-start", padding: SPACE.sm, borderRadius: RADIUS.md },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.sm },
-  action: { flexGrow: 1, minHeight: TOUCH },
-  sheetWrap: { flex: 1, justifyContent: "flex-end" },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: { padding: SPACE.lg, gap: SPACE.md, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  round: { gap: SPACE.sm, paddingTop: SPACE.md, borderTopWidth: StyleSheet.hairlineWidth },
-  roundHead: { flexDirection: "row", alignItems: "center", gap: SPACE.md },
+  roundRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, paddingTop: SPACE.md, minHeight: 48, borderTopWidth: StyleSheet.hairlineWidth },
 });

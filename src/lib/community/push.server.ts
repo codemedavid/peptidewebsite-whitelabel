@@ -314,11 +314,18 @@ export async function notifyGroupBuyJoinUpdate(args: {
 
 /** A paid join request is waiting: the store team members who hold `groupbuys`.
  *  The push is only a pointer — no amount, reference or receipt. */
-export async function notifyGroupBuyJoinRequest(args: { tenantId: string; storeName: string; customerName: string; roundName: string }): Promise<void> {
+export async function notifyGroupBuyJoinRequest(args: {
+  tenantId: string;
+  storeName: string;
+  customerName: string;
+  roundName: string;
+  /** Overrides the default "paid to join" line (Paid Access: proof vs approval). */
+  body?: string;
+}): Promise<void> {
   try {
     await send(args.tenantId, await storeRecipients(args.tenantId, "groupbuys"), {
       title: args.storeName,
-      body: `💳 ${firstName(args.customerName) || "A customer"} paid to join ${args.roundName}. Tap to review.`,
+      body: args.body ?? `💳 ${firstName(args.customerName) || "A customer"} paid to join ${args.roundName}. Tap to review.`,
       data: { type: "gb_join_request" },
     });
   } catch (e) {

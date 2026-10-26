@@ -1,21 +1,20 @@
 /**
- * Pure gate for paid group-buy access — WHO may see a paid round and WHAT a
+ * Pure gate for group-buy access — WHO may see a gated round and WHAT a
  * locked viewer's catalog looks like (src/lib/storefront/gb-access.ts). No DB,
  * no Next runtime; the wiring is proven by test:gb-access-flow.
  *
  *   npm run test:gb-access
  *
  * Covers: which round governs the storefront (live → upcoming → last closed);
- * the lock decision (feature, round setting, fee, admin, membership status —
- * only a literal "approved" opens); the locked catalog (round products and gb
- * listings removed, gbPrice stripped from everything left, inputs untouched);
- * and the teaser, which carries no product, price or description.
+ * the lock decision applied to Paid Access's answer (gated?, admin, canAccess); the
+ * locked catalog (round products and gb listings removed, gbPrice stripped
+ * from everything left, inputs untouched); and the teaser, which carries no
+ * product or price — and no description unless visibility is "summary".
  */
 import assert from "node:assert";
 
 import {
   governingGroupBuy,
-  requiresPaidJoin,
   isGroupBuyLocked,
   lockGroupBuyCatalog,
   buildGroupBuyTeaser,
@@ -46,7 +45,7 @@ const CAPS: GroupBuyCapabilities = { ...GROUP_BUY_CAPS_OFF, enabled: true, sched
 const round = (over: Partial<GroupBuy> & { id: string }): GroupBuy =>
   normalizeGroupBuy({ name: over.id, status: "active", createdAt: iso(-10), ...over });
 
-const paidLive = round({ id: "gb_live", paidJoin: true, joinFeeCents: 50000, productIds: ["p_round"], endsAt: iso(3), description: "Secret supplier batch" });
+const paidLive = round({ id: "gb_live", productIds: ["p_round"], endsAt: iso(3), description: "Secret supplier batch" });
 
 const product = (id: string, over: Partial<Product> = {}): Product =>
   ({ id, name: id, price: 1000, category: "c", available: true, ...over }) as Product;
@@ -88,42 +87,23 @@ test("drafts, cancelled and archived rounds never govern", () => {
   assert.strictEqual(governingGroupBuy([], CAPS, NOW), null);
 });
 
-console.log("paid join required?");
-
-test("needs the feature, the round's switch AND a positive fee", () => {
-  assert.ok(requiresPaidJoin(paidLive, CAPS));
-  assert.ok(!requiresPaidJoin(paidLive, { ...CAPS, paidAccess: false }), "feature revoked → reopens");
-  assert.ok(!requiresPaidJoin(paidLive, { ...CAPS, enabled: false }), "module off");
-  assert.ok(!requiresPaidJoin({ ...paidLive, paidJoin: false }, CAPS));
-  assert.ok(!requiresPaidJoin({ ...paidLive, joinFeeCents: 0 }, CAPS), "a paid round with no fee is a misconfiguration, not a wall");
-  assert.ok(!requiresPaidJoin(null, CAPS));
-});
-
 console.log("lock decision");
 
-test("free rounds are never locked, for anyone", () => {
-  const free = { ...paidLive, paidJoin: false };
-  for (const viewer of [anon, ana, admin]) assert.ok(!isGroupBuyLocked({ round: free, caps: CAPS, viewer, membershipStatus: null }));
+test("an Open (ungated) round is never locked, for anyone", () => {
+  for (const viewer of [anon, ana, admin]) assert.ok(!isGroupBuyLocked({ gated: false, viewer, canAccess: false }));
 });
 
-test("a paid round is locked for anonymous visitors and customers without a request", () => {
-  assert.ok(isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: anon, membershipStatus: null }));
-  assert.ok(isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: ana, membershipStatus: null }));
+test("a gated round is locked for anonymous visitors and customers who aren't in", () => {
+  assert.ok(isGroupBuyLocked({ gated: true, viewer: anon, canAccess: false }));
+  assert.ok(isGroupBuyLocked({ gated: true, viewer: ana, canAccess: false }));
 });
 
-test("only an approved membership opens it — every other status stays locked", () => {
-  for (const s of ["pending_payment", "paid_pending_approval", "rejected", "refunded", "revoked", "APPROVED", ""]) {
-    assert.ok(isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: ana, membershipStatus: s }), s);
-  }
-  assert.ok(!isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: ana, membershipStatus: "approved" }));
-});
-
-test("an anonymous viewer can't borrow an approval", () => {
-  assert.ok(isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: anon, membershipStatus: "approved" }));
+test("Paid Access's canAccess is what opens it for a customer", () => {
+  assert.ok(!isGroupBuyLocked({ gated: true, viewer: ana, canAccess: true }));
 });
 
 test("store admins always see the round (they edit its prices)", () => {
-  assert.ok(!isGroupBuyLocked({ round: paidLive, caps: CAPS, viewer: admin, membershipStatus: null }));
+  assert.ok(!isGroupBuyLocked({ gated: true, viewer: admin, canAccess: false }));
 });
 
 console.log("locked catalog");
@@ -148,11 +128,11 @@ test("a round with no assignment covers the whole catalog → nothing is left", 
 });
 
 test("once the round is over, only gb listings + prices stay hidden — normal shopping resumes", () => {
-  const closedAll = round({ id: "gb_done", status: "closed", paidJoin: true, joinFeeCents: 50000, productIds: [] });
+  const closedAll = round({ id: "gb_done", status: "closed", productIds: [] });
   const out = lockGroupBuyCatalog(catalog, closedAll, CAPS, NOW);
   assert.deepStrictEqual(out.map((p) => p.id), ["p_onhand", "p_plain"]);
   assert.ok(!JSON.stringify(out).includes("gbPrice"));
-  const upcoming = round({ id: "gb_soon", status: "scheduled", startsAt: iso(2), paidJoin: true, joinFeeCents: 50000, productIds: ["p_plain"] });
+  const upcoming = round({ id: "gb_soon", status: "scheduled", startsAt: iso(2), productIds: ["p_plain"] });
   assert.deepStrictEqual(lockGroupBuyCatalog(catalog, upcoming, CAPS, NOW).map((p) => p.id), ["p_onhand", "p_plain"], "not started → its products still sell as regular stock");
 });
 
@@ -164,29 +144,50 @@ test("never mutates its input", () => {
 
 console.log("teaser");
 
-test("carries name, dates, fee and state — and nothing else about the round", () => {
-  const t = buildGroupBuyTeaser(paidLive, CAPS, null, NOW);
+const TEASER = {
+  visibility: "nothing" as const,
+  steps: ["Pay ₱500", "Admin approval", "Access"],
+  joinFeeCents: 50000,
+  amountLabel: "₱500",
+  productCount: 1,
+  maxSlots: 30,
+  slotsTaken: 12,
+  membership: null,
+};
+
+test("'nothing' visibility: name, dates, the way in — no description, products or prices", () => {
+  const t = buildGroupBuyTeaser(paidLive, CAPS, TEASER, NOW);
   assert.deepStrictEqual(t, {
     id: "gb_live",
     name: "gb_live",
     startsAt: null,
     endsAt: paidLive.endsAt,
     state: "live",
+    visibility: "nothing",
+    summary: null,
+    steps: ["Pay ₱500", "Admin approval", "Access"],
     joinFeeCents: 50000,
+    amountLabel: "₱500",
     membership: null,
   });
   const s = JSON.stringify(t);
   assert.ok(!s.includes("Secret supplier batch") && !s.includes("p_round"), "no description, no product ids");
 });
 
-test("upcoming and closed rounds say so", () => {
-  assert.strictEqual(buildGroupBuyTeaser(round({ id: "u", status: "scheduled", startsAt: iso(2) }), CAPS, null, NOW).state, "upcoming");
-  assert.strictEqual(buildGroupBuyTeaser(round({ id: "c", status: "closed" }), CAPS, null, NOW).state, "closed");
+test("'summary' visibility adds description, ETA, product count and slots — still no products or prices", () => {
+  const t = buildGroupBuyTeaser(paidLive, CAPS, { ...TEASER, visibility: "summary" }, NOW);
+  assert.deepStrictEqual(t.summary, { description: "Secret supplier batch", deliveryEta: "", productCount: 1, maxSlots: 30, slotsTaken: 12 });
+  assert.ok(!JSON.stringify(t).includes("p_round"));
 });
 
-test("the viewer's own request status rides along (with their reason)", () => {
-  const t = buildGroupBuyTeaser(paidLive, CAPS, { status: "rejected", reviewReason: "Wrong amount" }, NOW);
-  assert.deepStrictEqual(t.membership, { status: "rejected", reviewReason: "Wrong amount" });
+test("upcoming and closed rounds say so", () => {
+  assert.strictEqual(buildGroupBuyTeaser(round({ id: "u", status: "scheduled", startsAt: iso(2) }), CAPS, TEASER, NOW).state, "upcoming");
+  assert.strictEqual(buildGroupBuyTeaser(round({ id: "c", status: "closed" }), CAPS, TEASER, NOW).state, "closed");
+});
+
+test("the viewer's own membership rides along (with their reason and headline)", () => {
+  const membership = { status: "rejected", reviewReason: "Wrong amount", headline: "Not approved: Wrong amount" };
+  assert.deepStrictEqual(buildGroupBuyTeaser(paidLive, CAPS, { ...TEASER, membership }, NOW).membership, membership);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

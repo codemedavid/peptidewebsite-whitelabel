@@ -51,6 +51,8 @@ import {
   sortCategoryOptions,
 } from "@/lib/storefront/sort-categories";
 import { normalizeOnHandOrder, orderOnHandProducts } from "@/lib/storefront/on-hand-order";
+import { MembersOnlyCatalog } from "./MembersOnlyCatalog";
+import { membersOnlyRound } from "../members-only";
 
 /**
  * The option picker, shared by the product card and its detail modal.
@@ -1139,6 +1141,19 @@ export function Catalog({
     return orderOnHandProducts(ranked, normalizeOnHandOrder(brand.onHandOrder));
   }, [products, category, query, effectiveSort, sortCategories, brand.bestSellerCounts, brand.onHandOrder]);
 
+  // Locked out of a paid group buy (brand.groupBuyTeaser): a catalog emptied by
+  // the lock is a members-only door, never "0 products · No matches".
+  const lockedRound = membersOnlyRound(brand);
+  if (lockedRound && products.length === 0) {
+    return (
+      <section className="catalog section" id="catalog">
+        <div className="container">
+          <MembersOnlyCatalog teaser={lockedRound} variant="panel" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="catalog section" id="catalog">
       <div className="container">
@@ -1193,6 +1208,8 @@ export function Catalog({
             {filtered.length} {filtered.length === 1 ? "Product" : "Products"}
           </div>
         )}
+
+        {lockedRound && <MembersOnlyCatalog teaser={lockedRound} variant="notice" />}
 
         <div className="catalog__grid" data-cd-grid={brand.cardDesign?.layout || undefined}>
           {filtered.map((p) => (

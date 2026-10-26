@@ -161,60 +161,98 @@ export type ShopCatalog = {
   groupBuyTeaser?: ShopGroupBuyTeaser | null;
 };
 
-/** The paid group-buy join screen — ONE shape for the website (#groupbuy) and
- *  the app (GET/POST /shop/group-buy/join). Built server-side by
- *  lib/storefront/gb-join.server.ts; the copy in `status` comes from
- *  gb-membership.membershipStatusView so every surface says the same thing. */
+/** Paid Access (src/modules/paid-access): the customer's way into a gated round — ONE
+ *  shape for the website (#groupbuy) and the app (GET/POST
+ *  /shop/group-buy/join). Declared here, not imported, because the Expo app
+ *  compiles this file; the module's actions map its JoinState onto it, so a
+ *  type error there means the two drifted. Every rule is decided server-side;
+ *  clients only render `stepper` and offer `stepper.action`. */
+export type GroupBuyStepper = {
+  steps: { key: "form" | "payment" | "approval"; label: string; state: "done" | "current" | "upcoming" }[];
+  /** 1-based position of the current step; null when not inside a step. */
+  position: number | null;
+  total: number;
+  /** e.g. "Step 2 of 3: Waiting for admin approval". */
+  headline: string;
+  detail: string;
+  tone: "neutral" | "pending" | "success" | "danger";
+  action: { kind: "join" | "fill_form" | "pay"; label: string } | null;
+  /** The last stop's name ("Access", or the store's own). Absent from older servers. */
+  accessLabel?: string;
+};
+
+export type GroupBuyJoinQuestion = { id: string; label: string; kind: "short" | "long" | "choice"; required: boolean; options: string[] };
+
 export type GroupBuyJoinState = {
-  round: ShopGroupBuyTeaser;
-  /** "₱500" / "₱499.50". */
-  joinFeeLabel: string;
-  /** Can this customer start a request right now (paid, open round, no live or
-   *  unrefunded request)? */
-  canJoin: boolean;
-  /** Where to send the fee — the store's active checkout payment methods. */
-  paymentMethods: ShopPaymentMethod[];
-  status: { title: string; detail: string; tone: "neutral" | "pending" | "success" | "danger" };
-  /** The customer's latest request on this round; null = none yet. The
-   *  receipt image itself never rides here — see the receipt endpoint. */
-  request: GroupBuyJoinRequest | null;
-};
-
-export type GroupBuyJoinRequest = {
-  /** The request's own id (the customer's own record). */
-  id: string;
-  status: string;
+  groupBuyId: string;
+  roundName: string;
+  /** false = Open: no join needed, everyone has access. */
+  gated: boolean;
+  status: string | null;
+  canAccess: boolean;
+  membershipId: string | null;
+  stepper: GroupBuyStepper;
+  /** Centavos — the member's own (snapshot) price. */
   amountCents: number;
-  reference: string;
-  method: string;
-  /** ISO. */
-  paidAt: string | null;
-  submittedAt: string | null;
-  hasReceipt: boolean;
-  /** The store's reason (rejected / revoked); "" otherwise. */
+  amountLabel: string;
+  amountMode: "full" | "deposit";
+  paymentOptions: { manual: boolean; online: boolean };
+  /** Where to send a manual payment — the store's checkout payment methods. */
+  paymentAccounts: ShopPaymentMethod[];
+  /** The application form, while it is the member's step. */
+  formQuestions: GroupBuyJoinQuestion[];
+  /** ISO — when an unpaid slot is released. */
+  holdExpiresAt: string | null;
+  window: { open: boolean; opensAt: string | null; closesAt: string | null; message: string };
+  capacity: { maxSlots: number | null; slotsTaken: number; waitlist: boolean };
+  /** The member's latest manual proof (the image itself never rides here). */
+  proof: { reference: string; method: string; submittedAt: string | null; hasReceipt: boolean; rejectReason: string } | null;
   reviewReason: string;
+  refundStatus: string;
+  canJoin: boolean;
+  visibility: "nothing" | "summary";
 };
 
-export type GroupBuyJoinErrorCode = "unauthenticated" | "invalid_input" | "not_found" | "conflict" | "rate_limited" | "server_error";
+export type GroupBuyJoinErrorCode =
+  | "unauthenticated"
+  | "forbidden"
+  | "invalid_input"
+  | "not_found"
+  | "conflict"
+  | "closed"
+  | "full"
+  | "unavailable"
+  | "rate_limited"
+  | "server_error";
 
 export type GroupBuyJoinResult =
-  | { ok: true; state: GroupBuyJoinState }
+  | { ok: true; state: GroupBuyJoinState; checkout?: { url: string; ref: string } }
   | { ok: false; code: GroupBuyJoinErrorCode; message: string };
 
-/** What a locked shopper is told about a paid round (lib/storefront/gb-access
- *  GroupBuyTeaser — declared here, not imported, because the Expo app compiles
- *  this file and must not resolve the website's modules). */
+/** What a viewer who isn't in a gated round is told about it (built by
+ *  lib/storefront/gb-access) — never its products or prices. */
 export type ShopGroupBuyTeaser = {
   id: string;
   name: string;
   startsAt: string | null;
   endsAt: string | null;
   state: "upcoming" | "live" | "closed";
-  /** Centavos. */
+  /** The round's "what pending members may see" setting. */
+  visibility: "nothing" | "summary";
+  /** Only with visibility "summary". */
+  summary: { description: string; deliveryEta: string; productCount: number; maxSlots: number | null; slotsTaken: number } | null;
+  /** The way in, in order, e.g. ["Pay ₱500", "Admin approval", "Access"]. */
+  steps: string[];
+  /** Centavos a newcomer pays (0 = free). */
   joinFeeCents: number;
-  /** The shopper's own latest request on this round; null = none. */
-  membership: { status: string; reviewReason: string } | null;
+  amountLabel: string;
+  /** The viewer's own membership on this round; null = none (or anonymous). */
+  membership: { status: string; reviewReason: string; headline: string } | null;
+  /** The store's own join-page words; "" (or absent) = the built-in wording. */
+  copy?: ShopGroupBuyTeaserCopy;
 };
+
+export type ShopGroupBuyTeaserCopy = { intro: string; button: string; note: string };
 
 // ── Cart, quote, place ───────────────────────────────────────────────────────
 

@@ -249,8 +249,9 @@ check("checkout still reads rounds live", () => {
 
 // Cached rounds are only correct if EVERY function that writes group_buys busts
 // them — revalidateGroupBuys, or revalidateTenant (the loader carries the
-// tenant tag too).
-const ROUND_WRITERS = ["src/actions/group-buys.ts", "src/lib/storefront/gb-review.server.ts"];
+// tenant tag too). (Paid Access keeps its join settings in its own tables and busts
+// its own tag — see the check below.)
+const ROUND_WRITERS = ["src/actions/group-buys.ts"];
 for (const file of ROUND_WRITERS) {
   check(`${file}: every group_buys writer busts the rounds cache`, () => {
     const fns = code(file).split(/\n(?=export async function |async function )/);
@@ -261,6 +262,12 @@ for (const file of ROUND_WRITERS) {
     assert.deepEqual(unbusted, []);
   });
 }
+
+check("Paid Access's cached gate policies are busted by every settings save", () => {
+  const settings = code("src/modules/paid-access/server/settings.ts");
+  assert.match(settings, /revalidateTag\(paidAccessTag\(/);
+  assert.match(code("src/modules/paid-access/server/access.ts"), /tags: \[`tenant:\$\{tenantId\}`, paidAccessTag\(tenantId\)\]/);
+});
 
 check("no unlisted file writes group_buys", () => {
   const out = execSync(

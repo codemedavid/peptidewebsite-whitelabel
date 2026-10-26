@@ -13,7 +13,7 @@ import type { GroupBuy } from "@/lib/storefront/group-buy";
 import type { RoundAnalytics } from "@/lib/storefront/group-buy-analytics";
 import type { RoundOrderRow } from "@/lib/storefront/group-buy-orders";
 import { getGroupBuyDashboardAction, listGroupBuysAction } from "@/actions/group-buys";
-import { listGroupBuyJoinRequestsAction } from "@/actions/gb-review";
+import { listPaidAccessQueueAction } from "@/modules/paid-access/actions";
 import {
   buildGroupBuyPanel,
   pickFocusRound,
@@ -41,11 +41,12 @@ export type GroupBuyPanelState =
   | { status: "error"; message: string }
   | { status: "ready"; panel: GbPanel; focus: FocusRound; next: GroupBuy | null };
 
-/** Pending paid-join receipts for one round, or null when the store has no
- *  paid join. A failed count never takes the whole panel down. */
+/** Paid Access items waiting on the store for one round (proofs to check +
+ *  approvals), or null when the store has no join flows. A failed count never
+ *  takes the whole panel down. */
 async function loadJoinsWaiting(groupBuyId: string): Promise<number | null> {
-  const res = await listGroupBuyJoinRequestsAction({ status: "paid_pending_approval", groupBuyId });
-  return "error" in res ? null : res.counts.paid_pending_approval;
+  const res = await listPaidAccessQueueAction({ groupBuyId, tab: "approvals" });
+  return res.ok ? res.counts.payments + res.counts.approvals : null;
 }
 
 async function loadRound(): Promise<Loaded> {

@@ -13,6 +13,7 @@ import { getTenantIdOrNull } from "@/lib/tenant/headers";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { withTenant } from "@/lib/db/tenant-client";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
+import { claimGuestCustomer } from "@/lib/storefront/guest-customer";
 import {
   saveCustomerSession,
   clearCustomerSession,
@@ -82,7 +83,11 @@ export async function signUpCustomerAction(input: unknown): Promise<CustomerAcco
     return { ok: true, account: toAccount(row) };
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return { error: "An account with this email already exists. Sign in instead." };
+      // The email joined a group buy without an account: this sign-up claims that row.
+      const claimed = await claimGuestCustomer(tenantId, email, { name, phone, passwordHash: hashPassword(password) }).catch(() => null);
+      if (!claimed) return { error: "An account with this email already exists. Sign in instead." };
+      await saveCustomerSession(tenantId, claimed.id, claimed.sessionVersion);
+      return { ok: true, account: { name, email, phone, memberSince: new Date().toISOString() } };
     }
     console.error("[customer-accounts] sign-up failed", e);
     return { error: "Couldn't create your account. Please try again." };

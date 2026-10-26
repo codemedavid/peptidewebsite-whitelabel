@@ -38,7 +38,10 @@ DECLARE
     'products', 'carts', 'orders', 'storefront_orders', 'events', 'email_logs',
     'automation_runs', 'automation_metrics', 'tenant_users', 'branding',
     'tenant_settings', 'pages', 'blog_posts', 'coupons', 'media_assets',
-    'assessment_responses'
+    'assessment_responses',
+    -- Paid Access entry flows (src/modules/paid-access). paid_access_webhook_events has no
+    -- tenant (webhooks arrive before one is known) and stays out on purpose.
+    'paid_access_flows', 'paid_access_memberships', 'paid_access_payments', 'paid_access_events'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

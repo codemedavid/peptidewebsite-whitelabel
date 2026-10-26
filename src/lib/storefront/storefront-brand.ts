@@ -586,6 +586,7 @@ export async function loadStorefrontBrand(
       caps: brand.groupBuyCaps,
       viewer: opts.groupBuyViewer,
       products,
+      currency: brand.currency || "₱",
     });
     products = access.products;
     if (access.teaser) {

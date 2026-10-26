@@ -52,12 +52,12 @@ export function GroupBuyScreen() {
     );
   }
   const round = q.data.groupBuy;
-  // Paid group buy the shopper isn't approved for yet: the join flow instead.
+  // A gated (Paid Access) round the shopper isn't in yet: the join flow instead.
   if (!round && q.data.groupBuyTeaser) {
     return (
       <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
         {screen}
-        <GroupBuyJoinScreen teaser={q.data.groupBuyTeaser} currency={q.data.store.currency} onRefreshCatalog={() => void q.refetch()} />
+        <GroupBuyJoinScreen teaser={q.data.groupBuyTeaser} onRefreshCatalog={() => void q.refetch()} />
       </View>
     );
   }

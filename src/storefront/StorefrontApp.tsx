@@ -35,6 +35,7 @@ import { isPageVisible } from "./visibility";
 import { parseProductHash } from "@/lib/storefront/product-link";
 import { parseProtocolHash } from "@/lib/storefront/protocol-link";
 import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
+import { getAccessLabel, isMembersOnlyStore } from "./members-only";
 import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
 import {
   hasStorefrontAdminSessionAction,
@@ -43,7 +44,7 @@ import {
 import { redeemAppHandoffAction } from "@/actions/app-handoff";
 import { takeAppHandoff } from "./app-embed";
 import { TextColorsStyle } from "./components/TextColorsStyle";
-import { GroupBuyJoinPage, GroupBuyJoinStrip } from "./components/GroupBuyJoin";
+import { PaidAccessJoinPage, PaidAccessJoinStrip } from "@/modules/paid-access/ui";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
 // chrome is bundled eagerly above. The secondary sub-pages and the entire
@@ -282,15 +283,23 @@ function Shell({
     }
   };
 
-  const heroCtaHandler = (n: 1 | 2): (() => void) =>
-    targetHandler(
-      resolveHeroCtaLink(
-        n === 1
-          ? { type: brand.heroCta1LinkType, page: brand.heroCta1LinkPage, url: brand.heroCta1LinkUrl }
-          : { type: brand.heroCta2LinkType, page: brand.heroCta2LinkPage, url: brand.heroCta2LinkUrl },
-        n,
-      ),
+  const heroCtaTarget = (n: 1 | 2): HeroCtaTarget =>
+    resolveHeroCtaLink(
+      n === 1
+        ? { type: brand.heroCta1LinkType, page: brand.heroCta1LinkPage, url: brand.heroCta1LinkUrl }
+        : { type: brand.heroCta2LinkType, page: brand.heroCta2LinkPage, url: brand.heroCta2LinkUrl },
+      n,
     );
+
+  // Locked out of a paid group buy with nothing else on the shelf (a
+  // group-buy-only store): every "shop" door would open an empty catalog, so
+  // the header button and a catalog-bound hero button become Get access.
+  const membersOnly = isMembersOnlyStore(brand, visibleProducts.length);
+  const accessCta = getAccessLabel(brand.groupBuyTeaser ?? {});
+  const heroGoesToCatalog = heroCtaTarget(1).kind === "catalog";
+  const heroCtaHandler = (n: 1 | 2): (() => void) =>
+    n === 1 && membersOnly && heroGoesToCatalog ? () => goToRoute("groupbuy") : targetHandler(heroCtaTarget(n));
+  const heroBrand: Brand = membersOnly && heroGoesToCatalog ? { ...brand, heroCta1: accessCta } : brand;
 
   // Whole-banner click in image mode. An owner who picked "not clickable" (or a
   // custom link whose URL was stripped) resolves to `none` — we pass undefined
@@ -353,10 +362,10 @@ function Shell({
 
       {brand.showHeader !== false && !editorial && (
         <Header
-          brand={brand}
+          brand={membersOnly ? { ...brand, ctaLabel: accessCta } : brand}
           cartCount={cart.length}
           onCartClick={() => setCartOpen(true)}
-          onShopClick={() => goToRoute("catalog")}
+          onShopClick={() => goToRoute(membersOnly ? "groupbuy" : "catalog")}
           discovery={
             boutique
               ? {
@@ -412,14 +421,14 @@ function Shell({
           join flow instead (the server already left the round's products and
           prices out of this page — brand.groupBuyTeaser is all there is). */}
       {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && brand.groupBuyTeaser && (
-        <GroupBuyJoinPage brand={brand} teaser={brand.groupBuyTeaser} onBack={goHome} onSignIn={() => goToRoute("account")} />
+        <PaidAccessJoinPage brand={brand} teaser={brand.groupBuyTeaser} onBack={goHome} onSignIn={() => goToRoute("account")} />
       )}
       {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && !brand.groupBuyTeaser && (
         <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
       )}
 
       {(activePage === "home" || activePage === "catalog") && brand.groupBuyTeaser && brand.twoWaysMode?.groupBuy !== "hidden" && (
-        <GroupBuyJoinStrip brand={brand} teaser={brand.groupBuyTeaser} onOpen={() => goToRoute("groupbuy")} />
+        <PaidAccessJoinStrip teaser={brand.groupBuyTeaser} onOpen={() => goToRoute("groupbuy")} />
       )}
 
       {/* Opt-in "two ways to order" home — a single scroll (hero + on-hand list +
@@ -432,7 +441,7 @@ function Shell({
         <BoutiqueHome
           view={activePage === "catalog" ? "catalog" : "home"}
           onShopAll={() => goToRoute("catalog")}
-          brand={brand}
+          brand={heroBrand}
           products={visibleProducts}
           category={category}
           query={query}
@@ -452,7 +461,7 @@ function Shell({
         <EditorialHome
           view={activePage === "catalog" ? "catalog" : "home"}
           onShopAll={() => goToRoute("catalog")}
-          brand={brand}
+          brand={heroBrand}
           products={visibleProducts}
           category={category}
           query={query}
@@ -473,7 +482,7 @@ function Shell({
           view={activePage === "catalog" ? "catalog" : "home"}
           onShopAll={() => goToRoute("catalog")}
           onRoute={goToRoute}
-          brand={brand}
+          brand={heroBrand}
           products={visibleProducts}
           category={category}
           query={query}
@@ -498,7 +507,7 @@ function Shell({
             brand.twoWaysHero === "store"
               ? brand.showHero !== false && (
                   <Hero
-                    brand={brand}
+                    brand={heroBrand}
                     onPrimary={heroCtaHandler(1)}
                     onSecondary={heroCtaHandler(2)}
                     onMedia={heroMediaHandler}
@@ -513,13 +522,14 @@ function Shell({
         <>
           {brand.showHero !== false && (
             <Hero
-              brand={brand}
+              brand={heroBrand}
               onPrimary={heroCtaHandler(1)}
               onSecondary={heroCtaHandler(2)}
               onMedia={heroMediaHandler}
             />
           )}
-          {brand.showCategories !== false && (
+          {/* Nothing to filter on a members-only shelf. */}
+          {brand.showCategories !== false && !membersOnly && (
             <Categories categories={categories} active={category} onChange={setCategory} />
           )}
           {brand.groupBuyBanner && (

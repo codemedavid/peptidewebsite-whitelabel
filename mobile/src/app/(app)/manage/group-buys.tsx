@@ -57,7 +57,7 @@ export default function GroupBuysScreen() {
       <Stack.Screen
         options={{
           title: "Group buys",
-          // Paid group-buy access: the join-request queue (manage/join-requests).
+          // Paid Access join flows: the join queue + per-round Join settings (manage/join-requests).
           headerRight: (brand.data as { groupBuyCaps?: { paidAccess?: boolean } } | undefined)?.groupBuyCaps?.paidAccess
             ? () => <Button label="Join requests" variant="ghost" icon="people-outline" onPress={() => router.push("/manage/join-requests")} />
             : undefined,

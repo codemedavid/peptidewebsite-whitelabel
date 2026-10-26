@@ -61,8 +61,6 @@ const round = (over: Partial<GroupBuy> = {}): GroupBuy => ({
   minVials: null,
   maxVials: null,
   moqVials: null,
-  paidJoin: false,
-  joinFeeCents: 0,
   closedAt: null,
   createdAt: day(-8),
   updatedAt: day(-1),

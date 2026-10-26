@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GroupBuyJoinState, PlaceShopOrderRequest, ShopCatalog, ShopOrdersResponse, ShopQuoteRequest } from "@shop-contract";
+import * as WebBrowser from "expo-web-browser";
 import type { UploadFile } from "@/api/client";
-import { shopApi, shopKeys } from "./api";
+import { shopApi, shopKeys, type GroupBuyJoinStepResult } from "./api";
 import { reconcileCart, type CartRow } from "./lib/cart";
 import { useShop } from "./ShopProvider";
 
@@ -94,9 +95,9 @@ export function useUploadProof() {
   });
 }
 
-// ── Paid group-buy join (lib/storefront/gb-join.server.ts) ───────────────────
+// ── Paid Access group-buy join (src/modules/paid-access) ───────────────────────────────
 
-/** The shopper's join screen for a paid round. Signed-in customers only. */
+/** The shopper's way into a gated round. Signed-in customers only. */
 export function useGroupBuyJoin(roundId: string | null) {
   const { scope, mode } = useShop();
   return useQuery({
@@ -106,20 +107,47 @@ export function useGroupBuyJoin(roundId: string | null) {
   });
 }
 
-/** Join + send-receipt. Each returns the new state, written straight into the
- *  cache; the catalog is refetched so the shop's teaser shows the new status. */
+/** Only https checkouts are opened — the URL comes from the server, but never trust a scheme. */
+const isWebUrl = (url: string) => /^https:\/\//i.test(url);
+
+/**
+ * Every step a member can take. Each returns the new state, written straight
+ * into the cache; the catalog is refetched so the shop's teaser (and, once the
+ * member is in, the round itself) catches up.
+ */
 export function useGroupBuyJoinActions(roundId: string) {
   const qc = useQueryClient();
   const { scope } = useShop();
+  const key = shopKeys.groupBuyJoin(scope, roundId);
   const settle = (state: GroupBuyJoinState) => {
-    qc.setQueryData(shopKeys.groupBuyJoin(scope, roundId), state);
+    qc.setQueryData(key, state);
     void qc.invalidateQueries({ queryKey: shopKeys.catalog(scope) });
   };
-  const join = useMutation({ mutationFn: () => shopApi.startGroupBuyJoin(roundId), onSuccess: settle });
-  const sendReceipt = useMutation({
-    mutationFn: ({ file, reference, method, signal }: { file: UploadFile; reference: string; method: string; signal?: AbortSignal }) =>
-      shopApi.sendGroupBuyReceipt(roundId, { reference, method }, file, signal),
+  const strip = ({ checkout: _checkout, ...state }: GroupBuyJoinStepResult): GroupBuyJoinState => state;
+
+  const join = useMutation({ mutationFn: async () => strip(await shopApi.groupBuyJoinStep(roundId, { action: "start" })), onSuccess: settle });
+  const submitForm = useMutation({
+    mutationFn: async (answers: Record<string, string>) => strip(await shopApi.groupBuyJoinStep(roundId, { action: "form", answers })),
     onSuccess: settle,
   });
-  return { join, sendReceipt };
+  const cancel = useMutation({ mutationFn: async () => strip(await shopApi.groupBuyJoinStep(roundId, { action: "cancel" })), onSuccess: settle });
+  /** Opens the provider's checkout in the in-app browser; the payment counts
+   *  only once its webhook arrives, so the state is simply refetched after. */
+  const payOnline = useMutation({
+    mutationFn: async () => {
+      const res = await shopApi.groupBuyJoinStep(roundId, { action: "online" });
+      if (res.checkout?.url && isWebUrl(res.checkout.url)) await WebBrowser.openBrowserAsync(res.checkout.url);
+      return strip(res);
+    },
+    onSuccess: (state) => {
+      settle(state);
+      void qc.invalidateQueries({ queryKey: key });
+    },
+  });
+  const sendReceipt = useMutation({
+    mutationFn: ({ file, reference, method, paidAt, signal }: { file: UploadFile; reference: string; method?: string; paidAt?: string; signal?: AbortSignal }) =>
+      shopApi.sendGroupBuyReceipt(roundId, { reference, method, paidAt }, file, signal),
+    onSuccess: settle,
+  });
+  return { join, submitForm, cancel, payOnline, sendReceipt };
 }

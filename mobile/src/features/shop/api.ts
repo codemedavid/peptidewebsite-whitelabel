@@ -19,6 +19,16 @@ import { api, apiUpload, type UploadFile } from "@/api/client";
  * viewing their own shop (/admin/storefront — same catalog, admin session).
  */
 
+/** POST /shop/group-buy/join actions (route: src/app/api/mobile/v1/shop/group-buy/join). */
+export type GroupBuyJoinStep =
+  | { action: "start" }
+  | { action: "form"; answers: Record<string, string> }
+  | { action: "online" }
+  | { action: "cancel" };
+
+/** "online" also carries the provider checkout to open; it counts only once the webhook lands. */
+export type GroupBuyJoinStepResult = GroupBuyJoinState & { checkout?: { url: string; ref: string } };
+
 export type ShopWho = { guest: true; store: string } | { guest: false; preview?: boolean };
 
 export const shopApi = {
@@ -38,13 +48,20 @@ export const shopApi = {
   placeOrder: (body: PlaceShopOrderRequest) =>
     api<PlaceShopOrderResponse>("/shop/orders", { method: "POST", body, retryable: true }),
   myOrders: () => api<ShopOrdersResponse>("/shop/orders"),
-  /** Paid group-buy join (signed-in customers only). The fee is the server's. */
+  /** Paid Access join (src/modules/paid-access; signed-in customers only). Every rule — and the price — is the server's. */
   groupBuyJoin: (roundId: string) => api<GroupBuyJoinState>(`/shop/group-buy/join?round=${encodeURIComponent(roundId)}`),
-  /** Idempotent server-side: a live request comes back, never a second one. */
-  startGroupBuyJoin: (roundId: string) => api<GroupBuyJoinState>("/shop/group-buy/join", { method: "POST", body: { roundId } }),
-  sendGroupBuyReceipt: (roundId: string, fields: { reference: string; method: string }, file: UploadFile, signal?: AbortSignal) =>
-    apiUpload<GroupBuyJoinState>("/shop/group-buy/receipt", "file", file, signal, { roundId, ...fields }),
-  /** A 10-minute link to the shopper's own receipt. */
+  /** start is idempotent server-side: a live membership comes back, never a second one. */
+  groupBuyJoinStep: (roundId: string, step: GroupBuyJoinStep) =>
+    api<GroupBuyJoinStepResult>("/shop/group-buy/join", { method: "POST", body: { roundId, ...step } }),
+  /** Manual proof of payment. No amount is ever sent — the server prices the step. */
+  sendGroupBuyReceipt: (roundId: string, fields: { reference: string; method?: string; paidAt?: string }, file: UploadFile, signal?: AbortSignal) =>
+    apiUpload<GroupBuyJoinState>("/shop/group-buy/receipt", "file", file, signal, {
+      roundId,
+      reference: fields.reference,
+      ...(fields.method ? { method: fields.method } : {}),
+      ...(fields.paidAt ? { paidAt: fields.paidAt } : {}),
+    }),
+  /** A 10-minute link to the shopper's own proof. */
   groupBuyReceiptUrl: (roundId: string) => api<{ url: string }>(`/shop/group-buy/receipt?round=${encodeURIComponent(roundId)}`),
 };
 

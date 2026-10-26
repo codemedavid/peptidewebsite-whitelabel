@@ -43,12 +43,6 @@ export type GroupBuy = {
    *  in the round (gb-moq-kits). null = no minimum. Optional so fixtures built
    *  before the field keep compiling; normalizeGroupBuy always sets it. */
   moqVials?: number | null;
-  /** Paid join (groupbuy.paid_access): customers pay `joinFeeCents` and wait
-   *  for approval before the round opens to them (lib/storefront/gb-access).
-   *  Optional so fixtures built before the fields keep compiling;
-   *  normalizeGroupBuy always sets both. */
-  paidJoin?: boolean;
-  joinFeeCents?: number;
   /** ISO — when the round actually closed. `endsAt` is only the scheduled close. */
   closedAt: string | null;
   createdAt: string;
@@ -184,8 +178,6 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     minVials: vialCount(x.minVials),
     maxVials: vialCount(x.maxVials),
     moqVials: vialCount(x.moqVials),
-    paidJoin: x.paidJoin === true,
-    joinFeeCents: feeCents(x.joinFeeCents),
     closedAt: isoOrNull(x.closedAt),
     createdAt: isoOrNull(x.createdAt) ?? now,
     updatedAt: isoOrNull(x.updatedAt) ?? now,
@@ -200,13 +192,6 @@ function vialCount(v: unknown): number | null {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.min(n, 1000000);
-}
-
-/** Coerce an untrusted join fee (centavos) to a non-negative integer; junk → 0. */
-function feeCents(v: unknown): number {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(n, 100_000_000);
 }
 
 /** Coerce an untrusted slot goal to a clean count: a non-negative integer, capped
@@ -381,8 +366,6 @@ export type DbGroupBuyRow = {
   minVials?: number | null;
   maxVials?: number | null;
   moqVials?: number | null;
-  paidJoin?: boolean | null;
-  joinFeeCents?: number | null;
   closedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -403,8 +386,6 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     minVials: row.minVials ?? null,
     maxVials: row.maxVials ?? null,
     moqVials: row.moqVials ?? null,
-    paidJoin: row.paidJoin ?? false,
-    joinFeeCents: row.joinFeeCents ?? 0,
     closedAt: row.closedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

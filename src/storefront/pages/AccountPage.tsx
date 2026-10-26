@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { Brand } from "../types";
 import { BackLink } from "../components/BackLink";
-import { GB_JOIN_RETURN_KEY } from "../components/GroupBuyJoin";
+import { PAID_ACCESS_JOIN_RETURN_KEY as GB_JOIN_RETURN_KEY } from "@/modules/paid-access/ui";
 import { TrackedOrderDetail, STATUS_LABELS, STATUS_DOT, formatDate } from "../components/TrackedOrderDetail";
 import {
   getCustomerAccountAction,

@@ -1,26 +1,27 @@
 /**
- * Paid group-buy access — who may see a paid round, and what a LOCKED viewer's
- * storefront contains. Pure (no DB, no React): the storefront loader, the
- * public price refresh, the app catalog, the chat card and checkout all ask
- * these same questions (server side: gb-access.server.ts).
+ * Group-buy access on the storefront — who may see a GATED round, and what a
+ * locked viewer's storefront contains. Pure (no DB, no React). Whether a round
+ * is gated, and whether a viewer is in, is decided by Paid Access
+ * (src/modules/paid-access — the round's entry flow); this file only applies that
+ * answer to the catalog (server side: gb-access.server.ts). GB pages never
+ * read Paid Access's tables.
  *
- * The rule (lib/storefront/gb-membership.ts owns the lifecycle):
- *   a round is LOCKED for a viewer when the store holds groupbuy.paid_access,
- *   the round has paid join on with a positive fee, and the viewer is neither a
- *   store admin nor the holder of an APPROVED membership for that round.
+ *   a round is LOCKED for a viewer when Paid Access says it is gated and the viewer
+ *   is neither a store admin nor an active member (canAccess).
  *
  * A locked viewer's catalog is built so View Source shows nothing of the round:
  * every gb listing is removed, every gbPrice (product and variation) is
  * stripped, and while the round is LIVE its assigned products — or, for a round
  * with no assignment, the whole catalog — are removed too. In their place the
- * brand carries a GroupBuyTeaser: name, dates, fee, and the viewer's own request.
+ * brand carries a GroupBuyTeaser: name, dates, the way in, and (when the
+ * round's visibility is "summary") a short summary.
  *
  * Gate: npm run test:gb-access (pure) + test:gb-access-flow (wired, PGlite).
  */
 
 import type { Product } from "@/storefront/types";
+import type { ShopGroupBuyTeaser, ShopGroupBuyTeaserCopy } from "@/lib/mobile/shop-contract";
 import { effectiveGroupBuyStatus, liveGroupBuys, type GroupBuy, type GroupBuyCapabilities } from "./group-buy";
-import { hasGroupBuyAccess } from "./gb-membership";
 import { isGroupBuyProduct } from "./two-ways";
 
 /** Who is looking. Admins (owner/staff) always see the round — they price it. */
@@ -31,7 +32,7 @@ export type GroupBuyViewer =
 
 export const ANONYMOUS_VIEWER: GroupBuyViewer = { kind: "anonymous" };
 
-type Caps = Pick<GroupBuyCapabilities, "enabled" | "scheduled" | "productAssignment" | "paidAccess">;
+type Caps = Pick<GroupBuyCapabilities, "scheduled" | "productAssignment">;
 
 const closedAtOf = (gb: GroupBuy) => gb.closedAt ?? gb.endsAt ?? gb.updatedAt;
 
@@ -54,25 +55,12 @@ export function governingGroupBuy(list: readonly GroupBuy[], caps: Pick<Caps, "s
   return closed[0] ?? null;
 }
 
-/** Does this round sit behind paid join at all? Revoking the feature reopens it. */
-export function requiresPaidJoin(
-  gb: Pick<GroupBuy, "paidJoin" | "joinFeeCents"> | null | undefined,
-  caps: Pick<Caps, "enabled" | "paidAccess">,
-): boolean {
-  return !!gb && caps.enabled && caps.paidAccess && gb.paidJoin === true && (gb.joinFeeCents ?? 0) > 0;
-}
-
-export function isGroupBuyLocked(input: {
-  round: Pick<GroupBuy, "paidJoin" | "joinFeeCents"> | null | undefined;
-  caps: Pick<Caps, "enabled" | "paidAccess">;
-  viewer: GroupBuyViewer;
-  /** The viewer's latest membership status for THIS round (null = none). */
-  membershipStatus: string | null | undefined;
-}): boolean {
-  if (!requiresPaidJoin(input.round, input.caps)) return false;
+/** Paid Access's answer applied: is this viewer locked out of the round? Admins
+ *  (owner/staff) always see it — they price it. */
+export function isGroupBuyLocked(input: { gated: boolean; viewer: GroupBuyViewer; canAccess: boolean }): boolean {
+  if (!input.gated) return false;
   if (input.viewer.kind === "admin") return false;
-  if (input.viewer.kind !== "customer") return true;
-  return !hasGroupBuyAccess(input.membershipStatus);
+  return !input.canAccess;
 }
 
 function withoutGbPrices(p: Product): Product {
@@ -106,25 +94,26 @@ export function lockGroupBuyCatalog(
   return products.filter((p) => !isGroupBuyProduct(p) && !scope.has(p.id)).map(withoutGbPrices);
 }
 
-export type GroupBuyTeaser = {
-  id: string;
-  name: string;
-  startsAt: string | null;
-  endsAt: string | null;
-  state: "upcoming" | "live" | "closed";
-  /** Centavos — the server's price, the only one the join flow charges. */
+export type GroupBuyTeaser = ShopGroupBuyTeaser;
+
+export type TeaserInput = {
+  visibility: "nothing" | "summary";
+  /** The way in, e.g. ["Pay ₱500", "Admin approval", "Access"]. */
+  steps: string[];
   joinFeeCents: number;
-  /** The viewer's own latest request on this round; null = none (or anonymous). */
-  membership: { status: string; reviewReason: string } | null;
+  amountLabel: string;
+  /** How many of the round's listings the viewer can't see (summary only). */
+  productCount: number;
+  maxSlots: number | null;
+  slotsTaken: number;
+  /** The viewer's own membership; null = none (or anonymous). */
+  membership: { status: string; reviewReason: string; headline: string } | null;
+  /** The store's join-page words (absent = built-in). */
+  copy?: ShopGroupBuyTeaserCopy;
 };
 
-/** What a locked viewer is told about the round — no products, prices or copy. */
-export function buildGroupBuyTeaser(
-  round: GroupBuy,
-  caps: Pick<Caps, "scheduled">,
-  membership: { status: string; reviewReason: string } | null,
-  now: Date = new Date(),
-): GroupBuyTeaser {
+/** What a locked viewer is told about the round — never products or prices. */
+export function buildGroupBuyTeaser(round: GroupBuy, caps: Pick<Caps, "scheduled">, input: TeaserInput, now: Date = new Date()): GroupBuyTeaser {
   const status = effectiveGroupBuyStatus(round, caps.scheduled, now);
   return {
     id: round.id,
@@ -132,7 +121,15 @@ export function buildGroupBuyTeaser(
     startsAt: round.startsAt,
     endsAt: round.endsAt,
     state: status === "active" ? "live" : status === "scheduled" ? "upcoming" : "closed",
-    joinFeeCents: round.joinFeeCents ?? 0,
-    membership: membership ? { status: membership.status, reviewReason: membership.reviewReason } : null,
+    visibility: input.visibility,
+    summary:
+      input.visibility === "summary"
+        ? { description: round.description, deliveryEta: round.deliveryEta, productCount: input.productCount, maxSlots: input.maxSlots, slotsTaken: input.slotsTaken }
+        : null,
+    steps: input.steps,
+    joinFeeCents: input.joinFeeCents,
+    amountLabel: input.amountLabel,
+    membership: input.membership,
+    ...(input.copy ? { copy: { intro: input.copy.intro, button: input.copy.button, note: input.copy.note } } : {}),
   };
 }

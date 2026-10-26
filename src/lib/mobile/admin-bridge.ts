@@ -4,7 +4,7 @@ import { runAsAppActor } from "@/lib/auth/app-actor-scope";
 import * as storefrontAdmin from "@/actions/storefront-admin";
 import * as products from "@/actions/products";
 import * as groupBuys from "@/actions/group-buys";
-import * as gbReview from "@/actions/gb-review";
+import * as paidAccess from "@/modules/paid-access/actions";
 import * as staff from "@/actions/storefront-staff";
 import * as orders from "@/actions/orders";
 import * as media from "@/actions/media";
@@ -80,11 +80,14 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   listGroupBuysAction: groupBuys.listGroupBuysAction,
   getGroupBuyDashboardAction: groupBuys.getGroupBuyDashboardAction,
   saveGroupBuyAction: groupBuys.saveGroupBuyAction,
-  // Paid group-buy access (actions/gb-review.ts — requireStaffPermission("groupbuys")).
-  saveGroupBuyPaidJoinAction: gbReview.saveGroupBuyPaidJoinAction,
-  listGroupBuyJoinRequestsAction: gbReview.listGroupBuyJoinRequestsAction,
-  reviewGroupBuyJoinRequestAction: gbReview.reviewGroupBuyJoinRequestAction,
-  getGroupBuyJoinReceiptAction: gbReview.getGroupBuyJoinReceiptAction,
+  // Paid Access join flows (src/modules/paid-access/actions.ts — requireStaffPermission("groupbuys")).
+  getPaidAccessSettingsAction: paidAccess.getPaidAccessSettingsAction,
+  savePaidAccessSettingsAction: paidAccess.savePaidAccessSettingsAction,
+  listPaidAccessQueueAction: paidAccess.listPaidAccessQueueAction,
+  decidePaidAccessAction: paidAccess.decidePaidAccessAction,
+  getPaidAccessProofUrlAction: paidAccess.getPaidAccessProofUrlAction,
+  getPaidAccessHistoryAction: paidAccess.getPaidAccessHistoryAction,
+  expirePaidAccessHoldsAction: paidAccess.expirePaidAccessHoldsAction,
   addOrderedProductsToRoundAction: groupBuys.addOrderedProductsToRoundAction,
   saveGroupBuyAllowOnHandAction: groupBuys.saveGroupBuyAllowOnHandAction,
   saveTwoWaysModeAction: groupBuys.saveTwoWaysModeAction,

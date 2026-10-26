@@ -1,15 +1,17 @@
 /**
- * Integration gate for paid group-buy access — the REAL app shop routes
+ * Integration gate for gated group-buy access — the REAL app shop routes
  * (/api/mobile/v1/shop/*), the website's storefront loader, its public price
  * refresh, its order engine and the chat card, against in-process PGlite with
- * the DB rules (prisma/group-buy-memberships.sql) applied. Same harness as
- * test-gb-invoice-flow.ts.
+ * Paid Access's DB rules (src/modules/paid-access/sql/paid-access.sql) applied. The round is
+ * gated by a Paid Access flow ("Pay then approve") and members walk it through
+ * Paid Access's public interface — every GB surface asks Paid Access, never its tables.
+ * Same harness as test-gb-invoice-flow.ts.
  *
  *   npm run test:gb-access-flow
  *
- * Covers: unapproved shoppers (no request / paid-pending / anonymous) get no
- * round products, no gbPrice anywhere, no banner — only the teaser; an approved
- * member gets the full round; checkout and quote refuse a round order without
+ * Covers: shoppers who aren't in (no membership / payment under review /
+ * anonymous) get no round products, no gbPrice anywhere, no banner — only the
+ * teaser; an active member gets the full round; checkout and quote refuse a round order without
  * approval while on-hand orders still go through; store admins see everything;
  * the chat card is the teaser; the public refresh is gated too; revoking the
  * feature reopens the round; a store without the feature is untouched.
@@ -55,7 +57,7 @@ async function main() {
   });
   const pg = new PGlite();
   await pg.exec(ddl);
-  await pg.exec(readFileSync(path.join(process.cwd(), "prisma", "group-buy-memberships.sql"), "utf8"));
+  await pg.exec(readFileSync(path.join(process.cwd(), "src", "modules", "paid-access", "sql", "paid-access.sql"), "utf8"));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = new PrismaClient({ adapter: new PrismaPGlite(pg) as any });
   (globalThis as { prisma?: PrismaClient }).prisma = db;
@@ -109,23 +111,42 @@ async function main() {
   const freeGb = await product(B.id, "FREEGB", 300000, { productType: "gb", gbPrice: 1500 });
 
   const round = await db.groupBuy.create({
-    data: { tenantId: A.id, name: "MNM Round 7", status: "active", endsAt: new Date(Date.now() + 3 * 86_400_000), productIds: [tirz.id, reta.id], paidJoin: true, joinFeeCents: 50000, description: "Supplier batch TR30-B7" },
+    data: { tenantId: A.id, name: "MNM Round 7", status: "active", endsAt: new Date(Date.now() + 3 * 86_400_000), productIds: [tirz.id, reta.id], description: "Supplier batch TR30-B7" },
   });
-  // Same shape on a store WITHOUT the feature: paidJoin must be inert there.
-  await db.groupBuy.create({
-    data: { tenantId: B.id, name: "Free Round", status: "active", endsAt: new Date(Date.now() + 3 * 86_400_000), productIds: [freeGb.id], paidJoin: true, joinFeeCents: 50000 },
+  // Same shape on a store WITHOUT the feature: a saved flow must be inert there.
+  const freeRound = await db.groupBuy.create({
+    data: { tenantId: B.id, name: "Free Round", status: "active", endsAt: new Date(Date.now() + 3 * 86_400_000), productIds: [freeGb.id] },
   });
 
-  // Memberships walk the real lifecycle (the DB trigger refuses shortcuts).
-  const membership = async (customerId: string, steps: string[]) => {
-    const m = await db.groupBuyMembership.create({
-      data: { tenantId: A.id, groupBuyId: round.id, customerId, customerName: "x", customerEmail: "x@x.test", amountCents: 50000 },
+  // The round's Paid Access flow: Pay then approve, ₱500, pending members see nothing.
+  const paidAccess = await import("../src/modules/paid-access");
+  const { presetSettings } = await import("../src/modules/paid-access/client");
+  const OWNER = { kind: "admin" as const, id: "owner", email: "owner@mnm.test" };
+  const flow = { ...presetSettings("pay_then_approve"), pendingVisibility: "nothing" as const };
+  const saved = await paidAccess.updateSettings({ tenantId: A.id, groupBuyId: round.id, admin: OWNER, input: { ...flow, payment: { ...flow.payment, amountCents: 50000 } } });
+  assert.ok(saved.ok, JSON.stringify(saved));
+  // Store B has no Paid Access feature, so its interface refuses; plant the row directly to prove it's inert.
+  await db.paidAccessFlow.create({ data: { tenantId: B.id, groupBuyId: freeRound.id, settings: { ...flow, payment: { ...flow.payment, amountCents: 50000 } } } });
+
+  // Members walk the real flow through Paid Access's interface (the DB refuses shortcuts).
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const payIn = async (c: { id: string; name: string; email: string }, reference: string) => {
+    assert.ok((await paidAccess.startJoin({ tenantId: A.id, groupBuyId: round.id, customer: c })).ok);
+    const p = await paidAccess.submitStep({
+      tenantId: A.id,
+      groupBuyId: round.id,
+      customer: c,
+      step: "payment",
+      data: { kind: "proof", file: new File([PNG], "r.png", { type: "image/png" }), reference, method: "GCash" },
     });
-    for (const status of steps) await db.groupBuyMembership.update({ where: { id: m.id }, data: { status } });
-    return m;
+    assert.ok(p.ok, JSON.stringify(p));
   };
-  await membership(ann.id, ["paid_pending_approval", "approved"]);
-  await membership(bea.id, ["paid_pending_approval"]);
+  await payIn({ id: ann.id, name: ann.name, email: ann.email }, "GC-ANN-0001");
+  await payIn({ id: bea.id, name: bea.name, email: bea.email }, "GC-BEA-0001");
+  const q = await paidAccess.listQueue({ tenantId: A.id, groupBuyId: round.id, tab: "payments" });
+  assert.ok(q.ok);
+  const annRow = q.rows.find((r) => r.customerEmail === ann.email)!;
+  assert.ok((await paidAccess.confirmPayment({ tenantId: A.id, paymentId: annRow.payment!.id, admin: OWNER, alsoApprove: true })).ok);
 
   // ── helpers ─────────────────────────────────────────────────────────────
   let ipSeq = 0;
@@ -155,7 +176,7 @@ async function main() {
   const ids = (cat: Json) => (cat.products as Json[]).map((p) => p.id).sort();
 
   console.log("\nlocked shoppers (app catalog)");
-  for (const [who, tok, status] of [["no request (Cy)", cyTok, null], ["paid, awaiting approval (Bea)", beaTok, "paid_pending_approval"]] as const) {
+  for (const [who, tok, status] of [["no request (Cy)", cyTok, null], ["paid, proof being checked (Bea)", beaTok, "payment_review"]] as const) {
     await test(`${who}: no round products, no group-buy prices, no banner — only the teaser`, async () => {
       const r = await call(catalogGet, req("GET", "/shop/catalog", tok));
       assert.equal(r.status, 200, JSON.stringify(r.json));
@@ -170,14 +191,20 @@ async function main() {
         startsAt: null,
         endsAt: round.endsAt!.toISOString(),
         state: "live",
+        visibility: "nothing",
+        summary: null,
+        steps: ["Pay ₱500", "Admin approval", "Access"],
         joinFeeCents: 50000,
-        membership: status ? { status, reviewReason: "" } : null,
+        amountLabel: "₱500",
+        membership: status ? { status, reviewReason: "", headline: "Step 1 of 2: Checking your payment" } : null,
+        // The store's own join-page words (public text; blank = built-in).
+        copy: { intro: "", button: "", note: "" },
       });
     });
   }
 
   console.log("\napproved member");
-  await test("Ann (approved) sees the round, its products and group-buy prices", async () => {
+  await test("Ann (active member) sees the round, its products and group-buy prices", async () => {
     const r = await call(catalogGet, req("GET", "/shop/catalog", annTok));
     const cat = r.json.data;
     assert.deepEqual(ids(cat), [bac.id, reta.id, tirz.id].sort());
@@ -190,12 +217,34 @@ async function main() {
   await test("Cy can't quote or order a round product (hand-rolled request)", async () => {
     const q = await call(quotePost, req("POST", "/shop/quote", cyTok, body([{ productId: tirz.id, qty: 1 }])));
     assert.notEqual(q.status, 200);
-    assert.match(JSON.stringify(q.json), /approved members/);
+    assert.match(JSON.stringify(q.json), /for members/);
     const o = await call(ordersPost, req("POST", "/shop/orders", cyTok, body([{ productId: tirz.id, qty: 1 }])));
     assert.notEqual(o.status, 200);
     assert.ok(JSON.stringify(o.json).includes(GB_JOIN_REQUIRED_MESSAGE.slice(0, 40)));
   });
-  await test("Bea (paid, not yet approved) can't order into the round either", async () => {
+  await test("the website order action: a line sent by NAME (no productId) can't sneak a round product past the gate", async () => {
+    const { placeStorefrontOrderAction } = await import("../src/actions/orders");
+    (globalThis as { __testHeaders?: Record<string, string> }).__testHeaders = { "x-tenant-host": "mnm.pepweb.store" };
+    try {
+      const res = await placeStorefrontOrderAction({
+        id: "web-name-only-1",
+        status: "pending",
+        paymentStatus: "pending",
+        paymentMethod: "GCash",
+        date: new Date().toISOString(),
+        customer: { name: "Sneaky", email: "sneaky@buyer.test", phone: "9171234567", contactMethod: "sms" },
+        shipping: { ...shipping, country: "PH", region: "Luzon", fee: 150 },
+        courier: "J&T Express",
+        trackingNumber: "",
+        items: [{ name: "TIRZ", qty: 1, price: 1690 }],
+      });
+      assert.ok("error" in res, `order went through: ${JSON.stringify(res).slice(0, 200)}`);
+      assert.match(res.error, /for members/);
+    } finally {
+      delete (globalThis as { __testHeaders?: Record<string, string> }).__testHeaders;
+    }
+  });
+  await test("Bea (paid, proof not yet checked) can't order into the round either", async () => {
     const o = await call(ordersPost, req("POST", "/shop/orders", beaTok, body([{ productId: reta.id, qty: 1, variation: "10mg" }])));
     assert.notEqual(o.status, 200, JSON.stringify(o.json));
   });
@@ -237,7 +286,7 @@ async function main() {
     assert.ok(card, "still a live, sendable card");
     assert.equal(card!.status, "open");
     assert.deepEqual([card!.productCount, card!.fromPriceLabel, card!.images.length, card!.description], [0, null, 0, ""]);
-    assert.match(card!.terms, /Members only · ₱500 join fee/);
+    assert.match(card!.terms, /Members only · Pay ₱500 → Admin approval/);
   });
   await test("the website's public price refresh is gated the same way (anonymous visitor)", async () => {
     (globalThis as { __testHeaders?: Record<string, string> }).__testHeaders = { "x-tenant-host": "mnm.pepweb.store" };
@@ -259,8 +308,26 @@ async function main() {
     assert.equal(await productVisibleToPublic(B.id, "free", { id: freeGb.id, productType: "gb" }), true, "no feature → public");
   });
 
+  console.log("\nfail closed: a round nobody set up");
+  await test("a live round with no join settings is locked for shoppers and hidden from link previews", async () => {
+    const C = await db.tenant.create({
+      data: { slug: "fresh", name: "Fresh Store", status: "active", planId: plan.id, featureOverrides: grants([fCommunity.id, fGb.id, fAssign.id, fPaid.id]) },
+    });
+    await db.branding.create({ data: { tenantId: C.id, config: { name: "Fresh", ...config } } });
+    const freshGb = await product(C.id, "FRESHGB", 300000, { productType: "gb", gbPrice: 1400 });
+    const freshOnHand = await product(C.id, "FRESHBAC", 30000);
+    await db.groupBuy.create({ data: { tenantId: C.id, name: "Fresh Round", status: "active", endsAt: new Date(Date.now() + 3 * 86_400_000), productIds: [freshGb.id] } });
+    const { products, brand } = await loadStorefrontBrand({ tenantId: C.id, slug: "fresh", isResellerUnlocked: async () => false, groupBuyViewer: async () => ({ kind: "anonymous" }) });
+    assert.deepEqual(products.map((p) => p.id), [freshOnHand.id], "round product hidden");
+    assert.ok(!JSON.stringify(products).includes("1400"), "no gb price");
+    assert.equal(brand.groupBuyTeaser?.name, "Fresh Round");
+    assert.equal(brand.groupBuyBanner, undefined);
+    const { productVisibleToPublic } = await import("../src/lib/storefront/gb-access.server");
+    assert.equal(await productVisibleToPublic(C.id, "fresh", { id: freshGb.id, productType: "gb" }), false);
+  });
+
   console.log("\nthe feature is the switch");
-  await test("a store without groupbuy.paid_access is untouched, even with paidJoin set", async () => {
+  await test("a store without groupbuy.paid_access is untouched, even with a Paid Access flow saved", async () => {
     const { products, brand } = await loadStorefrontBrand({ tenantId: B.id, slug: "free", isResellerUnlocked: async () => false, groupBuyViewer: async () => ({ kind: "anonymous" }) });
     assert.deepEqual(products.map((p) => p.id), [freeGb.id]);
     assert.equal(products[0].gbPrice, 1500);

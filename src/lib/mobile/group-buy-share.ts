@@ -116,8 +116,15 @@ export function teaserGroupBuyCard(teaser: ShopGroupBuyTeaser, currency: string)
     productCount: 0,
     fromPriceLabel: null,
     images: [],
-    terms: `Members only · ${joinFeeLabel(currency, teaser.joinFeeCents)} join fee. Join in the shop to see this group buy.`,
+    terms: `Members only · ${teaserWayIn(teaser, currency)}. Join in the shop to see this group buy.`,
   };
+}
+
+/** "₱500 to join" / "Pay ₱500 → Admin approval" — the way in, never a price list. */
+function teaserWayIn(teaser: ShopGroupBuyTeaser, currency: string): string {
+  const steps = (teaser.steps ?? []).filter((s) => s !== "Access");
+  if (steps.length > 0) return steps.join(" → ");
+  return teaser.joinFeeCents > 0 ? `${joinFeeLabel(currency, teaser.joinFeeCents)} to join` : "join to get in";
 }
 
 /** A round that is no longer live: its name survives, nothing else is promised. */

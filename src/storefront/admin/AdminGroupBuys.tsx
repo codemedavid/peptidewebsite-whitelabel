@@ -67,7 +67,7 @@ import {
   type GroupBuyContent,
 } from "@/lib/storefront/gb-content";
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
-import { AdminGroupBuyJoins } from "./AdminGroupBuyJoins";
+import { PaidAccessAdmin } from "@/modules/paid-access/ui";
 import { AdminHeroCountdown } from "./AdminHeroCountdown";
 import { isGroupBuyOnlyStore } from "../visibility";
 import {
@@ -1334,14 +1334,14 @@ export function AdminGroupBuys({
               className={`gbtabs__tab${tab === "joins" ? " is-active" : ""}`}
               onClick={() => setTab("joins")}
             >
-              Join requests{joinsWaiting ? ` (${joinsWaiting})` : ""}
+              Join flow{joinsWaiting ? ` (${joinsWaiting})` : ""}
             </button>
           )}
         </div>
 
         {tab === "joins" && caps.paidAccess && (
           <div id="gbpanel-joins" role="tabpanel" aria-labelledby="gbtab-joins">
-            <AdminGroupBuyJoins brand={brand} groupBuys={groupBuys} onGroupBuysChange={setGroupBuys} onWaitingCount={setJoinsWaiting} />
+            <PaidAccessAdmin brand={brand} groupBuys={groupBuys} onWaitingCount={setJoinsWaiting} />
           </div>
         )}
 

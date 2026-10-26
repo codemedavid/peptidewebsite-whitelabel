@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { normalizeLoginEmail } from "@/lib/auth/login-email";
 import { hashPassword } from "@/lib/auth/password-hash";
+import { claimGuestCustomer, GUEST_PASSWORD_HASH } from "@/lib/storefront/guest-customer";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { rateLimit } from "@/lib/security/rate-limit";
@@ -53,7 +54,8 @@ export async function isEmailTaken(tenantId: string, email: string): Promise<boo
   const [owner, staff, customer] = await Promise.all([
     prisma.tenant.count({ where: { id: tenantId, storeAdminEmail: e } }),
     prisma.storefrontStaff.count({ where: { tenantId, email: e } }).catch(() => 0),
-    prisma.storefrontCustomer.count({ where: { tenantId, email: e } }),
+    // A guest row (email-only group-buy join) is claimed by sign-up, not "taken".
+    prisma.storefrontCustomer.count({ where: { tenantId, email: e, passwordHash: { not: GUEST_PASSWORD_HASH } } }),
   ]);
   return owner + staff + customer > 0;
 }
@@ -90,30 +92,28 @@ export async function mobileRegister(
   }
   if (await isEmailTaken(store.id, email)) return failure("conflict", EMAIL_TAKEN);
 
+  const passwordHash = hashPassword(password);
+  // An email that joined a group buy without an account: sign-up claims that row.
+  const claimed = await claimGuestCustomer(store.id, email, { name, phone, age, gender, passwordHash });
   let customerId: string;
-  try {
-    const row = await withTenant(store.id, (db) =>
-      db.storefrontCustomer.create({
-        data: {
-          tenantId: store.id,
-          name,
-          email,
-          phone,
-          age,
-          gender,
-          passwordHash: hashPassword(password),
-          lastLoginAt: new Date(),
-        },
-        select: { id: true },
-      }),
-    );
-    customerId = row.id;
-  } catch (e) {
-    // Two sign-ups racing past the check above: the unique index decides.
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return failure("conflict", EMAIL_TAKEN);
+  if (claimed) {
+    customerId = claimed.id;
+  } else {
+    try {
+      const row = await withTenant(store.id, (db) =>
+        db.storefrontCustomer.create({
+          data: { tenantId: store.id, name, email, phone, age, gender, passwordHash, lastLoginAt: new Date() },
+          select: { id: true },
+        }),
+      );
+      customerId = row.id;
+    } catch (e) {
+      // Two sign-ups racing past the check above: the unique index decides.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        return failure("conflict", EMAIL_TAKEN);
+      }
+      throw e;
     }
-    throw e;
   }
 
   const session = await openSession(store, { kind: "customer", id: customerId }, ip, deviceLabel);
