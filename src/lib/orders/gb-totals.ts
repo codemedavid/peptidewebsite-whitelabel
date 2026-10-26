@@ -3,19 +3,19 @@
 //   items    = Σ successQty × price, less the promo PRORATED to what survived
 //              (discount × successSubtotal / subtotal — the spec's
 //              "× total_after_discount / subtotal")
-//   fees     = shipping, admin fee and QR PH fee — kept while ANY line survives,
-//              all dropped when nothing does. When vials were cancelled, a
-//              percentage admin fee and the QR PH fee are re-charged on the new
-//              amounts, the way checkout charges them (admin-fee.ts /
-//              payment-fee.ts); a fixed admin fee stays as charged. Nothing
-//              cancelled = every fee exactly as snapshotted.
+//   fees     = shipping and admin fee — kept while ANY line survives, dropped
+//              when nothing does. When vials were cancelled, a percentage admin
+//              fee is re-charged on what survived (admin-fee.ts); a fixed one
+//              stays as charged. The QR PH fee is ALWAYS kept exactly as
+//              charged, even when everything is cancelled: QR PH doesn't return
+//              it, so a refund covers items + shipping only (owner, 2026-10-27).
+//              Nothing cancelled = every fee exactly as snapshotted.
 //   newTotal = items + fees
 //
 // Money is worked in whole centavos and returned in major units, like every
 // other total surface. With nothing cancelled, newTotal equals
 // computeOrderTotals (test:gb-totals checks it).
 
-import { paymentFeeBase, QRPH_FEE_PERCENT } from "@/lib/storefront/payment-fee";
 import type { GbPaymentMode } from "@/lib/storefront/gb-kits";
 import type { Order } from "@/storefront/types";
 
@@ -77,15 +77,12 @@ function snapshotFees(order: TotalsOrder): Fees {
   };
 }
 
-/** The fees re-charged on what survived a cancellation. */
-function rechargedFees(order: TotalsOrder, kept: number, itemsAfterDiscount: number, adminFeePercent?: number): Fees {
+/** The fees after a cancellation: the admin fee re-charged on what survived
+ *  when it's a percentage; shipping and the QR PH fee as charged. */
+function rechargedFees(order: TotalsOrder, kept: number, adminFeePercent?: number): Fees {
   const charged = snapshotFees(order);
   const admin = adminFeePercent != null ? Math.round((kept * adminFeePercent) / 100) : charged.admin;
-  const base = cents(
-    paymentFeeBase({ subtotal: major(itemsAfterDiscount), shipping: major(charged.shipping), adminFee: major(admin) }),
-  );
-  const payment = charged.payment > 0 ? Math.round((base * QRPH_FEE_PERCENT) / 100) : 0;
-  return { shipping: charged.shipping, admin, payment };
+  return { shipping: charged.shipping, admin, payment: charged.payment };
 }
 
 /** Today's total, exactly as computeOrderTotals adds it up. */
@@ -113,10 +110,10 @@ export function recalculateOrder(
   const items = kept - discount;
   const fees: Fees =
     kept <= 0
-      ? { shipping: 0, admin: 0, payment: 0 }
+      ? { shipping: 0, admin: 0, payment: snapshotFees(order).payment }
       : kept === all
         ? snapshotFees(order)
-        : rechargedFees(order, kept, items, opts.adminFeePercent);
+        : rechargedFees(order, kept, opts.adminFeePercent);
   const newTotal = Math.max(0, items + fees.shipping + fees.admin + fees.payment);
   const paid = Math.max(0, cents(amountPaid));
   const amountDue = Math.max(0, newTotal - paid);

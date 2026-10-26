@@ -3,7 +3,9 @@
 //   Open → [Bunuan time, only with Bunuan] → Closed (Ligwak review) → [Payment time, pay_later only]
 //
 // A separate axis from GroupBuy.status + endsAt (which keep deciding whether a
-// round is live), so nothing that reads liveness changes. Forward-only:
+// round is live), so nothing that reads liveness changes. Forward-only, with
+// one way back — Closed → Open (reopen) until Ligwak is locked; never after
+// (owner, 2026-10-27; the server audits it):
 //   • Start Bunuan is blocked while pay_first orders still await a payment
 //     check (those orders aren't counted yet), and skips straight to Closed
 //     when every kit is already full.
@@ -73,6 +75,12 @@ function paymentOption(ctx: StageContext): StageOption {
   return { stage: "payment", allowed: true };
 }
 
+function reopenOption(ctx: StageContext): StageOption {
+  return ctx.ligwakLocked
+    ? { stage: "open", allowed: false, reason: "Ligwak is locked — this round can't reopen." }
+    : { stage: "open", allowed: true };
+}
+
 /** The moves the admin is offered from `current`, each allowed or blocked. */
 export function allowedNextStages(current: GbStage, ctx: StageContext): StageOption[] {
   switch (current) {
@@ -81,7 +89,7 @@ export function allowedNextStages(current: GbStage, ctx: StageContext): StageOpt
     case "bunuan":
       return [{ stage: "closed", allowed: true }];
     case "closed":
-      return ctx.paymentMode === "pay_later" ? [paymentOption(ctx)] : [];
+      return [reopenOption(ctx), ...(ctx.paymentMode === "pay_later" ? [paymentOption(ctx)] : [])];
     case "payment":
       return [];
   }
