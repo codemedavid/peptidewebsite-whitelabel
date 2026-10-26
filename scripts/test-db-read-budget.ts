@@ -211,6 +211,10 @@ const ORDER_WRITERS = [
   "src/lib/orders/apply-status.ts",
   "src/lib/mobile/orders.ts",
   "src/lib/mobile/account-delete.ts",
+  // Bunuan + Ligwak — each server function busts after its own commit.
+  "src/modules/bunuan/server/order-edit.ts",
+  "src/modules/ligwak/server/allocation.ts",
+  "src/modules/ligwak/server/refund.ts",
 ];
 for (const file of ORDER_WRITERS) {
   check(`${file} busts the orders cache after writing`, () => {
@@ -251,17 +255,27 @@ check("checkout still reads rounds live", () => {
 // them — revalidateGroupBuys, or revalidateTenant (the loader carries the
 // tenant tag too). (Paid Access keeps its join settings in its own tables and busts
 // its own tag — see the check below.)
-const ROUND_WRITERS = ["src/actions/group-buys.ts"];
+const ROUND_WRITERS = ["src/actions/group-buys.ts", "src/modules/bunuan/server/stage.ts", "src/modules/ligwak/server/allocation.ts"];
+// Helpers that write group_buys INSIDE a caller's transaction: busting before
+// the commit would let a re-read cache the old row, so the CALLER busts.
+const IN_TX_ROUND_HELPERS = new Set(["writeStageMove"]);
 for (const file of ROUND_WRITERS) {
   check(`${file}: every group_buys writer busts the rounds cache`, () => {
     const fns = code(file).split(/\n(?=export async function |async function )/);
     const unbusted = fns
       .filter((fn) => /groupBuy\.(create|update|updateMany|delete|deleteMany|upsert)\(/.test(fn))
       .filter((fn) => !/revalidateGroupBuys\(|revalidateTenant\(/.test(fn))
-      .map((fn) => fn.match(/function (\w+)/)?.[1] ?? "?");
+      .map((fn) => fn.match(/function (\w+)/)?.[1] ?? "?")
+      .filter((name) => !IN_TX_ROUND_HELPERS.has(name));
     assert.deepEqual(unbusted, []);
   });
 }
+check("every caller of an in-transaction round helper busts the rounds cache", () => {
+  const out = execSync("grep -rlE 'writeStageMove\\(|finishBunuanOrder\\(' src || true", { encoding: "utf8" });
+  const callers = out.split("\n").filter((f) => f && !f.endsWith("/server/index.ts") && !f.endsWith("/server/cap.ts"));
+  const unbusted = callers.filter((f) => !/revalidateGroupBuys\(/.test(code(f)));
+  assert.deepEqual(unbusted, []);
+});
 
 check("Paid Access's cached gate policies are busted by every settings save", () => {
   const settings = code("src/modules/paid-access/server/settings.ts");

@@ -120,6 +120,14 @@ export const FEATURES = {
   // grantable per tenant, default OFF; inert until the owner also turns on
   // "Require paid join" for a round. Revoking it reopens every paid round.
   GB_PAID_ACCESS: "groupbuy.paid_access",
+  // Bunuan — the kit-fill phase after Open: only variations with an unfinished
+  // kit stay buyable, capped at exactly the vials needed (src/modules/bunuan).
+  // Ligwak — the leftover vials that don't make a kit are suggested, decided
+  // and locked, which re-totals the orders (src/modules/ligwak). Both
+  // operator-grantable, default OFF; with neither, a round's stage stays "open"
+  // and nothing changes (docs/bunuan/README.md).
+  GB_BUNUAN: "groupbuy.bunuan",
+  GB_LIGWAK: "groupbuy.ligwak",
   // Excel & Supplier Reports — granular controls under "Supplier reports"
   GB_REPORT_EXCEL: "groupbuy.reports.excel",
   GB_REPORT_CSV: "groupbuy.reports.csv",
@@ -355,6 +363,10 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Paid group-buy join. Changes what customers PAY and who may see a round,
   // so — like Wholesale pricing — it lives outside every plan ceiling.
   FEATURES.GB_PAID_ACCESS,
+  // Bunuan + Ligwak change what customers can buy and what they finally pay,
+  // so — like Paid Access — they live outside every plan ceiling.
+  FEATURES.GB_BUNUAN,
+  FEATURES.GB_LIGWAK,
   // QR PH processing fee. Outside every plan ceiling (default OFF) for the same
   // reason as Wholesale pricing: granting it changes what customers PAY. A grant
   // alone is still inert — the store owner must also tag one of their payment
@@ -480,6 +492,8 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.GB_REPORT_CSV]: { label: "CSV export", description: "Download group-buy reports as CSV files. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_PDF]: { label: "PDF export", description: "Download group-buy reports as print-ready PDFs. Applies when Supplier reports is on.", group: "Group Buy" },
   [FEATURES.GB_REPORT_AUTO_ON_CLOSE]: { label: "Auto report on close", description: "Generate the report automatically the moment a group buy closes.", group: "Group Buy" },
+  [FEATURES.GB_BUNUAN]: { label: "Bunuan (fill the kits)", description: "After a round's Open phase, only variations with an unfinished kit stay buyable — capped at exactly the vials each kit still needs. Closes by itself when every kit fills.", group: "Group Buy" },
+  [FEATURES.GB_LIGWAK]: { label: "Ligwak (leftover vials)", description: "After a round closes, the vials that don't make a full kit are suggested for cancellation; the admin decides each line and locks, which re-totals the orders.", group: "Group Buy" },
   [FEATURES.GB_PAID_ACCESS]: { label: "Paid group-buy access", description: "Customers pay a join fee per group buy (receipt + reference) and wait for admin approval before they can see the round or order.", group: "Group Buy" },
   [FEATURES.GB_REPORT_CUSTOMER_BREAKDOWN]: { label: "Customer breakdown", description: "Reports include a per-customer section: each customer's items, quantities and totals.", group: "Group Buy" },
   [FEATURES.GB_REPORT_PRODUCT_BREAKDOWN]: { label: "Product breakdown", description: "Reports include a per-product section: units sold, order count and revenue per product.", group: "Group Buy" },

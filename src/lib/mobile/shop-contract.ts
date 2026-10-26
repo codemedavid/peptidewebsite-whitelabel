@@ -93,6 +93,14 @@ export type ShopGroupBuy = {
    * invoice arrives in chat at close. null/absent = pay at checkout as usual.
    */
   invoice?: { shippingFee: number } | null;
+  /** The round's stage (docs/bunuan). Absent on older servers = "open". */
+  stage?: GbStage;
+  /**
+   * Set only while the round is in Bunuan time: the ONLY options still
+   * buyable, each with the vials it can still take ("up to N"). Anything not
+   * listed reads as closed for this round. The checkout re-checks it live.
+   */
+  bunuan?: ShopBunuanState | null;
 };
 
 export type ShopGroupBuyLiveBanner = {
@@ -292,6 +300,20 @@ export type ShopOrderItem = {
   price: number;
   productId?: string;
   variation?: string;
+  /**
+   * Ligwak outcome for this line (docs/bunuan). Absent = the store doesn't use
+   * Ligwak (show the line as today). "pending" until the admin locks Ligwak.
+   */
+  lineStatus?: ShopLineStatus;
+  /** Vials that made a kit / were ligwak'd. Set with lineStatus. */
+  successQty?: number;
+  cancelledQty?: number;
+  /** "Pending", "Success", "Cancelled", or "2 Success · 3 Cancelled". */
+  lineStatusLabel?: string;
+  /** The store added this line, or changed its quantity ("Changed by the store"). */
+  changedByStore?: boolean;
+  /** The quantity before the store lowered it. */
+  originalQty?: number;
 };
 
 export type ShopFee = { label: string; amount: number };
@@ -365,6 +387,20 @@ export type ShopOrder = {
   groupBuyId: string | null;
   /** The round's name when the order was placed. */
   groupBuyName: string | null;
+  /**
+   * Set once Ligwak re-totalled the order: the total BEFORE (strike it through
+   * next to `total`, which is already the new one). null/absent = never re-totalled.
+   */
+  originalTotal?: number | null;
+  /** pay_later, at Payment time: what the customer still owes ("Payment due ₱X"). */
+  amountDue?: number | null;
+  /** pay_first: what the store owes back (the QR PH fee is never refunded). */
+  refundDue?: number | null;
+  refundStatus?: ShopRefundStatus | null;
+  /** The store's refund reference, once refunded. */
+  refundReference?: string | null;
+  /** The store changed this order's lines. */
+  changedByStore?: boolean;
 };
 
 /** A round the shopper has orders in — the My orders section header. */
@@ -379,9 +415,257 @@ export type ShopOrderRound = {
   /** ISO — scheduled close while live, actual close once closed. */
   endsAt: string | null;
   closedAt: string | null;
+  /** The round's stage (docs/bunuan). Absent on older servers = "open". */
+  stage?: GbStage;
+  /** "Open" | "Bunuan time" | "Closed" | "Payment time". */
+  stageLabel?: string;
+  /** ISO — optional due date shown at Payment time. */
+  paymentDueAt?: string | null;
+  /** Ligwak is locked: every line status and total in this round is final. */
+  ligwakLocked?: boolean;
 };
 
 export type PlaceShopOrderResponse = { order: ShopOrder };
 export type ShopOrdersResponse = { orders: ShopOrder[]; rounds: ShopOrderRound[] };
 /** POST /shop/proof, multipart `file` (image ≤ 10 MB). */
 export type ShopProofResponse = { url: string };
+
+// ── Group-buy stages: Bunuan + Ligwak (docs/bunuan) ──────────────────────────
+// Customer types above (ShopGroupBuy.bunuan, ShopOrderItem.lineStatus,
+// ShopOrder totals, ShopOrderRound.stage); the admin types below are what the
+// store-admin actions in src/modules/bunuan/actions.ts and
+// src/modules/ligwak/actions.ts return (website #admin and the app's admin
+// bridge alike). FROZEN for Wave 3 — add optional fields only.
+
+export type GbStage = "open" | "bunuan" | "closed" | "payment";
+export type GbPaymentModeName = "pay_first" | "pay_later";
+export type ShopLineStatus = "pending" | "success" | "partial" | "cancelled";
+export type ShopRefundStatus = "for_review" | "refund_pending" | "refunded";
+
+/** One option still open in Bunuan time. */
+export type ShopBunuanItem = {
+  productId: string;
+  /** null = the product's base option. */
+  variation: string | null;
+  name: string;
+  /** Vials this option can still take — cap the qty field here. */
+  allowance: number;
+};
+
+export type ShopBunuanState = {
+  /** Open options, by name. Empty = nothing left to fill. */
+  open: ShopBunuanItem[];
+};
+
+export type GbFailCode =
+  | "unauthenticated"
+  | "forbidden"
+  | "not_found"
+  | "invalid_input"
+  | "conflict"
+  | "blocked"
+  | "unavailable"
+  | "server_error";
+
+/** Every failure from a Bunuan / Ligwak action. `blockers` rides a blocked
+ *  Start Bunuan / Lock (the pay_first orders still awaiting a payment check). */
+export type GbFail = { ok: false; code: GbFailCode; message: string; blockers?: GbBlocker[] };
+
+export type GbBlocker = { orderId: string; orderNumber: string; customerName: string; placedAt: string };
+
+export type GbStageOption = {
+  stage: GbStage;
+  label: string;
+  allowed: boolean;
+  /** Why it's blocked (shown on the button). */
+  reason?: string;
+  /** Pressing it lands here instead (Start Bunuan with every kit already full → Closed). */
+  skipsTo?: GbStage;
+};
+
+/** The stage control bar for one round. */
+export type GbRoundStage = {
+  roundId: string;
+  stage: GbStage;
+  stageLabel: string;
+  /** ISO, null = never moved. */
+  stageChangedAt: string | null;
+  paymentMode: GbPaymentModeName;
+  /** ISO, optional Payment-time due date. */
+  paymentDueAt: string | null;
+  /** ISO, set while Ligwak is locked. */
+  ligwakLockedAt: string | null;
+  /** The store's features: which buttons exist at all. */
+  features: { bunuan: boolean; ligwak: boolean };
+  /** Stage is "open" but the scheduled close (endsAt) has passed — customers
+   *  can't order; the admin moves it on from here. */
+  windowEnded: boolean;
+  /** The moves offered from here, each allowed or blocked. */
+  options: GbStageOption[];
+  /** pay_first orders still awaiting a payment check (block Start Bunuan + Lock). */
+  blockers: GbBlocker[];
+  /** Admin order edits are locked (Payment time, or Ligwak locked until Recalculate). */
+  editsLocked: boolean;
+  /** The supplier report can be generated (ordering ended). */
+  reportReady: boolean;
+  /** The report is final (Ligwak locked, or the store has no Ligwak). */
+  reportFinal: boolean;
+};
+
+export type GbStageResult = { ok: true; round: GbRoundStage; skipped: boolean } | GbFail;
+export type GbRoundStageResult = { ok: true; round: GbRoundStage } | GbFail;
+
+/** One kit (variation) on the admin Bunuan counter. */
+export type GbKit = {
+  key: string;
+  productId: string | null;
+  variation: string | null;
+  name: string;
+  /** null = no kit size set (never open in Bunuan). */
+  kitSize: number | null;
+  vials: number;
+  fullKits: number;
+  leftover: number;
+  /** "7 vials needed"; 0 = kit complete. */
+  vialsNeeded: number;
+  /** pay_first: of `vials`, those on orders still awaiting a payment check. */
+  pendingVials: number;
+};
+
+export type GbBunuanCounter = {
+  roundId: string;
+  stage: GbStage;
+  kits: GbKit[];
+  /** Kits with vialsNeeded > 0. */
+  openCount: number;
+  allFilled: boolean;
+  /** ISO — when this was counted (poll ~5s). */
+  countedAt: string;
+};
+export type GbBunuanCounterResult = { ok: true; counter: GbBunuanCounter } | GbFail;
+
+/** One line change in an admin order edit. */
+export type GbLineChange = {
+  kind: "added" | "removed" | "qty";
+  key: string;
+  name: string;
+  variation: string | null;
+  fromQty: number;
+  toQty: number;
+  price: number;
+};
+
+/** An order line as the editor shows it (index = position in the order). */
+export type GbEditLine = {
+  index: number;
+  name: string;
+  productId: string | null;
+  variation: string | null;
+  qty: number;
+  price: number;
+  addedByStore: boolean;
+};
+
+/** editOrderLinesAction — preview (nothing saved) or saved. */
+export type GbOrderEditResult =
+  | {
+      ok: true;
+      saved: boolean;
+      orderId: string;
+      lines: GbEditLine[];
+      changes: GbLineChange[];
+      /** Over the Bunuan allowance (allowed, but said). */
+      warnings: string[];
+      subtotal: number;
+      total: number;
+      /** ISO — the order's updatedAt after the save (send back as expectedUpdatedAt). */
+      updatedAt: string;
+    }
+  | GbFail;
+
+export type LigwakChoiceName = "ligwak" | "keep";
+
+/** One suggested line in the Ligwak review. */
+export type LigwakSuggestion = {
+  /** `${orderId}#${lineIndex}` — what a decision refers to. */
+  entryId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  lineIndex: number;
+  key: string;
+  name: string;
+  variation: string | null;
+  /** ISO. */
+  placedAt: string;
+  quantity: number;
+  kitSize: number | null;
+  keepQty: number;
+  /** Vials suggested for ligwak (the decision covers exactly these). */
+  suggestQty: number;
+  decision: LigwakChoiceName | null;
+};
+
+export type LigwakKitSummary = {
+  key: string;
+  name: string;
+  variation: string | null;
+  kitSize: number | null;
+  vials: number;
+  fullKits: number;
+  keepVials: number;
+  ligwakVials: number;
+};
+
+/** What a lock would do to one order, with the decisions as they stand. */
+export type LigwakOrderImpact = {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  originalTotal: number;
+  newTotal: number;
+  amountDue: number;
+  refundDue: number;
+  nextAction: "collect" | "refund" | "none";
+  cancelledAll: boolean;
+};
+
+export type LigwakReview = {
+  roundId: string;
+  /** The allocation version (1, 2, … — a Recalculate starts the next). */
+  version: number;
+  paymentMode: GbPaymentModeName;
+  locked: boolean;
+  lockedAt: string | null;
+  lockedBy: string | null;
+  kits: LigwakKitSummary[];
+  suggestions: LigwakSuggestion[];
+  /** Suggestions without a (current) decision — Lock refuses while > 0. */
+  undecided: number;
+  complete: boolean;
+  /** Orders whose total a lock changes (unchanged orders left out). */
+  impact: LigwakOrderImpact[];
+  /** pay_first orders still awaiting a payment check — Lock refuses while any. */
+  blockers: GbBlocker[];
+};
+export type LigwakReviewResult = { ok: true; review: LigwakReview } | GbFail;
+
+export type LigwakDecisionInput = { entryId: string; suggestQty: number; choice: LigwakChoiceName };
+
+/** One step in a refund's trail (from the audit log). */
+export type GbRefundStep = { status: ShopRefundStatus; at: string; by: string; reference: string };
+
+export type GbRefund = {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  /** What the customer paid (the order's original total). */
+  amountPaid: number;
+  refundDue: number;
+  status: ShopRefundStatus;
+  reference: string;
+  trail: GbRefundStep[];
+};
+export type GbRefundsResult = { ok: true; refunds: GbRefund[] } | GbFail;
+export type GbRefundResult = { ok: true; refund: GbRefund } | GbFail;
+

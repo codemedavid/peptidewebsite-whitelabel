@@ -153,6 +153,10 @@ model Tenant {
   paidAccessMemberships PaidAccessMembership[]
   paidAccessPayments    PaidAccessPayment[]
   paidAccessEvents      PaidAccessEvent[]
+  // Bunuan + Ligwak (src/modules/bunuan, src/modules/ligwak)
+  gbAllocations         GbAllocation[]
+  gbAllocationEntries   GbAllocationEntry[]
+  gbAuditEvents         GbAuditEvent[]
 
   // Operator-authored calendar entries filed against this tenant. SetNull, not
   // Cascade: deleting a tenant must not wipe the operator's own schedule.
@@ -582,6 +586,31 @@ model StorefrontOrder {
   customerAccountId String?
   customerAccount   StorefrontCustomer? @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
 
+  // ── Ligwak re-total (src/modules/ligwak) ───────────────────────────────────
+  // Written when the admin locks Ligwak (or edits a locked round's order and
+  // presses Recalculate). Whole centavos. ALL NULL = never allocated, which is
+  // every order before this feature: totals read exactly as today
+  // (computeOrderTotals). adjustedTotalCents, when set, IS the order's total.
+  originalTotalCents Int?
+  adjustedTotalCents Int?
+  // pay_later: what the customer still owes at Payment time.
+  amountDueCents     Int?
+  // pay_first: what the store owes back (capped at what was paid). The QR PH
+  // fee is never part of it (QR PH keeps it).
+  refundDueCents     Int?
+  // for_review → refund_pending → refunded (forward only). NULL = no refund.
+  refundStatus       String?
+  refundReference    String?
+  // The whole re-total breakdown (gb-totals GbRecalc, major units: subtotal,
+  // successSubtotal, discount, shipping, adminFee, paymentFee, originalTotal,
+  // newTotal, amountDue, refundDue) so every surface shows the same lines the
+  // cents columns above add up to. NULL together with them.
+  gbTotals           Json?
+  // When the store last added / removed / changed lines on this order (admin
+  // order edit, audited in gb_audit_events). NULL = never — the customer sees
+  // "Changed by the store" only when set.
+  storeEditedAt      DateTime?
+
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientId]) // idempotency: one stored order per checkout draft
   @@index([tenantId, createdAt])
@@ -673,6 +702,25 @@ model GroupBuy {
 
   // This round's Paid Access entry flow (none = Open).
   paidAccessFlow  PaidAccessFlow?
+
+  // ── Stages (lib/storefront/gb-stage.ts) ────────────────────────────────────
+  // The admin-driven lifecycle: open | bunuan | closed | payment. A separate
+  // axis from status + endsAt above, which keep deciding whether the round is
+  // live, so nothing that reads liveness changes. Default "open" = every
+  // existing round reads exactly as today.
+  stage          String    @default("open")
+  stageChangedAt DateTime?
+  // pay_first | pay_later — snapshotted from the store's setting
+  // (gbPaymentModeFor) when the round opens, so flipping the store setting
+  // mid-round can't change how this round's orders are counted. NULL = not
+  // snapshotted yet (rounds before Bunuan) → read the store's current mode.
+  paymentMode    String?
+  // Optional due date shown at Payment time (pay_later).
+  paymentDueAt   DateTime?
+  // Set when the admin locks Ligwak; cleared by an explicit Recalculate.
+  ligwakLockedAt DateTime?
+
+  gbAllocations GbAllocation[]
 
   @@index([tenantId, status])
   @@map("group_buys")
@@ -1673,4 +1721,95 @@ model PaidAccessEvent {
   @@index([tenantId, groupBuyId, createdAt])
   @@index([membershipId])
   @@map("paid_access_events")
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Bunuan + Ligwak — group-buy kit fill and leftover-vial allocation
+// (docs/bunuan/README.md). Rules: src/modules/bunuan, src/modules/ligwak.
+// Database-enforced rules (successQty + cancelledQty = quantity, append-only
+// audit): src/modules/ligwak/sql/gb-allocation.sql
+// ⚠ Apply it after `db push` (npm run db:gb-allocation), then re-run
+//   prisma/lockdown-public-api.sql.
+// ════════════════════════════════════════════════════════════════════════════
+
+// One Ligwak allocation of a round. version 1, 2, … — a Recalculate supersedes
+// the current one and starts the next version. Exactly one is current (the
+// highest version); lockedAt set = the admin locked it and order totals were
+// written from it.
+model GbAllocation {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  groupBuyId String
+  groupBuy   GroupBuy  @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  version    Int
+  // pay_first | pay_later — the counting rule this allocation was made under.
+  paymentMode String
+  lockedAt   DateTime?
+  // "owner" | "staff:<id>"
+  lockedBy   String?
+  // Set when a Recalculate replaced this version.
+  supersededAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  entries GbAllocationEntry[]
+
+  @@unique([groupBuyId, version])
+  @@index([tenantId, groupBuyId])
+  @@map("gb_allocations")
+}
+
+// One order line in an allocation: how many of its vials made a kit
+// (successQty) and how many were ligwak'd (cancelledQty). suggestQty is what
+// suggestLigwak proposed; decision is the admin's answer for it.
+model GbAllocationEntry {
+  id           String       @id @default(cuid())
+  tenantId     String
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  allocationId String
+  allocation   GbAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  orderId      String
+  // Index of the line in the order's items array (results map back by it).
+  lineIndex    Int
+  // productLineKey — the kit (variation) this line fills.
+  lineKey      String
+  productId    String?
+  variation    String?
+  name         String       @default("")
+  quantity     Int
+  successQty   Int
+  cancelledQty Int          @default(0)
+  // Kit size when the allocation was made — a later product edit can't move it.
+  kitSize      Int?
+  suggestQty   Int          @default(0)
+  // ligwak | keep | NULL (undecided, or nothing suggested)
+  decision     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([allocationId, orderId, lineIndex])
+  @@index([tenantId, orderId])
+  @@map("gb_allocation_entries")
+}
+
+// Append-only audit trail for the round: stage changes, order edits, ligwak
+// decisions, lock, recalculate, refunds. The database refuses UPDATE/DELETE.
+model GbAuditEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  groupBuyId String?
+  orderId    String?
+  // stage | order_edit | ligwak_decide | ligwak_lock | ligwak_recalculate | refund
+  kind       String
+  // "owner" | "staff:<id>" | "system"
+  actor      String
+  reason     String   @default("")
+  data       Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, groupBuyId, createdAt])
+  @@index([tenantId, orderId])
+  @@map("gb_audit_events")
 }

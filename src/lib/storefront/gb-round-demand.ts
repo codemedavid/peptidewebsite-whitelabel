@@ -15,21 +15,45 @@ import { ordersTag } from "@/lib/orders/order-cache";
 import { isDemoMode, getDemoStoreOrders } from "@/lib/demo/fixtures";
 import { orderCountsAsDemand, DEMAND_EXCLUDED_STATUS_LIST } from "./group-buy";
 import { tallyKitVials } from "./gb-moq-kits";
+import { countedVials, kitKey, readKitLines } from "./gb-kits";
+
+/** Vials claimed on one kit (product + variation) — Bunuan's storefront state. */
+export type DemandLine = { key: string; productId: string | null; variation: string | null; name: string; vials: number };
 
 export type RoundDemand = {
   /** Demand orders in the round (everything except cancelled / refunded). */
   filled: number;
   /** Vials ordered per product id. */
   kitVials: Record<string, number>;
+  /** Vials ordered per VARIATION (kitKey), the unit Bunuan's kits fill. */
+  lines: DemandLine[];
 };
 
-const EMPTY: RoundDemand = { filled: 0, kitVials: {} };
+const EMPTY: RoundDemand = { filled: 0, kitVials: {}, lines: [] };
+
+function tallyLines(orders: readonly { items: unknown }[]): DemandLine[] {
+  const out = new Map<string, DemandLine>();
+  for (const o of orders) {
+    for (const line of readKitLines(o.items)) {
+      const key = kitKey(line);
+      const prev = out.get(key);
+      out.set(key, {
+        key,
+        productId: prev?.productId ?? line.productId ?? null,
+        variation: prev?.variation ?? line.variation ?? null,
+        name: prev?.name ?? line.name,
+        vials: (prev?.vials ?? 0) + countedVials(line),
+      });
+    }
+  }
+  return [...out.values()];
+}
 
 /** Outer bound only: every order writer busts `ordersTag`. */
 const REVALIDATE_SECONDS = 3600;
 
 function reduce(orders: readonly { items: unknown }[]): RoundDemand {
-  return { filled: orders.length, kitVials: tallyKitVials(orders) };
+  return { filled: orders.length, kitVials: tallyKitVials(orders), lines: tallyLines(orders) };
 }
 
 const loadDemand = (tenantId: string, groupBuyId: string) =>

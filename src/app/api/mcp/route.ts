@@ -233,6 +233,8 @@ const PRODUCT_SCHEMA = {
           price: { type: "number" },
           stock: { type: "number" },
           gbPrice: { type: "number" },
+          // Vials per supplier kit for this option (Bunuan/Ligwak kits are per variation).
+          kitSize: { type: "number" },
           // Hosted http(s) photo for this option — the connector can set the
           // colorway images the card's swipe gallery is built from. Without the
           // key, additionalProperties:false would reject a variation carrying one.
@@ -400,6 +402,11 @@ const VARIATION_EDIT_SCHEMA = {
       type: "number",
       description:
         "This option's own group-buy price. Only used on group-buy products. 0 or null means the option has no group price and sells at its own price.",
+    },
+    kitSize: {
+      type: "number",
+      description:
+        "Vials the supplier packs in one kit of THIS option (group-buy kits are counted per option). 0 or null means it uses the product's vials per kit.",
     },
     image: {
       type: "string",

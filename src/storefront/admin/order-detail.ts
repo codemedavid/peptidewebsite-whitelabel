@@ -101,8 +101,20 @@ export type OrderTotals = {
 };
 
 /** Order money breakdown. Mirrors checkout: Total = items − discount + shipping
- *  + adminFee + paymentFee, floored at 0. */
+ *  + adminFee + paymentFee, floored at 0. A group-buy order re-totalled by
+ *  Ligwak carries its final breakdown (gbTotals) — that IS its total. */
 export function computeOrderTotals(order: Order): OrderTotals {
+  if (order.gbTotals && order.adjustedTotal != null) {
+    const t = order.gbTotals;
+    return {
+      subtotal: t.successSubtotal,
+      discount: t.discount,
+      shipping: t.shipping,
+      fee: t.adminFee,
+      paymentFee: t.paymentFee,
+      total: order.adjustedTotal,
+    };
+  }
   const subtotal = (order.items || []).reduce(
     (s, i) => s + (i.price || 0) * (i.qty || 1),
     0,

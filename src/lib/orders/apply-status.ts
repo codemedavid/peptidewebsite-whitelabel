@@ -27,7 +27,7 @@ import { planStatusChange } from "@/lib/storefront/order-status";
 import { applyOrderStockMove } from "@/lib/orders/stock-move-tx";
 import {
   dbOrderToStorefront,
-  normalizeItems,
+  stockItems,
   normalizeStatusHistory,
   type DbOrderRow,
 } from "@/lib/orders/db-mapping";
@@ -134,7 +134,8 @@ export async function applyOrderStatusChange(
     // stock never goes negative.
     const move = plan?.move ?? null;
     if (move) {
-      await applyOrderStockMove(db, normalizeItems(current.items), move);
+      // What survived Ligwak — ligwak'd vials were restocked at the lock.
+      await applyOrderStockMove(db, stockItems(current.items), move);
     }
     return {
       row: await db.storefrontOrder.findFirst({

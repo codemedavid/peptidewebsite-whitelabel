@@ -4,7 +4,9 @@
  *   npm run test:gb-totals
  *
  * items    = Σ successQty × price, less the promo PRORATED to what survived
- * fees     = shipping + admin fee + QR PH fee, kept only while a line survives
+ * fees     = shipping + admin fee, kept only while a line survives; the QR PH
+ *            fee is ALWAYS kept as charged (QR PH doesn't return it — owner,
+ *            2026-10-27), so a refund covers items + shipping only
  * newTotal = items + fees
  * pay_later → amountDue; pay_first → refundDue, never more than was paid.
  * With nothing cancelled the new total must equal today's computeOrderTotals.
@@ -67,12 +69,18 @@ check("3 of 5 vials ligwak'd → only the 2 kept are charged, shipping stays", (
   assert.equal(r.refundDue, 0);
   assert.equal(r.nextAction, "collect");
 });
-check("every line cancelled → nothing to pay, every fee dropped, order cancelled", () => {
-  const o = base({ adminFee: { label: "A", amount: 25 }, paymentFee: { label: "Q", amount: 10 } });
+check("every line cancelled → nothing to pay, shipping + admin fee dropped, order cancelled", () => {
+  const o = base({ adminFee: { label: "A", amount: 25 } });
   const r = recalculateOrder(o, { 0: { cancelledQty: 5 }, 1: { cancelledQty: 2 } }, "pay_later", 0);
   assert.deepEqual([r.newTotal, r.shipping, r.adminFee, r.paymentFee, r.amountDue], [0, 0, 0, 0, 0]);
   assert.equal(r.cancelledAll, true);
   assert.equal(r.nextAction, "none");
+});
+check("every line cancelled on a QR PH order → the fee stays, the rest is refunded", () => {
+  const o = base({ adminFee: { label: "A", amount: 25 }, paymentFee: { label: "Q", amount: 10 } });
+  const r = recalculateOrder(o, { 0: { cancelledQty: 5 }, 1: { cancelledQty: 2 } }, "pay_first", 785);
+  assert.deepEqual([r.newTotal, r.shipping, r.adminFee, r.paymentFee], [10, 0, 0, 10]);
+  assert.deepEqual([r.refundDue, r.cancelledAll, r.nextAction], [775, true, "refund"]);
 });
 check("a cancelledQty above the line's qty is clamped", () => {
   const r = recalculateOrder(base(), { 0: { cancelledQty: 99 } }, "pay_later", 0);
@@ -129,11 +137,11 @@ check("a percentage admin fee is re-charged on what survived", () => {
   });
   assert.equal(r.adminFee, 15);
 });
-check("the QR PH fee is re-charged at 2% of the new base", () => {
+check("the QR PH fee is kept as charged — the refund covers items + shipping only", () => {
   const o = base({ paymentFee: { label: "QR PH (2%)", amount: 18 } });
   const r = recalculateOrder(o, { 0: { cancelledQty: 3 } }, "pay_first", 918);
-  // base = 300 items + 150 shipping = 450 → 9.00
-  assert.deepEqual([r.paymentFee, r.newTotal], [9, 459]);
+  // 300 items + 150 shipping + the 18.00 fee as charged; refund = the 3 vials
+  assert.deepEqual([r.paymentFee, r.newTotal, r.refundDue], [18, 468, 450]);
 });
 check("no QR PH fee on the order → none is added", () => {
   assert.equal(recalculateOrder(base(), { 0: { cancelledQty: 3 } }, "pay_first", 750).paymentFee, 0);

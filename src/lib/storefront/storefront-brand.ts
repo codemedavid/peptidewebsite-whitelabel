@@ -50,7 +50,8 @@ import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
 import { applyGroupBuyAccess } from "@/lib/storefront/gb-access.server";
 import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
-import { getRoundDemand } from "@/lib/storefront/gb-round-demand";
+import { getRoundDemand, type DemandLine } from "@/lib/storefront/gb-round-demand";
+import { bunuanShopState } from "@/modules/bunuan/core/counter";
 import { resellerCapsFrom } from "@/lib/storefront/reseller-caps";
 import {
   readResellerCredential,
@@ -478,6 +479,8 @@ export async function loadStorefrontBrand(
     ? normalizeTwoWaysMode(config.twoWaysMode)
     : TWO_WAYS_MODE_DEFAULT;
   brand.twoWaysMode = twoWaysMode;
+  // The live round's per-variation demand, kept for the Bunuan state below.
+  let bunuanLines: DemandLine[] | null = null;
   if (brand.groupBuyCaps.enabled) {
     const groupBuys = await groupBuysP;
     brand.gbPaymentMode = gbPaymentModeFor(config);
@@ -502,8 +505,9 @@ export async function loadStorefrontBrand(
     if (bannerId) {
       // One cached read serves both numbers: the slot bar's order count, and
       // the per-product vial totals behind the kit progress (gb-round-demand).
-      const { filled, kitVials } = await getRoundDemand(tenantId, bannerId, slug);
+      const { filled, kitVials, lines } = await getRoundDemand(tenantId, bannerId, slug);
       brand.groupBuyBanner = { ...brand.groupBuyBanner!, filled, kitVials };
+      bunuanLines = brand.groupBuyBanner.stage === "bunuan" ? lines : null;
     }
 
     // EFFECTIVE per-way states: the owner's setting folded with the live-round
@@ -601,6 +605,12 @@ export async function loadStorefrontBrand(
     }
   }
   // gb-access:end
+
+  // Bunuan time: the round sells only what its unfinished kits still need.
+  // Built once the catalog (kit sizes) is final; the checkout recounts live.
+  if (bunuanLines && brand.groupBuyBanner?.stage === "bunuan") {
+    brand.groupBuyBanner = { ...brand.groupBuyBanner, bunuan: bunuanShopState(bunuanLines, products) };
+  }
 
   // How many group-buy listings exist at all, independent of any round. Between
   // rounds there is no round scope to read, so the productType "gb" tag is the

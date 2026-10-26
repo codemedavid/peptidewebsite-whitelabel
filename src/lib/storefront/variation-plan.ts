@@ -80,6 +80,7 @@ type Edit = {
   stock?: number | null;
   gbPrice?: number | null;
   image?: string | null;
+  kitSize?: number | null;
 };
 
 /** Parse one requested edit, or say precisely what is wrong with it. Every
@@ -125,6 +126,17 @@ function parseEdit(raw: unknown, position: number): Edit | VariationPlanError {
     edit.gbPrice = gbPrice.value > 0 ? gbPrice.value : null;
   }
 
+  const kitSize = readNumber(o.kitSize);
+  if (kitSize.kind === "invalid") return { error: `"${name}" has an unreadable kit size.` };
+  // 0 and null both mean "no kit size of its own" — the product's vialsPerKit applies.
+  if (kitSize.kind === "clear") edit.kitSize = null;
+  if (kitSize.kind === "value") {
+    if (kitSize.value < 0 || !Number.isInteger(kitSize.value)) {
+      return { error: `"${name}" needs a whole-number kit size (vials per kit).` };
+    }
+    edit.kitSize = kitSize.value > 0 ? kitSize.value : null;
+  }
+
   if (o.image !== undefined) {
     if (o.image === null || o.image === "") edit.image = null;
     else {
@@ -156,6 +168,8 @@ function patch(current: Variation, edit: Edit): Variation {
   else if (edit.gbPrice !== undefined) next.gbPrice = edit.gbPrice;
   if (edit.image === null) delete next.image;
   else if (edit.image !== undefined) next.image = edit.image;
+  if (edit.kitSize === null) delete next.kitSize;
+  else if (edit.kitSize !== undefined) next.kitSize = edit.kitSize;
   return next;
 }
 

@@ -51,6 +51,8 @@ export type Variation = {
   /** What THIS option ships with, one item per line ("10 pcs syringes"). Shown
    *  only while the option is selected — see selectedIncludes. */
   includes?: string;
+  /** Vials per supplier kit for this option (Bunuan/Ligwak) — see Product.variations. */
+  kitSize?: number;
 };
 
 /** An option offered on the product card. `variation` is absent on the product's

@@ -5,6 +5,8 @@ import * as storefrontAdmin from "@/actions/storefront-admin";
 import * as products from "@/actions/products";
 import * as groupBuys from "@/actions/group-buys";
 import * as paidAccess from "@/modules/paid-access/actions";
+import * as bunuan from "@/modules/bunuan/actions";
+import * as ligwak from "@/modules/ligwak/actions";
 import * as staff from "@/actions/storefront-staff";
 import * as orders from "@/actions/orders";
 import * as media from "@/actions/media";
@@ -101,6 +103,18 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   setGroupBuyArchivedAction: groupBuys.setGroupBuyArchivedAction,
   getGroupBuySupplierReportAction: groupBuys.getGroupBuySupplierReportAction,
   saveGroupBuyProductPricingAction: groupBuys.saveGroupBuyProductPricingAction,
+  // Bunuan + Ligwak (src/modules/{bunuan,ligwak}/actions.ts — requireStaffPermission("groupbuys");
+  // editOrderLinesAction also accepts "orders").
+  getGbRoundStageAction: bunuan.getGbRoundStageAction,
+  setGbStageAction: bunuan.setGbStageAction,
+  getBunuanCounterAction: bunuan.getBunuanCounterAction,
+  editOrderLinesAction: bunuan.editOrderLinesAction,
+  previewLigwakAction: ligwak.previewLigwakAction,
+  decideLigwakAction: ligwak.decideLigwakAction,
+  lockLigwakAction: ligwak.lockLigwakAction,
+  recalculateLigwakAction: ligwak.recalculateLigwakAction,
+  listGbRefundsAction: ligwak.listGbRefundsAction,
+  setRefundStatusAction: ligwak.setRefundStatusAction,
 
   // actions/storefront-staff.ts (session info + owner-only staff management)
   getStorefrontAdminSessionAction: staff.getStorefrontAdminSessionAction,

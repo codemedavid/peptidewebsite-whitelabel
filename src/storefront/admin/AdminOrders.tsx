@@ -22,6 +22,8 @@ const STATUS_OPTIONS: { value: Order["status"]; label: string }[] = [
 ];
 
 function totalOf(o: Order): number {
+  // Re-totalled by Ligwak → that is the order's total.
+  if (o.adjustedTotal != null) return o.adjustedTotal;
   return Math.max(
     0,
     (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -

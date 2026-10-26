@@ -189,6 +189,8 @@ export function resolveDistinctId(order: Order): string {
  *  items subtotal + shipping fee + admin fee + payment fee − discount,
  *  clamped at zero. */
 export function orderTotal(order: Order): number {
+  // Re-totalled by Ligwak → that is the order's total.
+  if (order.adjustedTotal != null) return order.adjustedTotal;
   const subtotal = (order.items ?? []).reduce((s, it) => s + (it.price || 0) * (it.qty || 0), 0);
   const shipping = order.shipping?.fee ?? 0;
   const fee = order.adminFee?.amount ?? 0;

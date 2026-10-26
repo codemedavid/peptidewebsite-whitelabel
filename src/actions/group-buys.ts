@@ -50,6 +50,7 @@ import {
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
+import { loadReportKits, stageSyncForSave } from "@/modules/bunuan/server";
 import {
   mergeGroupBuyInvoiceSave,
   normalizeGroupBuyInvoice,
@@ -407,7 +408,9 @@ export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyD
         items: o.items ?? [],
       })),
     );
-    const prep = prepareReport(round, resolved.orders, report, await loadKitSizes(tenantId, slug));
+    // Bunuan / Ligwak stores count the round by the kit rule, kits per variation.
+    const kits = isDemoMode() ? null : await loadReportKits(tenantId, gbId, caps);
+    const prep = prepareReport(round, resolved.orders, report, await loadKitSizes(tenantId, slug), kits?.kits);
 
     // Is the assignment still tracking reality? Names for assigned-but-unsold
     // rows come from the catalog lookup we already did; the drift module only
@@ -513,8 +516,11 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
         if (staleIds.length) {
           await db.groupBuy.updateMany({ where: { id: { in: staleIds } }, data: { status: "closed" } });
         }
+        // Stores with Bunuan/Ligwak: the stage follows the saved status (and a
+        // locked round can't be reopened from here — throws its message).
+        const stage = await stageSyncForSave(db, tenantId, gb.id, gb.status, caps);
         // updateMany is tenant-scoped by the extension; the bare-id update isn't.
-        const n = await db.groupBuy.updateMany({ where: { id: gb.id }, data });
+        const n = await db.groupBuy.updateMany({ where: { id: gb.id }, data: { ...data, ...stage } });
         return n.count ? db.groupBuy.findFirst({ where: { id: gb.id } }) : null;
       });
       if (!row) return { error: "Group buy not found." };
@@ -533,7 +539,8 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
       if (staleIds.length) {
         await db.groupBuy.updateMany({ where: { id: { in: staleIds } }, data: { status: "closed" } });
       }
-      return db.groupBuy.create({ data: { ...data, tenantId } });
+      const stage = await stageSyncForSave(db, tenantId, null, gb.status, caps);
+      return db.groupBuy.create({ data: { ...data, ...stage, tenantId } });
     });
     revalidateGroupBuys(tenantId);
     return { ok: true, groupBuy: dbGroupBuyToStorefront(row as DbGroupBuyRow) };
@@ -1008,6 +1015,12 @@ export async function getGroupBuySupplierReportAction(
     const rounds = await loadGroupBuys(tenantId, slug);
     const round = rounds.find((g) => g.id === gbId);
     if (!round) return { error: "Group buy not found." };
+    // Bunuan / Ligwak stores: the supplier report is ready once ordering ends
+    // (after Bunuan), and counts by the kit rule (success vials only).
+    const kits = isDemoMode() ? null : await loadReportKits(tenantId, gbId, caps);
+    if (kits && !kits.ready) {
+      return { error: "The supplier report is ready once ordering ends — close the round (or let Bunuan finish) first." };
+    }
 
     // Load the CANDIDATES, not "the round's orders". A round's orders can't be
     // selected with `where: { groupBuyId: gbId }` — that was the bug. groupBuyId
@@ -1078,7 +1091,7 @@ export async function getGroupBuySupplierReportAction(
     // fed the SAME resolved orders and the SAME aggregation the screen renders,
     // so the download can never disagree with what the owner just looked at.
     const roundWindow = roundWindows.find((r) => r.id === gbId)!;
-    const prep = prepareReport(roundWindow, resolved.orders, report, await loadKitSizes(tenantId, slug));
+    const prep = prepareReport(roundWindow, resolved.orders, report, await loadKitSizes(tenantId, slug), kits?.kits);
 
     return {
       ok: true,

@@ -25,6 +25,8 @@ export interface ConfirmationOrder {
   id: string;
   /** Server-assigned, per tenant. Empty on the rare order that never got one. */
   orderNumber?: string;
+  /** Ligwak re-total — when set, the order's total (see Order.adjustedTotal). */
+  adjustedTotal?: number;
   date?: string;
   paymentMethod?: string;
   courier?: string;
@@ -149,7 +151,8 @@ export function buildOrderConfirmation(
   const paymentFee = Math.max(0, money(order.paymentFee?.amount));
   // Floored at zero, matching buildOrderMessage — an over-large discount must
   // never show the customer a negative amount due.
-  const total = Math.max(0, subtotal - discount + shipping + fee + paymentFee);
+  // Re-totalled by Ligwak → that is the order's total.
+  const total = order.adjustedTotal ?? Math.max(0, subtotal - discount + shipping + fee + paymentFee);
 
   const address = [
     order.shipping.address,

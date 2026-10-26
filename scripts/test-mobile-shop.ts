@@ -451,7 +451,20 @@ async function main() {
       assert.equal(gb.groupBuyName, "Round 3");
       assert.ok((r.json.data.orders as Json[]).some((o) => o.groupBuyId === null), "on-hand orders stay unfiled");
       assert.deepEqual(r.json.data.rounds, [
-        { id: round.id, name: "Round 3", batch: "", state: "closed", deliveryEta: "2 weeks after close", endsAt: null, closedAt: "2026-09-20T00:00:00.000Z" },
+        {
+          id: round.id,
+          name: "Round 3",
+          batch: "",
+          state: "closed",
+          deliveryEta: "2 weeks after close",
+          endsAt: null,
+          closedAt: "2026-09-20T00:00:00.000Z",
+          // The round's stage (docs/bunuan) — a round the editor closed reads Closed.
+          stage: "closed",
+          stageLabel: "Closed",
+          paymentDueAt: null,
+          ligwakLocked: false,
+        },
       ]);
     } finally {
       await db.storefrontOrder.update({ where: { id: row!.id }, data: { groupBuyId: null, groupBuyName: null } });

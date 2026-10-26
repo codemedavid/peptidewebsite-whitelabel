@@ -5,7 +5,8 @@
  *
  *   Open → [Bunuan time, only with Bunuan] → Closed (Ligwak review) → [Payment time, pay_later only]
  *
- * Admin-driven and forward-only. Start Bunuan is blocked while pay_first orders
+ * Admin-driven and forward-only, except one way back: Closed → Open (reopen)
+ * until Ligwak is locked (owner, 2026-10-27). Start Bunuan is blocked while pay_first orders
  * await a payment check, skips straight to Closed when every kit is already
  * full, and Bunuan closes itself when the last kit fills. Payment time waits for
  * the Ligwak lock. The matrix below is spelled out by hand as an oracle.
@@ -75,25 +76,35 @@ check("Open, store without Bunuan → Closed only", () => {
 check("Bunuan → Closed", () => {
   assert.deepEqual(options("bunuan", ctx()), ["closed:ok"]);
 });
-check("Closed, pay_later → Payment time (blocked until Ligwak is locked)", () => {
-  assert.deepEqual(options("closed", ctx()), ["payment:blocked"]);
-  assert.deepEqual(options("closed", ctx({ ligwakLocked: true })), ["payment:ok"]);
+check("Closed, pay_later → reopen, or Payment time (blocked until Ligwak is locked)", () => {
+  assert.deepEqual(options("closed", ctx()), ["open:ok", "payment:blocked"]);
+  assert.deepEqual(options("closed", ctx({ ligwakLocked: true })), ["open:blocked", "payment:ok"]);
 });
-check("Closed, pay_later, store without Ligwak → Payment time straight away", () => {
-  assert.deepEqual(options("closed", ctx({ hasLigwak: false })), ["payment:ok"]);
+check("Closed, pay_later, store without Ligwak → reopen or Payment time straight away", () => {
+  assert.deepEqual(options("closed", ctx({ hasLigwak: false })), ["open:ok", "payment:ok"]);
 });
-check("Closed, pay_first → nowhere (Closed is the end)", () => {
-  assert.deepEqual(options("closed", ctx({ paymentMode: "pay_first", ligwakLocked: true })), []);
+check("Closed, pay_first → reopen only until the lock (Closed is the end)", () => {
+  assert.deepEqual(options("closed", ctx({ paymentMode: "pay_first" })), ["open:ok"]);
+  assert.deepEqual(options("closed", ctx({ paymentMode: "pay_first", ligwakLocked: true })), ["open:blocked"]);
+});
+check("a blocked reopen says Ligwak is locked", () => {
+  const r = resolveStageMove("closed", "open", ctx({ ligwakLocked: true }));
+  assert.ok(!r.ok && r.reason.toLowerCase().includes("locked"), JSON.stringify(r));
+});
+check("reopen before the lock lands on Open", () => {
+  assert.deepEqual(resolveStageMove("closed", "open", ctx()), { ok: true, stage: "open", skipped: false });
 });
 check("Payment time → nowhere", () => {
   assert.deepEqual(options("payment", ctx({ ligwakLocked: true })), []);
 });
-check("never backwards", () => {
-  for (const from of GB_STAGES) {
-    const back = allowedNextStages(from, ctx({ ligwakLocked: true })).filter(
-      (o) => GB_STAGES.indexOf(o.stage) <= GB_STAGES.indexOf(from),
-    );
-    assert.deepEqual(back, [], from);
+check("never backwards, except the Closed → Open reopen", () => {
+  for (const locked of [false, true]) {
+    for (const from of GB_STAGES) {
+      const back = allowedNextStages(from, ctx({ ligwakLocked: locked }))
+        .filter((o) => o.allowed && GB_STAGES.indexOf(o.stage) <= GB_STAGES.indexOf(from))
+        .map((o) => `${from}→${o.stage}`);
+      assert.deepEqual(back, from === "closed" && !locked ? ["closed→open"] : [], `${from} locked=${locked}`);
+    }
   }
 });
 
@@ -132,7 +143,8 @@ check("a blocked move returns the reason", () => {
 check("a move that isn't offered is refused", () => {
   assert.equal(resolveStageMove("open", "payment", ctx()).ok, false);
   assert.equal(resolveStageMove("open", "bunuan", ctx({ hasBunuan: false })).ok, false);
-  assert.equal(resolveStageMove("closed", "open", ctx()).ok, false);
+  assert.equal(resolveStageMove("bunuan", "open", ctx()).ok, false);
+  assert.equal(resolveStageMove("payment", "open", ctx({ ligwakLocked: true })).ok, false);
   assert.equal(resolveStageMove("open", "open", ctx()).ok, false);
 });
 
