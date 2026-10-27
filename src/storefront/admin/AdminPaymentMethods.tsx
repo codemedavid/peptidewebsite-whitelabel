@@ -12,6 +12,7 @@ type EditingMethod = PaymentMethod & { _new?: boolean };
 function AdminPaymentMethodForm({
   method,
   qrphEntitled,
+  paidAccessEntitled,
   onCancel,
   onSave,
 }: {
@@ -21,6 +22,9 @@ function AdminPaymentMethodForm({
    *  field but never clears a tag already saved — the operator can grant the
    *  feature back and the owner's choice is still there. */
   qrphEntitled: boolean;
+  /** Whether this tenant has Paid Access group buys (GB module + paid access).
+   *  Same hide-don't-clear rule as qrphEntitled. */
+  paidAccessEntitled: boolean;
   onCancel: () => void;
   onSave: (m: EditingMethod) => void;
 }) {
@@ -130,23 +134,25 @@ function AdminPaymentMethodForm({
             </div>
           )}
 
-          <div className="admin-field" style={{ marginBottom: 22 }}>
-            <label className="admin-check">
-              <input
-                type="checkbox"
-                checked={paidAccess}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setPaidAccess(e.target.checked)
-                }
-              />
-              <span>Group buy join fee only (Paid Access)</span>
-            </label>
-            <div className="admin-field__hint">
-              Shown only on a group buy&apos;s join payment step, never at
-              checkout. If no method is tagged, the join step shows your
-              checkout methods.
+          {paidAccessEntitled && (
+            <div className="admin-field" style={{ marginBottom: 22 }}>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={paidAccess}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setPaidAccess(e.target.checked)
+                  }
+                />
+                <span>Group buy join fee only (Paid Access)</span>
+              </label>
+              <div className="admin-field__hint">
+                Shown only on a group buy&apos;s join payment step, never at
+                checkout. If no method is tagged, the join step shows your
+                checkout methods.
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="admin-field">
             <label className="admin-field__label">QR Code Image (Optional)</label>
@@ -242,6 +248,10 @@ export function AdminPaymentMethods({
   // Default-OFF feature: undefined must read as NOT entitled, so a brand blob
   // rendered before page.tsx projected the flag shows no tag field.
   const qrphEntitled = brand.qrphFeeEntitled === true;
+  // Same rule for the Paid Access join-fee tag: groupBuyCaps.paidAccess is
+  // already ANDed with the Group Buy module switch server-side, so a store
+  // without group buys never sees the field.
+  const paidAccessEntitled = brand.groupBuyCaps?.paidAccess === true;
 
   const commit = (next: PaymentMethod[]) => setPaymentMethods(next);
 
@@ -284,6 +294,7 @@ export function AdminPaymentMethods({
         brand={brand}
         method={editing}
         qrphEntitled={qrphEntitled}
+        paidAccessEntitled={paidAccessEntitled}
         onCancel={() => setEditing(null)}
         onSave={save}
       />
@@ -347,7 +358,7 @@ export function AdminPaymentMethods({
                       QR PH · {QRPH_FEE_PERCENT}%
                     </span>
                   )}
-                  {m.paidAccess && (
+                  {paidAccessEntitled && m.paidAccess && (
                     <span className="pay-row__tag" title="Shown only on the group buy join payment step">
                       Join fee
                     </span>
