@@ -109,7 +109,7 @@ export function TwoWaysHome({
 
       {/* Ways to order — one card per way the store actually offers. The
           heading comes from the view-model so a one-way store never claims two. */}
-      <section className="sf-twh__section" aria-labelledby="twh-ways-label">
+      <section className="sf-twh__section sf-twh__section--ways" aria-labelledby="twh-ways-label">
         <div id="twh-ways-label" className="sf-twh__eyebrow">
           {view.heading}
         </div>
@@ -237,7 +237,7 @@ export function TwoWaysHome({
 
       {/* Live group buy */}
       {gbLive && (
-        <section id="twh-gb" className="sf-twh__section" aria-label={`Group buy: ${view.gb.name}`}>
+        <section id="twh-gb" className="sf-twh__section sf-twh__section--gb" aria-label={`Group buy: ${view.gb.name}`}>
           <div className="sf-twh__gb">
             <div className="sf-twh__gb-top">
               <span className="sf-twh__gb-pill">● Group buy live</span>
@@ -284,7 +284,7 @@ export function TwoWaysHome({
       )}
 
       {/* How it works */}
-      <section className="sf-twh__section" aria-labelledby="twh-how-label">
+      <section className="sf-twh__section sf-twh__section--how" aria-labelledby="twh-how-label">
         <div id="twh-how-label" className="sf-twh__eyebrow">
           {content.howTitle}
         </div>
@@ -485,6 +485,8 @@ const twhCss = `
   color: var(--brand-text-muted);
 }
 .sf-root .sf-twh__ways { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* One way on offer: one full-width card, not a half-empty pair. */
+.sf-root .sf-twh__ways[data-ways="1"] { grid-template-columns: 1fr; }
 .sf-root .sf-twh__way {
   display: flex; flex-direction: column; gap: 6px; border-radius: 18px; padding: 16px 14px;
   text-decoration: none; border: 1px solid var(--brand-border); background: var(--brand-surface);
@@ -494,6 +496,11 @@ const twhCss = `
 .sf-root a.sf-twh__way:hover { transform: translateY(-2px); box-shadow: 0 6px 18px color-mix(in oklab, var(--brand-main) 16%, transparent); }
 .sf-root .sf-twh__way--gb { background: var(--brand-main); border-color: transparent; box-shadow: 0 4px 14px color-mix(in oklab, var(--brand-main) 35%, transparent); }
 .sf-root .sf-twh__way--closed { border-style: dashed; background: color-mix(in oklab, var(--brand-main) 6%, var(--brand-surface)); }
+/* A CLOSED group-buy card drops the filled brand background, so its text must
+   drop the on-brand (white) colour too — it was white on a pale tint. */
+.sf-root .sf-twh__way--gb.sf-twh__way--closed { box-shadow: 0 2px 10px color-mix(in oklab, var(--brand-main) 8%, transparent); border-color: var(--brand-border); }
+.sf-root .sf-twh__way--gb.sf-twh__way--closed .sf-twh__way-name { color: var(--brand-text); }
+.sf-root .sf-twh__way--gb.sf-twh__way--closed .sf-twh__way-copy { color: var(--brand-text-muted); }
 .sf-root .sf-twh__way-tag { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .sf-root .sf-twh__way-tag--ships { color: var(--brand-success, #1a8a5c); }
 .sf-root .sf-twh__way-tag--open { color: color-mix(in oklab, var(--brand-surface) 78%, var(--brand-main)); }
@@ -604,5 +611,35 @@ const twhCss = `
   flex-shrink: 0; width: 26px; height: 26px; border-radius: 99px; font-weight: 700; font-size: 13px;
   display: flex; align-items: center; justify-content: center; margin-top: 1px;
   color: var(--brand-main); background: color-mix(in oklab, var(--brand-main) 12%, var(--brand-surface));
+}
+/* Desktop. The home was a 560px phone column at every width; from tablet up
+   it uses the room. Phone keeps the original single column untouched.
+   The live round card and "How it works" share a row (gb + how), everything
+   else spans it. On-hand and group-buy products still never share a screen —
+   the round's products stay on #groupbuy (the no-mixed-cart rule). */
+@media (min-width: 768px) {
+  .sf-root .sf-twh { max-width: 1120px; }
+  .sf-root .sf-twh__section { padding: 0 var(--gutter); margin-top: 40px; }
+  .sf-root .sf-twh__hero { margin-top: 24px; padding: 56px var(--gutter) 48px; border-radius: 32px; }
+  .sf-root .sf-twh__hero-title > span:first-child { font-size: clamp(52px, 6vw, 72px); }
+  .sf-root .sf-twh__hero-em { font-size: clamp(42px, 5vw, 58px); }
+  .sf-root .sf-twh__hero-sub { font-size: 16px; max-width: 56ch; }
+  .sf-root .sf-twh__ways { gap: 16px; }
+  .sf-root .sf-twh__way { padding: 22px 22px; }
+  .sf-root .sf-twh__way-name { font-size: 26px; }
+  .sf-root .sf-twh__way-copy { font-size: 14px; }
+  .sf-root .sf-twh__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+}
+@media (min-width: 1024px) {
+  .sf-root .sf-twh {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    column-gap: 0; align-items: start;
+  }
+  .sf-root .sf-twh > * { grid-column: 1 / -1; }
+  .sf-root .sf-twh > .sf-twh__section--gb { grid-column: 1; padding-right: 12px; }
+  .sf-root .sf-twh > .sf-twh__section--gb + .sf-twh__section--how {
+    grid-column: 2; padding-left: 12px; align-self: center;
+  }
+  .sf-root .sf-twh__gb { padding: 28px 26px; }
 }
 `;

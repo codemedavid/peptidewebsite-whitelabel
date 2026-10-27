@@ -96,6 +96,16 @@ const ordersAction = read("src/actions/orders.ts");
 check("checkout still reads products live (stock guard)", /db\.product\.findMany\(\{ where: \{ status: \{ not: "archived" \} \} \}\)/.test(ordersAction));
 check("checkout does not use the cached catalog", !/loadCatalogRows|loadStorefrontBrand/.test(ordersAction));
 
+// The storefront's price refresh fires on every tab focus / visibilitychange,
+// per shopper. Measured 2026-10-27: it was the last uncached full-catalog read
+// (~6k calls/day). It is display-only — checkout re-prices live (above) — so it
+// shares the render's cached rows, which every product writer busts.
+const productsAction = read("src/actions/products.ts");
+const refresh = code(productsAction).slice(code(productsAction).indexOf("export async function getStorefrontProductsAction"));
+const refreshBody = refresh.slice(0, refresh.indexOf("\nexport ", 1));
+check("storefront price refresh reads the cached catalog", /loadCatalogRows\(/.test(refreshBody));
+check("storefront price refresh has no live product scan", !/db\.product\.findMany/.test(refreshBody));
+
 // Behavioural: DEMO_MODE bypasses both unstable_cache and the DB, so the
 // exported loader can actually be called here rather than only grepped.
 (async () => {

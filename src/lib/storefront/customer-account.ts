@@ -81,7 +81,26 @@ export function parseCustomerPasswordChange(input: unknown): Parsed<{ current: s
   return { ok: true, value: { current, next } };
 }
 
-export type CustomerSessionClaim = { tenantId: string; customerId: string; sessionVersion: number };
+/** Owner-issued temp passwords: lowercase + digits with the look-alikes
+ *  (0/o, 1/l/i) dropped, so the owner can read one out in a chat. */
+export const TEMP_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+const TEMP_PASSWORD_LENGTH = 10;
+
+/** A fresh temp password (Web Crypto, so it runs anywhere this module does).
+ *  Rejection sampling keeps every character equally likely. */
+export function generateTempPassword(): string {
+  const n = TEMP_PASSWORD_ALPHABET.length;
+  const limit = 256 - (256 % n);
+  const out: string[] = [];
+  while (out.length < TEMP_PASSWORD_LENGTH) {
+    for (const byte of globalThis.crypto.getRandomValues(new Uint8Array(16))) {
+      if (byte < limit && out.length < TEMP_PASSWORD_LENGTH) out.push(TEMP_PASSWORD_ALPHABET[byte % n]);
+    }
+  }
+  return out.join("");
+}
+
+export type CustomerSessionClaim ={ tenantId: string; customerId: string; sessionVersion: number };
 export type CustomerSessionRow = { id: string; tenantId: string; status: string; sessionVersion: number };
 
 /**

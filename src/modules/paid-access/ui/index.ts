@@ -2,4 +2,5 @@
 // they talk to Paid Access only through ../actions.
 
 export { PaidAccessAdmin } from "./PaidAccessAdmin";
+export { PaidAccessMembers, usePaidAccessWaitingCount } from "./PaidAccessMembers";
 export { PaidAccessJoinPage, PaidAccessJoinStrip, PAID_ACCESS_JOIN_RETURN_KEY } from "./PaidAccessJoin";

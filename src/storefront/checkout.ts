@@ -382,9 +382,10 @@ export function activeChannels(brand: Brand): ContactChannel[] {
   return (brand.contactChannels ?? []).filter((c) => c.enabled && c.destination.trim());
 }
 
-/** Active payment methods, in the order configured by the store admin. */
+/** Active checkout payment methods, in the order configured by the store
+ *  admin. Paid Access join-fee accounts are never offered at checkout. */
 export function activePaymentMethods(methods: PaymentMethod[]): PaymentMethod[] {
-  return methods.filter((m) => m.active).sort((a, b) => a.order - b.order);
+  return methods.filter((m) => m.active && m.paidAccess !== true).sort((a, b) => a.order - b.order);
 }
 
 function money(amount: number, currency: string): string {

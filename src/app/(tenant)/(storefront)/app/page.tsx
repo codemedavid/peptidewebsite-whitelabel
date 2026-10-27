@@ -19,6 +19,7 @@ import { getTenantId } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { storeDisplayName, storeLogoUrl } from "@/lib/mobile/store-name";
 import { storeDeepLink } from "@/lib/mobile/store-link";
+import { imageUrl } from "@/lib/media/image-url";
 
 const IOS_URL = process.env.NEXT_PUBLIC_MOBILE_IOS_URL?.trim() || null;
 const ANDROID_URL = process.env.NEXT_PUBLIC_MOBILE_ANDROID_URL?.trim() || null;
@@ -44,7 +45,7 @@ export default async function StoreAppPage() {
       <section aria-labelledby="app-heading" className="flex flex-col items-center gap-4 text-center">
         {logo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt="" width={72} height={72} className="h-[72px] w-[72px] rounded-2xl object-contain" />
+          <img src={imageUrl(logo, { width: 216 })} alt="" width={72} height={72} className="h-[72px] w-[72px] rounded-2xl object-contain" />
         ) : null}
         <h1 id="app-heading" className="font-heading text-3xl font-bold text-brand sm:text-4xl">
           Shop {name} in the app

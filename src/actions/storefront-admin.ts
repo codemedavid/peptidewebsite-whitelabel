@@ -190,6 +190,9 @@ function normalizeMethods(input: unknown): PaymentMethod[] {
       // The owner's QR PH tag — only persisted when set, so every existing
       // method's stored shape is byte-identical and no store starts charging.
       ...(o.qrph === true ? { qrph: true } : {}),
+      // Paid Access join-fee account (never offered at checkout); same
+      // only-when-set rule so untagged methods keep their stored shape.
+      ...(o.paidAccess === true ? { paidAccess: true } : {}),
     };
   });
 }

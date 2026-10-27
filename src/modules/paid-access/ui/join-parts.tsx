@@ -7,7 +7,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GroupBuyJoinQuestion, GroupBuyJoinResult, GroupBuyJoinState, ShopPaymentMethod } from "@/lib/mobile/shop-contract";
+import { ProofLightbox } from "@/storefront/admin/gb-proof-lightbox";
 import { getPaidAccessReceiptUrlAction, submitPaidAccessFormAction, submitPaidAccessProofAction } from "../actions";
+import { cachedProofUrl } from "./proof-url-cache";
 
 type Run = (fn: () => Promise<GroupBuyJoinResult>) => Promise<void>;
 const RECEIPT_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.heic,.heif";
@@ -183,10 +185,11 @@ type SentProofProps = {
 
 export function SentProof({ groupBuyId, proof, amount, showDetails = true }: SentProofProps) {
   const [msg, setMsg] = useState("");
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
   const view = async () => {
     setMsg("");
-    const res = await getPaidAccessReceiptUrlAction(groupBuyId).catch(() => null);
-    if (res && res.ok) window.open(res.url, "_blank", "noopener,noreferrer");
+    const res = await cachedProofUrl(`member:${groupBuyId}`, () => getPaidAccessReceiptUrlAction(groupBuyId)).catch(() => null);
+    if (res && res.ok) setProofUrl(res.url);
     else setMsg(res && !res.ok ? res.message : "Couldn't open your proof.");
   };
   return (
@@ -201,6 +204,7 @@ export function SentProof({ groupBuyId, proof, amount, showDetails = true }: Sen
         <button type="button" className="bnnjoin__link" onClick={() => void view()}>View my proof</button>
       )}
       {msg && <p className="bnnjoin__muted" role="alert">{msg}</p>}
+      {proofUrl && <ProofLightbox url={proofUrl} label="Your payment" onClose={() => setProofUrl(null)} />}
     </div>
   );
 }

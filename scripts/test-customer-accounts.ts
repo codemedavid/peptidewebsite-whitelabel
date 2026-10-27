@@ -21,6 +21,8 @@ import {
   parseCustomerProfile,
   parseCustomerPasswordChange,
   resolveCustomerSession,
+  generateTempPassword,
+  TEMP_PASSWORD_ALPHABET,
   CUSTOMER_PASSWORD_MIN,
 } from "../src/lib/storefront/customer-account";
 import { FEATURES, OPERATOR_GRANTABLE, PLAN_FEATURES } from "../src/lib/features/catalog";
@@ -245,6 +247,35 @@ check("the tracked view carries no customer PII or proof", () => {
     assert.ok(!json.includes(secret), `leaked ${secret}`);
   }
   assert.equal(toTrackedOrder(order).shippingFee, 100);
+});
+
+console.log("\nOwner password reset");
+
+check("a temp password clears the sign-up minimum and reads aloud cleanly", () => {
+  for (let i = 0; i < 200; i++) {
+    const pw = generateTempPassword();
+    assert.ok(pw.length >= CUSTOMER_PASSWORD_MIN, `too short: ${pw}`);
+    assert.ok([...pw].every((ch) => TEMP_PASSWORD_ALPHABET.includes(ch)), `off-alphabet char in ${pw}`);
+  }
+  for (const ambiguous of ["0", "O", "o", "1", "l", "I", "i"]) {
+    assert.ok(!TEMP_PASSWORD_ALPHABET.includes(ambiguous), `ambiguous ${ambiguous}`);
+  }
+});
+
+check("temp passwords don't repeat", () => {
+  const seen = new Set(Array.from({ length: 500 }, () => generateTempPassword()));
+  assert.equal(seen.size, 500);
+});
+
+check("the reset action rotates the session and is staff-gated", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const src = readFileSync("src/actions/customer-accounts.ts", "utf8");
+  const body = src.slice(src.indexOf("export async function resetStoreCustomerPasswordAction"));
+  assert.ok(body.length > 0, "resetStoreCustomerPasswordAction missing");
+  const fn = body.slice(0, body.indexOf("\n}\n"));
+  assert.ok(fn.includes("adminTenant()"), "not behind the customers permission");
+  assert.ok(fn.includes("sessionVersion: { increment: 1 }"), "reset must sign out every device");
+  assert.ok(fn.includes("tenantId"), "write must be scoped to the tenant");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

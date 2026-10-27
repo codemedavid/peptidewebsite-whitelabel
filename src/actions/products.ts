@@ -11,6 +11,7 @@
 import { Prisma } from "@prisma/client";
 import { getTenantSlug, getTenantIdOrNull } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
+import { loadCatalogRows } from "@/lib/storefront/storefront-brand";
 import { requireStaffPermission, requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
@@ -156,12 +157,10 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
     const { branding } = await getTenantContext(tenantId);
     const config = (branding?.config ?? {}) as Record<string, unknown>;
     const symbol = String(config.currency ?? "") || "₱";
-    const rows = await withTenant(tenantId, (db) =>
-      db.product.findMany({
-        where: { status: { not: "archived" } },
-        orderBy: { createdAt: "asc" },
-      }),
-    );
+    // Fires on every tab focus, per shopper — so it shares the render's cached
+    // rows (busted by every product writer) instead of re-scanning the catalog.
+    // Display only: checkout re-reads stock and price live.
+    const rows = await loadCatalogRows(tenantId);
     return {
       ok: true,
       products: await withGroupBuyAccess(

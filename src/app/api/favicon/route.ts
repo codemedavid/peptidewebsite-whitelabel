@@ -1,6 +1,11 @@
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
+import { imageUrl } from "@/lib/media/image-url";
+
+const FAVICON_CACHE = "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800";
+/** Retina-sharp for a 32px tab icon; the raw upload is often a ~250 kB photo. */
+const FAVICON_WIDTH = 96;
 
 // Dynamic via host header; the inner tenant context is `unstable_cache`-deduped
 // across requests, and the response itself is served with a long s-maxage so
@@ -38,7 +43,7 @@ export async function GET() {
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
+      "Cache-Control": FAVICON_CACHE,
     },
   });
 }
@@ -58,9 +63,15 @@ function faviconResponse(faviconUrl: string): Response {
     return new Response(body, {
       headers: {
         "Content-Type": contentType || "application/octet-stream",
-        "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
+        "Cache-Control": FAVICON_CACHE,
       },
     });
   }
-  return Response.redirect(faviconUrl, 307);
+  // A bare redirect carries no cache headers, so every page view woke this
+  // function and the browser then pulled the original upload. The redirect is
+  // cached like the monogram and points at a tab-icon-sized ImageKit render.
+  return new Response(null, {
+    status: 307,
+    headers: { Location: imageUrl(faviconUrl, { width: FAVICON_WIDTH }), "Cache-Control": FAVICON_CACHE },
+  });
 }

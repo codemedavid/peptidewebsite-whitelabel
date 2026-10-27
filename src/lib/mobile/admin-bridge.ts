@@ -132,9 +132,10 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   purgeStorefrontOrdersAction: orders.purgeStorefrontOrdersAction,
   bulkUpdateStorefrontOrderStatusAction: orders.bulkUpdateStorefrontOrderStatusAction,
 
-  // actions/customer-accounts.ts (admin side — both open with requireStaffPermission("customers"))
+  // actions/customer-accounts.ts (admin side — all open with requireStaffPermission("customers"))
   listStoreCustomersAction: customerAccounts.listStoreCustomersAction,
   setStoreCustomerStatusAction: customerAccounts.setStoreCustomerStatusAction,
+  resetStoreCustomerPasswordAction: customerAccounts.resetStoreCustomerPasswordAction,
 
   // actions/subscription-payments.ts (tenant side)
   submitSubscriptionPaymentAction: subscriptionPayments.submitSubscriptionPaymentAction,

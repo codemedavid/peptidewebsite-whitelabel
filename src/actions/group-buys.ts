@@ -121,6 +121,8 @@ import {
   type RoundListRow,
 } from "@/lib/storefront/group-buy-analytics";
 import type { Order } from "@/storefront/types";
+import { pickFocusRound, pickNextRound, type FocusRound } from "@/lib/storefront/admin-dashboard-gb";
+import * as paidAccess from "@/modules/paid-access";
 
 export type ListGroupBuysResult =
   | {
@@ -437,6 +439,76 @@ export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyD
       caps,
       unlinked: resolved.unlinked,
       drift,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't load the group buy." };
+  }
+}
+
+// ── Home dashboard card ──────────────────────────────────────────────────────
+
+export type DashboardGroupBuyResult =
+  | {
+      ok: true;
+      focus: FocusRound | null;
+      next: GroupBuy | null;
+      /** null when there is no focus round. */
+      analytics: RoundAnalytics | null;
+      orderRows: RoundOrderRow[];
+      /** Paid Access proofs + approvals waiting, or null without join flows. */
+      joinsWaiting: number | null;
+    }
+  | { error: string };
+
+/** Proofs to check + approvals for one round. A failed count never takes the
+ *  card down — it just hides the join stat. */
+async function countJoinsWaiting(tenantId: string, groupBuyId: string): Promise<number | null> {
+  try {
+    const res = await paidAccess.listQueue({ tenantId, groupBuyId, tab: "approvals" });
+    return res.ok ? res.counts.payments + res.counts.approvals : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Just what the store-admin home's Group Buy card renders, in ONE round trip.
+ * The card used to chain listGroupBuysAction → getGroupBuyDashboardAction →
+ * the Paid Access queue: three client server-action calls (Next runs those one
+ * at a time), each re-running the gate and reloading every round and order,
+ * plus report prep / drift / config reads the card never shows. Here the gate
+ * runs once and the independent reads run in parallel. The numbers come from
+ * the same resolveRoundOrders + buildRoundAnalytics, so the card still matches
+ * the round's own dashboard.
+ */
+export async function getDashboardGroupBuyAction(): Promise<DashboardGroupBuyResult> {
+  const gate = await requireGroupBuyAdmin();
+  if ("error" in gate) return gate;
+  const { tenantId, slug, caps } = gate;
+
+  try {
+    const rounds = await loadGroupBuys(tenantId, slug);
+    const focus = pickFocusRound(rounds, caps.scheduled);
+    const next = pickNextRound(rounds, caps.scheduled);
+    if (!focus) return { ok: true, focus: null, next, analytics: null, orderRows: [], joinsWaiting: null };
+
+    const wantsJoins = caps.paidAccess && focus.mode === "live" && !isDemoMode();
+    const [candidates, productNames, joinsWaiting] = await Promise.all([
+      loadCandidateOrders(tenantId, slug, rounds),
+      loadProductNames(tenantId, slug, rounds),
+      wantsJoins ? countJoinsWaiting(tenantId, focus.round.id) : Promise.resolve(null),
+    ]);
+
+    const windows = rounds.map(toAnalyticsRound);
+    const round = windows.find((w) => w.id === focus.round.id)!;
+    const resolved = resolveRoundOrders(round, candidates, windows);
+    return {
+      ok: true,
+      focus,
+      next,
+      analytics: buildRoundAnalytics(round, resolved.orders, productNames),
+      orderRows: buildRoundOrderRows(round, resolved.orders),
+      joinsWaiting,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load the group buy." };

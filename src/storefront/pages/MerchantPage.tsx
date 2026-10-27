@@ -22,6 +22,7 @@ import { RESELLER_MIN_QTY, resellerMinQty, resellerTierLabel } from "../checkout
 import { resolveWholesale } from "@/lib/storefront/wholesale";
 import { resolveBaseSaleView } from "@/lib/storefront/sale";
 import { resolveProductImage } from "@/lib/storefront/product-image";
+import { imageUrl, imageSrcSet, CARD_SIZES, CARD_WIDTHS } from "@/lib/media/image-url";
 import { verifyResellerCodeAction, resellerSignOutAction } from "@/actions/storefront-admin";
 
 // The unlock is a SERVER session, not a browser flag. `brand.resellerUnlocked` is
@@ -113,7 +114,14 @@ function MerchantCard({
       <div className="product-card__media">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt={product.name} />
+          <img
+            src={imageUrl(image, { width: CARD_WIDTHS[1] })}
+            srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
+            sizes={CARD_SIZES}
+            alt={product.name}
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           <svg className="product-card__media-placeholder" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M32 4 6 16v32l26 12 26-12V16L32 4z" />

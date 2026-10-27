@@ -182,7 +182,7 @@ async function main() {
     assert.ok(settings.includes('"saveGroupBuyLiveBannerAction"'), "Group buys settings never save the strip");
   });
   await test("customer-account admin actions are bridged (disable / re-enable in the app)", () => {
-    for (const name of ["listStoreCustomersAction", "setStoreCustomerStatusAction"]) {
+    for (const name of ["listStoreCustomersAction", "setStoreCustomerStatusAction", "resetStoreCustomerPasswordAction"]) {
       assert.ok(lookupAction(BRIDGED_ACTIONS, name), `${name} not bridged`);
     }
   });
@@ -196,6 +196,7 @@ async function main() {
     }
     const accounts = read("manage/customer-accounts.tsx");
     assert.ok(accounts.includes('"setStoreCustomerStatusAction"'), "accounts screen can't disable/re-enable");
+    assert.ok(accounts.includes('"resetStoreCustomerPasswordAction"'), "accounts screen can't reset a password");
     const layout = read("_layout.tsx");
     for (const r of ["manage/order-trash", "manage/customer-accounts"]) assert.ok(layout.includes(`name="${r}"`), `${r} not registered`);
     assert.ok(read("(tabs)/orders.tsx").includes('"/manage/order-trash"'), "Orders tab has no way into the Trash");

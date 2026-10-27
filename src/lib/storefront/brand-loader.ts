@@ -31,6 +31,7 @@ import {
   type BrandSplash,
   type SplashDesign,
 } from "./brand-splash";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 
 /**
  * The initials <Monogram> draws, as a standalone rule so the loader's CSS-only
@@ -111,7 +112,8 @@ export function brandLoaderVars(
   if (!splash.enabled) return {};
 
   const vars: Record<string, string> = { ...splashVarsCss(splash) };
-  const logo = cssUrl(splashLogoUrl(splash, brandingLogoUrl));
+  // Sized like every other logo slot: the raw upload is a phone photo (~250 kB).
+  const logo = cssUrl(imageUrl(splashLogoUrl(splash, brandingLogoUrl), { width: LOGO_WIDTH }));
 
   if (logo) {
     vars["--splash-logo"] = logo;

@@ -88,12 +88,12 @@ export default function SignIn() {
     Alert.alert(
       "Forgot your password?",
       linked
-        ? `Customers: reset it on ${linked.name}'s website.\n\nStore team: ask the store owner, or contact ${APP_NAME}.`
-        : `Shoppers: reset it on the website of the store you shop at.\n\nStore owners: contact ${APP_NAME} and we'll reset it.\n\nStaff: ask your store owner to reset your password.`,
+        ? `Customers: message ${linked.name} and ask them to reset it. They'll send you a temporary password.\n\nStore team: ask the store owner, or contact ${APP_NAME}.`
+        : `Shoppers: message the store you shop at and ask them to reset it. They'll send you a temporary password.\n\nStore owners: contact ${APP_NAME} and we'll reset it.\n\nStaff: ask your store owner to reset your password.`,
       [
         { text: "Close", style: "cancel" },
         linked
-          ? { text: "Open website", onPress: () => void WebBrowser.openBrowserAsync(linked.signUpUrl) }
+          ? { text: "Message the store", onPress: () => void WebBrowser.openBrowserAsync(linked.websiteUrl) }
           : { text: `Contact ${APP_NAME}`, onPress: () => void WebBrowser.openBrowserAsync(SUPPORT_URL) },
       ],
     );

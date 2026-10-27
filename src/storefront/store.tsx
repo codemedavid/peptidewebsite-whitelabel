@@ -46,9 +46,7 @@ import {
   saveShippingLocationsAction,
 } from "@/actions/storefront-admin";
 import { addToCartViolation } from "@/lib/storefront/checkout-rules";
-import { brandBorderVars } from "@/lib/storefront/brand-border";
-import { priceFontVar } from "@/lib/storefront/price-font";
-import { fontStack } from "@/lib/theme/tokens";
+import { brandStyleVars } from "@/lib/storefront/brand-style";
 import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
 import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
 import { qtyDelta } from "@/lib/storefront/qty-input";
@@ -183,43 +181,16 @@ function load<T>(key: string, seed: T): T {
 // mirror, which carries customer PII.
 const NS_BASE = "sf_v1__";
 
-/** Apply the brand palette to --brand-* custom properties (per applyBrandStyle). */
+/** Apply the brand palette to --brand-* custom properties (per applyBrandStyle).
+ *  Same vars the server paints first (BrandStyle), so hydration never re-colors
+ *  the page; this inline copy on <html> is what live admin edits update. */
 function applyBrandStyle(b: Brand) {
   if (typeof document === "undefined") return;
   const r = document.documentElement.style;
-  r.setProperty("--brand-main", b.main);
-  r.setProperty("--brand-accent", b.accent);
-  r.setProperty("--brand-button", b.button);
-  r.setProperty("--brand-button-2", b.button2);
-  r.setProperty("--brand-button-text", b.buttonText);
-  r.setProperty("--brand-background", b.background);
-  r.setProperty("--brand-surface", b.surface);
-  r.setProperty("--brand-text", b.text);
-  // Optional header overrides — remove (not set "") when unset so the CSS
-  // var() fallbacks kick in and a previous tenant's value can't linger.
-  if (b.headerBg) r.setProperty("--brand-header", b.headerBg);
-  else r.removeProperty("--brand-header");
-  if (b.headerText) r.setProperty("--brand-header-text", b.headerText);
-  else r.removeProperty("--brand-header-text");
-  // Border overrides — normalized fail-closed (invalid config keeps the theme
-  // default). Remove when unset so a previous tenant's border can't linger.
-  const borderVars = brandBorderVars(b);
-  for (const varName of ["--brand-border", "--brand-border-width"]) {
-    if (borderVars[varName]) r.setProperty(varName, borderVars[varName]);
-    else r.removeProperty(varName);
+  for (const [name, value] of Object.entries(brandStyleVars(b))) {
+    if (value) r.setProperty(name, value);
+    else r.removeProperty(name);
   }
-  r.setProperty("--brand-heading-font", fontStack(b.headingFont, "Georgia, serif"));
-  r.setProperty("--brand-body-font", fontStack(b.bodyFont, "system-ui, sans-serif"));
-  // Button font is optional — remove (not set "") when unset so the CSS default
-  // (--brand-button-font: var(--brand-body-font)) applies and a previous
-  // tenant's value can't linger.
-  if (b.buttonFont) r.setProperty("--brand-button-font", fontStack(b.buttonFont, "system-ui, sans-serif"));
-  else r.removeProperty("--brand-button-font");
-  // Price font is optional too — set it only when pinned; unset removes the var
-  // so the CSS default (--brand-price-font: var(--brand-body-font)) applies.
-  const priceVar = priceFontVar(b);
-  if (priceVar) r.setProperty("--brand-price-font", priceVar);
-  else r.removeProperty("--brand-price-font");
 }
 
 export function StoreProvider({

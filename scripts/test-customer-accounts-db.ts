@@ -8,7 +8,9 @@
  *   - store A's scoped client can't read, count, disable or sign in B's customer;
  *   - My Account lists exactly the orders stamped with the account, minus trash;
  *   - deleting an account keeps its orders (the FK nulls out, history survives);
- *   - a stored password verifies and a wrong one doesn't.
+ *   - a stored password verifies and a wrong one doesn't;
+ *   - an owner reset swaps the password, signs out every device, and can't
+ *     reach another store's customer or a disabled account.
  *
  *   npm run test:customer-accounts-db
  */
@@ -19,7 +21,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { PrismaPGlite } from "pglite-prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword, verifyPassword } from "../src/lib/auth/password-hash";
-import { resolveCustomerSession } from "../src/lib/storefront/customer-account";
+import { generateTempPassword, resolveCustomerSession } from "../src/lib/storefront/customer-account";
 
 let passed = 0;
 let failed = 0;
@@ -112,6 +114,25 @@ async function main() {
   check(
     "an existing session no longer resolves",
     resolveCustomerSession({ tenantId: A, customerId: ana.id, sessionVersion: 1 }, bumped, A) === null,
+  );
+
+  console.log("\nOwner password reset (resetStoreCustomerPasswordAction's write)");
+  const temp = generateTempPassword();
+  const resetWrite = (client: typeof a, tenantId: string, id: string) =>
+    client.storefrontCustomer.updateMany({
+      where: { id, tenantId, status: "active" },
+      data: { passwordHash: hashPassword(temp), sessionVersion: { increment: 1 } },
+    });
+  check("store A can't reset store B's customer (0 rows)", (await resetWrite(a, A, anaB.id)).count === 0);
+  check("a disabled account can't be reset (0 rows)", (await resetWrite(a, A, ana.id)).count === 0);
+  const beforeReset = await b.storefrontCustomer.findFirstOrThrow({ where: { id: anaB.id } });
+  check("store B resets its own customer", (await resetWrite(b, B, anaB.id)).count === 1);
+  const afterReset = await b.storefrontCustomer.findFirstOrThrow({ where: { id: anaB.id } });
+  check("the temp password signs in", verifyPassword(temp, afterReset.passwordHash));
+  check("the old password no longer does", !verifyPassword("different pw", afterReset.passwordHash));
+  check(
+    "every existing session is signed out",
+    resolveCustomerSession({ tenantId: B, customerId: anaB.id, sessionVersion: beforeReset.sessionVersion }, afterReset, B) === null,
   );
 
   console.log("\nDeleting an account keeps the order history");

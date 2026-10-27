@@ -3,13 +3,16 @@
 // Store-admin "Customers": everyone who created an account on this storefront
 // (customer accounts). Search, see how many orders each has placed while signed
 // in, and disable an account — which signs it out everywhere on its next
-// request. Staff need the "customers" permission; the server re-checks it.
+// request. A shopper who forgot their password messages the store; "Reset
+// password" issues a temp one to pass on (also signs them out everywhere).
+// Staff need the "customers" permission; the server re-checks it.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import {
   listStoreCustomersAction,
+  resetStoreCustomerPasswordAction,
   setStoreCustomerStatusAction,
   type StoreCustomerRow,
 } from "@/actions/customer-accounts";
@@ -28,6 +31,8 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
   const [rows, setRows] = useState<StoreCustomerRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** The temp password just issued — shown once, on that customer's row. */
+  const [issued, setIssued] = useState<{ id: string; password: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +84,40 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
       toast("Couldn't update the customer.");
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const resetPassword = async (c: StoreCustomerRow) => {
+    if (busyId) return;
+    if (
+      !window.confirm(
+        `Reset ${c.name}'s password? You'll get a temporary password to send them, and they'll be signed out on every device.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(c.id);
+    try {
+      const res = await resetStoreCustomerPasswordAction(c.id);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setIssued({ id: c.id, password: res.tempPassword });
+    } catch {
+      toast("Couldn't reset the password.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const copyIssued = async () => {
+    if (!issued) return;
+    try {
+      await navigator.clipboard.writeText(issued.password);
+      toast("Password copied");
+    } catch {
+      toast("Couldn't copy. Select the password and copy it.");
     }
   };
 
@@ -151,6 +190,15 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
                           {c.status === "active" ? "Active" : "Disabled"}
                         </span>
                         <div className="staff-row__actions">
+                          {c.status === "active" && (
+                            <button
+                              className="admin-btn admin-btn--ghost"
+                              onClick={() => void resetPassword(c)}
+                              disabled={busyId === c.id}
+                            >
+                              Reset password
+                            </button>
+                          )}
                           <button
                             className={`admin-btn ${c.status === "active" ? "admin-btn--danger" : "admin-btn--ghost"}`}
                             onClick={() => void toggle(c)}
@@ -160,6 +208,24 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
                           </button>
                         </div>
                       </div>
+                      {issued?.id === c.id && (
+                        <div className="cust-temp" role="status">
+                          <div className="cust-temp__label">Temporary password</div>
+                          <code className="cust-temp__value">{issued.password}</code>
+                          <div className="cust-temp__actions">
+                            <button className="admin-btn admin-btn--ghost" onClick={() => void copyIssued()}>
+                              Copy
+                            </button>
+                            <button className="admin-btn admin-btn--ghost" onClick={() => setIssued(null)}>
+                              Done
+                            </button>
+                          </div>
+                          <p className="admin-field__hint">
+                            Send this to {c.name}. It&apos;s shown only once. They can sign in with it, then change it
+                            under My Account → Change password.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

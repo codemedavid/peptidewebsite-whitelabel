@@ -30,6 +30,7 @@ import {
   type PaidAccessJoinViewer,
 } from "../actions";
 import { ApplicationForm, PaymentAccounts, ProofForm, SentProof } from "./join-parts";
+import { autoOpenRound, openRoundHome } from "./auto-open";
 import { paidAccessJoinCss } from "./join-styles";
 
 type Phase = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; state: GroupBuyJoinState };
@@ -99,6 +100,12 @@ export function PaidAccessJoinPage({ brand, teaser, onBack, onSignIn }: Props) {
 
   const state = phase.kind === "ready" ? phase.state : null;
   const isWaiting = viewer.kind !== "guest" && !!state?.status && WAITING.has(state.status);
+  const canAccess = !!state?.canAccess;
+  // "Unlocks by itself": the moment they're in, this locked page is stale.
+  const [isOpening, setIsOpening] = useState(false);
+  useEffect(() => {
+    if (canAccess) setIsOpening(autoOpenRound(teaser.id));
+  }, [canAccess, teaser.id]);
 
   // Approval needs no "verify again": re-check while the store reviews.
   useEffect(() => {
@@ -239,7 +246,7 @@ export function PaidAccessJoinPage({ brand, teaser, onBack, onSignIn }: Props) {
             {isGuest ? (
               state.canJoin && <GuestJoin state={state} email={email} onEmail={setEmail} isBusy={isBusy} onRun={run} join={joinWithEmail} groupBuyId={teaser.id} />
             ) : (
-              <NextStep state={state} isBusy={isBusy} onRun={run} groupBuyId={teaser.id} isEmailOnly={viewer.kind === "email"} />
+              <NextStep state={state} isBusy={isBusy} onRun={run} groupBuyId={teaser.id} isEmailOnly={viewer.kind === "email"} isOpening={isOpening} />
             )}
             {viewer.kind === "account" && state.status && (CANCELLABLE.has(state.status) || (state.status === "approval_pending" && !steps.some((s) => s.key === "payment" && s.state === "done"))) && (
               <button type="button" className="bnnjoin__link bnnjoin__leave" disabled={isBusy} onClick={() => void run(() => cancelPaidAccessJoinAction(teaser.id))}>
@@ -388,15 +395,21 @@ type StepProps = {
   groupBuyId: string;
   /** Joined with just an email: the proof's details stay private. */
   isEmailOnly: boolean;
+  /** Approved and already reloading into the round (auto-open.ts). */
+  isOpening: boolean;
 };
 
 /** The one action for the member's next step (or the way into the round). */
-function NextStep({ state, isBusy, onRun, groupBuyId, isEmailOnly }: StepProps) {
+function NextStep({ state, isBusy, onRun, groupBuyId, isEmailOnly, isOpening }: StepProps) {
   const action = state.stepper.action;
   if (state.canAccess) {
     return (
-      <div className="bnnjoin__card">
-        <button type="button" className="btn btn-primary bnnjoin__cta" onClick={() => window.location.reload()}>Open the group buy</button>
+      <div className="bnnjoin__card" role="status">
+        {isOpening ? (
+          <p className="bnnjoin__muted">You’re in! Opening the shop…</p>
+        ) : (
+          <button type="button" className="btn btn-primary bnnjoin__cta" onClick={openRoundHome}>Shop the group buy</button>
+        )}
       </div>
     );
   }

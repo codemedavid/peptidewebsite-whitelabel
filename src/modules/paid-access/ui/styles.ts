@@ -5,6 +5,8 @@
 export const paidAccessAdminCss = `
 .sf-root .bnn { display: grid; gap: 22px; }
 .sf-root .bnn-round-pick { max-width: 420px; }
+.sf-root .bnn-nudge { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border-radius: 12px; font-size: 14px;
+  border: 1px solid color-mix(in oklab, #b45309 35%, transparent); background: color-mix(in oklab, #b45309 9%, transparent); }
 .sf-root .bnn-settings { display: grid; gap: 16px; padding: 18px; border-radius: 16px; border: 1px solid var(--brand-border, rgba(0,0,0,.12));
   background: color-mix(in oklab, var(--brand-main, #0a66a1) 3%, var(--brand-surface, #fff)); }
 .sf-root .bnn-settings__head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
@@ -58,35 +60,8 @@ export const paidAccessAdminCss = `
 .sf-root .bnn-skeleton { height: 120px; border-radius: 12px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--brand-main, #0a66a1) 8%, transparent), transparent); background-size: 200% 100%; animation: bnn-shimmer 1.2s ease-in-out infinite; }
 @keyframes bnn-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .sf-root .bnn-skeleton { animation: none; } .sf-root .bnn-preset:hover { transform: none; } }
-.sf-root .bnn-queue { display: grid; gap: 12px; }
-.sf-root .bnn-queue__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.sf-root .bnn-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
-.sf-root .bnn-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px;
-  border: 1px solid var(--brand-border, rgba(0,0,0,.14)); background: transparent; color: inherit; transition: background .15s ease, border-color .15s ease; }
-.sf-root .bnn-chip:hover { border-color: var(--brand-main, #0a66a1); }
-.sf-root .bnn-chip:focus-visible { outline: 2px solid var(--brand-main, #0a66a1); outline-offset: 2px; }
-.sf-root .bnn-chip.is-active { background: var(--brand-main, #0a66a1); border-color: var(--brand-main, #0a66a1); color: var(--brand-button-text, #fff); }
-.sf-root .bnn-chip__n { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: color-mix(in oklab, currentColor 14%, transparent); }
-.sf-root .bnn-list { display: grid; gap: 12px; }
-.sf-root .bnn-card { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--brand-border, rgba(0,0,0,.12)); display: grid; gap: 10px; background: var(--brand-surface, #fff); }
-.sf-root .bnn-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.sf-root .bnn-card__who { font-weight: 700; font-size: 15px; }
-.sf-root .bnn-facts, .sf-root .bnn-answers { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; }
-.sf-root .bnn-answers { grid-template-columns: 1fr; padding: 10px 12px; border-radius: 10px; background: color-mix(in oklab, var(--brand-main, #0a66a1) 5%, transparent); }
-.sf-root .bnn-facts div, .sf-root .bnn-answers div { display: grid; gap: 2px; }
-.sf-root .bnn-facts dt, .sf-root .bnn-answers dt { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .65; }
-.sf-root .bnn-facts dd, .sf-root .bnn-answers dd { margin: 0; font-size: 14px; word-break: break-word; }
-.sf-root .bnn-dupe { color: #b45309; font-weight: 600; }
-.sf-root .bnn-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.sf-root .bnn-prompt { display: grid; gap: 6px; }
-.sf-root .bnn .admin-btn.bnn-danger { background: #b42318; border-color: #b42318; color: #fff; }
-.sf-root .bnn .admin-btn.bnn-danger:hover:not(:disabled) { background: #912018; border-color: #912018; }
-.sf-root .bnn-history summary { cursor: pointer; font-size: 13px; font-weight: 600; opacity: .8; }
-.sf-root .bnn-history ol { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 @media (max-width: 560px) {
   .sf-root .bnn-settings { padding: 14px; }
   .sf-root .bnn-settings__save { margin: 0 -14px -14px; padding: 10px 14px; }
-  .sf-root .bnn-actions { justify-content: stretch; }
-  .sf-root .bnn-actions .admin-btn { flex: 1 1 auto; }
 }
 `;

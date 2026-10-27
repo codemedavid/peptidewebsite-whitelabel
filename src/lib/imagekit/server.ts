@@ -1,6 +1,7 @@
 import ImageKit from "imagekit";
 import { prisma } from "@/lib/db/prisma";
 import { mediaFolderPrefix, onboardingFolder, tenantFolder } from "@/lib/imagekit/folders";
+import { alignedExpirySeconds, type SignedTransform } from "@/lib/imagekit/signed-url";
 
 // Lazily constructed so importing this module (e.g. during build page-data
 // collection) doesn't require the private key to be present.
@@ -163,7 +164,17 @@ export async function uploadPrivateTenantFile(opts: {
   return { fileId: res.fileId, filePath: res.filePath };
 }
 
-/** A signed link to a private file that stops working after `expireSeconds`. */
-export function signedPrivateUrl(filePath: string, expireSeconds: number): string {
-  return getImageKit().url({ path: filePath, signed: true, expireSeconds });
+/**
+ * A signed link to a private file, valid for at least `expireSeconds` (expiry
+ * is snapped to a window so repeat calls return the same, browser-cacheable
+ * url — see signed-url.ts). Pass `transform` to sign a resized render instead
+ * of the original upload.
+ */
+export function signedPrivateUrl(filePath: string, expireSeconds: number, transform?: SignedTransform): string {
+  return getImageKit().url({
+    path: filePath,
+    signed: true,
+    expireSeconds: alignedExpirySeconds(expireSeconds),
+    ...(transform ? { transformation: [transform] } : {}),
+  });
 }

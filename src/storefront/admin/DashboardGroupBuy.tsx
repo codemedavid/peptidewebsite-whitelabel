@@ -2,22 +2,18 @@
 
 // Dashboard → Group Buy panel. Replaces "Stock levels" on a group-buy store,
 // where every pre-order item reads "Out of stock" and the panel says nothing.
-// useGroupBuyPanel() loads the round (the same actions the Group Buys manager
-// uses); GroupBuyPanel only renders what lib/storefront/admin-dashboard-gb
-// decided. Clicking the join-request strip jumps straight to the approval queue.
+// useGroupBuyPanel() loads the round in one server call
+// (getDashboardGroupBuyAction); GroupBuyPanel only renders what
+// lib/storefront/admin-dashboard-gb decided. Clicking the join-request strip
+// jumps straight to the approval queue.
 
 import { useEffect, useMemo, useState } from "react";
 
 import type { Product } from "../types";
 import type { GroupBuy } from "@/lib/storefront/group-buy";
-import type { RoundAnalytics } from "@/lib/storefront/group-buy-analytics";
-import type { RoundOrderRow } from "@/lib/storefront/group-buy-orders";
-import { getGroupBuyDashboardAction, listGroupBuysAction } from "@/actions/group-buys";
-import { listPaidAccessQueueAction } from "@/modules/paid-access/actions";
+import { getDashboardGroupBuyAction, type DashboardGroupBuyResult } from "@/actions/group-buys";
 import {
   buildGroupBuyPanel,
-  pickFocusRound,
-  pickNextRound,
   type FocusRound,
   type GbCatalogEntry,
   type GbKitRow,
@@ -27,13 +23,7 @@ import { formatDashboardMoney } from "@/lib/storefront/admin-dashboard";
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
-type Loaded = {
-  focus: FocusRound | null;
-  next: GroupBuy | null;
-  analytics: RoundAnalytics | null;
-  orderRows: RoundOrderRow[];
-  joinsWaiting: number | null;
-};
+type Loaded = Extract<DashboardGroupBuyResult, { ok: true }>;
 
 export type GroupBuyPanelState =
   | { status: "off" | "loading" }
@@ -41,29 +31,10 @@ export type GroupBuyPanelState =
   | { status: "error"; message: string }
   | { status: "ready"; panel: GbPanel; focus: FocusRound; next: GroupBuy | null };
 
-/** Paid Access items waiting on the store for one round (proofs to check +
- *  approvals), or null when the store has no join flows. A failed count never
- *  takes the whole panel down. */
-async function loadJoinsWaiting(groupBuyId: string): Promise<number | null> {
-  const res = await listPaidAccessQueueAction({ groupBuyId, tab: "approvals" });
-  return res.ok ? res.counts.payments + res.counts.approvals : null;
-}
-
 async function loadRound(): Promise<Loaded> {
-  const list = await listGroupBuysAction();
-  if ("error" in list) throw new Error(list.error);
-
-  const focus = pickFocusRound(list.groupBuys, list.caps.scheduled);
-  const next = pickNextRound(list.groupBuys, list.caps.scheduled);
-  if (!focus) return { focus: null, next, analytics: null, orderRows: [], joinsWaiting: null };
-
-  const wantsJoins = list.caps.paidAccess && focus.mode === "live";
-  const [dash, joinsWaiting] = await Promise.all([
-    getGroupBuyDashboardAction(focus.round.id),
-    wantsJoins ? loadJoinsWaiting(focus.round.id) : Promise.resolve(null),
-  ]);
-  if ("error" in dash) throw new Error(dash.error);
-  return { focus, next, analytics: dash.analytics, orderRows: dash.orderRows, joinsWaiting };
+  const res = await getDashboardGroupBuyAction();
+  if ("error" in res) throw new Error(res.error);
+  return res;
 }
 
 export function useGroupBuyPanel(input: {

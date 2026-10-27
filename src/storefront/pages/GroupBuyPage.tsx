@@ -9,7 +9,7 @@
 // while any tenant with a live round gets the same page. Rendered only when a
 // round is live (StorefrontApp gates the route on brand.groupBuyBanner).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
@@ -31,18 +31,35 @@ import { isStoreClosed } from "@/lib/storefront/store-status";
 import { roundKitProgress, type KitProgress } from "@/lib/storefront/gb-moq-kits";
 import { KitProgressBar } from "../components/KitProgress";
 import { ShareProductButton } from "../components/ShareProductButton";
+import { imageUrl, imageSrcSet, CARD_SIZES, CARD_WIDTHS } from "@/lib/media/image-url";
+import { findProductByLinkKey } from "@/lib/storefront/product-link";
 
 export function GroupBuyPage({
   brand,
   onBack,
   onCheckout,
+  embedded = false,
+  focusProductSlug = null,
 }: {
   brand: Brand;
   onBack: () => void;
   /** Open the cart/checkout drawer (owned by the storefront shell). */
   onCheckout: () => void;
+  /** Rendered AS the home of a group-buy-only store (lib/storefront/gb-only-home):
+   *  no "Back to store" (this is the store), the listing is the #catalog every
+   *  "Shop now" scrolls to, and the hero above owns the page's h1. */
+  embedded?: boolean;
+  /** A shared product link (#p/<slug>) on that home: scroll to its card and
+   *  ring it, instead of the catalog's quick-view (which prices off-round). */
+  focusProductSlug?: string | null;
 }) {
   const { products, cart, addToCart, setLineQty } = useStore();
+  const focusId = focusProductSlug ? (findProductByLinkKey(products, focusProductSlug)?.id ?? null) : null;
+  useEffect(() => {
+    if (!focusId) return;
+    document.getElementById(gbCardDomId(focusId))?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusId]);
+  const Title = embedded ? "h2" : "h1";
   const currency = brand.currency || "₱";
   // The owner shut the whole shop — the round still advertises itself, but no
   // one can join it. store.addToCart and the server re-check the same rule.
@@ -69,9 +86,9 @@ export function GroupBuyPage({
     return (
       <section className="page gbpage" id="groupbuy">
         <div className="page__container gbpage__narrow">
-          <BackLink onClick={onBack} label="Back to store" />
+          {!embedded && <BackLink onClick={onBack} label="Back to store" />}
           <div className="gbpage__empty">
-            <h1 className="page__title font-display">No group buy right now</h1>
+            <Title className="page__title font-display">No group buy right now</Title>
             <p style={{ color: "var(--brand-text-muted)" }}>
               There isn’t an open group-buy round at the moment. Check back soon — or browse
               what’s on hand in the store.
@@ -98,8 +115,8 @@ export function GroupBuyPage({
 
   return (
     <section className="page gbpage" id="groupbuy">
-      <div className="page__container gbpage__narrow">
-        <BackLink onClick={onBack} label="Back to store" />
+      <div className="page__container gbpage__wide">
+        {!embedded && <BackLink onClick={onBack} label="Back to store" />}
 
         {/* Status: the live-round banner, or the view-only closed notice. Never
             both — a countdown beside "ordering is closed" reads as a bug. */}
@@ -133,8 +150,8 @@ export function GroupBuyPage({
         )}
 
         {/* Listing header */}
-        <div className="gbpage__listhead">
-          <h1 className="page__title font-display gbpage__title">Group buy pricing</h1>
+        <div className="gbpage__listhead" id={embedded ? "catalog" : undefined}>
+          <Title className="page__title font-display gbpage__title">Group buy pricing</Title>
           <span className="gbpage__count">
             {view.count} {view.count === 1 ? "product" : "products"}
           </span>
@@ -154,6 +171,7 @@ export function GroupBuyPage({
               viewOnly={view.viewOnly}
               storeName={brand.name}
               kit={roundKitProgress(line.product, brand.groupBuyBanner)}
+              isFocused={line.product.id === focusId}
             />
           ))}
         </div>
@@ -177,7 +195,7 @@ export function GroupBuyPage({
           checkout button here would only lead to a refusal. */}
       {!view.viewOnly && summary.hasItems && (
         <div className="gbpage__cartbar">
-          <div className="gbpage__narrow gbpage__cartbar-inner">
+          <div className="gbpage__wide gbpage__cartbar-inner">
             <div className="gbpage__cartbar-row">
               <span className="gbpage__cartbar-count">
                 {summary.totalQty} item{summary.totalQty === 1 ? "" : "s"}
@@ -219,8 +237,11 @@ function GbProductCard({
   viewOnly,
   storeName,
   kit,
+  isFocused = false,
 }: {
   line: GroupBuyPageLine<Product>;
+  /** The product a shared link pointed at — ringed so it's easy to spot. */
+  isFocused?: boolean;
   /** Live kit progress for this product (roundKitProgress); null = no bar. */
   kit: KitProgress | null;
   image: string | null;
@@ -272,11 +293,18 @@ function GbProductCard({
   const join = () => addToCart(p, 1, chosen.variation);
 
   return (
-    <article className="gbpage__card">
+    <article className="gbpage__card" id={gbCardDomId(p.id)} data-focused={isFocused || undefined}>
       <div className="gbpage__card-media">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt={line.displayName} />
+          <img
+            src={imageUrl(image, { width: CARD_WIDTHS[1] })}
+            srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
+            sizes={CARD_SIZES}
+            alt={line.displayName}
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           <span className="gbpage__monogram font-display" aria-hidden>
             {line.initial}
@@ -286,7 +314,7 @@ function GbProductCard({
       <div className="gbpage__card-body">
         <div>
           <div className="gbpage__card-name">
-            {line.displayName}
+            <span className="gbpage__card-title">{line.displayName}</span>
             {/* The group-buy page renders its own cards, so it does not inherit
                 the catalog card's share control. `row` keeps the button in flow:
                 .gbpage__card clips its overflow, which would swallow an
@@ -355,11 +383,19 @@ function GbProductCard({
   );
 }
 
+/** DOM id of one product's card, so a shared link can scroll to it. */
+function gbCardDomId(productId: string): string {
+  return `gb-card-${productId}`;
+}
+
 // Scoped to .gbpage. Colour comes from the brand CSS variables (K Glow's pink
 // theme fills them); the structure/motion live here so the component stays inline
 // and self-contained (mirrors GroupBuyBanner's inline <style>).
 const gbPageCss = `
 .sf-root .gbpage__narrow { max-width: 560px; }
+/* The pricing page itself uses the store's full width: at 560px a desktop
+   showed three squeezed cards with the share icon wrapping under the name. */
+.sf-root .gbpage__wide { max-width: 1120px; }
 .sf-root .gbpage__status {
   margin: 8px 0 20px;
   background: var(--brand-main);
@@ -402,16 +438,22 @@ const gbPageCss = `
 .sf-root .gbpage__bar { height: 7px; background: color-mix(in oklab, var(--brand-surface) 25%, transparent); border-radius: 99px; overflow: hidden; }
 .sf-root .gbpage__bar-fill { height: 100%; background: #fff; border-radius: 99px; transition: width .4s ease; }
 .sf-root .gbpage__terms { font-size: 12px; opacity: .92; margin: 12px 0 0; line-height: 1.5; }
+.sf-root .gbpage__listhead { scroll-margin-top: 96px; }
 .sf-root .gbpage__listhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .sf-root .gbpage__title { margin: 0; font-size: clamp(24px, 6vw, 30px); }
 .sf-root .gbpage__count { font-size: 12px; color: var(--brand-text-muted); white-space: nowrap; }
-.sf-root .gbpage__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (min-width: 620px) { .sf-root .gbpage__grid { grid-template-columns: 1fr 1fr 1fr; } }
+.sf-root .gbpage__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 640px) { .sf-root .gbpage__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; } }
+@media (min-width: 960px) { .sf-root .gbpage__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; } }
 .sf-root .gbpage__card {
   background: var(--brand-surface);
   border: 1px solid var(--brand-border);
   border-radius: 18px; overflow: hidden; display: flex; flex-direction: column;
   box-shadow: 0 2px 10px color-mix(in oklab, var(--brand-main) 7%, transparent);
+}
+.sf-root .gbpage__card { scroll-margin-top: 96px; transition: box-shadow .3s ease; }
+.sf-root .gbpage__card[data-focused] {
+  box-shadow: 0 0 0 3px var(--brand-main), 0 8px 24px color-mix(in oklab, var(--brand-main) 22%, transparent);
 }
 .sf-root .gbpage__card-media {
   position: relative;
@@ -421,7 +463,11 @@ const gbPageCss = `
 .sf-root .gbpage__card-media img { width: 100%; height: 100%; object-fit: cover; }
 .sf-root .gbpage__monogram { font-size: 30px; color: var(--brand-main); }
 .sf-root .gbpage__card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
-.sf-root .gbpage__card-name { font-weight: 700; font-size: 14px; color: var(--brand-text); line-height: 1.3; }
+.sf-root .gbpage__card-name {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 2px 4px;
+  font-weight: 700; font-size: 14px; color: var(--brand-text); line-height: 1.3;
+}
+.sf-root .gbpage__card-title { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; padding-top: 3px; }
 .sf-root .gbpage__card-note { font-size: 11px; color: var(--brand-text-muted); margin-top: 2px; }
 .sf-root .gbpage__opts {
   width: 100%; font: inherit; font-size: 12px; font-weight: 600;
@@ -466,7 +512,10 @@ const gbPageCss = `
   font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--brand-main); margin-bottom: 12px;
 }
-.sf-root .gbpage__how-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sf-root .gbpage__how-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 768px) {
+  .sf-root .gbpage__how-list { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+}
 .sf-root .gbpage__how-step { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--brand-text); line-height: 1.5; }
 .sf-root .gbpage__how-n {
   flex-shrink: 0; width: 22px; height: 22px; border-radius: 99px;
@@ -479,7 +528,12 @@ const gbPageCss = `
   background: var(--brand-surface); border-top: 1px solid var(--brand-border);
   box-shadow: 0 -6px 20px color-mix(in oklab, var(--brand-main) 10%, transparent);
 }
-.sf-root .gbpage__cartbar-inner { margin: 0 auto; padding: 14px 0 18px; display: flex; flex-direction: column; gap: 10px; }
+.sf-root .gbpage__cartbar-inner { margin: 0 auto; padding: 14px var(--gutter) 18px; display: flex; flex-direction: column; gap: 10px; }
+@media (min-width: 768px) {
+  .sf-root .gbpage__cartbar-inner { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
+  .sf-root .gbpage__cartbar-row { flex: 1; justify-content: flex-start; }
+  .sf-root .gbpage__checkout { width: auto; padding: 14px 32px; }
+}
 .sf-root .gbpage__cartbar-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .sf-root .gbpage__cartbar-count { font-size: 13px; color: var(--brand-text-muted); }
 .sf-root .gbpage__cartbar-total { font-size: 22px; font-weight: 700; color: var(--brand-text); }

@@ -73,7 +73,7 @@ import {
   type GroupBuyContent,
 } from "@/lib/storefront/gb-content";
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
-import { PaidAccessAdmin } from "@/modules/paid-access/ui";
+import { PaidAccessAdmin, PaidAccessMembers, usePaidAccessWaitingCount } from "@/modules/paid-access/ui";
 import { AdminHeroCountdown } from "./AdminHeroCountdown";
 import { isGroupBuyOnlyStore } from "../visibility";
 import {
@@ -108,6 +108,9 @@ function fmtDate(iso: string | null): string {
     ? "—"
     : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+
+/** Group Buys tabs. "members" = who is in a round; "joins" = how people get in. */
+export type GroupBuysTab = "rounds" | "pricing" | "members" | "joins";
 
 const STATUS_TINT: Record<GroupBuyStatus, string> = {
   draft: "orange",
@@ -1066,8 +1069,8 @@ export function AdminGroupBuys({
   onBack: () => void;
   /** Open one round's dedicated dashboard. */
   onOpen: (gb: GroupBuy) => void;
-  /** Tab to land on — the dashboard's "review join requests" shortcut opens "joins". */
-  initialTab?: "rounds" | "pricing" | "joins";
+  /** Tab to land on — the dashboard's "review join requests" shortcut opens "members". */
+  initialTab?: GroupBuysTab;
 }) {
   const { toast } = useStore();
   const caps = brand.groupBuyCaps ?? GROUP_BUY_CAPS_OFF;
@@ -1117,12 +1120,12 @@ export function AdminGroupBuys({
   // Two tabs: the rounds themselves, and the per-product group-buy pricing.
   // Pricing is a separate panel component — this file is already long, and the
   // two views share only the loaded rounds.
-  // A "joins" landing only sticks when the store actually has paid join.
-  const [tab, setTab] = useState<"rounds" | "pricing" | "joins">(
-    initialTab === "joins" && !caps.paidAccess ? "rounds" : initialTab,
+  // A "joins"/"members" landing only sticks when the store actually has paid join.
+  const [tab, setTab] = useState<GroupBuysTab>(
+    (initialTab === "joins" || initialTab === "members") && !caps.paidAccess ? "rounds" : initialTab,
   );
-  // Paid group-buy access: receipts waiting for approval, shown on the tab.
-  const [joinsWaiting, setJoinsWaiting] = useState<number | null>(null);
+  // Paid group-buy access: proofs + approvals waiting on the store, on the Members tab.
+  const { waiting: joinsWaiting, refresh: refreshJoinsWaiting } = usePaidAccessWaitingCount(caps.paidAccess);
 
   const [editing, setEditing] = useState<GroupBuy | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1356,20 +1359,49 @@ export function AdminGroupBuys({
             <button
               type="button"
               role="tab"
+              id="gbtab-members"
+              aria-selected={tab === "members"}
+              aria-controls="gbpanel-members"
+              className={`gbtabs__tab${tab === "members" ? " is-active" : ""}`}
+              onClick={() => setTab("members")}
+            >
+              Members
+              {joinsWaiting ? (
+                <span className="gbtabs__badge" aria-label={`${joinsWaiting} waiting on you`}>
+                  {joinsWaiting}
+                </span>
+              ) : null}
+            </button>
+          )}
+          {caps.paidAccess && (
+            <button
+              type="button"
+              role="tab"
               id="gbtab-joins"
               aria-selected={tab === "joins"}
               aria-controls="gbpanel-joins"
               className={`gbtabs__tab${tab === "joins" ? " is-active" : ""}`}
               onClick={() => setTab("joins")}
             >
-              Join flow{joinsWaiting ? ` (${joinsWaiting})` : ""}
+              Join flow
             </button>
           )}
         </div>
 
+        {tab === "members" && caps.paidAccess && (
+          <div id="gbpanel-members" role="tabpanel" aria-labelledby="gbtab-members">
+            <PaidAccessMembers
+              brand={brand}
+              groupBuys={groupBuys}
+              onOpenJoinFlow={() => setTab("joins")}
+              onChanged={refreshJoinsWaiting}
+            />
+          </div>
+        )}
+
         {tab === "joins" && caps.paidAccess && (
           <div id="gbpanel-joins" role="tabpanel" aria-labelledby="gbtab-joins">
-            <PaidAccessAdmin brand={brand} groupBuys={groupBuys} onWaitingCount={setJoinsWaiting} />
+            <PaidAccessAdmin brand={brand} groupBuys={groupBuys} waiting={joinsWaiting} onOpenMembers={() => setTab("members")} />
           </div>
         )}
 

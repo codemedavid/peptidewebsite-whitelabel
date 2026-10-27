@@ -48,6 +48,8 @@ import {
   PROTOCOL_VIEWER_WIDTH,
 } from "../src/lib/storefront/protocol-images";
 import { COA_THUMB_WIDTH } from "../src/lib/storefront/coa";
+import { brandLoaderVars } from "../src/lib/storefront/brand-loader";
+import { BRAND_SPLASH_DEFAULT } from "../src/lib/storefront/brand-splash";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -174,6 +176,34 @@ check("COA card thumbnails are transformed", /imageUrl\(/.test(coa));
 check("COA card thumbnails lazy-load", /loading="lazy"/.test(coa));
 check("COA card thumbnails decode async", /decoding="async"/.test(coa));
 check("COA_THUMB_WIDTH is a card-sized width", COA_THUMB_WIDTH > 0 && COA_THUMB_WIDTH <= 800, COA_THUMB_WIDTH);
+
+// 7. As a group-buy shopper on a phone, I want the round's product cards and the
+//    tab icon to arrive sized for their slot — measured 2026-10-27 on
+//    mnm-pepsabuy: the GB page, the page loader's logo and the favicon each
+//    pulled the 248 kB original upload where a 13 kB render would do.
+for (const [label, path] of [
+  ["Group buy page cards", "src/storefront/pages/GroupBuyPage.tsx"],
+  ["Reseller (merchant) cards", "src/storefront/pages/MerchantPage.tsx"],
+  ["Storefront chrome header logo", "src/app/(tenant)/(storefront)/layout.tsx"],
+  ["Store app page logo", "src/app/(tenant)/(storefront)/app/page.tsx"],
+] as const) {
+  const src = read(path);
+  check(`${label}: imports the image layer`, /from "@\/lib\/media\/image-url"/.test(src));
+  check(`${label}: no raw <img src={…}> left`, !/<img\s+src=\{(?!imageUrl\()[\w.?]+\}/.test(src));
+}
+const gbPage = read("src/storefront/pages/GroupBuyPage.tsx");
+check("Group buy page cards lazy-load", /loading="lazy"/.test(gbPage));
+
+const loader = brandLoaderVars({ ...BRAND_SPLASH_DEFAULT }, "Store", IK);
+check(
+  "Page-loader logo (--splash-logo) is a sized render, not the original",
+  (loader["--splash-logo"] ?? "").includes("tr=w-"),
+  loader["--splash-logo"],
+);
+
+const favicon = read("src/app/api/favicon/route.ts");
+check("Favicon route sizes an uploaded icon", /imageUrl\(/.test(favicon));
+check("Favicon redirect is CDN-cacheable", !/Response\.redirect\(/.test(favicon) && /s-maxage/.test(favicon));
 
 console.log(failures === 0 ? "\nPASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

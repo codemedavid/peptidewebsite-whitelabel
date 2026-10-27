@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
+import * as Clipboard from "expo-clipboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { callAction } from "@/features/admin/account/data";
@@ -27,7 +28,8 @@ const shortDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateStrin
 
 /**
  * The website's Customers view (AdminCustomers): shoppers who made an account,
- * with disable (signs them out everywhere) and re-enable. Runs the website's own
+ * with disable (signs them out everywhere), re-enable, and reset password (a
+ * temp one for the owner to send a shopper who forgot theirs). Runs the website's own
  * actions, gated on the "customers" permission and the store's feature.
  */
 export default function CustomerAccountsScreen() {
@@ -57,6 +59,32 @@ export default function CustomerAccountsScreen() {
       setBusyId(null);
     }
   }
+
+  async function resetPassword(c: StoreCustomer) {
+    setBusyId(c.id);
+    try {
+      const { tempPassword } = await callAction<{ ok: true; tempPassword: string }>("resetStoreCustomerPasswordAction", c.id);
+      success();
+      Alert.alert(
+        "Temporary password",
+        `${tempPassword}\n\nSend this to ${c.name}. It's shown only once. They can sign in with it, then change it in their account.`,
+        [
+          { text: "Copy", onPress: () => void Clipboard.setStringAsync(tempPassword) },
+          { text: "Done", style: "cancel" },
+        ],
+      );
+    } catch (e) {
+      Alert.alert("Couldn't reset the password", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const confirmReset = (c: StoreCustomer) =>
+    Alert.alert(`Reset ${c.name}'s password?`, "You'll get a temporary password to send them. They'll be signed out on every device.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Reset", onPress: () => void resetPassword(c) },
+    ]);
 
   const toggle = (c: StoreCustomer) => {
     if (c.status === "disabled") return void setStatus(c, "active");
@@ -114,6 +142,15 @@ export default function CustomerAccountsScreen() {
               <AppText variant="caption" color="faint">
                 {`${c.orderCount} order${c.orderCount === 1 ? "" : "s"} · Joined ${shortDate(c.joinedAt)} · Last sign-in ${shortDate(c.lastLoginAt)}`}
               </AppText>
+              {c.status === "active" && (
+                <Button
+                  label="Reset password"
+                  variant="secondary"
+                  icon="key-outline"
+                  disabled={!online || busyId !== null}
+                  onPress={() => confirmReset(c)}
+                />
+              )}
               <Button
                 label={c.status === "active" ? "Disable" : "Re-enable"}
                 variant={c.status === "active" ? "danger" : "secondary"}

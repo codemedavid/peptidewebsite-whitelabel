@@ -28,6 +28,7 @@ import {
   parseCustomerSignIn,
   parseCustomerProfile,
   parseCustomerPasswordChange,
+  generateTempPassword,
 } from "@/lib/storefront/customer-account";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
 import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
@@ -300,5 +301,34 @@ export async function setStoreCustomerStatusAction(
   } catch (e) {
     console.error("[customer-accounts] status change failed", e);
     return { error: "Couldn't update the customer." };
+  }
+}
+
+/** A shopper who forgot their password messages the store; the owner issues a
+ *  temp one here and passes it on. Bumping sessionVersion signs the account out
+ *  of every device (website cookie and app token alike). The temp password is
+ *  returned once and never stored in plain text. */
+export async function resetStoreCustomerPasswordAction(
+  id: unknown,
+): Promise<{ ok: true; tempPassword: string } | Fail> {
+  const tenantId = await adminTenant();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+  if (typeof id !== "string" || !id) return { error: "Invalid request." };
+  const limit = rateLimit(`customer-reset:${tenantId}`, 20, 15 * MINUTE);
+  if (!limit.ok) return { error: "Too many resets. Try again later." };
+
+  const tempPassword = generateTempPassword();
+  try {
+    const res = await withTenant(tenantId, (db) =>
+      db.storefrontCustomer.updateMany({
+        where: { id, tenantId, status: "active" },
+        data: { passwordHash: hashPassword(tempPassword), sessionVersion: { increment: 1 } },
+      }),
+    );
+    if (res.count !== 1) return { error: "Customer not found, or the account is disabled." };
+    return { ok: true, tempPassword };
+  } catch (e) {
+    console.error("[customer-accounts] password reset failed", e);
+    return { error: "Couldn't reset the password. Please try again." };
   }
 }

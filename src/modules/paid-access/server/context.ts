@@ -10,7 +10,7 @@ import { withTenant } from "@/lib/db/tenant-client";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { getTenantContext } from "@/lib/tenant/context";
 import { joinFeeLabel } from "@/lib/mobile/group-buy-share";
-import { readPaymentMethods } from "@/lib/mobile/shop-checkout";
+import { paidAccessMethodsOf } from "@/lib/mobile/shop-checkout";
 import {
   dbGroupBuyToStorefront,
   effectiveGroupBuyStatus,
@@ -71,7 +71,7 @@ export function currencyOf(config: Record<string, unknown>): string {
 
 export const money = (currency: string, cents: number) => joinFeeLabel(currency, cents);
 
-export const paymentAccountsOf = (config: Record<string, unknown>) => readPaymentMethods(config, false);
+export const paymentAccountsOf = (config: Record<string, unknown>) => paidAccessMethodsOf(config);
 
 /** Paid Access's switch for a store. Off → every round is Open. */
 export async function paidAccessEnabled(tenantId: string): Promise<{ enabled: boolean; caps: GroupBuyCapabilities }> {

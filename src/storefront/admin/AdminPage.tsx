@@ -37,7 +37,7 @@ import { AdminResellerSettings } from "./AdminResellerSettings";
 import { AdminAccessCode } from "./AdminAccessCode";
 import { AdminCheckoutRules } from "./AdminCheckoutRules";
 import { AdminFeeSettings } from "./AdminFeeSettings";
-import { AdminGroupBuys } from "./AdminGroupBuys";
+import { AdminGroupBuys, type GroupBuysTab } from "./AdminGroupBuys";
 import { AdminGroupBuyDetail } from "./AdminGroupBuyDetail";
 import { AdminGroupBuyRules } from "./AdminGroupBuyRules";
 import { AdminAnalytics } from "./AdminAnalytics";
@@ -135,9 +135,9 @@ export function AdminPage({
   // The round whose dedicated dashboard is open. Same master-detail shape as
   // viewingOrder — the list hands the row over, the detail view hands back.
   const [viewingGroupBuy, setViewingGroupBuy] = useState<GroupBuy | null>(null);
-  // Which Group Buys tab to land on — "joins" when the dashboard's
+  // Which Group Buys tab to land on — "members" when the dashboard's
   // "review join requests" shortcut sent us; every other entry opens Rounds.
-  const [groupBuysTab, setGroupBuysTab] = useState<"rounds" | "joins">("rounds");
+  const [groupBuysTab, setGroupBuysTab] = useState<GroupBuysTab>("rounds");
   const [editingStaff, setEditingStaff] = useState<StaffListItem | null>(null);
 
   // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
@@ -464,7 +464,7 @@ export function AdminPage({
             onOpen={openView}
             canGroupBuys={canSeeGroupBuyPanel(brand, actor)}
             onOpenGroupBuyJoins={() => {
-              setGroupBuysTab("joins");
+              setGroupBuysTab("members");
               setView("groupbuys");
             }}
             onOpenGroupBuyRound={(gb) => {

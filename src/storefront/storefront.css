@@ -3257,12 +3257,16 @@
 }
 .sf-root .admin-stat__watermark svg { width: 100%; height: 100%; }
 
+/* minmax(0, …) rather than bare 1fr: a 1fr track's floor is its content's
+   min-content width, so one long nowrap line (a product name) widened the
+   card past the phone viewport and the whole page scrolled sideways. */
 .sf-root .admin__row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
-@media (max-width: 900px) { .sf-root .admin__row { grid-template-columns: 1fr; } }
+.sf-root .admin__row > * { min-width: 0; }
+@media (max-width: 900px) { .sf-root .admin__row { grid-template-columns: minmax(0, 1fr); } }
 
 .sf-root .admin-card {
   background: var(--brand-surface);
@@ -3279,6 +3283,10 @@
   padding-left: 14px;
   border-left: 3px solid var(--brand-accent);
   letter-spacing: -0.01em;
+}
+@media (max-width: 640px) {
+  .sf-root .admin-card { padding: 20px 18px; }
+  .sf-root .admin-card__title { font-size: 21px; }
 }
 
 .sf-root .admin-quick {
@@ -5994,6 +6002,13 @@
   background: var(--brand-text);
   color: #fff;
 }
+/* Phones: span the row and tighten the buttons so all five ranges fit on a
+   360px screen; the scroll above stays as the fallback for narrower ones. */
+@media (max-width: 640px) {
+  .sf-root .admin-analytics__controls { gap: 8px; }
+  .sf-root .admin-seg { display: flex; width: 100%; }
+  .sf-root .admin-seg__btn { flex: 1 0 auto; padding: 7px 6px; font-size: 12.5px; }
+}
 
 /* KPI card extras (delta badge + sub-line + money-sized value). The value
    is one unbreakable token inside an overflow-hidden card, so truncation
@@ -6030,6 +6045,17 @@
    line end so long labels wrap under it instead of colliding at the grid's
    220px minimum card width. */
 .sf-root .admin-stat__delta + .admin-stat__label { padding-right: 76px; }
+/* Two KPI cards per row on phones leaves ~150px per card; reserving 76px for
+   the pill squeezed "Avg. Order Value" onto three lines. Stack the pill
+   above the label instead. */
+@media (max-width: 640px) {
+  .sf-root .admin-stat__delta { position: static; margin-bottom: 8px; }
+  .sf-root .admin-stat__delta + .admin-stat__label { padding-right: 0; }
+  .sf-root .admin-stat__value--compact { font-size: 26px; }
+}
+@media (max-width: 380px) {
+  .sf-root .admin-stat__value--compact { font-size: 22px; }
+}
 
 .sf-root .admin-analytics__card { margin-bottom: 18px; }
 .sf-root .admin-analytics__row { margin-bottom: 18px; }
@@ -6127,7 +6153,21 @@
   font-weight: 600;
   color: var(--brand-text);
 }
+/* Phones: a one-line ellipsis cut most product names to "Tirzepatide 30mg…",
+   which hides the variant that tells two rows apart. Allow two lines. */
+@media (max-width: 640px) {
+  .sf-root .admin-bar-row__name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 13.5px;
+  }
+}
 .sf-root .admin-bar-row__val {
+  flex-shrink: 0;
   font-size: 13.5px;
   font-weight: 700;
   color: var(--brand-text);
@@ -8852,6 +8892,23 @@
   color: var(--brand-text);
   border-bottom-color: var(--brand-accent);
 }
+/* Four tabs on a phone: scroll sideways instead of wrapping under the line. */
+.sf-root .gbtabs { overflow-x: auto; scrollbar-width: none; }
+.sf-root .gbtabs::-webkit-scrollbar { display: none; }
+/* The scroll box clips the -1px overlap, so the underline sits on the line instead. */
+.sf-root .gbtabs__tab { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-bottom: 0; }
+.sf-root .gbtabs__badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: #b45309;
+}
 
 .sf-root .gbprice__bar {
   display: flex;
@@ -10896,6 +10953,23 @@
 .sf-root .cust-summary { display: flex; gap: 20px; font-size: 14px; color: var(--brand-text-muted); margin-bottom: 12px; }
 .sf-root .cust-summary strong { color: var(--brand-text); font-size: 18px; margin-right: 4px; }
 .sf-root .cust-search { width: 100%; min-width: 0; height: 48px; margin-bottom: 16px; }
+/* The just-issued temp password drops onto its own line under the row. */
+.sf-root .staff-row:has(.cust-temp) { flex-wrap: wrap; }
+.sf-root .cust-temp {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 10px;
+  background: var(--brand-surface-2);
+}
+.sf-root .cust-temp__label { grid-column: 1 / -1; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--brand-text-muted); }
+.sf-root .cust-temp__value { font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 20px; font-weight: 600; letter-spacing: 0.08em; color: var(--brand-text); user-select: all; overflow-wrap: anywhere; }
+.sf-root .cust-temp__actions { display: flex; gap: 8px; }
+.sf-root .cust-temp .admin-field__hint { grid-column: 1 / -1; margin: 0; }
 /* ── customer-accounts:end ── */
 
 /* =========================================================

@@ -13,6 +13,7 @@ import "server-only";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { isImageKitConfigured, signedPrivateUrl, uploadPrivateTenantFile } from "@/lib/imagekit/server";
+import { PROOF_VIEW_TRANSFORM } from "@/lib/imagekit/signed-url";
 import { classifyProofFile } from "@/lib/upload/image-file";
 
 export type WebhookEvent = {
@@ -116,7 +117,11 @@ export async function storeReceipt(tenantId: string, file: File): Promise<{ file
   });
 }
 
-/** Signed, short-lived link for a stored receipt path (inline in dev/tests). */
+/**
+ * Signed, short-lived link for a stored receipt path (inline in dev/tests).
+ * A viewer-sized render, not the original upload — the proof is shown in the
+ * page's lightbox, so a phone screenshot costs ~100 kB instead of megabytes.
+ */
 export function receiptUrl(filePath: string): string {
-  return filePath.startsWith("data:") ? filePath : signedPrivateUrl(filePath, RECEIPT_URL_TTL_SECONDS);
+  return filePath.startsWith("data:") ? filePath : signedPrivateUrl(filePath, RECEIPT_URL_TTL_SECONDS, PROOF_VIEW_TRANSFORM);
 }

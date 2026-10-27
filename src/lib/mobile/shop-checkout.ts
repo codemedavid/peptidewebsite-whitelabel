@@ -24,12 +24,29 @@ const text = (v: unknown): string => (typeof v === "string" ? v : "");
 const money = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 
-/** Active methods, in the owner's order (activePaymentMethods). */
-export function readPaymentMethods(config: Row, qrphEntitled: boolean): ShopPaymentMethod[] {
-  return rows(config.paymentMethods)
+const activeMethods = (config: Row): Row[] =>
+  rows(config.paymentMethods)
     .filter((m) => m.active === true && text(m.id) && text(m.name))
-    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-    .map((m) => ({
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+/** Active checkout methods, in the owner's order (activePaymentMethods). */
+export function readPaymentMethods(config: Row, qrphEntitled: boolean): ShopPaymentMethod[] {
+  return toShopMethods(activeMethods(config).filter((m) => m.paidAccess !== true), qrphEntitled);
+}
+
+/**
+ * The accounts a Paid Access join fee is paid to: the methods the owner tagged
+ * `paidAccess`, or — when none are tagged — the checkout methods, so a store
+ * that never split them keeps showing what it always did.
+ */
+export function paidAccessMethodsOf(config: Row): ShopPaymentMethod[] {
+  const active = activeMethods(config);
+  const reserved = active.filter((m) => m.paidAccess === true);
+  return toShopMethods(reserved.length > 0 ? reserved : active, false);
+}
+
+function toShopMethods(methods: Row[], qrphEntitled: boolean): ShopPaymentMethod[] {
+  return methods.map((m) => ({
       id: text(m.id),
       name: text(m.name),
       account: text(m.account),

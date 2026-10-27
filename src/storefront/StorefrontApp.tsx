@@ -36,6 +36,7 @@ import { parseProductHash } from "@/lib/storefront/product-link";
 import { parseProtocolHash } from "@/lib/storefront/protocol-link";
 import { resolveHeroCtaLink, type HeroCtaTarget } from "@/lib/storefront/hero-links";
 import { getAccessLabel, isMembersOnlyStore } from "./members-only";
+import { isGroupBuyOnlyHome } from "@/lib/storefront/gb-only-home";
 import { resolveHeroMedia, resolveHeroMediaLink } from "@/lib/storefront/hero-media";
 import {
   hasStorefrontAdminSessionAction,
@@ -44,6 +45,7 @@ import {
 import { redeemAppHandoffAction } from "@/actions/app-handoff";
 import { takeAppHandoff } from "./app-embed";
 import { TextColorsStyle } from "./components/TextColorsStyle";
+import { BrandStyle } from "./components/BrandStyle";
 import { PaidAccessJoinPage, PaidAccessJoinStrip } from "@/modules/paid-access/ui";
 
 // The home/catalog view is what (nearly) every visitor sees, so only its
@@ -232,6 +234,11 @@ function Shell({
   // Every owner-selectable layout keeps the full grid off the home, so "go to
   // the catalog" is a ROUTE on each of them rather than a scroll down the home.
   const catalogIsOwnScreen = boutique || editorial || showcase;
+  // Group-buy-only store (on-hand hidden): the home IS the group buy, so the
+  // separate #groupbuy page and the catalog would list the same round twice.
+  const gbOnlyHome = isGroupBuyOnlyHome(brand);
+  const showGbHome =
+    gbOnlyHome && (activePage === "home" || activePage === "catalog" || activePage === "groupbuy");
   const scrollToCatalog = () => {
     document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -239,7 +246,8 @@ function Shell({
   // CTAs use (catalog scrolls on home; home clears the hash; else set the route).
   const goToRoute = (route: string) => {
     if (route === "home") return goHome();
-    if (route === "catalog") {
+    // Every "group buy" door on that store leads to the home's own listing.
+    if (route === "catalog" || (gbOnlyHome && route === "groupbuy")) {
       // On the boutique layout the catalog is its own SCREEN, not a section of
       // the home — the home stops at category discovery. Every other layout
       // keeps the historical behaviour: go home and scroll to the grid.
@@ -423,8 +431,29 @@ function Shell({
       {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && brand.groupBuyTeaser && (
         <PaidAccessJoinPage brand={brand} teaser={brand.groupBuyTeaser} onBack={goHome} onSignIn={() => goToRoute("account")} />
       )}
-      {activePage === "groupbuy" && brand.twoWaysMode?.groupBuy !== "hidden" && !brand.groupBuyTeaser && (
+      {activePage === "groupbuy" && !gbOnlyHome && brand.twoWaysMode?.groupBuy !== "hidden" && !brand.groupBuyTeaser && (
         <GroupBuyPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />
+      )}
+
+      {showGbHome && (
+        <>
+          {brand.showHero !== false && (
+            <Hero
+              brand={heroBrand}
+              onPrimary={heroCtaHandler(1)}
+              onSecondary={heroCtaHandler(2)}
+              onMedia={heroMediaHandler}
+            />
+          )}
+          <GroupBuyPage
+            brand={brand}
+            onBack={goHome}
+            onCheckout={() => setCartOpen(true)}
+            embedded
+            focusProductSlug={productKey}
+          />
+          <TrustStrip brand={brand} />
+        </>
       )}
 
       {(activePage === "home" || activePage === "catalog") && brand.groupBuyTeaser && brand.twoWaysMode?.groupBuy !== "hidden" && (
@@ -498,7 +527,7 @@ function Shell({
         />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && brand.homeLayout === "two-ways" && (
+      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && !gbOnlyHome && brand.homeLayout === "two-ways" && (
         <TwoWaysHome
           brand={brand}
           onCheckout={() => setCartOpen(true)}
@@ -518,7 +547,7 @@ function Shell({
         />
       )}
 
-      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && brand.homeLayout !== "two-ways" && (
+      {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && !gbOnlyHome && brand.homeLayout !== "two-ways" && (
         <>
           {brand.showHero !== false && (
             <Hero
@@ -614,6 +643,7 @@ export function StorefrontApp({
               : undefined
       }
     >
+      <BrandStyle brand={brand} />
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell initialProductKey={initialProduct} initialProtocolKey={initialProtocol} />
       </StoreProvider>

@@ -29,6 +29,7 @@ function AdminPaymentMethodForm({
   const [account, setAccount] = useState<string>(method.account || "");
   const [qrImage, setQrImage] = useState<string>(method.qrImage || "");
   const [qrph, setQrph]       = useState<boolean>(method.qrph === true);
+  const [paidAccess, setPaidAccess] = useState<boolean>(method.paidAccess === true);
   const [drag, setDrag]       = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -72,7 +73,7 @@ function AdminPaymentMethodForm({
         <div className="admin-form__bar-spacer"></div>
         <button className="admin-form__cancel" onClick={onCancel}>Cancel</button>
         <button className="admin-form__save"
-          onClick={() => onSave({ ...method, name, number, account, qrImage, qrph })}
+          onClick={() => onSave({ ...method, name, number, account, qrImage, qrph, paidAccess })}
           disabled={!canSave}>
           Save
         </button>
@@ -128,6 +129,24 @@ function AdminPaymentMethodForm({
               </div>
             </div>
           )}
+
+          <div className="admin-field" style={{ marginBottom: 22 }}>
+            <label className="admin-check">
+              <input
+                type="checkbox"
+                checked={paidAccess}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setPaidAccess(e.target.checked)
+                }
+              />
+              <span>Group buy join fee only (Paid Access)</span>
+            </label>
+            <div className="admin-field__hint">
+              Shown only on a group buy&apos;s join payment step, never at
+              checkout. If no method is tagged, the join step shows your
+              checkout methods.
+            </div>
+          </div>
 
           <div className="admin-field">
             <label className="admin-field__label">QR Code Image (Optional)</label>
@@ -326,6 +345,11 @@ export function AdminPaymentMethods({
                   {qrphEntitled && m.qrph && (
                     <span className="pay-row__tag" title={`Adds a ${QRPH_FEE_PERCENT}% processing fee at checkout`}>
                       QR PH · {QRPH_FEE_PERCENT}%
+                    </span>
+                  )}
+                  {m.paidAccess && (
+                    <span className="pay-row__tag" title="Shown only on the group buy join payment step">
+                      Join fee
                     </span>
                   )}
                 </div>

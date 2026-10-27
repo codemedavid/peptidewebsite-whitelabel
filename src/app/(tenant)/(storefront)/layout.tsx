@@ -22,6 +22,7 @@ import "@/storefront/showcase.css";
 // Imported last so the splash rules never land in storefront.css's cascade
 // (see brand-splash.css header: that file has a recorded override hazard).
 import "@/storefront/brand-splash.css";
+import { imageUrl, LOGO_WIDTH } from "@/lib/media/image-url";
 
 /** Per-tenant SEO: title, description, favicon all derive from tenant config. */
 export async function generateMetadata(): Promise<Metadata> {
@@ -203,7 +204,7 @@ export default async function StorefrontLayout({
               >
                 {branding?.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={branding.logoUrl} alt={name} className="h-8 w-auto" />
+                  <img src={imageUrl(branding.logoUrl, { width: LOGO_WIDTH })} alt={name} className="h-8 w-auto" />
                 ) : (
                   <>
                     <Monogram name={name} />

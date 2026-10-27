@@ -411,6 +411,11 @@ export type PaymentMethod = {
    *  Absent/false on every existing method, so no store starts charging on
    *  deploy. Gated on FEATURES.STORE_QRPH_FEE. See lib/storefront/payment-fee. */
   qrph?: boolean;
+  /** Reserved for the Paid Access join fee: shown on a group buy's payment
+   *  step and never at checkout. When a store tags none, the join step falls
+   *  back to the checkout methods, so untagged stores behave as before.
+   *  See paidAccessMethodsOf (lib/mobile/shop-checkout). */
+  paidAccess?: boolean;
 };
 
 export type FaqItem = { q: string; a: string };

@@ -12,6 +12,7 @@
 
 import type { Brand, NavItem } from "@/storefront/types";
 import { isLinkHidden, isPageVisible } from "@/storefront/visibility";
+import { isGroupBuyOnlyHome } from "./gb-only-home";
 
 /**
  * The links a nav surface should render, in order.
@@ -33,9 +34,14 @@ import { isLinkHidden, isPageVisible } from "@/storefront/visibility";
 export function buildStorefrontNav(brand: Brand): NavItem[] {
   // .filter() already gives us a fresh array, so the unshift/push/splice below
   // can never reach the caller's stored nav.
-  const nav = (brand.nav || []).filter((item) => !isLinkHidden(brand, item.href));
+  // A group-buy-only store's home IS the group buy, so a "Group Buy" link —
+  // automatic or the owner's own — would only reopen the page they're on.
+  const homeIsGroupBuy = isGroupBuyOnlyHome(brand);
+  const nav = (brand.nav || []).filter(
+    (item) => !isLinkHidden(brand, item.href) && !(homeIsGroupBuy && item.href === "#groupbuy"),
+  );
 
-  if (isPageVisible(brand, "groupbuy") && !nav.some((i) => i.href === "#groupbuy")) {
+  if (!homeIsGroupBuy && isPageVisible(brand, "groupbuy") && !nav.some((i) => i.href === "#groupbuy")) {
     nav.unshift({ label: "Group Buy", href: "#groupbuy" });
   }
 
