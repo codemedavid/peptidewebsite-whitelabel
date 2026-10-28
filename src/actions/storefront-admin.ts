@@ -35,7 +35,7 @@ import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
 import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } from "@/storefront/types";
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeGroupBuyRules } from "@/lib/storefront/group-buy-rules";
-import { normalizeAdminFee } from "@/lib/storefront/admin-fee";
+import { mergeAdminFeeInput } from "@/lib/storefront/admin-fee";
 import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 import {
@@ -954,8 +954,9 @@ export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionRes
   }
 
   const slug = await getTenantSlug();
-  const adminFee = normalizeAdminFee(input);
   const current = await readConfig(tenantId);
+  // Keeps the stored oncePerGroupBuy when this editor doesn't send it (the app).
+  const adminFee = mergeAdminFeeInput(current.adminFee, input);
   const config = { ...current, adminFee };
 
   if (isDemoMode()) {

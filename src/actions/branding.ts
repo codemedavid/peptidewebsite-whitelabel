@@ -8,7 +8,7 @@ import { getPlatformUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { normalizeContactChannels, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
-import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
+import { mergeAdminFeeInput, normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeGbPaymentMode, withGbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
@@ -486,7 +486,8 @@ export async function saveGbPaymentModeAction(slug: string, input: unknown): Pro
  */
 export async function saveAdminFeeAction(
   slug: string,
-  input: AdminFeeConfig,
+  /** oncePerGroupBuy may be omitted: the stored value is then kept. */
+  input: Omit<AdminFeeConfig, "oncePerGroupBuy"> & { oncePerGroupBuy?: boolean },
 ): Promise<SaveResult> {
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
@@ -499,7 +500,7 @@ export async function saveAdminFeeAction(
 
   if (isDemoMode()) {
     const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, adminFee } });
+    saveDemoBranding(slug, { config: { ...current, adminFee: mergeAdminFeeInput(current.adminFee, input) } });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -515,7 +516,7 @@ export async function saveAdminFeeAction(
   if (!tenant) return { error: "Tenant not found." };
 
   const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, adminFee } as Prisma.InputJsonValue;
+  const config = { ...current, adminFee: mergeAdminFeeInput(current.adminFee, input) } as Prisma.InputJsonValue;
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },

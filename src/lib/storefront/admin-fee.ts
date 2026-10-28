@@ -29,6 +29,9 @@ export type AdminFeeConfig = {
   amount: number;
   /** Percent of the items subtotal, 0–100 (mode "percentage"). */
   percent: number;
+  /** Group-buy stores: charge the fee on a buyer's FIRST order in a round only.
+   *  Their add-on orders in the same round carry no fee (admin-fee-once.ts). */
+  oncePerGroupBuy: boolean;
 };
 
 /** What an order actually charged (Order.adminFee) — a snapshot at placement. */
@@ -53,7 +56,20 @@ export function normalizeAdminFee(input: unknown): AdminFeeConfig {
     mode: x.mode === "percentage" ? "percentage" : "fixed",
     amount,
     percent,
+    oncePerGroupBuy: x.oncePerGroupBuy === true,
   };
+}
+
+/**
+ * The config a save should store: the editor's input, keeping the stored
+ * `oncePerGroupBuy` when the input doesn't mention it. Three editors save this
+ * key (platform settings, store admin, the app) and not all of them show that
+ * switch, so a plain normalize would silently turn it off on every other save.
+ */
+export function mergeAdminFeeInput(stored: unknown, input: unknown): AdminFeeConfig {
+  const next = (input ?? {}) as Record<string, unknown>;
+  const keep = "oncePerGroupBuy" in next ? {} : { oncePerGroupBuy: normalizeAdminFee(stored).oncePerGroupBuy };
+  return normalizeAdminFee({ ...next, ...keep });
 }
 
 /**

@@ -33,6 +33,7 @@ import { KitProgressBar } from "../components/KitProgress";
 import { ShareProductButton } from "../components/ShareProductButton";
 import { imageUrl, imageSrcSet, CARD_SIZES, CARD_WIDTHS } from "@/lib/media/image-url";
 import { findProductByLinkKey } from "@/lib/storefront/product-link";
+import { isTextOnlyCard } from "../cardDesign";
 
 export function GroupBuyPage({
   brand,
@@ -75,6 +76,10 @@ export function GroupBuyPage({
   // Owner-editable GB copy — the same content object the two-ways home renders
   // (branding.config.groupBuyContent), so both surfaces stay in sync.
   const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
+  // Card Studio's "Text only" layout turns the card grid into a plain price
+  // list: one row per product, no photos (mnm-pepsabuy asked for this). The
+  // catalog card reads the same switch, so both listings agree.
+  const listLayout = isTextOnlyCard(brand.cardDesign);
 
   // The empty state — nothing to list at all. Keyed on the LISTING, not on the
   // round: a view-only page has no live round but plenty to show, and testing
@@ -158,12 +163,13 @@ export function GroupBuyPage({
         </div>
 
         {/* Product grid */}
-        <div className="gbpage__grid">
+        <div className={listLayout ? "gbpage__grid gbpage__grid--list" : "gbpage__grid"}>
           {view.lines.map((line) => (
             <GbProductCard
               key={line.product.id}
               line={line}
-              image={resolveProductImage(line.product.image, brand.defaultProductImage)}
+              image={listLayout ? null : resolveProductImage(line.product.image, brand.defaultProductImage)}
+              textOnly={listLayout}
               cart={cart}
               addToCart={addToCart}
               setLineQty={setLineQty}
@@ -238,8 +244,11 @@ function GbProductCard({
   storeName,
   kit,
   isFocused = false,
+  textOnly = false,
 }: {
   line: GroupBuyPageLine<Product>;
+  /** Render as a list row with no media box (Card Studio "Text only"). */
+  textOnly?: boolean;
   /** The product a shared link pointed at — ringed so it's easy to spot. */
   isFocused?: boolean;
   /** Live kit progress for this product (roundKitProgress); null = no bar. */
@@ -294,25 +303,27 @@ function GbProductCard({
 
   return (
     <article className="gbpage__card" id={gbCardDomId(p.id)} data-focused={isFocused || undefined}>
-      <div className="gbpage__card-media">
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl(image, { width: CARD_WIDTHS[1] })}
-            srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
-            sizes={CARD_SIZES}
-            alt={line.displayName}
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <span className="gbpage__monogram font-display" aria-hidden>
-            {line.initial}
-          </span>
-        )}
-      </div>
+      {!textOnly && (
+        <div className="gbpage__card-media">
+          {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl(image, { width: CARD_WIDTHS[1] })}
+              srcSet={imageSrcSet(image, [...CARD_WIDTHS])}
+              sizes={CARD_SIZES}
+              alt={line.displayName}
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <span className="gbpage__monogram font-display" aria-hidden>
+              {line.initial}
+            </span>
+          )}
+        </div>
+      )}
       <div className="gbpage__card-body">
-        <div>
+        <div className="gbpage__card-head">
           <div className="gbpage__card-name">
             <span className="gbpage__card-title">{line.displayName}</span>
             {/* The group-buy page renders its own cards, so it does not inherit
@@ -543,4 +554,38 @@ const gbPageCss = `
 }
 .sf-root .gbpage__checkout:hover { filter: brightness(0.92); }
 .sf-root .gbpage__empty { padding: 40px 0; text-align: center; }
+/* Price list (Card Studio "Text only"): one bordered panel, a row per product.
+   Phone: name + price on top, dose picker + button under them. Wider: all
+   four on one line, so the list scans like a printed price sheet. */
+.sf-root .gbpage__grid.gbpage__grid--list {
+  grid-template-columns: minmax(0, 1fr); gap: 0;
+  background: var(--brand-surface); border: 1px solid var(--brand-border);
+  border-radius: 18px; overflow: hidden;
+}
+.sf-root .gbpage__grid--list .gbpage__card {
+  border: 0; border-radius: 0; box-shadow: none; overflow: visible;
+}
+.sf-root .gbpage__grid--list .gbpage__card + .gbpage__card { border-top: 1px solid var(--brand-border); }
+.sf-root .gbpage__grid--list .gbpage__card[data-focused] { box-shadow: inset 4px 0 0 var(--brand-main); }
+.sf-root .gbpage__grid--list .gbpage__card-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head price" "opts action";
+  align-items: center; gap: 10px 14px; padding: 14px 16px;
+}
+.sf-root .gbpage__grid--list .gbpage__card-head { grid-area: head; min-width: 0; }
+.sf-root .gbpage__grid--list .gbpage__opts { grid-area: opts; }
+.sf-root .gbpage__grid--list .gbpage__card-prices { grid-area: price; margin: 0; justify-content: flex-end; }
+.sf-root .gbpage__grid--list .gbpage__card-price { font-size: 17px; white-space: nowrap; }
+.sf-root .gbpage__grid--list .gbpage__join,
+.sf-root .gbpage__grid--list .gbpage__stepper { grid-area: action; min-width: 128px; }
+.sf-root .gbpage__grid--list .gbpage__join { padding: 9px 16px; }
+@media (min-width: 768px) {
+  .sf-root .gbpage__grid.gbpage__grid--list { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sf-root .gbpage__grid--list .gbpage__card-body {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) 110px 140px;
+    grid-template-areas: "head opts price action";
+    padding: 14px 20px;
+  }
+  .sf-root .gbpage__grid--list .gbpage__card-name { font-size: 15px; }
+}
 `;

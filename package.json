@@ -120,6 +120,7 @@
     "test:review-viewer": "tsx scripts/test-review-viewer.ts",
     "test:data-export": "tsx scripts/test-data-export.ts",
     "test:coa": "tsx scripts/test-coa.ts",
+    "test:admin-fee-once": "tsx scripts/test-admin-fee-once.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
     "test:coa-protocols-backfill": "tsx scripts/test-coa-protocols-backfill.ts",
     "test:coa-import": "tsx scripts/test-coa-import.ts",

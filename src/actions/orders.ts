@@ -60,7 +60,9 @@ import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
   ADMIN_FEE_LABEL_MAX,
+  normalizeAdminFee,
 } from "@/lib/storefront/admin-fee";
+import { hasPaidAdminFeeInRound } from "@/lib/storefront/admin-fee-once";
 import {
   checkoutRuleViolations,
   normalizeCheckoutRules,
@@ -306,24 +308,22 @@ function matchedProductIds(
  * displayed): when admin-fee validation is on and that snapshot no longer
  * matches the configured fee, the order is rejected so the customer never pays
  * a total they didn't see. Legacy clients that send no snapshot skip the check
- * (the server-stamped fee remains authoritative either way).
+ * (the server-stamped fee remains authoritative either way). `chargedFee` is the
+ * fee this order is really stamped with: 0 when the tenant isn't entitled, and 0
+ * on a group-buy add-on whose buyer already paid it (admin-fee-once.ts).
  */
 function checkoutRulesViolation(
   config: Record<string, unknown>,
   catalog: Product[],
   items: OrderItem[],
   clientFee: unknown,
-  adminFeeEntitled: boolean,
+  chargedFee: number,
 ): string | null {
   const rules = normalizeCheckoutRules(config.checkoutRules);
 
   if (rules.adminFeeValidation && rules.ruleBasedCheckout && clientFee && typeof clientFee === "object") {
     const shown = Math.max(0, num((clientFee as Record<string, unknown>).amount));
-    // No fee is charged when the tenant isn't entitled, so it must validate to 0.
-    const charged = adminFeeEntitled
-      ? (activeAdminFee(config.adminFee, itemsSubtotal(items))?.amount ?? 0)
-      : 0;
-    if (shown !== charged) {
+    if (shown !== chargedFee) {
       return "The store's fees changed while you were checking out — please review your updated total and try again.";
     }
   }
@@ -593,6 +593,34 @@ async function hasOrderInRound(tenantId: string, groupBuyId: string): Promise<bo
     }),
   );
   return prior !== null;
+}
+
+/**
+ * Did this buyer already pay the admin fee in the order's round? Only when the
+ * store charges it once per group buy (branding.config.adminFee.oncePerGroupBuy)
+ * and the order was attributed to a round. The buyer is the signed-in account
+ * (read from the session), else the email / phone on the order
+ * (admin-fee-once.ts says why that is the best a store without accounts has).
+ */
+async function adminFeeAlreadyPaid(
+  tenantId: string,
+  config: Record<string, unknown>,
+  p: Order,
+): Promise<boolean> {
+  if (!normalizeAdminFee(config.adminFee).oncePerGroupBuy || !p.groupBuyId) return false;
+  const groupBuyId = p.groupBuyId;
+  const account = await getSignedInCustomer(tenantId).catch(() => null);
+  const prior = await withTenant(tenantId, (db) =>
+    db.storefrontOrder.findMany({
+      where: { ...ACTIVE_ORDERS_WHERE, groupBuyId, status: { not: "cancelled" } },
+      select: { status: true, customer: true, customerAccountId: true, adminFee: true },
+    }),
+  );
+  return hasPaidAdminFeeInRound(prior, {
+    accountId: account?.id ?? null,
+    email: p.customer.email,
+    phone: p.customer.phone,
+  });
 }
 
 /**
@@ -980,6 +1008,9 @@ async function validateLiveOrder(
   p.adminFee = adminFeeEntitled
     ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items)) ?? undefined)
     : undefined;
+  // "Once per group buy": a buyer's add-on order in a round they already paid
+  // the fee in carries none. Needs the round, so it runs after attribution.
+  if (p.adminFee && (await adminFeeAlreadyPaid(tenantId, config, p))) p.adminFee = undefined;
   // Shipping fee + courier — re-derived from the tenant's shipping locations,
   // never trusted from the client (same authority as the admin fee).
   stampShipping(config, p, catalog);
@@ -1028,7 +1059,7 @@ async function validateLiveOrder(
   // Smart Checkout rules — reject the order when it violates a blocking rule.
   // Entitlement-gated, same as the demo path above.
   const ruleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
-    ? checkoutRulesViolation(config, catalog, p.items, clientFee, adminFeeEntitled)
+    ? checkoutRulesViolation(config, catalog, p.items, clientFee, p.adminFee?.amount ?? 0)
     : null;
   if (ruleError) return { error: ruleError };
 
@@ -1172,7 +1203,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
     // the storefront uses to drop the line.
     const demoAdminFeeEntitled = await hasFeature(tenantId, FEATURES.STORE_ADMIN_FEE);
     const demoRuleError = (await hasFeature(tenantId, FEATURES.STORE_SMART_CHECKOUT))
-      ? checkoutRulesViolation(config, demoProducts, p.items, clientFee, demoAdminFeeEntitled)
+      ? checkoutRulesViolation(
+          config,
+          demoProducts,
+          p.items,
+          clientFee,
+          demoAdminFeeEntitled ? (activeAdminFee(config.adminFee, itemsSubtotal(p.items))?.amount ?? 0) : 0,
+        )
       : null;
     if (demoRuleError) return { error: demoRuleError };
     // Group Buy Rules (incl. Order Ratio Control) — entitlement-gated on
@@ -1312,6 +1349,30 @@ export async function quoteStorefrontOrderAction(input: unknown): Promise<QuoteR
     // Generic on purpose: this answers anonymous callers, and a DB error's
     // message can echo query arguments.
     return { error: "Couldn't price the order. Please try again." };
+  }
+}
+
+/**
+ * Will this cart's admin fee be waived for this buyer? The checkout asks before
+ * showing the payment step, so a group-buy member topping up an order sees the
+ * total they will really be charged (no second fee) BEFORE they pay. Placement
+ * re-decides with the same rule (adminFeeAlreadyPaid), so this is display only.
+ * Any failure answers "not waived": the customer then sees the full fee, never
+ * a total lower than the one placement would charge.
+ */
+export async function adminFeeWaivedAction(input: unknown): Promise<{ waived: boolean }> {
+  const tenantId = await getTenantIdOrNull();
+  if (!tenantId || isDemoMode()) return { waived: false };
+  try {
+    const { branding } = await getTenantContext(tenantId);
+    const config = (branding?.config ?? {}) as Record<string, unknown>;
+    if (!normalizeAdminFee(config.adminFee).oncePerGroupBuy) return { waived: false };
+    const p = normalizeOrderInput(input);
+    if (!p.items.length) return { waived: false };
+    await stampGroupBuy(p, tenantId, (await getTenantSlug()) ?? tenantId);
+    return { waived: await adminFeeAlreadyPaid(tenantId, config, p) };
+  } catch {
+    return { waived: false };
   }
 }
 

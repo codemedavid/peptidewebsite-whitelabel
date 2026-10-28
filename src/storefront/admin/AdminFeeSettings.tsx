@@ -30,6 +30,7 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
   const [label, setLabel] = useState(initial.label);
   // Raw string so partial entries ("12.") don't fight the field; parsed on save.
   const [amount, setAmount] = useState(initial.amount > 0 ? String(initial.amount) : "");
+  const [oncePerGroupBuy, setOncePerGroupBuy] = useState(initial.oncePerGroupBuy);
   const [saving, setSaving] = useState(false);
 
   const currency = brand.currency ?? "₱";
@@ -51,6 +52,7 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
         // so a percentage fee configured by the operator isn't clobbered to fixed.
         mode: initial.mode,
         percent: initial.percent,
+        oncePerGroupBuy,
       });
       const res = await saveStoreAdminFeeAction(value);
       if ("error" in res) {
@@ -177,6 +179,22 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
                   </div>
                 )}
               </div>
+
+              <div className="admin-field" style={{ marginTop: 14, marginBottom: 4 }}>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={oncePerGroupBuy}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOncePerGroupBuy(e.target.checked)}
+                  />
+                  <span>Charge once per customer per group buy</span>
+                </label>
+                <div className="admin-field__hint">
+                  For group buys: a customer pays the fee on their first order in a
+                  round only. Orders they add later in the same round carry no fee.
+                  Customers are matched by email or phone number.
+                </div>
+              </div>
             </>
           )}
 
@@ -184,7 +202,8 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
             {enabled && amountValid ? (
               <>
                 Checkout will show &ldquo;{previewLabel}: {currency}
-                {amountNum.toLocaleString()}&rdquo; above the total.
+                {amountNum.toLocaleString()}&rdquo; above the total
+                {oncePerGroupBuy ? ", on a customer's first order in each group buy" : ""}.
               </>
             ) : (
               <>No fee is charged at checkout.</>

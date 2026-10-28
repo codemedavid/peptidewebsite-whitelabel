@@ -18,10 +18,10 @@ import { imageUrl } from "@/lib/media/image-url";
 import { useStore } from "../store";
 import { QtyField } from "./QtyField";
 import type { ContactChannel, Order, PromoCode } from "../types";
-import { uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
+import { adminFeeWaivedAction, uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
 import { classifyProofFile } from "@/lib/upload/image-file";
 import { settleUpload } from "@/lib/upload/settle";
-import { activeAdminFee } from "@/lib/storefront/admin-fee";
+import { activeAdminFee, normalizeAdminFee } from "@/lib/storefront/admin-fee";
 import { activePaymentFee, paymentFeeBase } from "@/lib/storefront/payment-fee";
 import { resolveCourierBooking } from "@/lib/storefront/courier-booking";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
@@ -74,6 +74,10 @@ import { useCustomerAccount } from "../customer-account-client";
 import "./remember-details.css";
 
 type Step = "cart" | "details" | "payment";
+
+/** Pause after the last keystroke in the contact fields before asking the
+ *  server whether the admin fee is waived (adminFeeWaivedAction). */
+const FEE_WAIVER_DEBOUNCE_MS = 500;
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
@@ -214,7 +218,19 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // Per-tenant admin fee (super admin toggle, branding.config.adminFee) — a flat
   // charge on top of the items. Displayed here for transparency; the AUTHORITATIVE
   // value is re-stamped server-side at placement from the same config.
-  const adminFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
+  const configuredFee = useMemo(() => activeAdminFee(brand.adminFee, subtotal), [brand, subtotal]);
+  // "Once per group buy" (admin-fee-once.ts): a member's add-on order in a round
+  // they already paid the fee in carries none. Only the server knows their
+  // earlier orders, so it is asked (adminFeeWaivedAction) once their contact is
+  // typed. The answer is keyed on what it was asked about: edit the email,
+  // phone or cart and the fee shows again until the server answers anew.
+  const feeOncePerRound = useMemo(() => normalizeAdminFee(brand.adminFee).oncePerGroupBuy, [brand.adminFee]);
+  const waiverKey = `${customer.email.trim().toLowerCase()}|${customer.phone.trim()}|${lines
+    .map((l) => `${baseProductId(l.product)}:${l.qty}`)
+    .join(",")}`;
+  const [feeWaiver, setFeeWaiver] = useState<{ key: string; waived: boolean } | null>(null);
+  const feeWaived = feeWaiver?.key === waiverKey && feeWaiver.waived;
+  const adminFee = feeWaived ? null : configuredFee;
 
   // The chosen method's NAME — what the order stores and what the server
   // re-derives the processing fee from. Declared here (rather than beside
@@ -397,6 +413,28 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const selectedMethod = payMethods.find((m) => m.id === methodId);
   const paymentValid =
     !requiresPayment || (!!selectedMethod && (!requiresProof || !!proof));
+
+  // Ask the server whether this buyer already paid the admin fee in the round
+  // (see feeWaiver above). Debounced so typing a phone number fires one request,
+  // and only past the cart step, where the contact fields exist.
+  useEffect(() => {
+    if (!open || step === "cart" || !feeOncePerRound || !configuredFee) return;
+    if (!customer.email.trim() && !customer.phone.trim()) return;
+    const key = waiverKey;
+    let live = true;
+    const timer = setTimeout(() => {
+      adminFeeWaivedAction({
+        customer: { email: customer.email, phone: customer.phone },
+        items: lines.map((l) => ({ productId: baseProductId(l.product), name: l.product.name, qty: l.qty })),
+      })
+        .then((r) => live && setFeeWaiver({ key, waived: r.waived }))
+        .catch(() => live && setFeeWaiver({ key, waived: false }));
+    }, FEE_WAIVER_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [open, step, feeOncePerRound, configuredFee, waiverKey, customer.email, customer.phone, lines]);
 
   // Reset to the cart step whenever the drawer is (re)opened. A fresh open is a
   // new logical order, so clear the idempotency key and the in-flight lock.
@@ -1200,6 +1238,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             )}
             <div className="sf-cart__totals">
               {(adminFee ||
+                feeWaived ||
                 paymentFee ||
                 shippingFee > 0 ||
                 shippingWaived ||
@@ -1240,6 +1279,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                             {shippingFee.toLocaleString()}
                           </>
                         )}
+                      </span>
+                    </div>
+                  )}
+                  {feeWaived && configuredFee && (
+                    <div className="sf-cart__total sf-cart__total--sub">
+                      <span>{configuredFee.label} · paid on your first order</span>
+                      <span>
+                        {currency}0
                       </span>
                     </div>
                   )}
