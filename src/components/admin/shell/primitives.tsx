@@ -53,6 +53,7 @@ import {
   Trash2,
   Truck,
   Users,
+  Wallet,
   Wand2,
   Handshake,
   X,
@@ -122,6 +123,7 @@ export const Ic: Record<string, LucideIcon> = withIconFallback(
   Handshake,
   Menu,
   LogOut,
+  Wallet,
   },
   AlertCircle,
 );

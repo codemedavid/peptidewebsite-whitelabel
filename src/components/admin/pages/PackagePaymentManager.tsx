@@ -78,7 +78,7 @@ export function PackagePaymentManager({ initial }: { initial: PackagePaymentConf
     <div className="page-inner">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Checkout Payments</h1>
+          <h1 className="page-title">Receiving Accounts</h1>
           <p className="page-sub">
             Your receiving accounts shown on the public <span className="mono">/get-started</span>{" "}
             checkout — where new clients pay for their package.

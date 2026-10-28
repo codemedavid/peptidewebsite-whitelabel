@@ -10,9 +10,8 @@ import {
   Sparkline,
   TenantAvatar,
 } from "@/components/admin/shell/primitives";
-import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { formatPesosCompact } from "@/lib/admin/plans";
-import type { OverviewData } from "@/lib/admin/data";
+import type { AttentionItem, AttentionQueue, OverviewData } from "@/lib/admin/data";
 
 /* ---------- revenue chart (SVG, hover tooltip) ---------- */
 function RevenueChart({ series }: { series: OverviewData["revenueSeries"] }) {
@@ -130,9 +129,9 @@ function GrowthBars({ data, labels }: { data: number[]; labels: string[] }) {
   );
 }
 
-export function DashboardView({ data }: { data: OverviewData }) {
-  const { openCreate } = useAdminUI();
-  const [range, setRange] = useState("30d");
+type DashboardViewProps = { data: OverviewData; queue: AttentionQueue };
+
+export function DashboardView({ data, queue }: DashboardViewProps) {
   const k = data.kpis;
   const maxRev = Math.max(...data.topTenants.map((t) => t.revenueCents), 1);
 
@@ -150,21 +149,13 @@ export function DashboardView({ data }: { data: OverviewData }) {
       <div className="page-head">
         <div>
           <h1 className="page-title">Platform overview</h1>
-          <p className="page-sub">Real-time metrics across all tenant storefronts</p>
-        </div>
-        <div className="page-actions">
-          <div className="seg">
-            {["24h", "7d", "30d", "90d", "1y"].map((r) => (
-              <div key={r} className={"seg-item" + (range === r ? " active" : "")} onClick={() => setRange(r)}>
-                {r}
-              </div>
-            ))}
-          </div>
-          <button className="btn btn-accent btn-sm" onClick={openCreate}>
-            <Ic.Plus /> New tenant
-          </button>
+          <p className="page-sub">Your to-do list first, then metrics across every tenant storefront</p>
         </div>
       </div>
+
+      {/* What needs doing comes first; the metrics follow. */}
+      <NeedsAttention queue={queue} expiringCount={data.expiringTenants.length} />
+      {data.expiringTenants.length > 0 && <ExpiringPanel tenants={data.expiringTenants} />}
 
       <div className="kpi-grid">
         {kpis.map((kpi, i) => (
@@ -214,8 +205,6 @@ export function DashboardView({ data }: { data: OverviewData }) {
           </div>
         </div>
       </div>
-
-      {data.expiringTenants.length > 0 && <ExpiringPanel tenants={data.expiringTenants} />}
 
       <div className="grid-2">
         <div className="card">
@@ -292,6 +281,92 @@ export function DashboardView({ data }: { data: OverviewData }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// `all` = a page listing the whole bucket. Payments have none — each is
+// confirmed on its tenant's Billing tab — so the overflow is plain text.
+const QUEUE_COLUMNS: { key: keyof AttentionQueue; title: string; empty: string; all?: string; icon: string }[] = [
+  { key: "onboarding", title: "Onboarding", empty: "No sign-ups waiting", all: "/onboarding", icon: "Sparkles" },
+  { key: "upgrades", title: "Upgrade requests", empty: "No upgrades to approve", all: "/upgrades", icon: "TrendUp" },
+  { key: "payments", title: "Payments to confirm", empty: "No payments to review", icon: "Wallet" },
+];
+
+function waitingFor(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/** The operator's to-do list: oldest-first queues for the three kinds of work
+ *  that wait on them. Collapses to a single line when everything is clear. */
+function NeedsAttention({ queue, expiringCount }: { queue: AttentionQueue; expiringCount: number }) {
+  const total = queue.onboarding.count + queue.upgrades.count + queue.payments.count;
+  if (total === 0) {
+    return (
+      <div className="card attn-clear mb-4" role="status">
+        <Ic.CheckCircle aria-hidden />
+        <span>
+          Nothing waiting on you{expiringCount > 0 ? ` — ${expiringCount} subscription${expiringCount === 1 ? "" : "s"} expiring below` : ""}.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <section className="card mb-4" aria-labelledby="attn-title">
+      <div className="card-head">
+        <div>
+          <h2 id="attn-title" className="card-title">
+            Needs attention
+          </h2>
+          <div className="card-sub">Oldest first · {total} waiting on you</div>
+        </div>
+        <span className="badge badge-warn">{total}</span>
+      </div>
+      <div className="attn-grid">
+        {QUEUE_COLUMNS.map((col) => {
+          const bucket = queue[col.key];
+          const IconCmp = Ic[col.icon];
+          return (
+            <div key={col.key} className="attn-col">
+              <div className="attn-col-head">
+                <IconCmp aria-hidden />
+                <span>{col.title}</span>
+                <span className={"attn-count tnum" + (bucket.count ? " on" : "")}>{bucket.count}</span>
+              </div>
+              {bucket.items.length === 0 ? (
+                <div className="attn-empty">{col.empty}</div>
+              ) : (
+                <ul className="attn-list">
+                  {bucket.items.map((item: AttentionItem) => (
+                    <li key={item.id}>
+                      <Link href={item.href} className="attn-item">
+                        <span className="attn-item-text">
+                          <span className="attn-item-title">{item.title}</span>
+                          <span className="attn-item-detail">{item.detail}</span>
+                        </span>
+                        <span className="attn-age tnum">{waitingFor(item.at)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {bucket.count > bucket.items.length &&
+                (col.all ? (
+                  <Link href={col.all} className="attn-more">
+                    View all {bucket.count} <Ic.ArrowRight aria-hidden />
+                  </Link>
+                ) : (
+                  <span className="attn-more muted">+{bucket.count - bucket.items.length} more on tenant Billing tabs</span>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

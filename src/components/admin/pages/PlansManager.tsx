@@ -230,7 +230,7 @@ export function PlansManager({
     <div className="page-inner">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Plans &amp; Billing</h1>
+          <h1 className="page-title">Plans &amp; Pricing</h1>
           <p className="page-sub">
             Plan mix and monthly revenue across {totalTenants} tenants. Prices and
             features here drive the marketing pricing, the get-started wizard, and new-tenant billing.

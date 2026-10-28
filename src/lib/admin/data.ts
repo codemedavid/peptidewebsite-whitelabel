@@ -717,6 +717,135 @@ async function loadTenantSubscriptionSignals(): Promise<TenantSubscriptionSignal
   return { urgencies, prices };
 }
 
+/* ---------- needs-attention queue (dashboard panel + sidebar badges) ---------- */
+
+/** Onboarding setup states that wait on the operator, not the client. */
+const ONBOARDING_NEEDS_OPERATOR = ["payment_received", "revision"];
+const ATTENTION_ITEM_LIMIT = 5;
+
+export type AttentionItem = {
+  id: string;
+  title: string; // business / tenant name
+  detail: string; // what is waiting, e.g. "New sign-up" or "₱9,899 via GCash"
+  href: string; // bare admin URL that resolves it
+  at: string; // ISO time the item started waiting
+};
+
+export type AttentionQueue = {
+  onboarding: { count: number; items: AttentionItem[] };
+  upgrades: { count: number; items: AttentionItem[] };
+  payments: { count: number; items: AttentionItem[] };
+};
+
+const EMPTY_BUCKET = { count: 0, items: [] as AttentionItem[] };
+
+/** A bucket that can't be read (e.g. its table isn't on the DB yet) reports
+ *  empty instead of failing the whole dashboard. */
+async function attentionBucket(
+  label: string,
+  load: () => Promise<{ count: number; items: AttentionItem[] }>,
+): Promise<{ count: number; items: AttentionItem[] }> {
+  try {
+    return await load();
+  } catch (err) {
+    console.error(`[admin] attention queue: ${label} unavailable`, err);
+    return EMPTY_BUCKET;
+  }
+}
+
+function pesoLabel(cents: number): string {
+  return `₱${Math.round(cents / 100).toLocaleString("en-PH")}`;
+}
+
+const _cachedAttentionQueue = unstable_cache(
+  async (): Promise<AttentionQueue> => {
+    const [onboarding, upgrades, payments] = await Promise.all([
+      attentionBucket("onboarding", async () => {
+        const where = { setupStatus: { in: ONBOARDING_NEEDS_OPERATOR } };
+        const [count, rows] = await Promise.all([
+          prisma.onboardingSubmission.count({ where }),
+          prisma.onboardingSubmission.findMany({
+            where,
+            orderBy: { createdAt: "asc" },
+            take: ATTENTION_ITEM_LIMIT,
+            select: { id: true, businessName: true, setupStatus: true, createdAt: true },
+          }),
+        ]);
+        return {
+          count,
+          items: rows.map((r) => ({
+            id: r.id,
+            title: r.businessName,
+            detail: r.setupStatus === "revision" ? "Revision requested" : "New sign-up · payment received",
+            href: `/onboarding/${r.id}`,
+            at: r.createdAt.toISOString(),
+          })),
+        };
+      }),
+      attentionBucket("upgrades", async () => {
+        const where = { status: "pending" };
+        const [count, rows] = await Promise.all([
+          prisma.upgradeRequest.count({ where }),
+          prisma.upgradeRequest.findMany({
+            where,
+            orderBy: { createdAt: "asc" },
+            take: ATTENTION_ITEM_LIMIT,
+            select: { id: true, toPlan: true, amountCents: true, createdAt: true, tenant: { select: { name: true } } },
+          }),
+        ]);
+        return {
+          count,
+          items: rows.map((r) => ({
+            id: r.id,
+            title: r.tenant.name,
+            detail: `Upgrade to ${planMeta(r.toPlan).label}${r.amountCents > 0 ? ` · ${pesoLabel(r.amountCents)}` : ""}`,
+            href: "/upgrades",
+            at: r.createdAt.toISOString(),
+          })),
+        };
+      }),
+      attentionBucket("payments", async () => {
+        const where = { status: "pending" };
+        const [count, rows] = await Promise.all([
+          prisma.subscriptionPayment.count({ where }),
+          prisma.subscriptionPayment.findMany({
+            where,
+            orderBy: { submittedAt: "asc" },
+            take: ATTENTION_ITEM_LIMIT,
+            select: {
+              id: true,
+              amountCents: true,
+              method: true,
+              submittedAt: true,
+              tenant: { select: { name: true, slug: true } },
+            },
+          }),
+        ]);
+        return {
+          count,
+          items: rows.map((r) => ({
+            id: r.id,
+            title: r.tenant.name,
+            detail: `${pesoLabel(r.amountCents)} via ${r.method}`,
+            href: `/tenants/${r.tenant.slug}?tab=billing`,
+            at: r.submittedAt.toISOString(),
+          })),
+        };
+      }),
+    ]);
+    return { onboarding, upgrades, payments };
+  },
+  ["admin-attention-queue"],
+  { tags: ["admin:data"], revalidate: 60 },
+);
+
+/** What is waiting on the operator right now, oldest first per bucket. Empty in
+ *  demo mode (no queue fixtures). */
+export async function getAttentionQueue(): Promise<AttentionQueue> {
+  if (isDemoMode()) return { onboarding: EMPTY_BUCKET, upgrades: EMPTY_BUCKET, payments: EMPTY_BUCKET };
+  return _cachedAttentionQueue();
+}
+
 /** One tenant's list row, for the shared tenant-workspace header. Reuses the
  *  cached tenants list rather than a fresh query, so every tenant tab — and
  *  every navigation between them — costs no extra DB round trip. */

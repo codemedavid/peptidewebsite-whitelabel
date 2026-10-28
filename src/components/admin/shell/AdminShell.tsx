@@ -10,19 +10,25 @@ import type { EditablePlanCard } from "@/lib/platform/plan-config";
 
 type NavItem = { id: string; label: string; href: string; icon: string; group: string; badge?: string };
 
+/** Counts of work waiting on the operator; drive the sidebar's action badges. */
+export type AttentionCounts = { onboarding: number; upgrades: number };
+
+// Grouped by job: what needs doing today, the money, then platform plumbing.
+// Badges only ever mean "something is waiting on you".
 const NAV: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", href: "/", icon: "Home", group: "Platform" },
-  { id: "tenants", label: "Tenants", href: "/tenants", icon: "Buildings", group: "Platform" },
-  { id: "onboarding", label: "Onboarding", href: "/onboarding", icon: "Sparkles", group: "Platform" },
-  { id: "payments", label: "Checkout Payments", href: "/payments", icon: "DollarSign", group: "Platform" },
-  { id: "upgrades", label: "Upgrade Requests", href: "/upgrades", icon: "Sparkles", group: "Platform" },
-  { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "Platform" },
-  { id: "plans", label: "Plans & Billing", href: "/plans", icon: "Card", group: "Platform" },
-  { id: "analytics", label: "Analytics", href: "/analytics", icon: "Chart", group: "Insights" },
-  { id: "income", label: "My Income", href: "/income", icon: "DollarSign", group: "Insights" },
-  { id: "calendar", label: "Calendar", href: "/calendar", icon: "Calendar", group: "Insights" },
+  { id: "dashboard", label: "Dashboard", href: "/", icon: "Home", group: "Work" },
+  { id: "tenants", label: "Tenants", href: "/tenants", icon: "Buildings", group: "Work" },
+  { id: "onboarding", label: "Onboarding", href: "/onboarding", icon: "Sparkles", group: "Work" },
+  { id: "upgrades", label: "Upgrade Requests", href: "/upgrades", icon: "TrendUp", group: "Work" },
+  { id: "income", label: "My Income", href: "/income", icon: "DollarSign", group: "Money" },
+  { id: "calendar", label: "Calendar", href: "/calendar", icon: "Calendar", group: "Money" },
+  { id: "analytics", label: "Analytics", href: "/analytics", icon: "Chart", group: "Money" },
+  { id: "plans", label: "Plans & Pricing", href: "/plans", icon: "Card", group: "Money" },
+  { id: "payments", label: "Receiving Accounts", href: "/payments", icon: "Wallet", group: "Money" },
+  { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "System" },
   { id: "settings", label: "Platform Settings", href: "/settings", icon: "Settings", group: "System" },
   { id: "audit", label: "Audit Logs", href: "/audit", icon: "History", group: "System" },
+  { id: "diagnostics", label: "Domain Diagnostics", href: "/diagnostics/domains", icon: "Globe", group: "System" },
 ];
 
 const CRUMB_LABEL: Record<string, string> = Object.fromEntries(NAV.map((n) => [n.href, n.label]));
@@ -51,15 +57,15 @@ function activeId(pathname: string): string {
 export function AdminShell({
   children,
   operatorEmail,
-  tenantCount,
   tenantNameBySlug,
   planCards,
+  attention,
 }: {
   children: React.ReactNode;
   operatorEmail?: string | null;
-  tenantCount?: number;
   tenantNameBySlug?: Record<string, string>;
   planCards?: EditablePlanCard[];
+  attention?: AttentionCounts;
 }) {
   const pathname = usePathname() || "/";
   const router = useRouter();
@@ -139,7 +145,8 @@ export function AdminShell({
 
   const groups: { name: string; items: NavItem[] }[] = [];
   for (const item of NAV) {
-    const withBadge = item.id === "tenants" && tenantCount ? { ...item, badge: String(tenantCount) } : item;
+    const waiting = item.id === "onboarding" ? attention?.onboarding : item.id === "upgrades" ? attention?.upgrades : 0;
+    const withBadge = waiting ? { ...item, badge: waiting > 99 ? "99+" : String(waiting) } : item;
     const g = groups.find((x) => x.name === item.group);
     if (g) g.items.push(withBadge);
     else groups.push({ name: item.group, items: [withBadge] });
@@ -193,7 +200,12 @@ export function AdminShell({
                       >
                         <IconCmp className="nav-icon" />
                         <span className="nav-label">{item.label}</span>
-                        {item.badge && !collapsed && <span className="nav-badge">{item.badge}</span>}
+                        {item.badge && !collapsed && (
+                          <span className="nav-badge" aria-label={`${item.badge} waiting`}>
+                            {item.badge}
+                          </span>
+                        )}
+                        {item.badge && collapsed && <span className="nav-dot" aria-label={`${item.badge} waiting`} />}
                       </Link>
                     );
                   })}
