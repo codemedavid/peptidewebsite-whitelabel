@@ -19,7 +19,7 @@
  */
 
 import { useState } from "react";
-import { Ic } from "@/components/admin/shell/primitives";
+import { Ic, useEscapeKey } from "@/components/admin/shell/primitives";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS } from "@/lib/subscription/billing-cycle";
 import { SUBSCRIPTION_PAYMENT_METHODS } from "@/lib/subscription/payments";
 import { defaultNextDueDay } from "@/lib/admin/calendar-settlement";
@@ -78,6 +78,7 @@ type Props = {
 export function CalendarMarkPaidDrawer({ target, todayIso, pending, onCancel, onSave }: Props) {
   const startCycle = initialCycle(target.cycle);
 
+  useEscapeKey(onCancel, !pending);
   const [amount, setAmount] = useState(pesoInput(target.amountCents));
   const [paidDay, setPaidDay] = useState(todayIso);
   const [method, setMethod] = useState<string>(SUBSCRIPTION_PAYMENT_METHODS[0]);

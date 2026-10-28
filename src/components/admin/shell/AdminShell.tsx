@@ -7,6 +7,13 @@ import { Ic } from "./primitives";
 import { CreateTenantDrawer } from "./CreateTenantDrawer";
 import { signOutAction } from "@/actions/auth";
 import type { EditablePlanCard } from "@/lib/platform/plan-config";
+import {
+  COLLAPSED_COOKIE,
+  THEME_COOKIE,
+  shellPrefCookie,
+  type ShellPrefs,
+  type ShellTheme,
+} from "./shell-prefs";
 
 type NavItem = { id: string; label: string; href: string; icon: string; group: string; badge?: string };
 
@@ -60,17 +67,20 @@ export function AdminShell({
   tenantNameBySlug,
   planCards,
   attention,
+  initialPrefs,
 }: {
   children: React.ReactNode;
   operatorEmail?: string | null;
   tenantNameBySlug?: Record<string, string>;
   planCards?: EditablePlanCard[];
   attention?: AttentionCounts;
+  /** Theme + collapsed state read from cookies by the server layout. */
+  initialPrefs?: ShellPrefs;
 }) {
   const pathname = usePathname() || "/";
   const router = useRouter();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [collapsed, setCollapsed] = useState(false);
+  const [theme, setThemeState] = useState<ShellTheme>(initialPrefs?.theme ?? "light");
+  const [collapsed, setCollapsedState] = useState(initialPrefs?.collapsed ?? false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [avatarMenu, setAvatarMenu] = useState(false);
   // Phone nav drawer. Stored as the path it was opened on, so navigating
@@ -81,18 +91,27 @@ export function AdminShell({
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // restore persisted prefs
-  useEffect(() => {
-    const t = localStorage.getItem("sa-theme");
-    if (t === "dark" || t === "light") setTheme(t);
-    setCollapsed(localStorage.getItem("sa-collapsed") === "1");
+  // Prefs persist in cookies so the server paints them on the first frame.
+  const setTheme = useCallback((next: ShellTheme) => {
+    setThemeState(next);
+    document.cookie = shellPrefCookie(THEME_COOKIE, next);
   }, []);
+  const setCollapsed = useCallback((next: boolean) => {
+    setCollapsedState(next);
+    document.cookie = shellPrefCookie(COLLAPSED_COOKIE, next ? "1" : "0");
+  }, []);
+
+  // One-time move of prefs saved before the cookie existed (localStorage only).
   useEffect(() => {
-    localStorage.setItem("sa-theme", theme);
-  }, [theme]);
-  useEffect(() => {
-    localStorage.setItem("sa-collapsed", collapsed ? "1" : "0");
-  }, [collapsed]);
+    if (document.cookie.includes(`${THEME_COOKIE}=`)) return;
+    try {
+      const t = localStorage.getItem(THEME_COOKIE);
+      if (t === "dark" || t === "light") setTheme(t);
+      if (localStorage.getItem(COLLAPSED_COOKIE) === "1") setCollapsed(true);
+    } catch {
+      // Storage blocked (private mode) — defaults stand.
+    }
+  }, [setTheme, setCollapsed]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -213,7 +232,7 @@ export function AdminShell({
               ))}
             </nav>
             <div className="sidebar-foot">
-              <button type="button" className="collapse-btn" onClick={() => setCollapsed((c) => !c)}>
+              <button type="button" className="collapse-btn" onClick={() => setCollapsed(!collapsed)}>
                 <ChevronLeft />
                 <span className="sidebar-foot-text">Collapse</span>
               </button>
@@ -259,7 +278,7 @@ export function AdminShell({
                 className="icon-btn"
                 title="Toggle theme"
                 aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               >
                 <ThemeI />
               </button>

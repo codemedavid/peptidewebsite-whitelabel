@@ -246,6 +246,11 @@ export function Sparkline({
 function useCounter(target: number, duration = 900) {
   const [v, setV] = useState(0);
   useEffect(() => {
+    // Honour "reduce motion": show the number, skip the count-up.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setV(target);
+      return;
+    }
     let raf = 0;
     let start: number | undefined;
     const step = (t: number) => {
@@ -348,13 +353,17 @@ export function Toggle({
   on,
   onChange,
   disabled,
+  label,
 }: {
   on: boolean;
   onChange?: (v: boolean) => void;
   disabled?: boolean;
+  /** Accessible name when no visible <label> wraps the switch. */
+  label?: string;
 }) {
   return (
-    <div
+    <button
+      type="button"
       className={"switch " + (on ? "on " : "") + (disabled ? "disabled" : "")}
       onClick={(e) => {
         e.stopPropagation();
@@ -362,8 +371,22 @@ export function Toggle({
       }}
       role="switch"
       aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
     />
   );
+}
+
+/** Close a drawer/dialog on Escape while it is open. */
+export function useEscapeKey(onEscape: () => void, active = true): void {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onEscape, active]);
 }
 
 /* ---------- bold-markdown renderer for feed text ---------- */

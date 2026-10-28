@@ -9,7 +9,7 @@ const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", padding: "10px 0", borderBottom: "1px solid var(--border-soft)", fontSize: 13 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(84px, min(180px, 38%)) minmax(0, 1fr)", gap: 8, overflowWrap: "anywhere", padding: "10px 0", borderBottom: "1px solid var(--border-soft)", fontSize: 13 }}>
       <div style={{ color: "var(--ink-400)" }}>{k}</div>
       <div style={{ color: "var(--ink-900)" }}>{v}</div>
     </div>

@@ -57,6 +57,8 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
 
   const sortHandle = (key: SortKey) => () =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
+  const ariaSort = (key: SortKey): "ascending" | "descending" | "none" =>
+    sort.key !== key ? "none" : sort.dir === "asc" ? "ascending" : "descending";
   const sortMark = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "");
 
   const totalRevenue = filtered.reduce((s, t) => s + t.revenueCents, 0);
@@ -103,14 +105,20 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         </div>
       </div>
 
-      <div className="tabs" style={{ marginBottom: 16 }}>
+      <div className="tabs" style={{ marginBottom: 16 }} role="group" aria-label="Filter by status">
         {STATUS_FILTERS.map((s) => {
           const count = s.id === "all" ? tenants.length : tenants.filter((t) => t.status === s.id).length;
           return (
-            <div key={s.id} className={"tab" + (filter === s.id ? " active" : "")} onClick={() => setFilter(s.id)}>
+            <button
+              key={s.id}
+              type="button"
+              className={"tab" + (filter === s.id ? " active" : "")}
+              aria-pressed={filter === s.id}
+              onClick={() => setFilter(s.id)}
+            >
               {s.label}
               <span className="tab-count tnum">{count}</span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -138,20 +146,28 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         <table className="table">
           <thead>
             <tr>
-              <th onClick={sortHandle("name")} style={{ cursor: "pointer" }}>
-                Business{sortMark("name")}
+              <th aria-sort={ariaSort("name")}>
+                <button type="button" className="th-sort" onClick={sortHandle("name")}>
+                  Business{sortMark("name")}
+                </button>
               </th>
               <th className="col-sm">Plan</th>
               <th>Status</th>
               <th className="col-md">Active features</th>
-              <th className="col-xs" onClick={sortHandle("revenueCents")} style={{ cursor: "pointer", textAlign: "right" }}>
-                Revenue{sortMark("revenueCents")}
+              <th className="col-xs" aria-sort={ariaSort("revenueCents")} style={{ textAlign: "right" }}>
+                <button type="button" className="th-sort" onClick={sortHandle("revenueCents")}>
+                  Revenue{sortMark("revenueCents")}
+                </button>
               </th>
-              <th className="col-md" onClick={sortHandle("orders")} style={{ cursor: "pointer", textAlign: "right" }}>
-                Orders{sortMark("orders")}
+              <th className="col-md" aria-sort={ariaSort("orders")} style={{ textAlign: "right" }}>
+                <button type="button" className="th-sort" onClick={sortHandle("orders")}>
+                  Orders{sortMark("orders")}
+                </button>
               </th>
-              <th className="col-md" onClick={sortHandle("createdAt")} style={{ cursor: "pointer" }}>
-                Created{sortMark("createdAt")}
+              <th className="col-md" aria-sort={ariaSort("createdAt")}>
+                <button type="button" className="th-sort" onClick={sortHandle("createdAt")}>
+                  Created{sortMark("createdAt")}
+                </button>
               </th>
               <th style={{ width: 40 }}></th>
             </tr>

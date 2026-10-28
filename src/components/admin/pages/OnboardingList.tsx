@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/admin/shell/primitives";
 import type { OnboardingSummary } from "@/lib/admin/onboarding-types";
@@ -79,14 +80,16 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
               ? submissions.length
               : submissions.filter((s) => s.setupStatus === sf.id).length;
           return (
-            <div
+            <button
               key={sf.id}
+              type="button"
               className={"tab" + (filter === sf.id ? " active" : "")}
+              aria-pressed={filter === sf.id}
               onClick={() => setFilter(sf.id)}
             >
               {sf.label}
               <span className="tab-count tnum">{count}</span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -113,7 +116,7 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
       </div>
 
       {/* Table */}
-      <div className="card" style={{ overflow: "visible" }}>
+      <div className="card" style={{ overflowX: "auto" }}>
         <table className="table">
           <thead>
             <tr>
@@ -187,7 +190,11 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                     <div className="tenant-cell">
                       <BusinessAvatar name={s.businessName} />
                       <div>
-                        <div className="tenant-name">{s.businessName}</div>
+                        <div className="tenant-name">
+                          <Link href={`/onboarding/${s.id}`} className="tenant-link" onClick={(e) => e.stopPropagation()}>
+                            {s.businessName}
+                          </Link>
+                        </div>
                         <div className="tenant-domain">{s.whatsapp || s.email || "—"}</div>
                       </div>
                     </div>

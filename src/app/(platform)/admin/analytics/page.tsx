@@ -87,9 +87,9 @@ export default async function AnalyticsPage() {
           <h3 className="card-title">Tenant growth</h3>
         </div>
         <div className="card-body">
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 180, padding: "4px 0 24px" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: "clamp(2px, 1vw, 8px)", height: 180, padding: "4px 0 24px" }}>
             {data.tenantGrowth.map((v, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <div key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                 <div
                   style={{
                     width: "100%",

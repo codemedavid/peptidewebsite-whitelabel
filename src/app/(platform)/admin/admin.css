@@ -91,6 +91,16 @@
   --border-strong: #2a3142;
   --border-soft: #161b26;
 
+  /* The branding editors use Tailwind tokens from globals.css (HSL triples,
+     light-only). Point the ones they read at this dark palette so their
+     borders, inputs and muted text don't glare on the dark admin. */
+  --border: 220 22% 16%; /* ≈ --border-c */
+  --input: 221 23% 21%; /* ≈ --border-strong */
+  --muted: 222 26% 12%;
+  --muted-foreground: 222 9% 58%; /* ≈ --ink-500 */
+  --foreground: 220 14% 96%; /* ≈ --ink-900 */
+  --background: 223 33% 6%; /* ≈ --bg-canvas */
+
   --accent-soft: rgba(47, 98, 245, 0.16);
   --accent-softer: rgba(47, 98, 245, 0.08);
   --success-soft: rgba(22, 163, 74, 0.16);
@@ -102,9 +112,13 @@
 .sa *,
 .sa *::before,
 .sa *::after { box-sizing: border-box; }
-.sa button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
-.sa input, .sa select, .sa textarea { font: inherit; color: inherit; }
-.sa a { color: inherit; text-decoration: none; }
+/* Element resets sit at zero class-specificity (:where) so ANY class beats
+   them — .sa .btn as before, and single-class Tailwind utilities used by the
+   branding editors, which `.sa button` / `.sa a` used to silently override
+   (unstyled Save button, colourless links, unpadded preview buttons). */
+:where(.sa) button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+:where(.sa) input, :where(.sa) select, :where(.sa) textarea { font: inherit; color: inherit; }
+:where(.sa) a { color: inherit; text-decoration: none; }
 .sa ::selection { background: var(--accent-soft); }
 
 /* App shell */
@@ -414,6 +428,7 @@
 .sa .switch.on { background: var(--accent); }
 .sa .switch.on::after { transform: translateX(14px); }
 .sa .switch.disabled { opacity: 0.4; cursor: not-allowed; }
+.sa .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* segmented control */
 .sa .seg { display: inline-flex; background: var(--bg-canvas); border: 1px solid var(--border-c); border-radius: 8px; padding: 2px; }
@@ -535,7 +550,8 @@
 .sa .step-line.filled { background: var(--accent); }
 
 /* plan card */
-.sa .plan-card { border: 1.5px solid var(--border-c); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.15s; background: var(--bg); position: relative; }
+.sa .plan-card { border: 1.5px solid var(--border-c); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.15s; background: var(--bg); position: relative; text-align: left; display: block; width: 100%; }
+.sa .plan-card:focus-visible, .sa .fcat-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sa .plan-card:hover { border-color: var(--border-strong); }
 .sa .plan-card.selected { border-color: var(--accent); background: var(--accent-softer); }
 .sa .plan-card.selected::after {
@@ -561,7 +577,7 @@
 /* feature toggle list */
 .sa .fcat { border: 1px solid var(--border-c); border-radius: 10px; background: var(--bg); overflow: hidden; }
 .sa .fcat + .fcat { margin-top: 10px; }
-.sa .fcat-head { padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.sa .fcat-head { padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; width: 100%; text-align: left; }
 .sa .fcat-head:hover { background: var(--bg-canvas); }
 .sa .fcat-icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .sa .fcat-icon svg { width: 14px; height: 14px; }
@@ -616,6 +632,9 @@
 
 /* tenants table · drop secondary columns instead of scrolling the whole page */
 .sa .tenant-link { color: inherit; }
+.sa .th-sort { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; }
+.sa .th-sort:hover { color: var(--ink-700); }
+.sa .th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 .sa .tenant-link:hover { color: var(--accent); }
 .sa .tenant-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 @media (max-width: 860px) { .sa .table .col-md { display: none; } }
@@ -683,6 +702,14 @@
   .sa .attn-grid { grid-template-columns: minmax(0, 1fr); }
   .sa .attn-col { border-right: none; border-top: 1px solid var(--border-soft); }
   .sa .attn-col:first-child { border-top: none; }
+}
+
+/* feature modules list · adoption bar + registry key (key hidden on phones) */
+.sa .fm-adoption { width: 160px; flex-shrink: 0; }
+.sa .fm-key { width: 180px; flex-shrink: 0; }
+@media (max-width: 720px) {
+  .sa .fm-adoption { width: 96px; }
+  .sa .fm-key, .sa .pf-key { display: none; }
 }
 
 /* progress bar */
@@ -770,6 +797,10 @@
   .sa .crumbs > span:not(.current) { display: none; }
   .sa .crumbs .current { overflow: hidden; text-overflow: ellipsis; }
   .sa .page-inner { padding: 20px 16px; }
+  /* Page-level action rows (Save/Reset, Export, view switches) wrap under the title. */
+  .sa .page-head { flex-wrap: wrap; }
+  .sa .page-head > * { min-width: 0; max-width: 100%; }
+  .sa .page-head > :last-child { flex-wrap: wrap; }
   .sa .search-wrap { display: none; }
   .sa .new-tenant-label { display: none; }
   .sa .nav-item { padding: 10px 12px; font-size: 14.5px; }
@@ -952,7 +983,7 @@
 .sa .ftr-sum-bar-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-400); font-weight: 500; }
 .sa .ftr-sum-bar { height: 7px; border-radius: 99px; background: var(--bg-active); overflow: hidden; }
 .sa .ftr-sum-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); transition: width 0.25s; }
-.sa .ftr-seg { display: flex; gap: 2px; background: var(--bg-active); border-radius: 9px; padding: 3px; }
+.sa .ftr-seg { display: flex; gap: 2px; background: var(--bg-active); border-radius: 9px; padding: 3px; flex-wrap: wrap; }
 .sa .ftr-seg button { font-size: 12.5px; font-weight: 600; color: var(--ink-400); padding: 6px 13px; border-radius: 7px; }
 .sa .ftr-seg button.on { background: var(--bg-elevated); color: var(--ink-900); box-shadow: var(--shadow-sm); }
 

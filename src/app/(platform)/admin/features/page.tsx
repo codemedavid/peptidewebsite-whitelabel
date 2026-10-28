@@ -46,7 +46,7 @@ export default async function FeatureModulesPage() {
                     </div>
                     <div style={{ fontSize: 12, color: "var(--ink-400)", marginTop: 2 }}>{f.description}</div>
                   </div>
-                  <div style={{ width: 160 }}>
+                  <div className="fm-adoption">
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 4 }}>
                       <span className="muted">Adoption</span>
                       <span className="tnum muted">
@@ -57,7 +57,7 @@ export default async function FeatureModulesPage() {
                       <span style={{ width: pct + "%" }} />
                     </div>
                   </div>
-                  <code className="mono" style={{ fontSize: 11, color: "var(--ink-400)", width: 180, textAlign: "right" }}>
+                  <code className="mono fm-key" style={{ fontSize: 11, color: "var(--ink-400)", textAlign: "right" }}>
                     {f.key}
                   </code>
                 </div>

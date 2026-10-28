@@ -14,7 +14,7 @@ import {
 } from "@/lib/features/catalog";
 import { planMeta, formatPesos } from "@/lib/admin/plans";
 import { defaultPlanConfig, type EditablePlanCard } from "@/lib/platform/plan-config";
-import { Ic, Toggle } from "./primitives";
+import { Ic, Toggle, useEscapeKey } from "./primitives";
 
 const STEPS = [
   { id: 1, label: "Business" },
@@ -103,13 +103,15 @@ export function CreateTenantDrawer({
   // close + toast + navigate on success
   useEffect(() => {
     if (state.createdSlug) {
-      onToast(`${name || "Tenant"} created · trial active`);
+      onToast(`${name || "Tenant"} created · in trial`);
       const created = state.createdSlug;
       onClose();
       router.push(`/tenants/${created}`);
       router.refresh();
     }
   }, [state.createdSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEscapeKey(onClose, open);
 
   if (!open) return null;
 
@@ -132,7 +134,7 @@ export function CreateTenantDrawer({
   return (
     <>
       <div className="sa-drawer-backdrop" onClick={onClose} />
-      <form action={formAction} className="sa-drawer" role="dialog" aria-modal="true">
+      <form action={formAction} className="sa-drawer" role="dialog" aria-modal="true" aria-labelledby="create-tenant-title">
         {/* hidden inputs carry the collected values to the server action */}
         <input type="hidden" name="name" value={name} />
         <input type="hidden" name="slug" value={slug} />
@@ -144,10 +146,12 @@ export function CreateTenantDrawer({
         <input type="hidden" name="orderDigits" value="4" />
 
         <div className="drawer-head">
-          <button type="button" className="drawer-close" onClick={onClose}>
+          <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">
             <Ic.X />
           </button>
-          <h2 className="drawer-title">Create tenant</h2>
+          <h2 className="drawer-title" id="create-tenant-title">
+            Create tenant
+          </h2>
           <p className="drawer-sub">
             Spin up a new white-label site. Goes live instantly at{" "}
             <span className="mono" style={{ color: "var(--ink-700)" }}>
@@ -219,9 +223,20 @@ export function CreateTenantDrawer({
           {step === 2 && (
             <div>
               <SectionTitle title="Subscription plan" subtitle="Sets defaults for features, limits and billing." />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+              <div
+                role="radiogroup"
+                aria-label="Subscription plan"
+                style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginTop: 16 }}
+              >
                 {cards.map((p) => (
-                  <div key={p.key} className={"plan-card" + (plan === p.key ? " selected" : "")} onClick={() => setPlan(p.key)}>
+                  <button
+                    key={p.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={plan === p.key}
+                    className={"plan-card" + (plan === p.key ? " selected" : "")}
+                    onClick={() => setPlan(p.key)}
+                  >
                     {p.tag && <span className="plan-tag">{p.tag}</span>}
                     <div className="plan-name">{p.name}</div>
                     <div className="plan-price">
@@ -236,13 +251,14 @@ export function CreateTenantDrawer({
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div style={{ marginTop: 16, padding: 12, background: "var(--accent-softer)", border: "1px solid var(--accent-soft)", borderRadius: 10, display: "flex", gap: 10 }}>
                 <Ic.Sparkles style={{ width: 16, height: 16, color: "var(--accent)", flexShrink: 0, marginTop: 1 }} />
                 <div style={{ fontSize: 12.5, color: "var(--ink-700)", lineHeight: 1.5 }}>
-                  Tenants on <strong>{planMeta(plan).label}</strong> get a 14-day free trial. You can fine-tune individual feature toggles on the next step.
+                  New tenants start in <strong>Trial</strong> status on <strong>{planMeta(plan).label}</strong> until you set their
+                  subscription window on the Billing tab. You can fine-tune individual feature toggles on the next step.
                 </div>
               </div>
             </div>
@@ -258,7 +274,12 @@ export function CreateTenantDrawer({
                   const enabledOf = items.filter((k) => features[k]).length;
                   return (
                     <div key={group} className={"fcat" + (isOpen ? " open" : "")}>
-                      <div className="fcat-head" onClick={() => setOpenCats((o) => ({ ...o, [group]: !o[group] }))}>
+                      <button
+                        type="button"
+                        className="fcat-head"
+                        aria-expanded={!!isOpen}
+                        onClick={() => setOpenCats((o) => ({ ...o, [group]: !o[group] }))}
+                      >
                         <div className="fcat-icon">
                           <IconCmp />
                         </div>
@@ -269,7 +290,7 @@ export function CreateTenantDrawer({
                         <div className="fcat-chev">
                           <ChevronRight />
                         </div>
-                      </div>
+                      </button>
                       <div className="fcat-body">
                         {items.map((key) => {
                           const meta = FEATURE_META[key];
@@ -287,7 +308,12 @@ export function CreateTenantDrawer({
                                 </div>
                                 <div className="feat-desc">{meta.description}</div>
                               </div>
-                              <Toggle on={!!features[key] && !locked} disabled={locked} onChange={(v) => setFeature(key, v)} />
+                              <Toggle
+                                on={!!features[key] && !locked}
+                                disabled={locked}
+                                label={`${meta.label}${locked ? " (needs a higher plan)" : ""}`}
+                                onChange={(v) => setFeature(key, v)}
+                              />
                             </div>
                           );
                         })}
@@ -329,7 +355,7 @@ export function CreateTenantDrawer({
                       </span>
                     }
                   />
-                  <ReviewRow k="Trial" v="14 days, no card required" />
+                  <ReviewRow k="Starts as" v="Trial — set the billing window on its Billing tab" />
                 </div>
               </div>
               <div className="card" style={{ boxShadow: "none" }}>

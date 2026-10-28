@@ -18,9 +18,9 @@
  * router.refresh(), matching TenantDetailView's useTransition + toast idiom.
  */
 
-import { useMemo, useState, useTransition, type KeyboardEvent } from "react";
+import { type KeyboardEvent, useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ic } from "@/components/admin/shell/primitives";
+import { Ic, useEscapeKey } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import {
   CALENDAR_ENTRY_KINDS,
@@ -148,6 +148,8 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
 
   const [selectedDay, setSelectedDay] = useState<string>(data.todayIso);
   const [draft, setDraft] = useState<DraftState | null>(null);
+  const closeDraft = useCallback(() => setDraft(null), []);
+  useEscapeKey(closeDraft, draft !== null);
   const [payTarget, setPayTarget] = useState<MarkPaidTarget | null>(null);
 
   const { grid, eventsByDay, tenantOptions, entriesAvailable, paidAvailable } = data;

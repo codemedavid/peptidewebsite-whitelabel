@@ -247,7 +247,7 @@ export function PlanFeaturesEditor({
                       style={{ gap: 12, alignItems: "center", padding: "10px 18px", borderTop: "1px solid var(--border-soft)" }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="row" style={{ gap: 8 }}>
+                        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--ink-900)" }}>
                             {meta.label}
                           </span>
@@ -280,7 +280,7 @@ export function PlanFeaturesEditor({
                         </div>
                         <div style={{ fontSize: 12, color: "var(--ink-400)", marginTop: 2 }}>{meta.description}</div>
                       </div>
-                      <code className="mono" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>
+                      <code className="mono pf-key" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>
                         {k}
                       </code>
                       <Toggle on={on} label={`Include ${meta.label} in ${planMeta(active).label}`} onChange={() => toggle(active, k)} />

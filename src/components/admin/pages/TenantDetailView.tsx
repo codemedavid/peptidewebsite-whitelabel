@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ic, StatusBadge, FeedText, tenantColor } from "@/components/admin/shell/primitives";
+import { Ic, StatusBadge, FeedText, tenantColor, useEscapeKey } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
@@ -858,6 +858,9 @@ function PaymentReviewDrawer({ payment, onClose }: { payment: TenantSubscription
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [zoomed, setZoomed] = useState(false);
+  // Esc backs out one level: the zoomed proof first, then the drawer.
+  const onEscape = useCallback(() => (zoomed ? setZoomed(false) : onClose()), [zoomed, onClose]);
+  useEscapeKey(onEscape, !pending);
   const tone = SUBSCRIPTION_PAYMENT_STATUS_TONE[payment.status];
 
   const review = (action: "confirm" | "reject") =>

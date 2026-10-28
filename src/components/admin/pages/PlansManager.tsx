@@ -267,7 +267,8 @@ export function PlansManager({
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }} className="grid-3">
+      {/* .grid-3 owns the columns (3 → 1 below 1100px); an inline copy used to pin 3 on phones. */}
+      <div className="grid-3">
         {plans.map((p) => {
           const row = rows.find((r) => r.key === p.key);
           const share = totalTenants && row ? Math.round((row.count / totalTenants) * 100) : 0;

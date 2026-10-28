@@ -109,9 +109,9 @@ function RevenueChart({ series }: { series: OverviewData["revenueSeries"] }) {
 function GrowthBars({ data, labels }: { data: number[]; labels: string[] }) {
   const max = Math.max(...data, 1);
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 180, padding: "4px 0 24px" }}>
+    <div style={{ display: "flex", alignItems: "flex-end", gap: "clamp(2px, 1vw, 8px)", height: 180, padding: "4px 0 24px" }}>
       {data.map((v, i) => (
-        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
           <div
             style={{
               width: "100%",
@@ -122,7 +122,7 @@ function GrowthBars({ data, labels }: { data: number[]; labels: string[] }) {
             }}
             title={`${labels[i]} · ${v} tenants`}
           />
-          <div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>{labels[i]}</div>
+          <div style={{ fontSize: 10.5, color: "var(--ink-400)", whiteSpace: "nowrap" }}>{labels[i]}</div>
         </div>
       ))}
     </div>
