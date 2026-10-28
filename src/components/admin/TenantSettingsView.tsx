@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Ic } from "@/components/admin/shell/primitives";
+import { Ic, StatusBadge } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction, setTenantFeatureAction } from "@/actions/onboarding";
 import { FEATURES } from "@/lib/features/catalog";
 import {
@@ -115,6 +115,8 @@ type Props = {
   planStatus?: React.ReactNode;
   /** Custom-domain card, rendered in the sections column (its own save flow). */
   domains?: React.ReactNode;
+  /** Current Tenant.status (active | trial | suspended …), shown in the header badge. */
+  status?: string;
 };
 
 const SECTIONS = [
@@ -149,6 +151,7 @@ export function TenantSettingsView({
   lastSaved,
   planStatus,
   domains,
+  status,
 }: Props) {
   /* ---------- order-number format ---------- */
   const [prefix, setPrefix] = useState(format.prefix);
@@ -485,6 +488,14 @@ export function TenantSettingsView({
   }, []);
   const scrollTo = (id: SectionId) => refs[id].current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
+  // Deep links like /tenants/<slug>/settings#admin land on that section.
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    const target = SECTIONS.find((s) => s.id === hash);
+    if (target) refs[target.id].current?.scrollIntoView({ block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const counts: Record<SectionId, string> = {
     orders: "4",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
@@ -506,10 +517,7 @@ export function TenantSettingsView({
           <span className="set-tenant-badge">
             <span className="mark" style={{ background: "linear-gradient(135deg, #34d399, #10b981)" }}>{mark}</span>
             <span className="mono">{domain}</span>
-            <span className="badge badge-success">
-              <span className="bdot" />
-              Live
-            </span>
+            {status && <StatusBadge status={status} />}
           </span>
           <Link href={`/tenants/${slug}`} className="set-back">
             <Ic.ChevronLeft /> Back to tenant

@@ -39,6 +39,7 @@ export default async function TenantSettingsPage({
       slug={slug}
       name={tenant.name}
       domain={`${slug}.${ROOT}`}
+      status={planStatus?.status}
       format={tenant.format}
       planStatus={
         planStatus ? (

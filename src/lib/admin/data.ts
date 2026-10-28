@@ -542,6 +542,39 @@ export async function getTenantStoreAdminCredential(
   return { email: t.storeAdminEmail ?? "", hasPassword: Boolean(t.storeAdminPasswordHash) };
 }
 
+const SNAPSHOT_WINDOW_DAYS = 30;
+
+/** Real, cheap store counts for the tenant overview — replaces the old plan
+ *  "usage" bars, which showed invented storage/bandwidth/email figures. */
+export type TenantStoreSnapshot = {
+  orders30d: number;
+  staffActive: number;
+  staffTotal: number;
+};
+
+/** Fail-open: null in demo mode, for an unknown slug, or if a table is missing,
+ *  so the overview simply hides the counts instead of erroring the page. */
+export async function getTenantStoreSnapshot(slug: string): Promise<TenantStoreSnapshot | null> {
+  if (isDemoMode()) return null;
+  try {
+    const t = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    if (!t) return null;
+    const since = new Date(Date.now() - SNAPSHOT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [orders30d, staff] = await Promise.all([
+      prisma.storefrontOrder.count({
+        where: { ...ACTIVE_ORDERS_WHERE, tenantId: t.id, createdAt: { gte: since } },
+      }),
+      prisma.storefrontStaff.groupBy({ by: ["status"], where: { tenantId: t.id }, _count: { _all: true } }),
+    ]);
+    const staffTotal = staff.reduce((sum, g) => sum + g._count._all, 0);
+    const staffActive = staff.find((g) => g.status === "active")?._count._all ?? 0;
+    return { orders30d, staffActive, staffTotal };
+  } catch (err) {
+    console.error("[admin] getTenantStoreSnapshot failed", { slug, err });
+    return null;
+  }
+}
+
 export type TenantDomainRow = {
   id: string;
   hostname: string;

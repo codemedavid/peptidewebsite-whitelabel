@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Ic } from "./primitives";
 import { CreateTenantDrawer } from "./CreateTenantDrawer";
 import { signOutAction } from "@/actions/auth";
@@ -56,10 +56,16 @@ export function AdminShell({
   planCards?: EditablePlanCard[];
 }) {
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [avatarMenu, setAvatarMenu] = useState(false);
+  // Phone nav drawer. Stored as the path it was opened on, so navigating
+  // anywhere closes it without an effect.
+  const [navOpenAt, setNavOpenAt] = useState<string | null>(null);
+  const navOpen = navOpenAt === pathname;
+  const closeNav = useCallback(() => setNavOpenAt(null), []);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,18 +89,27 @@ export function AdminShell({
   }, []);
   const openCreate = useCallback(() => setDrawerOpen(true), []);
 
-  // keyboard shortcuts: ⌘K focuses search, N opens create
+  // keyboard shortcuts: ⌘K focuses search, N opens create, Esc closes menus
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (el && el.matches("input, textarea, select")) return;
-      if (e.key === "n" || e.key === "N") {
-        e.preventDefault();
-        setDrawerOpen(true);
+      if (e.key === "Escape") {
+        setAvatarMenu(false);
+        setNavOpenAt(null);
+        return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         (document.querySelector(".sa .search-input") as HTMLInputElement | null)?.focus();
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.isContentEditable || el.matches("input, textarea, select"));
+      // A bare N only — never while typing, with a modifier, or over an open dialog.
+      const modified = e.metaKey || e.ctrlKey || e.altKey;
+      const dialogOpen = !!document.querySelector(".sa-drawer-backdrop, [role='dialog']");
+      if (!typing && !modified && !dialogOpen && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setDrawerOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -123,8 +138,17 @@ export function AdminShell({
     else groups.push({ name: item.group, items: [withBadge] });
   }
 
+  // Global search jumps to the tenants list, filtered — the one thing it can
+  // honestly search today.
+  const submitSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement | null;
+    const q = input?.value.trim() ?? "";
+    router.push(q ? `/tenants?q=${encodeURIComponent(q)}` : "/tenants");
+    input?.blur();
+  };
+
   const ChevronLeft = Ic.ChevronLeft;
-  const Bell = Ic.Bell;
   const SearchI = Ic.Search;
   const Plus = Ic.Plus;
   const ThemeI = theme === "dark" ? Ic.Sun : Ic.Moon;
@@ -134,13 +158,17 @@ export function AdminShell({
     <AdminUIContext.Provider value={{ openCreate, showToast }}>
       <div className="sa" data-theme={theme}>
         <div className={"app" + (collapsed ? " collapsed" : "")}>
+          {navOpen && <div className="sidebar-scrim" onClick={closeNav} aria-hidden="true" />}
           {/* SIDEBAR */}
-          <aside className="sidebar">
+          <aside className={"sidebar" + (navOpen ? " open" : "")} id="sa-sidebar">
             <div className="sidebar-brand">
               <div className="brand-mark">P</div>
-              <div className="brand-text">Peptide&nbsp;Platform</div>
+              <div className="brand-text">Pepweb&nbsp;Admin</div>
+              <button type="button" className="icon-btn sidebar-close" onClick={closeNav} aria-label="Close menu">
+                <Ic.X />
+              </button>
             </div>
-            <nav className="sidebar-nav">
+            <nav className="sidebar-nav" aria-label="Admin">
               {groups.map((g, gi) => (
                 <div key={g.name}>
                   {!collapsed && <div className="nav-section-label">{g.name}</div>}
@@ -152,7 +180,9 @@ export function AdminShell({
                         key={item.id}
                         href={item.href}
                         className={"nav-item" + (id === item.id ? " active" : "")}
+                        aria-current={id === item.id ? "page" : undefined}
                         title={collapsed ? item.label : ""}
+                        onClick={closeNav}
                       >
                         <IconCmp className="nav-icon" />
                         <span className="nav-label">{item.label}</span>
@@ -164,7 +194,7 @@ export function AdminShell({
               ))}
             </nav>
             <div className="sidebar-foot">
-              <button className="collapse-btn" onClick={() => setCollapsed((c) => !c)}>
+              <button type="button" className="collapse-btn" onClick={() => setCollapsed((c) => !c)}>
                 <ChevronLeft />
                 <span className="sidebar-foot-text">Collapse</span>
               </button>
@@ -174,38 +204,61 @@ export function AdminShell({
           {/* MAIN */}
           <div className="main-col">
             <header className="topbar">
+              <button
+                type="button"
+                className="icon-btn menu-btn"
+                onClick={() => setNavOpenAt(pathname)}
+                aria-label="Open menu"
+                aria-expanded={navOpen}
+                aria-controls="sa-sidebar"
+              >
+                <Ic.Menu />
+              </button>
               <div className="crumbs">
                 {crumbs.map((c, i) => (
-                  <span key={i} style={{ display: "contents" }}>
+                  <Fragment key={i}>
                     <span className={i === crumbs.length - 1 ? "current" : ""}>{c}</span>
                     {i < crumbs.length - 1 && <span className="sep">/</span>}
-                  </span>
+                  </Fragment>
                 ))}
               </div>
               <div className="topbar-spacer" />
-              <div className="search-wrap">
+              <form className="search-wrap" role="search" onSubmit={submitSearch}>
                 <SearchI className="search-icon" />
-                <input className="search-input" placeholder="Search tenants, orders, features…" />
+                <input
+                  className="search-input"
+                  name="q"
+                  type="search"
+                  placeholder="Search tenants…"
+                  aria-label="Search tenants by name or subdomain"
+                  autoComplete="off"
+                />
                 <span className="kbd">⌘K</span>
-              </div>
-              <span className="status-pill">
-                <span className="pulse" />
-                All systems operational
-              </span>
-              <button className="icon-btn" title="Notifications">
-                <Bell />
-                <span className="dot" />
-              </button>
-              <button className="icon-btn" title="Toggle theme" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>
+              </form>
+              <button
+                type="button"
+                className="icon-btn"
+                title="Toggle theme"
+                aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              >
                 <ThemeI />
               </button>
-              <button className="btn btn-accent btn-sm" onClick={openCreate}>
-                <Plus /> New tenant
+              <button type="button" className="btn btn-accent btn-sm new-tenant-btn" onClick={openCreate} aria-label="New tenant">
+                <Plus /> <span className="new-tenant-label">New tenant</span>
               </button>
               <div style={{ position: "relative" }}>
-                <div className="avatar" title={operatorEmail ?? "Super admin"} onClick={() => setAvatarMenu((v) => !v)}>
+                <button
+                  type="button"
+                  className="avatar"
+                  title={operatorEmail ?? "Super admin"}
+                  aria-label="Account menu"
+                  aria-haspopup="menu"
+                  aria-expanded={avatarMenu}
+                  onClick={() => setAvatarMenu((v) => !v)}
+                >
                   {initials}
-                </div>
+                </button>
                 {avatarMenu && (
                   <>
                     <div style={{ position: "fixed", inset: 0, zIndex: 9 }} onClick={() => setAvatarMenu(false)} />
@@ -228,7 +281,7 @@ export function AdminShell({
                       </div>
                       <form action={signOutAction.bind(null, "/login")}>
                         <button type="submit" className="row" style={{ width: "100%", padding: "7px 9px", borderRadius: 6, fontSize: 13, color: "var(--ink-700)", gap: 8 }}>
-                          <Ic.External style={{ width: 14, height: 14 }} /> Sign out
+                          <Ic.LogOut style={{ width: 14, height: 14 }} /> Sign out
                         </button>
                       </form>
                     </div>

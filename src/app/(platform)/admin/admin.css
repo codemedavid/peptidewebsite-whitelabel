@@ -480,6 +480,10 @@
 .sa .grid-2-eq { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .sa .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 @media (max-width: 1100px) { .sa .grid-2, .sa .grid-2-eq, .sa .grid-3 { grid-template-columns: 1fr; } }
+/* Grid/column children may shrink below their content (wide tables scroll inside their card, not the page). */
+.sa .grid-2 > *, .sa .grid-2-eq > *, .sa .grid-3 > *, .sa .col > * { min-width: 0; }
+/* A card that holds a table scrolls it sideways instead of overflowing (Tenants sets its own overflow for row menus). */
+.sa .card:has(> .table) { overflow-x: auto; }
 
 /* activity feed */
 .sa .feed-item { display: flex; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border-soft); }
@@ -583,6 +587,44 @@
 .sa .tab-count { display: inline-block; margin-left: 6px; padding: 0 6px; background: var(--bg-canvas); color: var(--ink-400); border-radius: 999px; font-size: 11px; font-weight: 500; }
 .sa .tab.active .tab-count { background: var(--accent-soft); color: var(--accent-ink); }
 
+/* tenant detail · header stats strip + store snapshot */
+.sa .td-stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border-soft); background: var(--bg-canvas); }
+.sa .td-stat { padding: 14px 24px; border-right: 1px solid var(--border-soft); }
+.sa .td-stat:last-child { border-right: none; }
+@media (max-width: 720px) {
+  .sa .td-stats { grid-template-columns: repeat(2, 1fr); }
+  .sa .td-stat { padding: 12px 16px; }
+  .sa .td-stat:nth-child(2n) { border-right: none; }
+  .sa .td-stat:nth-child(-n + 2) { border-bottom: 1px solid var(--border-soft); }
+}
+.sa .td-snapshot { margin: 0; padding: 4px 0; }
+.sa .td-snapshot-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--border-soft); }
+.sa .td-snapshot-row:first-child { border-top: none; }
+.sa .td-snapshot-row dt { font-size: 13px; color: var(--ink-700); }
+.sa .td-snapshot-row dt span { color: var(--ink-400); font-size: 12px; }
+.sa .td-snapshot-row dd { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-900); letter-spacing: -0.01em; }
+.sa .tab { white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 720px) {
+  /* Tabs scroll sideways on phones; the underline sits inside the scrollport. */
+  .sa .tabs { overflow-x: auto; scrollbar-width: none; }
+  .sa .tab.active::after { bottom: 0; }
+}
+.sa .tab:focus-visible, .sa .nav-item:focus-visible, .sa .icon-btn:focus-visible, .sa .avatar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* tenants table · drop secondary columns instead of scrolling the whole page */
+.sa .tenant-link { color: inherit; }
+.sa .tenant-link:hover { color: var(--accent); }
+.sa .tenant-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+@media (max-width: 860px) { .sa .table .col-md { display: none; } }
+@media (max-width: 520px) {
+  .sa .table .col-sm { display: none; }
+  .sa .table thead th { padding: 10px 10px; }
+  .sa .table tbody td { padding: 12px 10px; }
+  .sa .table thead th:first-child, .sa .table tbody td:first-child { padding-left: 14px; }
+  .sa .tenant-cell { gap: 8px; }
+}
+@media (max-width: 380px) { .sa .table .col-xs { display: none; } }
+
 /* progress bar */
 .sa .bar { height: 6px; background: var(--bg-active); border-radius: 999px; overflow: hidden; }
 .sa .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -624,12 +666,53 @@
 }
 .sa-toast svg { width: 16px; height: 16px; color: var(--success); }
 
-/* responsive: hide sidebar on small */
+/* Phone nav: the menu button and drawer-close only exist below 860px. */
+.sa .menu-btn,
+.sa .sidebar-close { display: none; }
+.sa .sidebar-scrim { display: none; }
+
+/* responsive: sidebar becomes an off-canvas drawer on small screens */
 @media (max-width: 860px) {
-  .sa .app { grid-template-columns: 1fr; }
-  .sa .app .sidebar { display: none; }
-  .sa .page-inner { padding: 20px; }
+  .sa .app,
+  .sa .app.collapsed { grid-template-columns: 1fr; }
+  .sa .menu-btn { display: grid; margin-left: -6px; }
+  .sa .sidebar-close { display: grid; margin-left: auto; }
+  .sa .app .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(280px, 84vw);
+    z-index: 90;
+    box-shadow: var(--shadow-xl);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform 0.24s var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1)), visibility 0s linear 0.24s;
+  }
+  .sa .app .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.24s var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1)), visibility 0s;
+  }
+  /* The drawer is always full-width labels — the desktop collapse doesn't apply. */
+  .sa .app.collapsed .brand-text,
+  .sa .app.collapsed .nav-label,
+  .sa .app.collapsed .nav-section-label { opacity: 1; pointer-events: auto; }
+  .sa .sidebar-foot { display: none; }
+  .sa .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 89;
+    background: rgba(10, 13, 20, 0.4);
+    animation: sa-fadeIn 0.18s;
+  }
+  .sa .topbar { padding: 0 14px; gap: 10px; }
+  .sa .crumbs { overflow: hidden; white-space: nowrap; }
+  .sa .crumbs > span:not(.current) { display: none; }
+  .sa .crumbs .current { overflow: hidden; text-overflow: ellipsis; }
+  .sa .page-inner { padding: 20px 16px; }
   .sa .search-wrap { display: none; }
+  .sa .new-tenant-label { display: none; }
+  .sa .nav-item { padding: 10px 12px; font-size: 14.5px; }
 }
 
 /* ============================================================
@@ -1231,6 +1314,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sa .app .sidebar,
+  .sa .app .sidebar.open { transition: none; }
   .sa .cal-day,
   .sa .cal-month-pill,
   .sa .cal-meter-fill { transition: none; }

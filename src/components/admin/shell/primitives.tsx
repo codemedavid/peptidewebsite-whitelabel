@@ -32,7 +32,9 @@ import {
   Layers,
   LifeBuoy,
   Lock,
+  LogOut,
   Mail,
+  Menu,
   Moon,
   MoreVertical,
   Pencil,
@@ -118,6 +120,8 @@ export const Ic: Record<string, LucideIcon> = withIconFallback(
   Box,
   Clock,
   Handshake,
+  Menu,
+  LogOut,
   },
   AlertCircle,
 );

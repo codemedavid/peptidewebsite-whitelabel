@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Ic, StatusBadge, TenantAvatar, FeedText, tenantColor } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
-import { planMeta, planLimits, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
+import { planMeta, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
 import { FEATURE_GROUPS } from "@/lib/features/catalog";
 import { suspendTenantAction, setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
 import { confirmSubscriptionPaymentAction, rejectSubscriptionPaymentAction } from "@/actions/subscription-payments";
-import { setTenantAdminPasswordAction } from "@/actions/tenant-admin";
 import { ApplyTenantPresetCard } from "@/components/admin/tenant-presets/ApplyTenantPresetCard";
 import {
   summarizeSubscriptionPayments,
@@ -26,7 +25,12 @@ import {
 } from "@/lib/subscription/billing-cycle";
 import { buildWaLink } from "@/lib/admin/whatsapp";
 import { effectivePlanFeeCents } from "@/lib/subscription/plan-fee";
-import type { TenantDetail, TenantSubscriptionPayment } from "@/lib/admin/data";
+import type {
+  StoreAdminCredentialStatus,
+  TenantDetail,
+  TenantStoreSnapshot,
+  TenantSubscriptionPayment,
+} from "@/lib/admin/data";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "peptide.app").replace(/:\d+$/, "");
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -38,7 +42,15 @@ function subEndLabel(iso: string): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
+type TenantDetailViewProps = {
+  tenant: TenantDetail;
+  /** Store-owner `#admin` sign-in status; null when it can't be read. */
+  signIn: StoreAdminCredentialStatus | null;
+  /** Real 30-day store counts; null in demo mode or on a read failure. */
+  snapshot: TenantStoreSnapshot | null;
+};
+
+export function TenantDetailView({ tenant, signIn, snapshot }: TenantDetailViewProps) {
   const router = useRouter();
   const { showToast } = useAdminUI();
   const [pending, startTransition] = useTransition();
@@ -59,7 +71,6 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "features", label: "Features", count: tenant.enabledFeatures },
-    { id: "usage", label: "Usage" },
     { id: "orders", label: "Orders", count: tenant.orders > 999 ? "1k+" : tenant.orders },
     { id: "billing", label: "Billing" },
     { id: "audit", label: "Audit log" },
@@ -106,7 +117,7 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
               </span>
             </div>
           </div>
-          <div className="row">
+          <div className="row" style={{ flexWrap: "wrap" }}>
             {tenant.ownerWhatsapp && (
               <a
                 className="btn btn-sm btn-accent"
@@ -118,8 +129,14 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
                 <Ic.Send /> WhatsApp
               </a>
             )}
-            <a className="btn btn-sm" href={storefront} target="_blank" rel="noreferrer">
-              <Ic.External /> Login as tenant
+            <a
+              className="btn btn-sm"
+              href={`${storefront}/#admin`}
+              target="_blank"
+              rel="noreferrer"
+              title="Opens the store's own admin sign-in in a new tab"
+            >
+              <Ic.External /> Open store admin
             </a>
             <Link className="btn btn-sm" href={`/tenants/${tenant.slug}/settings`}>
               <Ic.Edit /> Edit
@@ -130,14 +147,14 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border-soft)", background: "var(--bg-canvas)" }}>
+        <div className="td-stats">
           {[
             { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
             { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
             { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(effectivePlanFeeCents(tenant.subscriptionPriceCents, tenant.planPriceCents)), sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}` },
             { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
           ].map((m, i) => (
-            <div key={i} style={{ padding: "14px 24px", borderRight: i < 3 ? "1px solid var(--border-soft)" : "none" }}>
+            <div key={i} className="td-stat">
               <div style={{ fontSize: 11, color: "var(--ink-400)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{m.label}</div>
               <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, letterSpacing: "-0.02em" }} className="tnum">
                 {m.v}
@@ -148,18 +165,24 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
         </div>
       </div>
 
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Tenant sections">
         {tabs.map((t) => (
-          <div key={t.id} className={"tab" + (tab === t.id ? " active" : "")} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={"tab" + (tab === t.id ? " active" : "")}
+            onClick={() => setTab(t.id)}
+          >
             {t.label}
             {t.count !== undefined && <span className="tab-count tnum">{t.count}</span>}
-          </div>
+          </button>
         ))}
       </div>
 
-      {tab === "overview" && <Overview tenant={tenant} storefront={storefront} />}
+      {tab === "overview" && <Overview tenant={tenant} storefront={storefront} signIn={signIn} snapshot={snapshot} />}
       {tab === "features" && <FeaturesPanel tenant={tenant} />}
-      {tab === "usage" && <UsagePanel tenant={tenant} />}
       {tab === "orders" && <OrdersPanel tenant={tenant} />}
       {tab === "billing" && <BillingPanel tenant={tenant} />}
       {tab === "audit" && <AuditPanel tenant={tenant} />}
@@ -168,26 +191,6 @@ export function TenantDetailView({ tenant }: { tenant: TenantDetail }) {
 }
 
 /* ---------- helpers ---------- */
-function UsageBar({ label, used, cap, unit = "" }: { label: string; used: number; cap: number | null; unit?: string }) {
-  const isUnlimited = cap === null;
-  const pct = isUnlimited ? Math.min(100, used / 50) : Math.min(100, (used / cap) * 100);
-  const tone = pct > 90 ? "danger" : pct > 75 ? "warn" : "success";
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 5 }}>
-        <span style={{ color: "var(--ink-700)" }}>{label}</span>
-        <span className="tnum muted">
-          {used}
-          {unit} {isUnlimited ? <span style={{ color: "var(--success)" }}>· unlimited</span> : `/ ${cap.toLocaleString()}${unit}`}
-        </span>
-      </div>
-      <div className={"bar " + tone}>
-        <span style={{ width: pct + "%" }} />
-      </div>
-    </div>
-  );
-}
-
 function TenantRevenueChart({ data }: { data: number[] }) {
   const w = 480,
     h = 160,
@@ -213,9 +216,14 @@ function TenantRevenueChart({ data }: { data: number[] }) {
 }
 
 /* ---------- OVERVIEW ---------- */
-function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: string }) {
-  const limits = planLimits(tenant.planKey);
-  const ordersThisMonth = Math.min(tenant.orders, limits.ordersPerMonth ?? tenant.orders);
+type OverviewProps = {
+  tenant: TenantDetail;
+  storefront: string;
+  signIn: StoreAdminCredentialStatus | null;
+  snapshot: TenantStoreSnapshot | null;
+};
+
+function Overview({ tenant, storefront, signIn, snapshot }: OverviewProps) {
   return (
     <div className="grid-2">
       <div className="col" style={{ gap: 16 }}>
@@ -280,29 +288,19 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
           <div className="card-body" style={{ display: "grid", gap: 6 }}>
             <ActionRow icon="External" label="Open storefront" sub={`${tenant.slug}.${ROOT}`} href={storefront} external />
             <ActionRow icon="Layers" label="Manage features" sub={`${tenant.enabledFeatures} modules active`} href={`/tenants/${tenant.slug}/features`} />
-            <ActionRow icon="Zap" label="Integrations" sub="PostHog analytics & email" href={`/tenants/${tenant.slug}/integrations`} />
+            <ActionRow icon="Zap" label="Integrations" sub="Analytics, email, Telegram bot" href={`/tenants/${tenant.slug}/integrations`} />
             <ActionRow icon="Image" label="Edit branding" sub="Theme, colors, logo" href={`/tenants/${tenant.slug}/branding`} />
-            <ActionRow icon="Settings" label="Settings" sub="Store, order numbers" href={`/tenants/${tenant.slug}/settings`} />
+            <ActionRow icon="Settings" label="Settings" sub="Checkout, fees, order numbers, sign-in" href={`/tenants/${tenant.slug}/settings`} />
           </div>
         </div>
 
-        <AdminPasswordCard slug={tenant.slug} />
+        <StoreSignInCard slug={tenant.slug} signIn={signIn} />
 
         <ApplyTenantPresetCard slug={tenant.slug} />
 
         <TenantWhatsappCard slug={tenant.slug} tenantName={tenant.name} current={tenant.ownerWhatsapp} />
 
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Plan &amp; limits</h3>
-          </div>
-          <div className="card-body" style={{ padding: 16 }}>
-            <UsageBar label="Orders this month" used={ordersThisMonth} cap={limits.ordersPerMonth} />
-            <UsageBar label="Staff accounts" used={limits.staffSeats === null ? 9 : Math.min(3, limits.staffSeats)} cap={limits.staffSeats} />
-            <UsageBar label="Storage" used={2.4} cap={limits.storageGb} unit="GB" />
-            <UsageBar label="Bandwidth (30d)" used={184} cap={limits.bandwidthGb} unit="GB" />
-          </div>
-        </div>
+        <StoreSnapshotCard tenant={tenant} snapshot={snapshot} />
 
         <div className="card">
           <div className="card-head">
@@ -333,62 +331,80 @@ function Overview({ tenant, storefront }: { tenant: TenantDetail; storefront: st
   );
 }
 
-function AdminPasswordCard({ slug }: { slug: string }) {
-  const { showToast } = useAdminUI();
-  const [pending, startTransition] = useTransition();
-  const [pwd, setPwd] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  const save = () => {
-    setErr(null);
-    startTransition(async () => {
-      const res = await setTenantAdminPasswordAction(slug, pwd);
-      if ("error" in res) {
-        setErr(res.error);
-      } else {
-        setPwd("");
-        showToast("Tenant admin password updated.");
-      }
-    });
-  };
-
+/** Read-only sign-in status. The credential itself is edited in exactly one
+ *  place — Settings → Admin access — so there is no second password box here
+ *  that writes a different (legacy /dashboard) credential. */
+function StoreSignInCard({ slug, signIn }: { slug: string; signIn: StoreAdminCredentialStatus | null }) {
+  const ready = !!signIn && signIn.hasPassword && !!signIn.email;
   return (
     <div className="card">
       <div className="card-head">
         <div>
-          <h3 className="card-title">Admin password</h3>
+          <h3 className="card-title">Store admin sign-in</h3>
           <div className="card-sub">
-            Tenant signs in at <span className="mono">{slug}.{ROOT}/admin</span> with this password.
+            Owner signs in at <span className="mono">{slug}.{ROOT}/#admin</span>
           </div>
         </div>
+        <span className={"badge " + (ready ? "badge-success" : "badge-warn")}>
+          <span className="bdot" />
+          {ready ? "Set" : "Not set"}
+        </span>
       </div>
-      <div className="card-body" style={{ display: "grid", gap: 8, padding: 16 }}>
-        <input
-          type="password"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          placeholder="New password (min 6 chars)"
-          autoComplete="new-password"
-          style={{
-            width: "100%",
-            padding: "8px 10px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg-canvas)",
-            fontSize: 13,
-          }}
-        />
-        {err && <div style={{ fontSize: 12, color: "var(--danger)" }}>{err}</div>}
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={save}
-          disabled={pending || pwd.length < 6}
-          style={{ justifySelf: "start" }}
-        >
-          {pending ? "Saving…" : "Set password"}
-        </button>
+      <div className="card-body" style={{ display: "grid", gap: 10, padding: 16 }}>
+        {signIn === null ? (
+          <div className="muted" style={{ fontSize: 13 }}>Couldn&apos;t read the sign-in status.</div>
+        ) : ready ? (
+          <div style={{ fontSize: 13 }}>
+            <span className="muted">Email · </span>
+            <span className="mono">{signIn.email}</span>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "var(--ink-700)" }}>
+            Nobody can open this store&apos;s admin until both an email and a password are set.
+          </div>
+        )}
+        <Link className="btn btn-sm" href={`/tenants/${slug}/settings#admin`} style={{ justifySelf: "start" }}>
+          <Ic.Lock /> {ready ? "Change sign-in" : "Set up sign-in"}
+        </Link>
       </div>
+    </div>
+  );
+}
+
+/** Real counts only. Plan "limits" were never enforced anywhere, so the old
+ *  bars (and their storage/bandwidth/email figures) are gone rather than faked. */
+function StoreSnapshotCard({ tenant, snapshot }: { tenant: TenantDetail; snapshot: TenantStoreSnapshot | null }) {
+  const rows: { label: string; value: string; sub?: string }[] = [
+    ...(snapshot ? [{ label: "Orders", value: snapshot.orders30d.toLocaleString(), sub: "last 30 days" }] : []),
+    { label: "Orders", value: tenant.orders.toLocaleString(), sub: "all time" },
+    { label: "Customers", value: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
+    ...(snapshot
+      ? [
+          {
+            label: "Staff accounts",
+            value: snapshot.staffActive.toLocaleString(),
+            sub: snapshot.staffTotal > snapshot.staffActive ? `${snapshot.staffTotal - snapshot.staffActive} suspended` : "active",
+          },
+        ]
+      : []),
+    { label: "Features on", value: `${tenant.enabledFeatures}`, sub: `of ${tenant.totalFeatures} available` },
+  ];
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="card-title">Store snapshot</h3>
+      </div>
+      <dl className="td-snapshot">
+        {rows.map((r, i) => (
+          <div key={i} className="td-snapshot-row">
+            <dt>
+              {r.label}
+              {r.sub && <span> · {r.sub}</span>}
+            </dt>
+            <dd className="tnum">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
@@ -839,26 +855,6 @@ function FeaturesPanel({ tenant }: { tenant: TenantDetail }) {
             </Link>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- USAGE ---------- */
-function UsagePanel({ tenant }: { tenant: TenantDetail }) {
-  const limits = planLimits(tenant.planKey);
-  return (
-    <div className="card">
-      <div className="card-head">
-        <h3 className="card-title">Usage · last 30 days</h3>
-      </div>
-      <div className="card-body" style={{ padding: 20 }}>
-        <UsageBar label="Orders" used={Math.min(tenant.orders, limits.ordersPerMonth ?? tenant.orders)} cap={limits.ordersPerMonth} />
-        <UsageBar label="Customers" used={tenant.visitors} cap={null} />
-        <UsageBar label="Email sends" used={Math.round(tenant.orders * 2.4)} cap={limits.emailSends} />
-        <UsageBar label="Staff seats" used={limits.staffSeats === null ? 9 : Math.min(3, limits.staffSeats)} cap={limits.staffSeats} />
-        <UsageBar label="Storage" used={2.4} cap={limits.storageGb} unit="GB" />
-        <UsageBar label="Bandwidth" used={184} cap={limits.bandwidthGb} unit="GB" />
       </div>
     </div>
   );

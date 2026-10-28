@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Ic, StatusBadge, TenantAvatar } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, formatPesosCompact } from "@/lib/admin/plans";
@@ -19,6 +19,9 @@ const STATUS_FILTERS = [
   { id: "past_due", label: "Past due" },
 ];
 
+// Same order and labels as the plan badges (Starter / Business / Automated).
+const PLAN_KEYS = ["starter", "pro", "enterprise"] as const;
+
 type SortKey = "name" | "revenueCents" | "orders" | "createdAt";
 
 export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
@@ -27,7 +30,15 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
   const [pending, startTransition] = useTransition();
   const [filter, setFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
-  const [q, setQ] = useState("");
+  // ?q= comes from the top-bar search; re-seed the box whenever it changes so a
+  // second search from the top bar still lands while this page is open.
+  const urlQ = useSearchParams().get("q") ?? "";
+  const [q, setQ] = useState(urlQ);
+  const [seededQ, setSeededQ] = useState(urlQ);
+  if (urlQ !== seededQ) {
+    setSeededQ(urlQ);
+    setQ(urlQ);
+  }
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "revenueCents", dir: "desc" });
   const [menu, setMenu] = useState<string | null>(null);
 
@@ -104,16 +115,18 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         })}
       </div>
 
-      <div className="row mb-3" style={{ gap: 8 }}>
-        <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+      <div className="row mb-3" style={{ gap: 8, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 320 }}>
           <Ic.Search style={{ position: "absolute", left: 10, top: 9, width: 14, height: 14, color: "var(--ink-400)" }} />
-          <input className="input" placeholder="Search by name or subdomain…" value={q} onChange={(e) => setQ(e.target.value)} style={{ paddingLeft: 32, height: 32 }} />
+          <input className="input" type="search" aria-label="Search tenants" placeholder="Search by name or subdomain…" value={q} onChange={(e) => setQ(e.target.value)} style={{ paddingLeft: 32, height: 32 }} />
         </div>
-        <select className="input" value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} style={{ width: 160, height: 32, fontSize: 13 }}>
+        <select className="input" aria-label="Filter by plan" value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} style={{ width: 160, height: 32, fontSize: 13 }}>
           <option value="all">All plans</option>
-          <option value="starter">Starter</option>
-          <option value="pro">Professional</option>
-          <option value="enterprise">Enterprise</option>
+          {PLAN_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {planMeta(key).label}
+            </option>
+          ))}
         </select>
         <div style={{ flex: 1 }} />
         <button className="btn btn-sm btn-ghost" onClick={() => router.refresh()} disabled={pending}>
@@ -128,16 +141,16 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
               <th onClick={sortHandle("name")} style={{ cursor: "pointer" }}>
                 Business{sortMark("name")}
               </th>
-              <th>Plan</th>
+              <th className="col-sm">Plan</th>
               <th>Status</th>
-              <th>Active features</th>
-              <th onClick={sortHandle("revenueCents")} style={{ cursor: "pointer", textAlign: "right" }}>
+              <th className="col-md">Active features</th>
+              <th className="col-xs" onClick={sortHandle("revenueCents")} style={{ cursor: "pointer", textAlign: "right" }}>
                 Revenue{sortMark("revenueCents")}
               </th>
-              <th onClick={sortHandle("orders")} style={{ cursor: "pointer", textAlign: "right" }}>
+              <th className="col-md" onClick={sortHandle("orders")} style={{ cursor: "pointer", textAlign: "right" }}>
                 Orders{sortMark("orders")}
               </th>
-              <th onClick={sortHandle("createdAt")} style={{ cursor: "pointer" }}>
+              <th className="col-md" onClick={sortHandle("createdAt")} style={{ cursor: "pointer" }}>
                 Created{sortMark("createdAt")}
               </th>
               <th style={{ width: 40 }}></th>
@@ -164,31 +177,34 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                       <TenantAvatar name={t.name} logoUrl={t.logoUrl} />
                       <div>
                         <div className="tenant-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {t.name}
+                          {/* A real link, so ⌘/ctrl-click and keyboard focus work; the row click stays as a shortcut. */}
+                          <Link href={`/tenants/${t.slug}`} className="tenant-link" onClick={(e) => e.stopPropagation()}>
+                            {t.name}
+                          </Link>
                           {t.subscriptionUrgency && <UrgencyBadge u={t.subscriptionUrgency} />}
                         </div>
                         <div className="tenant-domain">{t.slug}</div>
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td className="col-sm">
                     <span className={"badge " + planCls}>{pm.label}</span>
                   </td>
                   <td>
                     <StatusBadge status={t.status} />
                   </td>
-                  <td>
+                  <td className="col-md">
                     <span className="tag">
                       <Ic.Layers style={{ width: 11, height: 11 }} /> {t.features} enabled
                     </span>
                   </td>
-                  <td style={{ textAlign: "right" }} className="tnum">
+                  <td style={{ textAlign: "right" }} className="tnum col-xs">
                     {formatPesosCompact(t.revenueCents)}
                   </td>
-                  <td style={{ textAlign: "right" }} className="tnum muted">
+                  <td style={{ textAlign: "right" }} className="tnum muted col-md">
                     {t.orders.toLocaleString()}
                   </td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>
+                  <td className="muted col-md" style={{ fontSize: 12.5 }}>
                     {t.createdAt}
                   </td>
                   <td onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
@@ -205,7 +221,15 @@ export function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
                           <Ic.Send style={{ width: 14, height: 14 }} />
                         </a>
                       )}
-                      <button className="icon-btn" style={{ width: 24, height: 24 }} onClick={() => setMenu(menu === t.id ? null : t.id)}>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        style={{ width: 24, height: 24 }}
+                        aria-label={`Actions for ${t.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menu === t.id}
+                        onClick={() => setMenu(menu === t.id ? null : t.id)}
+                      >
                         <Ic.Dots />
                       </button>
                     </div>
