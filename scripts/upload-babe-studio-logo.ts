@@ -6,14 +6,15 @@
  * directly (layout.tsx), so BOTH are written — the same pair the self-serve
  * onboarding provisioner sets.
  *
- * Source file: ~/Downloads/logo-2.jpeg (the JPEG the client sent).
+ * Source file: ~/Downloads/logo-2.jpeg by default (the JPEG the client sent);
+ * pass `--file <path>` to upload a replacement logo instead.
  *
  * DRY RUN BY DEFAULT — resolves and reports, uploads nothing:
- *   npx tsx scripts/upload-babe-studio-logo.ts
- *   npx tsx scripts/upload-babe-studio-logo.ts --apply
+ *   npx tsx scripts/upload-babe-studio-logo.ts [--file <path>]
+ *   npx tsx scripts/upload-babe-studio-logo.ts [--file <path>] --apply
  */
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import ImageKit from "imagekit";
 import { PrismaClient, Prisma } from "@prisma/client";
@@ -22,7 +23,11 @@ const APPLY = process.argv.includes("--apply");
 const prisma = new PrismaClient();
 
 const TENANT_SLUG = "the-babe-studio";
-const SRC = join(homedir(), "Downloads", "logo-2.jpeg");
+const FILE_FLAG = process.argv.indexOf("--file");
+const SRC =
+  FILE_FLAG > -1 && process.argv[FILE_FLAG + 1]
+    ? resolve(process.argv[FILE_FLAG + 1])
+    : join(homedir(), "Downloads", "logo-2.jpeg");
 
 /** Ensure the ImageKit env vars are present (Prisma loads .env; belt-and-braces). */
 function loadEnvFallback() {
@@ -76,7 +81,7 @@ async function main() {
 
   const uploaded = await imagekit.upload({
     file: readFileSync(SRC),
-    fileName: `${TENANT_SLUG}-logo.jpeg`,
+    fileName: `${TENANT_SLUG}-logo${extname(SRC).toLowerCase() || ".jpeg"}`,
     folder: `/tenant/${TENANT_SLUG}`,
     useUniqueFileName: true,
     tags: ["logo", TENANT_SLUG],
@@ -94,6 +99,10 @@ async function main() {
   });
 
   console.log(`\n✓ Logo attached to ${TENANT_SLUG}:\n  ${uploaded.url}`);
+  console.log(
+    "\nNext: the storefront caches branding — press Save on any store-admin branding\n" +
+      "screen (or restart/redeploy) so the live site picks up the new logo.",
+  );
 }
 
 main()
