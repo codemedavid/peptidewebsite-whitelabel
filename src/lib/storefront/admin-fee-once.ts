@@ -34,13 +34,16 @@ const MIN_PHONE_DIGITS = 7;
 /** PH numbers are written 09xx…, +639xx…, 639xx…: the last 10 digits agree. */
 const PHONE_MATCH_DIGITS = 10;
 
-function emailKey(raw: unknown): string | null {
+/** A comparable email, or null when it isn't one. Shared with gb-member-orders.ts
+ *  so "the same member" means one thing for the fee and for the member view. */
+export function emailKey(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim().toLowerCase();
   return v.includes("@") ? v : null;
 }
 
-function phoneKey(raw: unknown): string | null {
+/** A comparable phone number (its last 10 digits), or null when too short. */
+export function phoneKey(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const digits = raw.replace(/\D/g, "");
   return digits.length >= MIN_PHONE_DIGITS ? digits.slice(-PHONE_MATCH_DIGITS) : null;

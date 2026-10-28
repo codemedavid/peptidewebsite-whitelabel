@@ -12,8 +12,8 @@
  *   • the "TEST RUN · Bunuan" round is closed (kept for history, not deleted)
  *   • products show as a text-only price list (Card Studio layout "text")
  *   • Track Order page hidden (members track through Shopee)
- *   • FAQ: international-shipping answer rewritten; the two removed questions
- *     ("Are products tested?", "How do I know my parcel is shipped?") stay out
+ *   • FAQ: every default question removed; only the owner's own
+ *     international-shipping answer is kept
  *
  * Dry run by default — prints the before/after. `--apply` writes.
  *
@@ -35,30 +35,14 @@ const APPLY = process.argv.includes("--apply");
 
 const INTERNATIONAL_Q = "Do you ship internationally or nationwide only?";
 const INTERNATIONAL_A = "We do not ship internationally. Orders are available within the Philippines only.";
-const REMOVED_QS = new Set(["Are products tested?", "How do I know my parcel is shipped?"]);
-
 type FaqItem = { q: string; a: string };
 type FaqGroup = { id: string; label: string; icon: string; items: FaqItem[] };
 
-/** The owner's FAQ with the requested edits; every other question untouched. */
-function editFaq(groups: FaqGroup[]): FaqGroup[] {
-  const cleaned = groups.map((g) => ({
-    ...g,
-    items: g.items
-      .filter((it) => !REMOVED_QS.has(it.q))
-      .map((it) => (it.q === INTERNATIONAL_Q ? { ...it, a: INTERNATIONAL_A } : it)),
-  }));
-  if (cleaned.some((g) => g.items.some((it) => it.q === INTERNATIONAL_Q))) return cleaned;
-  // The owner had deleted the question; their note asks for it back with the
-  // new answer, so it goes under Shipping & Delivery (made if missing).
-  const hasShipping = cleaned.some((g) => g.id === "shipping");
-  const withShipping = hasShipping
-    ? cleaned
-    : [{ id: "shipping", label: "Shipping & Delivery", icon: "shipping", items: [] }, ...cleaned];
-  return withShipping.map((g) =>
-    g.id === "shipping" ? { ...g, items: [...g.items, { q: INTERNATIONAL_Q, a: INTERNATIONAL_A }] } : g,
-  );
-}
+/** The owner's FAQ is exactly what their feedback sent (2026-10-28): every
+ *  stock default question removed, only their own answer kept. */
+const MNM_FAQ: FaqGroup[] = [
+  { id: "shipping", label: "Shipping & Delivery", icon: "shipping", items: [{ q: INTERNATIONAL_Q, a: INTERNATIONAL_A }] },
+];
 
 function nextConfig(config: Record<string, unknown>): Record<string, unknown> {
   const card = (config.cardDesign ?? {}) as Record<string, unknown>;
@@ -78,7 +62,7 @@ function nextConfig(config: Record<string, unknown>): Record<string, unknown> {
       "New reports are added here as more batches are tested.",
     cardDesign: { ...card, layout: "text", preset: "custom" },
     showPageTrack: false,
-    faqGroups: editFaq(Array.isArray(config.faqGroups) ? (config.faqGroups as FaqGroup[]) : []),
+    faqGroups: MNM_FAQ,
   };
 }
 

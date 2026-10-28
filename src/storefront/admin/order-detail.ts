@@ -103,7 +103,14 @@ export type OrderTotals = {
 /** Order money breakdown. Mirrors checkout: Total = items − discount + shipping
  *  + adminFee + paymentFee, floored at 0. A group-buy order re-totalled by
  *  Ligwak carries its final breakdown (gbTotals) — that IS its total. */
-export function computeOrderTotals(order: Order): OrderTotals {
+/** The fields an order's totals are computed from — narrower than Order so the
+ *  group-buy member view can total its report rows with the SAME math. */
+export type TotalsInput = Pick<
+  Order,
+  "items" | "shipping" | "adminFee" | "paymentFee" | "discount" | "gbTotals" | "adjustedTotal"
+>;
+
+export function computeOrderTotals(order: TotalsInput): OrderTotals {
   if (order.gbTotals && order.adjustedTotal != null) {
     const t = order.gbTotals;
     return {
