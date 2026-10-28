@@ -105,6 +105,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // EMPTY fields.
   const [rememberDetails, setRememberDetails] = useState(true);
   const [hasSavedDetails, setHasSavedDetails] = useState(false);
+  // A returning shopper whose saved details are complete sees them as one
+  // "Ordering as" card instead of a form to scroll through — a group-buy member
+  // topping up their order shouldn't re-read eight filled fields. Edit opens the
+  // form; failing validation opens it too, so a gap is never hidden.
+  const [editingDetails, setEditingDetails] = useState(false);
   useEffect(() => {
     const saved = recallSavedDetails();
     if (!saved) return;
@@ -115,6 +120,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     forgetSavedDetails();
     setHasSavedDetails(false);
     setRememberDetails(false);
+    setEditingDetails(true);
     setCustomer(
       account
         ? { ...EMPTY_CUSTOMER, name: account.name, email: account.email, phone: account.phone }
@@ -513,6 +519,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
   const missing = fields.filter((f) => f.required && !customer[f.key].trim());
   const detailsValid = missing.length === 0;
+  const showDetailsCard = hasSavedDetails && detailsValid && !editingDetails;
+  const savedAddress = [customer.address, customer.barangay, customer.city, customer.province, customer.postal]
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join(", ");
 
   // Upload the proof screenshot to the tenant's ImageKit folder as soon as it's
   // picked (mirrors the product-image flow), then keep only the hosted URL —
@@ -891,6 +902,25 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   )}
                 </p>
               )}
+              {showDetailsCard ? (
+                <section className="sf-cart__saved" aria-label="Your details">
+                  <div className="sf-cart__saved-head">
+                    <span className="sf-cart__saved-eyebrow">Ordering as</span>
+                    <button type="button" className="sf-cart__saved-edit" onClick={() => setEditingDetails(true)}>
+                      Edit
+                    </button>
+                  </div>
+                  <p className="sf-cart__saved-name">{customer.name}</p>
+                  <p className="sf-cart__saved-line">
+                    {[customer.phone, customer.email].map((v) => v.trim()).filter(Boolean).join(" · ")}
+                  </p>
+                  {savedAddress && <p className="sf-cart__saved-line">{savedAddress}</p>}
+                  <button type="button" className="sf-cart__remember-forget" onClick={forgetDetails}>
+                    Not you? Clear saved details
+                  </button>
+                </section>
+              ) : (
+              <>
               <div className="sf-cart__fields">
                 {fields.map((f) => (
                   <label key={f.key} className="sf-cart__field">
@@ -923,6 +953,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   </button>
                 )}
               </div>
+              </>
+              )}
 
               {shippingEnabled && (
                 <div className="sf-cart__ship">

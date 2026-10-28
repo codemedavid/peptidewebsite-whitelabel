@@ -38,6 +38,7 @@ import {
   type RoundSummary,
 } from "./group-buy-orders";
 import { withKitColumns, type KitColumns } from "./gb-moq-kits";
+import { buildMemberOrders, type MemberOrder } from "./gb-member-orders";
 import {
   countedVials,
   countsTowardKits,
@@ -127,6 +128,9 @@ export type ReportPrep = {
   orderLines: ReportOrderLine[];
   /** Per-buyer rollup for the customer workbook's Customers sheet. */
   customerLines: ReportCustomerLine[];
+  /** One consolidated order per member: every checkout in the round merged,
+   *  with total, paid and balance (gb-member-orders.ts). Owner's copy only. */
+  memberOrders: MemberOrder[];
 };
 
 /** URL/file-safe slug of a round name: lowercase, non-alphanumerics → single
@@ -283,6 +287,7 @@ export function prepareReport(
     summary,
     orderLines,
     customerLines: buildCustomerLines(orders),
+    memberOrders: buildMemberOrders(orders),
   };
 }
 

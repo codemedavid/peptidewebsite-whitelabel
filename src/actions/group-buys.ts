@@ -310,6 +310,10 @@ async function loadCandidateOrders(
         shipping: true,
         groupBuyId: true,
         groupBuyName: true,
+        customerAccountId: true,
+        adminFee: true,
+        paymentFee: true,
+        discount: true,
       },
       orderBy: { placedAt: "asc" },
     }),
@@ -1126,6 +1130,10 @@ export async function getGroupBuySupplierReportAction(
             shipping: true,
             groupBuyId: true,
             groupBuyName: true,
+            customerAccountId: true,
+            adminFee: true,
+            paymentFee: true,
+            discount: true,
           },
           orderBy: { placedAt: "asc" },
         }),
@@ -1196,6 +1204,10 @@ function toLinkableOrder(r: {
   shipping?: unknown;
   groupBuyId?: string | null;
   groupBuyName?: string | null;
+  customerAccountId?: string | null;
+  adminFee?: unknown;
+  paymentFee?: unknown;
+  discount?: unknown;
 }): LinkableOrder {
   const placed = r.placedAt ?? r.date ?? "";
   return {
@@ -1210,6 +1222,10 @@ function toLinkableOrder(r: {
     customer: (r.customer ?? {}) as LinkableOrder["customer"],
     shipping: (r.shipping ?? {}) as LinkableOrder["shipping"],
     items: (Array.isArray(r.items) ? r.items : []) as LinkableOrder["items"],
+    customerAccountId: r.customerAccountId ?? null,
+    adminFee: (r.adminFee ?? null) as LinkableOrder["adminFee"],
+    paymentFee: (r.paymentFee ?? null) as LinkableOrder["paymentFee"],
+    discount: (r.discount ?? null) as LinkableOrder["discount"],
   };
 }
 

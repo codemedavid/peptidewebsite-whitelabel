@@ -15,6 +15,7 @@ import { addOrderedProductsToRoundAction, getGroupBuyDashboardAction } from "@/a
 import type { AssignmentDrift } from "@/lib/storefront/group-buy-assignment";
 import { downloadSupplierWorkbook } from "./supplier-workbook";
 import { ProofThumb, ProofLightbox, PaymentBadge } from "./gb-proof-lightbox";
+import { GbMemberOrders } from "./GbMemberOrders";
 import {
   filterOrderRows,
   type OrderRowFilters,
@@ -354,6 +355,9 @@ export function AdminGroupBuyDetail({
           </table>
         </section>
       )}
+
+      {/* ── Orders per customer: every checkout in the round combined ── */}
+      {prep && <GbMemberOrders members={prep.memberOrders} money={money} />}
 
       {/* ── Orders ── */}
       <section style={{ marginTop: 24 }}>

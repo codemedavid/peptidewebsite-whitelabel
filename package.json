@@ -122,6 +122,7 @@
     "test:coa": "tsx scripts/test-coa.ts",
     "test:admin-fee-once": "tsx scripts/test-admin-fee-once.ts",
     "test:linkify": "tsx scripts/test-linkify.ts",
+    "test:gb-member-orders": "tsx scripts/test-gb-member-orders.ts",
     "test:admin-fee-once-flow": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-admin-fee-once-flow.ts",
     "test:coa-protocols": "tsx scripts/test-coa-protocols-feature.ts",
     "test:coa-protocols-backfill": "tsx scripts/test-coa-protocols-backfill.ts",

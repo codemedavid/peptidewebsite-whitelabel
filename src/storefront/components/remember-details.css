@@ -39,3 +39,29 @@
   outline: 2px solid var(--brand-accent);
   outline-offset: 2px;
 }
+
+/* Returning shopper: their saved details as one card (CartCheckout.tsx) in
+   place of the filled form. Edit reopens the form. */
+.sf-root .sf-cart__saved {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: 4px 0 12px; padding: 14px 16px;
+  border: 1px solid color-mix(in oklab, var(--brand-accent) 30%, var(--brand-border));
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--brand-accent) 6%, var(--brand-surface));
+}
+.sf-root .sf-cart__saved-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sf-root .sf-cart__saved-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--brand-accent);
+}
+.sf-root .sf-cart__saved-edit {
+  padding: 6px 14px; border-radius: 99px; cursor: pointer;
+  border: 1px solid var(--brand-accent); background: var(--brand-surface);
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--brand-accent);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.sf-root .sf-cart__saved-edit:hover { background: var(--brand-accent); color: var(--brand-button-text, #fff); }
+.sf-root .sf-cart__saved-edit:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .sf-cart__saved-name { margin: 4px 0 0; font-size: 16px; font-weight: 700; color: var(--brand-text); }
+.sf-root .sf-cart__saved-line { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--brand-text-muted); overflow-wrap: anywhere; }
+.sf-root .sf-cart__saved .sf-cart__remember-forget { align-self: flex-start; margin-top: 6px; font-size: 12.5px; }

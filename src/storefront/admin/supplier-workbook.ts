@@ -125,6 +125,54 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     prep.counts.totalSales,
   ]).font = { bold: true };
 
+  // Orders per Customer — every checkout a customer made in the round merged:
+  // their products (one row each), then a bold total row with what they paid
+  // and still owe (gb-member-orders.ts). Same rows as the dashboard panel.
+  const perCustomer = wb.addWorksheet("Orders per Customer");
+  perCustomer.columns = [
+    { header: "Customer", width: 24 },
+    { header: "Contact Number", width: 16 },
+    { header: "Email", width: 26 },
+    { header: "Product", width: 38 },
+    { header: "Qty", width: 7 },
+    { header: "Amount", width: 12 },
+    { header: "Checkouts", width: 22 },
+    { header: "Admin Fee", width: 11 },
+    { header: "Order Total", width: 12 },
+    { header: "Paid", width: 12 },
+    { header: "Balance", width: 12 },
+    { header: "Shipping Address", width: 46 },
+  ];
+  perCustomer.getRow(1).font = { bold: true };
+  for (const m of prep.memberOrders) {
+    m.products.forEach((p, i) => {
+      const product = p.variation && !p.product.includes(p.variation) ? `${p.product} — ${p.variation}` : p.product;
+      perCustomer.addRow(
+        i === 0 ? [m.name, m.contact, m.email, product, p.qty, p.amount] : ["", "", "", product, p.qty, p.amount],
+      );
+    });
+    perCustomer.addRow([
+      `${m.name} — total`,
+      "",
+      "",
+      "",
+      m.products.reduce((s, p) => s + p.qty, 0),
+      "",
+      m.checkouts.map((c) => `${c.orderNumber}${c.paid ? " (paid)" : ""}`).join(", "),
+      m.adminFee,
+      m.total,
+      m.paid,
+      m.balance,
+      m.address,
+    ]).font = { bold: true };
+    perCustomer.addRow([]);
+  }
+  const grand = prep.memberOrders.reduce(
+    (t, m) => ({ total: t.total + m.total, paid: t.paid + m.paid, balance: t.balance + m.balance, fee: t.fee + m.adminFee }),
+    { total: 0, paid: 0, balance: 0, fee: 0 },
+  );
+  perCustomer.addRow(["ALL CUSTOMERS", "", "", "", "", "", "", grand.fee, grand.total, grand.paid, grand.balance]).font = { bold: true };
+
   // Orders — one row per line, every order incl cancelled, with a Counted flag
   // and the full customer detail the owner reconciles payments against.
   const orders = wb.addWorksheet("Orders");

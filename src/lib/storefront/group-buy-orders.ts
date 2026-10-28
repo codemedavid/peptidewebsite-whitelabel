@@ -68,6 +68,12 @@ export type LinkableOrder = {
   /** The buyer's checkout note. Reaches the owner's own customer workbook only
    *  — never the supplier copy, which carries no PII (see supplier-workbook). */
   customerNote?: string;
+  /** Money + identity for the per-member view (gb-member-orders.ts): what the
+   *  checkout charged on top of the items, and the buyer's account if any. */
+  customerAccountId?: string | null;
+  adminFee?: { label: string; amount: number } | null;
+  paymentFee?: { label: string; amount: number } | null;
+  discount?: { code: string; label: string; amount: number } | null;
 };
 
 export type PaymentDisplayStatus = "Pending" | "Confirmed" | "Cancelled";
