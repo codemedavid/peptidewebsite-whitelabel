@@ -11,8 +11,7 @@
  *     the lab is TJQXGD. The owner uploads TR30 + TR15 in Admin → Lab Reports
  *   • the "TEST RUN · Bunuan" round is closed (kept for history, not deleted)
  *   • products show as a text-only price list (Card Studio layout "text")
- *   • Track Order page KEPT on (operator's call, 2026-10-28: members see their
- *     order history there), though MNM asked to remove it
+ *   • Track Order page hidden (members track through Shopee)
  *   • FAQ: every default question removed; only the owner's own
  *     international-shipping answer is kept
  *
@@ -62,7 +61,7 @@ function nextConfig(config: Record<string, unknown>): Record<string, unknown> {
       "Our certificates of analysis are issued by TJQXGD, a local testing laboratory in China. " +
       "New reports are added here as more batches are tested.",
     cardDesign: { ...card, layout: "text", preset: "custom" },
-    showPageTrack: true,
+    showPageTrack: false,
     faqGroups: MNM_FAQ,
   };
 }
