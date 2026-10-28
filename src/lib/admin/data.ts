@@ -717,6 +717,14 @@ async function loadTenantSubscriptionSignals(): Promise<TenantSubscriptionSignal
   return { urgencies, prices };
 }
 
+/** One tenant's list row, for the shared tenant-workspace header. Reuses the
+ *  cached tenants list rather than a fresh query, so every tenant tab — and
+ *  every navigation between them — costs no extra DB round trip. */
+export async function getTenantHeader(slug: string): Promise<AdminTenantRow | null> {
+  const rows = await listAdminTenants();
+  return rows.find((r) => r.slug === slug) ?? null;
+}
+
 export async function listAdminTenants(): Promise<AdminTenantRow[]> {
   if (isDemoMode()) {
     return listDemoTenants().map(demoRow).sort((a, b) => b.revenueCents - a.revenueCents);

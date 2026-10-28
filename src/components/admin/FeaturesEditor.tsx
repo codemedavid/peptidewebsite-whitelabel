@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   Bell,
   Check,
@@ -188,19 +187,15 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
 
   return (
     <div className="page-inner ftr">
-      <Link href={`/tenants/${slug}`} className="ftr-back">
-        <ArrowLeft size={15} aria-hidden /> Back to tenant
-      </Link>
-
       <div className="ftr-phead">
         <div>
-          <h1 className="ftr-title">
-            <span>Features · {name}</span>
+          <h2 className="ftr-title">
+            <span>Features</span>
             <span className="ftr-plan-chip">
               <Layers size={12} aria-hidden />
               {planLabel} plan
             </span>
-          </h1>
+          </h2>
           <p className="ftr-sub">
             Defines which storefront features are available to this tenant. Toggle within the plan&rsquo;s
             ceiling — locked features need a plan upgrade.

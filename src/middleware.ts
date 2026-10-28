@@ -101,7 +101,9 @@ export async function middleware(req: NextRequest) {
       if (path === "/admin" || path.startsWith("/admin/") || path.startsWith("/api")) {
         return NextResponse.next({ request: { headers: requestHeaders } });
       }
-      return NextResponse.rewrite(new URL(`/admin${path}`, req.url), {
+      // Keep the query string: pages read it as searchParams (calendar ?y=&m=,
+      // tenant ?tab=) and the bare rewrite used to drop it silently.
+      return NextResponse.rewrite(new URL(`/admin${path}${url.search}`, req.url), {
         request: { headers: requestHeaders },
       });
     }

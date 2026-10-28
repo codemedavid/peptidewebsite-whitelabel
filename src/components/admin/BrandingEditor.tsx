@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Check, ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
 import { ThemePresetPicker } from "@/components/theme/ThemePresetPicker";
@@ -27,7 +26,6 @@ import {
   type FontWeight,
   type HeroAlign,
 } from "@/lib/theme/tokens";
-import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { BRAND } from "@/storefront/data";
 import type { Brand } from "@/storefront/types";
@@ -286,13 +284,7 @@ export function BrandingEditor({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden /> Tenants
-          </Link>
-          <h1 className="mt-2 font-heading text-2xl font-bold">Branding · {name}</h1>
+          <h2 className="font-heading text-xl font-bold">Branding</h2>
         </div>
         <div className="flex items-center gap-3">
           <a
@@ -304,9 +296,11 @@ export function BrandingEditor({
             View storefront
             <ExternalLink className="h-3.5 w-3.5" aria-label="opens in a new tab" />
           </a>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : saved ? (<><Check className="h-4 w-4" aria-hidden /> Saved</>) : "Save branding"}
-          </Button>
+          {/* .sa's button reset beats single-class Tailwind utilities, so the
+              primary action uses the admin's own .btn styles. */}
+          <button type="button" className="btn btn-accent" onClick={onSave} disabled={saving}>
+            {saving ? "Saving…" : saved ? (<><Check aria-hidden /> Saved</>) : "Save branding"}
+          </button>
         </div>
       </div>
       {saved && (
@@ -316,25 +310,24 @@ export function BrandingEditor({
       )}
 
       {/* ── Tabs ── */}
-      <div role="tablist" aria-label="Branding sections" className="mt-5 flex gap-1 border-b border-border">
+      {/* A segmented control, not a second underline tab bar — the tenant
+          workspace tabs already sit directly above this. */}
+      <div role="tablist" aria-label="Branding sections" className="seg mt-5 brand-seg">
         {(["brand", "hero", "storefront"] as const).map((t) => (
           <button
             key={t}
+            type="button"
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`-mb-px rounded-t-sm border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              tab === t
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+            className={"seg-item" + (tab === t ? " active" : "")}
           >
             {t === "brand" ? "Brand" : t === "hero" ? "Hero" : "Storefront"}
           </button>
         ))}
       </div>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-[320px_1fr]">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* ── Controls ── */}
         <div className="space-y-6">
           {/* Theme preset + Card Studio are the shared base for every tab —

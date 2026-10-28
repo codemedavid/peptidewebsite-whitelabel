@@ -26,6 +26,12 @@ const NAV: NavItem[] = [
 ];
 
 const CRUMB_LABEL: Record<string, string> = Object.fromEntries(NAV.map((n) => [n.href, n.label]));
+const TENANT_SECTION_LABEL: Record<string, string> = {
+  branding: "Branding",
+  features: "Features",
+  settings: "Settings",
+  integrations: "Integrations",
+};
 
 /* ---------- UI context: open create drawer + toast from anywhere ---------- */
 type AdminUI = { openCreate: () => void; showToast: (msg: string) => void };
@@ -120,8 +126,9 @@ export function AdminShell({
   const id = activeId(pathname);
   const crumbs: string[] = ["Platform"];
   if (pathname.startsWith("/tenants/") && pathname !== "/tenants") {
-    const slug = pathname.split("/")[2];
+    const [, , slug, section] = pathname.split("/");
     crumbs.push("Tenants", tenantNameBySlug?.[slug] ?? slug);
+    if (section && TENANT_SECTION_LABEL[section]) crumbs.push(TENANT_SECTION_LABEL[section]);
   } else if (pathname.startsWith("/onboarding/") && pathname !== "/onboarding") {
     crumbs.push("Onboarding", "Detail");
   } else if (id === "dashboard") {

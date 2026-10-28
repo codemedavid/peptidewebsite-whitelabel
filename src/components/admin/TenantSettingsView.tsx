@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Ic, StatusBadge } from "@/components/admin/shell/primitives";
+import { Ic } from "@/components/admin/shell/primitives";
 import { saveOrderFormatAction, setTenantFeatureAction } from "@/actions/onboarding";
 import { FEATURES } from "@/lib/features/catalog";
 import {
@@ -115,8 +115,6 @@ type Props = {
   planStatus?: React.ReactNode;
   /** Custom-domain card, rendered in the sections column (its own save flow). */
   domains?: React.ReactNode;
-  /** Current Tenant.status (active | trial | suspended …), shown in the header badge. */
-  status?: string;
 };
 
 const SECTIONS = [
@@ -130,6 +128,11 @@ const SECTIONS = [
   { id: "admin", label: "Admin access" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
+
+// The on-this-page list also covers the two self-saving cards (plan & status,
+// domains), which aren't part of the dirty/save-all state keyed by SectionId.
+const TOC = [{ id: "plan", label: "Plan & status" }, ...SECTIONS, { id: "domains", label: "Domains" }] as const;
+type TocId = (typeof TOC)[number]["id"];
 
 export function TenantSettingsView({
   slug,
@@ -151,7 +154,6 @@ export function TenantSettingsView({
   lastSaved,
   planStatus,
   domains,
-  status,
 }: Props) {
   /* ---------- order-number format ---------- */
   const [prefix, setPrefix] = useState(format.prefix);
@@ -460,7 +462,8 @@ export function TenantSettingsView({
   }
 
   /* ---------- scroll-spy TOC ---------- */
-  const refs: Record<SectionId, React.RefObject<HTMLElement | null>> = {
+  const refs: Record<TocId, React.RefObject<HTMLElement | null>> = {
+    plan: useRef<HTMLElement>(null),
     orders: useRef<HTMLElement>(null),
     channels: useRef<HTMLElement>(null),
     proof: useRef<HTMLElement>(null),
@@ -469,8 +472,9 @@ export function TenantSettingsView({
     fee: useRef<HTMLElement>(null),
     copy: useRef<HTMLElement>(null),
     admin: useRef<HTMLElement>(null),
+    domains: useRef<HTMLElement>(null),
   };
-  const [active, setActive] = useState<SectionId>("orders");
+  const [active, setActive] = useState<TocId>("plan");
   useEffect(() => {
     const scroller = document.querySelector(".sa .page");
     const observer = new IntersectionObserver(
@@ -478,7 +482,7 @@ export function TenantSettingsView({
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.getAttribute("data-section") as SectionId);
+        if (visible[0]) setActive(visible[0].target.getAttribute("data-section") as TocId);
       },
       { root: scroller, rootMargin: "-80px 0px -60% 0px", threshold: 0 },
     );
@@ -486,43 +490,36 @@ export function TenantSettingsView({
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const scrollTo = (id: SectionId) => refs[id].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollTo = (id: TocId) => refs[id].current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // Deep links like /tenants/<slug>/settings#admin land on that section.
   useEffect(() => {
     const hash = window.location.hash.slice(1);
-    const target = SECTIONS.find((s) => s.id === hash);
+    const target = TOC.find((s) => s.id === hash);
     if (target) refs[target.id].current?.scrollIntoView({ block: "start" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const counts: Record<SectionId, string> = {
-    orders: "4",
+  // Status hints beside each TOC entry; blank where there is no state to show.
+  const counts: Record<TocId, string> = {
+    plan: "",
+    orders: "",
     channels: `${enabledCount}/${CONTACT_CHANNEL_META.length}`,
     proof: requireProof ? "On" : "Off",
     notice: noticeGranted ? "On" : "Off",
     gbpay: gbPayMode === "pay_later" ? "After" : "Before",
     fee: feeEnabled ? "On" : "Off",
-    copy: "3",
+    copy: "",
     admin: hasAdminPassword && baseline.current.adminEmail ? "Set" : "Not set",
+    domains: "",
   };
-
-  const mark = name.slice(0, 2).toUpperCase();
 
   return (
     <div className="page-inner">
       {/* page head */}
       <div className="set-pagehead">
         <div>
-          <span className="set-tenant-badge">
-            <span className="mark" style={{ background: "linear-gradient(135deg, #34d399, #10b981)" }}>{mark}</span>
-            <span className="mono">{domain}</span>
-            {status && <StatusBadge status={status} />}
-          </span>
-          <Link href={`/tenants/${slug}`} className="set-back">
-            <Ic.ChevronLeft /> Back to tenant
-          </Link>
-          <h1 className="set-title">Settings · {name}</h1>
+          <h2 className="set-title">Settings</h2>
           <p className="set-subtitle">
             Configure how this tenant&apos;s storefront behaves — order numbering, checkout channels, and the
             copy customers see at the moment of purchase.
@@ -534,7 +531,7 @@ export function TenantSettingsView({
         {/* TOC */}
         <nav className="set-toc" aria-label="On this page">
           <div className="set-toc-title">On this page</div>
-          {SECTIONS.map((s) => (
+          {TOC.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -542,7 +539,7 @@ export function TenantSettingsView({
               onClick={() => scrollTo(s.id)}
             >
               <span>{s.label}</span>
-              <span className="set-toc-count tnum">{counts[s.id]}</span>
+              {counts[s.id] && <span className="set-toc-count tnum">{counts[s.id]}</span>}
             </button>
           ))}
           {lastSaved && (
@@ -556,7 +553,10 @@ export function TenantSettingsView({
         {/* sections */}
         <div className="set-sections">
           {/* ---------- plan & status (self-contained card) ---------- */}
-          {planStatus}
+          {/* Self-contained cards (own save flows) wrapped so the TOC can spy on them. */}
+          <div ref={refs.plan as React.RefObject<HTMLDivElement>} data-section="plan">
+            {planStatus}
+          </div>
 
           {/* ---------- order numbers ---------- */}
           <section className="set-card" ref={refs.orders} data-section="orders">
@@ -1074,7 +1074,7 @@ export function TenantSettingsView({
                     Master switch for this tenant. When off, no fee is charged, the checkout line is
                     removed everywhere, and the fields below are hidden. Saved fee label and amount
                     are kept and resume when it&apos;s switched back on. Same control as{" "}
-                    <Link href={`/admin/tenants/${slug}/features`}>Features → Admin fee</Link>.
+                    <Link href={`/tenants/${slug}/features`}>Features → Admin fee</Link>.
                   </div>
                 </div>
                 <div className="set-row-control">
@@ -1500,7 +1500,9 @@ export function TenantSettingsView({
           </section>
 
           {/* ---------- custom domains (self-contained card) ---------- */}
-          {domains}
+          <div ref={refs.domains as React.RefObject<HTMLDivElement>} data-section="domains">
+            {domains}
+          </div>
         </div>
       </div>
 

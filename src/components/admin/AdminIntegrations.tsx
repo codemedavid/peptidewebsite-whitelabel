@@ -80,9 +80,9 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
     <div className="page-inner">
       <div className="page-head" style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Integrations</h1>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Integrations</h2>
           <p style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
-            {name} — connect this store to external analytics &amp; messaging.
+            Connect this store to external analytics &amp; messaging.
           </p>
         </div>
       </div>

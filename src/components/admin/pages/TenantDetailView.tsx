@@ -3,11 +3,10 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ic, StatusBadge, TenantAvatar, FeedText, tenantColor } from "@/components/admin/shell/primitives";
+import { Ic, StatusBadge, FeedText, tenantColor } from "@/components/admin/shell/primitives";
 import { useAdminUI } from "@/components/admin/shell/AdminShell";
 import { planMeta, formatPesos, formatPesosCompact } from "@/lib/admin/plans";
-import { FEATURE_GROUPS } from "@/lib/features/catalog";
-import { suspendTenantAction, setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
+import { setTenantWhatsappAction, setSubscriptionWindowAction } from "@/actions/admin";
 import { confirmSubscriptionPaymentAction, rejectSubscriptionPaymentAction } from "@/actions/subscription-payments";
 import { ApplyTenantPresetCard } from "@/components/admin/tenant-presets/ApplyTenantPresetCard";
 import {
@@ -25,6 +24,7 @@ import {
 } from "@/lib/subscription/billing-cycle";
 import { buildWaLink } from "@/lib/admin/whatsapp";
 import { effectivePlanFeeCents } from "@/lib/subscription/plan-fee";
+import type { TenantDetailTab } from "@/components/admin/pages/tenant-tabs";
 import type {
   StoreAdminCredentialStatus,
   TenantDetail,
@@ -48,144 +48,51 @@ type TenantDetailViewProps = {
   signIn: StoreAdminCredentialStatus | null;
   /** Real 30-day store counts; null in demo mode or on a read failure. */
   snapshot: TenantStoreSnapshot | null;
+  /** Which in-page tab to show, from ?tab= (see TENANT_DETAIL_TABS). */
+  tab: TenantDetailTab;
 };
 
-export function TenantDetailView({ tenant, signIn, snapshot }: TenantDetailViewProps) {
-  const router = useRouter();
-  const { showToast } = useAdminUI();
-  const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState("overview");
-  const pm = planMeta(tenant.planKey);
-  const planCls = pm.key === "enterprise" ? "badge-accent" : pm.key === "pro" ? "badge-info" : "badge-neutral";
-
-  const suspend = () =>
-    startTransition(async () => {
-      const res = await suspendTenantAction(tenant.slug);
-      if ("error" in res) showToast(res.error);
-      else {
-        showToast(`Tenant ${res.status === "suspended" ? "suspended" : "reactivated"}`);
-        router.refresh();
-      }
-    });
-
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "features", label: "Features", count: tenant.enabledFeatures },
-    { id: "orders", label: "Orders", count: tenant.orders > 999 ? "1k+" : tenant.orders },
-    { id: "billing", label: "Billing" },
-    { id: "audit", label: "Audit log" },
-  ];
-
-  const aov = tenant.orders > 0 ? Math.round(tenant.revenueCents / 100 / tenant.orders) : 0;
+export function TenantDetailView({ tenant, signIn, snapshot, tab }: TenantDetailViewProps) {
+  // Identity, actions and the tab bar live in the shared tenant layout
+  // (TenantWorkspaceHeader); this view only renders the selected in-page tab.
   const storefront = `https://${tenant.slug}.${ROOT}`;
-
   return (
-    <div className="page-inner">
-      <Link href="/tenants" className="btn btn-ghost btn-sm mb-3" style={{ paddingLeft: 4 }}>
-        <Ic.ChevronLeft /> All tenants
-      </Link>
-
-      <div className="card" style={{ marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ padding: "20px 24px", display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <TenantAvatar name={tenant.name} logoUrl={tenant.logoUrl} size={56} />
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
-              <h1 className="page-title" style={{ marginBottom: 0 }}>
-                {tenant.name}
-              </h1>
-              <StatusBadge status={tenant.status} />
-              <span className={"badge " + planCls}>{pm.label}</span>
-            </div>
-            <div className="row" style={{ gap: 16, color: "var(--ink-500)", fontSize: 13, flexWrap: "wrap" }}>
-              <a className="row mono" style={{ gap: 4, color: "var(--accent)" }} href={storefront} target="_blank" rel="noreferrer">
-                {tenant.slug}.{ROOT} <Ic.External style={{ width: 12, height: 12 }} />
-              </a>
-              <span>·</span>
-              <span>
-                <Ic.Users style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
-                {tenant.owner}
-              </span>
-              <span>·</span>
-              <span>
-                <Ic.Mail style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
-                {tenant.email}
-              </span>
-              <span>·</span>
-              <span>
-                <Ic.History style={{ width: 12, height: 12, verticalAlign: "-2px", marginRight: 4 }} />
-                Created {tenant.createdAt}
-              </span>
-            </div>
-          </div>
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            {tenant.ownerWhatsapp && (
-              <a
-                className="btn btn-sm btn-accent"
-                href={buildWaLink(tenant.ownerWhatsapp, `Hi ${tenant.name}, `)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Message this tenant on WhatsApp"
-              >
-                <Ic.Send /> WhatsApp
-              </a>
-            )}
-            <a
-              className="btn btn-sm"
-              href={`${storefront}/#admin`}
-              target="_blank"
-              rel="noreferrer"
-              title="Opens the store's own admin sign-in in a new tab"
-            >
-              <Ic.External /> Open store admin
-            </a>
-            <Link className="btn btn-sm" href={`/tenants/${tenant.slug}/settings`}>
-              <Ic.Edit /> Edit
-            </Link>
-            <button className="btn btn-sm" onClick={suspend} disabled={pending}>
-              <Ic.Lock /> {tenant.status === "suspended" ? "Reactivate" : "Suspend"}
-            </button>
-          </div>
-        </div>
-
-        <div className="td-stats">
-          {[
-            { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
-            { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
-            { label: "Plan fee", v: tenant.status === "trial" ? "Trial" : formatPesos(effectivePlanFeeCents(tenant.subscriptionPriceCents, tenant.planPriceCents)), sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}` },
-            { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
-          ].map((m, i) => (
-            <div key={i} className="td-stat">
-              <div style={{ fontSize: 11, color: "var(--ink-400)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{m.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, letterSpacing: "-0.02em" }} className="tnum">
-                {m.v}
-              </div>
-              <div style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: 2 }}>{m.sub}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="tabs" role="tablist" aria-label="Tenant sections">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={"tab" + (tab === t.id ? " active" : "")}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.count !== undefined && <span className="tab-count tnum">{t.count}</span>}
-          </button>
-        ))}
-      </div>
-
+    <>
       {tab === "overview" && <Overview tenant={tenant} storefront={storefront} signIn={signIn} snapshot={snapshot} />}
-      {tab === "features" && <FeaturesPanel tenant={tenant} />}
       {tab === "orders" && <OrdersPanel tenant={tenant} />}
       {tab === "billing" && <BillingPanel tenant={tenant} />}
-      {tab === "audit" && <AuditPanel tenant={tenant} />}
+      {tab === "activity" && <AuditPanel tenant={tenant} />}
+    </>
+  );
+}
+
+/** Headline numbers, shown at the top of Overview only. */
+function OverviewStats({ tenant }: { tenant: TenantDetail }) {
+  const pm = planMeta(tenant.planKey);
+  const aov = tenant.orders > 0 ? Math.round(tenant.revenueCents / 100 / tenant.orders) : 0;
+  const stats = [
+    { label: "Lifetime revenue", v: formatPesosCompact(tenant.revenueCents), sub: "all orders" },
+    { label: "Total orders", v: tenant.orders.toLocaleString(), sub: aov ? `₱${aov.toLocaleString("en-PH")} AOV` : "—" },
+    {
+      label: "Plan fee",
+      v: tenant.status === "trial" ? "Trial" : formatPesos(effectivePlanFeeCents(tenant.subscriptionPriceCents, tenant.planPriceCents)),
+      sub: `${pm.label} · ${tenant.subscriptionCycle ? BILLING_CYCLE_LABELS[tenant.subscriptionCycle].toLowerCase() : "one-time"}`,
+    },
+    { label: "Customers", v: tenant.visitors.toLocaleString(), sub: "lifetime contacts" },
+  ];
+  return (
+    <div className="card td-stats-card">
+      <div className="td-stats">
+        {stats.map((m) => (
+          <div key={m.label} className="td-stat">
+            <div style={{ fontSize: 11, color: "var(--ink-400)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{m.label}</div>
+            <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, letterSpacing: "-0.02em" }} className="tnum">
+              {m.v}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: 2 }}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -225,6 +132,8 @@ type OverviewProps = {
 
 function Overview({ tenant, storefront, signIn, snapshot }: OverviewProps) {
   return (
+    <>
+    <OverviewStats tenant={tenant} />
     <div className="grid-2">
       <div className="col" style={{ gap: 16 }}>
         <div className="card">
@@ -281,19 +190,6 @@ function Overview({ tenant, storefront, signIn, snapshot }: OverviewProps) {
       </div>
 
       <div className="col" style={{ gap: 16 }}>
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Quick actions</h3>
-          </div>
-          <div className="card-body" style={{ display: "grid", gap: 6 }}>
-            <ActionRow icon="External" label="Open storefront" sub={`${tenant.slug}.${ROOT}`} href={storefront} external />
-            <ActionRow icon="Layers" label="Manage features" sub={`${tenant.enabledFeatures} modules active`} href={`/tenants/${tenant.slug}/features`} />
-            <ActionRow icon="Zap" label="Integrations" sub="Analytics, email, Telegram bot" href={`/tenants/${tenant.slug}/integrations`} />
-            <ActionRow icon="Image" label="Edit branding" sub="Theme, colors, logo" href={`/tenants/${tenant.slug}/branding`} />
-            <ActionRow icon="Settings" label="Settings" sub="Checkout, fees, order numbers, sign-in" href={`/tenants/${tenant.slug}/settings`} />
-          </div>
-        </div>
-
         <StoreSignInCard slug={tenant.slug} signIn={signIn} />
 
         <ApplyTenantPresetCard slug={tenant.slug} />
@@ -328,6 +224,7 @@ function Overview({ tenant, storefront, signIn, snapshot }: OverviewProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -677,32 +574,6 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
   );
 }
 
-function ActionRow({ icon, label, sub, href, external }: { icon: string; label: string; sub: string; href: string; external?: boolean }) {
-  const IconCmp = Ic[icon];
-  const inner = (
-    <>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--bg-canvas)", display: "grid", placeItems: "center", color: "var(--ink-500)" }}>
-        <IconCmp />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--ink-900)" }}>{label}</div>
-        <div style={{ fontSize: 11.5, color: "var(--ink-400)" }}>{sub}</div>
-      </div>
-      <Ic.ChevronRight style={{ width: 14, height: 14, color: "var(--ink-300)" }} />
-    </>
-  );
-  const style = { display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderRadius: 8 } as const;
-  return external ? (
-    <a href={href} target="_blank" rel="noreferrer" style={style}>
-      {inner}
-    </a>
-  ) : (
-    <Link href={href} style={style}>
-      {inner}
-    </Link>
-  );
-}
-
 function WebsitePreview({ tenant, storefront }: { tenant: TenantDetail; storefront: string }) {
   const [c1, c2] = tenantColor(tenant.name);
   return (
@@ -763,96 +634,6 @@ function WebsitePreview({ tenant, storefront }: { tenant: TenantDetail; storefro
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- FEATURES ---------- */
-function FeaturesPanel({ tenant }: { tenant: TenantDetail }) {
-  const grouped = FEATURE_GROUPS.map((group) => ({
-    group,
-    items: tenant.featureStates.filter((f) => f.group === group),
-  })).filter((g) => g.items.length > 0);
-
-  return (
-    <div className="grid-2">
-      <div>
-        {grouped.map(({ group, items }) => {
-          const enabledCount = items.filter((f) => f.enabled).length;
-          return (
-            <div key={group} className="fcat open" style={{ marginBottom: 12 }}>
-              <div className="fcat-head" style={{ cursor: "default" }}>
-                <div className="fcat-icon">
-                  <Ic.Layers />
-                </div>
-                <div className="fcat-name">{group}</div>
-                <div className="fcat-count tnum">
-                  {enabledCount} of {items.length} enabled
-                </div>
-              </div>
-              <div className="fcat-body">
-                {items.map((f) => (
-                  <div key={f.key} className={"feat-row" + (f.locked ? " locked" : "")}>
-                    <div className="feat-info">
-                      <div className="feat-name">
-                        {f.label}
-                        {f.locked && (
-                          <span className="lock">
-                            <Ic.Lock /> Upgrade
-                          </span>
-                        )}
-                      </div>
-                      <div className="feat-desc">{f.description}</div>
-                    </div>
-                    <span className={"badge " + (f.locked ? "badge-neutral" : f.enabled ? "badge-success" : "badge-neutral")}>
-                      {f.locked ? "Locked" : f.enabled ? "On" : "Off"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="col" style={{ gap: 16, alignSelf: "flex-start" }}>
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Feature summary</h3>
-          </div>
-          <div className="card-body">
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-              <span className="muted">Total enabled</span>
-              <span className="tnum" style={{ fontWeight: 600 }}>
-                {tenant.enabledFeatures} / {tenant.totalFeatures}
-              </span>
-            </div>
-            <div className="bar">
-              <span style={{ width: `${(tenant.enabledFeatures / Math.max(1, tenant.totalFeatures)) * 100}%` }} />
-            </div>
-            <div className="divider" />
-            {grouped.map(({ group, items }) => (
-              <div key={group} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "5px 0" }}>
-                <span>{group}</span>
-                <span className="tnum muted">
-                  {items.filter((f) => f.enabled).length} / {items.length}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Edit toggles</h3>
-          </div>
-          <div className="card-body" style={{ padding: 14 }}>
-            <div style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 10 }}>Grant or revoke individual modules in the full editor.</div>
-            <Link className="btn btn-accent" style={{ width: "100%", justifyContent: "center" }} href={`/tenants/${tenant.slug}/features`}>
-              <Ic.Layers /> Open features editor
-            </Link>
           </div>
         </div>
       </div>
