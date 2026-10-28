@@ -983,6 +983,9 @@ export type Brand = {
   protocolsEyebrow: string;
   protocolsTitle: string;
   protocolsSub: string;
+  /** Owner's note shown in its own box under the Protocols title. Plain text;
+   *  web addresses in it render as links (lib/storefront/linkify.ts). */
+  protocolsNote?: string;
   protocolsBackLabel: string;
   protocolsGuidelinesTitle: string;
   protocolsGuidelines: { label: string; text: string }[];

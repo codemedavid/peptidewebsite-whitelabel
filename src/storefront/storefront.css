@@ -2543,6 +2543,55 @@
   border: var(--brand-border-width) solid var(--brand-border);
   border-radius: var(--radius-pill);
 }
+/* Owner's note under the title (brand.protocolsNote): a tinted callout with an
+   accent rule, so it reads as "from the store" rather than as guide content.
+   Links inside it are the owner's typed web addresses (LinkifiedText). */
+.sf-root .protocols__note {
+  display: flex; align-items: flex-start; gap: 12px;
+  max-width: 720px; margin: -16px auto 32px;
+  padding: 16px 20px;
+  background: color-mix(in oklab, var(--brand-accent) 8%, var(--brand-surface));
+  border: var(--brand-border-width) solid color-mix(in oklab, var(--brand-accent) 28%, var(--brand-border));
+  /* A capped radius + an inset accent edge: a 4px border-left on a store with
+     pill-sized radii curved into a bracket. */
+  border-radius: min(var(--radius-lg), 14px);
+  box-shadow: inset 4px 0 0 var(--brand-accent);
+  color: var(--brand-text);
+}
+.sf-root .protocols__note svg { flex-shrink: 0; width: 20px; height: 20px; margin-top: 2px; color: var(--brand-accent); }
+.sf-root .protocols__note p { margin: 0; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.sf-root .protocols__note-link {
+  color: var(--brand-accent); font-weight: 700;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px;
+  transition: color var(--duration-fast, 150ms) ease;
+}
+.sf-root .protocols__note-link:hover { color: var(--brand-main); }
+.sf-root .protocols__note-link:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 3px; }
+/* Store admin → Protocols: the page-note editor (AdminProtocolsManager). The
+   preview reuses the page's own .protocols__note so it looks exactly live. */
+.sf-root .protocols-note-editor { margin-bottom: 20px; }
+.sf-root .protocols-note-editor__head { display: flex; align-items: center; gap: 10px; }
+.sf-root .protocols-note-editor__title { margin: 0; font-size: 16px; font-weight: 700; }
+.sf-root .protocols-note-editor__badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 99px;
+  color: var(--brand-accent); background: color-mix(in oklab, var(--brand-accent) 12%, transparent);
+}
+.sf-root .protocols-note-editor__hint { margin: 6px 0 14px; }
+.sf-root .protocols-note-editor__grid { display: grid; gap: 16px; }
+@media (min-width: 900px) { .sf-root .protocols-note-editor__grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.sf-root .protocols-note-editor__field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sf-root .protocols-note-editor__input { resize: vertical; min-height: 96px; line-height: 1.5; font: inherit; }
+.sf-root .protocols-note-editor__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 12px; color: var(--brand-text-muted); font-variant-numeric: tabular-nums;
+}
+.sf-root .protocols-note-editor__clear { padding: 4px 10px; font-size: 12px; }
+.sf-root .protocols__note.protocols-note-editor__preview { margin: 0; max-width: none; }
+.sf-root .protocols-note-editor__empty {
+  padding: 18px; border: 1.5px dashed var(--brand-border); border-radius: var(--radius-lg);
+  font-size: 13px; color: var(--brand-text-muted); text-align: center;
+}
 .sf-root .protocols__guide-card {
   background: var(--brand-surface);
   border: var(--brand-border-width) solid var(--brand-border);

@@ -36,6 +36,7 @@ import type { Category, Courier, PaymentMethod, Protocol, ShippingLocation } fro
 import { normalizeCheckoutRules } from "@/lib/storefront/checkout-rules";
 import { normalizeGroupBuyRules } from "@/lib/storefront/group-buy-rules";
 import { mergeAdminFeeInput } from "@/lib/storefront/admin-fee";
+import { normalizeOwnerNote } from "@/lib/storefront/linkify";
 import { normalizePromoCodes } from "@/lib/storefront/promo";
 import { DEFAULT_CARD_DESIGN, type CardDesign, type CardTemplate } from "@/storefront/cardDesign";
 import {
@@ -1415,6 +1416,35 @@ function normalizeProtocols(input: unknown): Protocol[] {
  * edits show on every device/customer — fixing the bug where the public
  * protocol page fell back to the seed samples on other devices.
  */
+/**
+ * Save the note under the Protocols page title (branding.config.protocolsNote),
+ * read-modify-write like saveProtocolsAction. Plain text only: the page turns
+ * web addresses into links itself (lib/storefront/linkify.ts), so no markup is
+ * ever stored. An empty note removes the box from the page.
+ */
+export async function saveProtocolsNoteAction(note: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("proto");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, protocolsNote: normalizeOwnerNote(note) };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
 export async function saveProtocolsAction(protocols: unknown): Promise<ActionResult> {
   const ctx = await requireStaffPermission("proto");
   if (!ctx) return { error: NO_ACCESS };

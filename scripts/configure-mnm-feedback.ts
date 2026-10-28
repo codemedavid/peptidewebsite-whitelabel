@@ -52,9 +52,8 @@ function nextConfig(config: Record<string, unknown>): Record<string, unknown> {
     couriers: [],
     shippingLocations: [],
     checkoutNote: "All shipping checkouts will be done via Shopee, c/o the member.",
-    protocolsSub:
-      "General guidelines and protocols. Always consult with a healthcare professional before use. " +
-      "To access more protocols, please visit our Peptide Library at www.feelsbonita.com.",
+    // Its own box under the title; the address renders as a link (linkify.ts).
+    protocolsNote: "To access more protocols, please visit our Peptide Library at www.feelsbonita.com.",
     coaReports: [],
     coaPartners: [{ label: "TJQXGD", href: "" }],
     coaInfoBody:
@@ -67,7 +66,7 @@ function nextConfig(config: Record<string, unknown>): Record<string, unknown> {
 }
 
 const CHANGED_KEYS = [
-  "adminFee", "couriers", "shippingLocations", "checkoutNote", "protocolsSub", "coaReports",
+  "adminFee", "couriers", "shippingLocations", "checkoutNote", "protocolsNote", "coaReports",
   "coaPartners", "coaInfoBody", "cardDesign", "showPageTrack", "faqGroups",
 ] as const;
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
+import { LinkifiedText } from "../components/LinkifiedText";
 import { BackLink } from "../components/BackLink";
 import { ShareLinkButton } from "../components/ShareProductButton";
 import {
@@ -166,6 +167,18 @@ export function ProtocolsPage({
             {brand.protocolsSub}
           </p>
         </div>
+
+        {brand.protocolsNote?.trim() && (
+          <aside className="protocols__note" aria-label="Note from the store">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4M12 8h.01" />
+            </svg>
+            <p>
+              <LinkifiedText text={brand.protocolsNote} linkClassName="protocols__note-link" />
+            </p>
+          </aside>
+        )}
 
         {brand.protocolsGuidelines && brand.protocolsGuidelines.length > 0 && (
           <div className="protocols__guide-card">

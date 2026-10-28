@@ -5,16 +5,26 @@ import type { Brand, Protocol } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
 import { resolveProtocolImages, MAX_PROTOCOL_IMAGES } from "@/lib/storefront/protocol-images";
+import { saveProtocolsNoteAction } from "@/actions/storefront-admin";
+import { OWNER_NOTE_MAX, normalizeOwnerNote } from "@/lib/storefront/linkify";
+import { LinkifiedText } from "../components/LinkifiedText";
 
 export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack: () => void }) {
-  const { protocols, setProtocols, categories, toast } = useStore();
+  const { protocols, setProtocols, categories, toast, setTweak } = useStore();
   const [list, setList] = useState<Protocol[]>(protocols);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   // Index of the protocol whose image is currently uploading (null = none).
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
-
-  void brand;
+  // The note under the page title (brand.protocolsNote). Saved by the same Save
+  // button as the list, so the owner has one place to commit their edits.
+  const [note, setNote] = useState(brand.protocolsNote ?? "");
+  const [noteDirty, setNoteDirty] = useState(false);
+  const editNote = (next: string) => {
+    setNote(next.slice(0, OWNER_NOTE_MAX));
+    setNoteDirty(true);
+  };
+  const unsaved = dirty || noteDirty;
 
   const edit = (next: Protocol[]) => {
     setList(next);
@@ -126,14 +136,30 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
 
   // Persist the whole list to the DB (branding.config) in one shot. Done on an
   // explicit Save so inline keystrokes don't each fire a server round-trip.
-  const save = () => {
+  const save = async () => {
     setSaving(true);
-    setProtocols(list);
-    setDirty(false);
-    toast("Protocols saved");
-    // setProtocols resolves async + surfaces its own errors via toast; flip the
-    // button back so the owner can keep editing.
-    setSaving(false);
+    try {
+      if (dirty) {
+        // setProtocols resolves async + surfaces its own errors via toast.
+        setProtocols(list);
+        setDirty(false);
+      }
+      if (noteDirty) {
+        const res = await saveProtocolsNoteAction(note);
+        if ("error" in res) {
+          toast(`Couldn't save the note: ${res.error}`);
+          return;
+        }
+        // Mirror into the live brand so the open storefront shows it at once.
+        setTweak({ protocolsNote: normalizeOwnerNote(note) });
+        setNoteDirty(false);
+      }
+      toast("Protocols saved");
+    } catch {
+      toast("Couldn't save — please sign in again and retry.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -214,11 +240,67 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
               </svg>
               Add Protocol
             </button>
-            <button className="admin-btn" onClick={save} disabled={!dirty || saving}>
-              {saving ? "Saving…" : dirty ? "Save Changes" : "Saved"}
+            <button className="admin-btn" onClick={() => void save()} disabled={!unsaved || saving}>
+              {saving ? "Saving…" : unsaved ? "Save Changes" : "Saved"}
             </button>
           </div>
         </div>
+
+        <section className="editor-card protocols-note-editor" aria-labelledby="protocols-note-title">
+          <div className="protocols-note-editor__head">
+            <h2 id="protocols-note-title" className="protocols-note-editor__title">
+              Page note
+            </h2>
+            {noteDirty && <span className="protocols-note-editor__badge">Unsaved</span>}
+          </div>
+          <p className="admin-field__hint protocols-note-editor__hint">
+            Shown in a highlighted box under the Protocols page title. Type a web
+            address like <strong>www.yoursite.com</strong> and it becomes a clickable
+            link. Leave it empty to hide the box.
+          </p>
+          <div className="protocols-note-editor__grid">
+            <div className="protocols-note-editor__field">
+              <label className="small" htmlFor="protocols-note">
+                Note
+              </label>
+              <textarea
+                id="protocols-note"
+                className="admin-input protocols-note-editor__input"
+                rows={4}
+                maxLength={OWNER_NOTE_MAX}
+                value={note}
+                placeholder="e.g. To access more protocols, please visit our Peptide Library at www.yoursite.com."
+                onChange={(e) => editNote(e.target.value)}
+              />
+              <div className="protocols-note-editor__foot">
+                <span aria-live="polite">
+                  {note.length} / {OWNER_NOTE_MAX}
+                </span>
+                {note && (
+                  <button type="button" className="admin-btn admin-btn--ghost protocols-note-editor__clear" onClick={() => editNote("")}>
+                    Remove note
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="protocols-note-editor__field">
+              <span className="small">Preview</span>
+              {note.trim() ? (
+                <aside className="protocols__note protocols-note-editor__preview">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" />
+                  </svg>
+                  <p>
+                    <LinkifiedText text={note} linkClassName="protocols__note-link" />
+                  </p>
+                </aside>
+              ) : (
+                <div className="protocols-note-editor__empty">No note — nothing extra shows on your page.</div>
+              )}
+            </div>
+          </div>
+        </section>
 
         <div className="editor-list">
           {list.map((p, i) => {
