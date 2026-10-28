@@ -237,6 +237,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const [feeWaiver, setFeeWaiver] = useState<{ key: string; waived: boolean } | null>(null);
   const feeWaived = feeWaiver?.key === waiverKey && feeWaiver.waived;
   const adminFee = feeWaived ? null : configuredFee;
+  // Still waiting on the server's answer for THIS contact + cart: the fee line
+  // reads "Checking…" and placing waits, so a returning member never sees (or
+  // pays against) a ₱250 that is about to drop to ₱0.
+  const feeChecking =
+    feeOncePerRound &&
+    !!configuredFee &&
+    !!(customer.email.trim() || customer.phone.trim()) &&
+    feeWaiver?.key !== waiverKey;
 
   // The chosen method's NAME — what the order stores and what the server
   // re-derives the processing fee from. Declared here (rather than beside
@@ -421,10 +429,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     !requiresPayment || (!!selectedMethod && (!requiresProof || !!proof));
 
   // Ask the server whether this buyer already paid the admin fee in the round
-  // (see feeWaiver above). Debounced so typing a phone number fires one request,
-  // and only past the cart step, where the contact fields exist.
+  // (see feeWaiver above). Debounced so typing a phone number fires one request.
+  // Runs from the cart step too: a returning member's saved details are already
+  // filled in there, so their real total shows before they reach the form.
   useEffect(() => {
-    if (!open || step === "cart" || !feeOncePerRound || !configuredFee) return;
+    if (!open || !feeOncePerRound || !configuredFee) return;
     if (!customer.email.trim() && !customer.phone.trim()) return;
     const key = waiverKey;
     let live = true;
@@ -440,7 +449,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       live = false;
       clearTimeout(timer);
     };
-  }, [open, step, feeOncePerRound, configuredFee, waiverKey, customer.email, customer.phone, lines]);
+  }, [open, feeOncePerRound, configuredFee, waiverKey, customer.email, customer.phone, lines]);
 
   // Reset to the cart step whenever the drawer is (re)opened. A fresh open is a
   // new logical order, so clear the idempotency key and the in-flight lock.
@@ -1325,10 +1334,16 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   {adminFee && (
                     <div className="sf-cart__total sf-cart__total--sub">
                       <span>{adminFee.label}</span>
-                      <span>
-                        {currency}
-                        {adminFee.amount.toLocaleString()}
-                      </span>
+                      {feeChecking ? (
+                        <span className="sf-cart__checking" role="status">
+                          Checking…
+                        </span>
+                      ) : (
+                        <span>
+                          {currency}
+                          {adminFee.amount.toLocaleString()}
+                        </span>
+                      )}
                     </div>
                   )}
                   {paymentFee && (
@@ -1430,15 +1445,15 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   // only the destination differs.
                   <button
                     className="btn btn-primary sf-cart__cta sf-cart__place"
-                    disabled={placing}
-                    aria-busy={placing}
+                    disabled={placing || feeChecking}
+                    aria-busy={placing || feeChecking}
                     onClick={() => {
                       if (step === "details") setTouched(true);
                       if (step === "payment") setPaymentTouched(true);
                       if (detailsValid && shippingValid && paymentValid) void placeOrder(null);
                     }}
                   >
-                    {placing ? "Placing order…" : "Place order"}
+                    {placing ? "Placing order…" : feeChecking ? "Checking your total…" : "Place order"}
                   </button>
                 ) : (
                   <>
@@ -1448,8 +1463,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                         <button
                           key={c.type}
                           className="btn btn-primary sf-cart__channel"
-                          disabled={placing}
-                          aria-busy={placing}
+                          disabled={placing || feeChecking}
+                          aria-busy={placing || feeChecking}
                           onClick={() => {
                             if (step === "details") setTouched(true);
                             if (step === "payment") setPaymentTouched(true);

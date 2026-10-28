@@ -65,3 +65,9 @@
 .sf-root .sf-cart__saved-name { margin: 4px 0 0; font-size: 16px; font-weight: 700; color: var(--brand-text); }
 .sf-root .sf-cart__saved-line { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--brand-text-muted); overflow-wrap: anywhere; }
 .sf-root .sf-cart__saved .sf-cart__remember-forget { align-self: flex-start; margin-top: 6px; font-size: 12.5px; }
+
+/* Admin-fee line while the server checks "already paid this round"
+   (CartCheckout feeChecking): a soft pulse, never a ₱250 that drops to ₱0. */
+.sf-root .sf-cart__checking { color: var(--brand-text-muted); font-style: italic; animation: sf-cart-checking 1.2s ease-in-out infinite; }
+@keyframes sf-cart-checking { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .sf-root .sf-cart__checking { animation: none; } }
