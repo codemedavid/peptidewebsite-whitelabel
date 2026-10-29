@@ -51,6 +51,8 @@ const OWNER_LAYOUTS: Record<string, Brand["homeLayout"]> = {
   "Boutique — banner, category tiles, catalog": "boutique",
   "Editorial — side menu, category index, catalog": "editorial",
   "Showcase — promise bar, split hero, featured shelf": "showcase",
+  // Sells by group buy ONLY — needs the Group Buy module, else it renders classic.
+  "Group buy only — the round is the home": "groupbuy",
 };
 
 /** Shown, but not selectable, for a tenant the operator granted it to — so

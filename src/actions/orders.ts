@@ -123,7 +123,7 @@ import {
 } from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
-import { isOnHandHidden } from "@/lib/storefront/two-ways-mode";
+import { isOnHandHidden, storedTwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import { groupBuyMoqViolation, type MoqLine } from "@/lib/storefront/gb-moq-kits";
 import {
   activePaymentFee,
@@ -1052,7 +1052,7 @@ async function validateLiveOrder(
   const mixViolation = twoWaysOrderViolation(
     matchedProductIds(catalog, p.items),
     gbScope,
-    isOnHandHidden(config.twoWaysMode),
+    isOnHandHidden(storedTwoWaysMode(config)),
   );
   if (mixViolation) return { error: mixViolation };
 

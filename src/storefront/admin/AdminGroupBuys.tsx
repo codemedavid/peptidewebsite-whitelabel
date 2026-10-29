@@ -43,6 +43,7 @@ import {
   setWayVisible,
   wayAcceptsOrders,
   wayIsVisible,
+  waysAreLayoutOwned,
   type TwoWaysMode,
   type WayKey,
 } from "@/lib/storefront/two-ways-mode";
@@ -1452,7 +1453,9 @@ export function AdminGroupBuys({
 
         {tab === "rounds" && <AdminHeroCountdown brand={brand} />}
 
-        {tab === "rounds" && (
+        {/* The group-buy-only layout sells one way by definition — it owns the
+            ways (storedTwoWaysMode), so there are no switches to show. */}
+        {tab === "rounds" && !waysAreLayoutOwned(brand.homeLayout) && (
           <div
             style={{
               margin: "4px 0 14px",

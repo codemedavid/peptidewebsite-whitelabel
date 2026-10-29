@@ -96,7 +96,7 @@ import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront
 import { normalizeVialsPerKit } from "@/lib/storefront/gb-moq-kits";
 import { normalizeGroupBuyLiveBanner, type GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
 import { normalizeHeroCountdown, type HeroCountdownConfig } from "@/lib/storefront/hero-countdown";
-import { normalizeTwoWaysMode, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
+import { normalizeTwoWaysMode, storedTwoWaysMode, waysAreLayoutOwned, type TwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import {
   buildCustomerLines,
   prepareReport,
@@ -620,7 +620,7 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     // Order IDs are a group-buy-only-store feature (on-hand hidden — the same
     // test as isGroupBuyOnlyStore). Anywhere else the round keeps whatever it
     // already had, so a store that later re-opens on-hand can't change one.
-    const groupBuyOnly = normalizeTwoWaysMode((await readTenantConfig(tenantId)).twoWaysMode).onHand === "hidden";
+    const groupBuyOnly = storedTwoWaysMode(await readTenantConfig(tenantId)).onHand === "hidden";
     if (!groupBuyOnly) gb.orderPrefix = before?.orderPrefix ?? "";
     // An order ID names one round's orders; reusing it would hand a new round
     // numbers its old orders already hold. The unique index backs this up.
@@ -824,13 +824,19 @@ export async function saveTwoWaysModeAction(
   if ("error" in gate) return gate;
   const { tenantId, slug } = gate;
   const value = normalizeTwoWaysMode(mode);
+  // The group-buy-only layout decides the ways itself (storedTwoWaysMode), so a
+  // save here would be stored but never read — refuse it instead.
+  const layoutOwned =
+    "The group-buy-only layout sells by group buy only, so Ways to order doesn't apply.";
 
   try {
     if (isDemoMode()) {
       const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      if (waysAreLayoutOwned(current.homeLayout)) return { error: layoutOwned };
       saveDemoBranding(slug, { config: { ...current, twoWaysMode: value } });
     } else {
       const current = await readTenantConfig(tenantId);
+      if (waysAreLayoutOwned(current.homeLayout)) return { error: layoutOwned };
       const config = { ...current, twoWaysMode: value } as Prisma.InputJsonValue;
       await prisma.branding.upsert({
         where: { tenantId },

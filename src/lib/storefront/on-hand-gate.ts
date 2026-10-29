@@ -20,7 +20,7 @@ import {
 import {
   isGroupBuyBuyable,
   isOnHandBuyable,
-  normalizeTwoWaysMode,
+  storedTwoWaysMode,
   HIDDEN_WAY_MESSAGES,
   WAY_BLOCK_MESSAGES,
   type TwoWaysMode,
@@ -136,7 +136,7 @@ export async function evaluateOnHandGate(
   deps: OnHandGateDeps,
 ): Promise<string | null> {
   const allowOnHand = config.groupBuyAllowOnHand !== false;
-  const ways = normalizeTwoWaysMode(config.twoWaysMode);
+  const ways = storedTwoWaysMode(config);
   const waysOpen = isOnHandBuyable(ways) && isGroupBuyBuyable(ways);
   // Sync, common case — no I/O, no throw surface. Only a store that is actively
   // restricting how it sells (a paused round, or a shut way) pays for a read.

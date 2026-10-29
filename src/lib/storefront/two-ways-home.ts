@@ -8,7 +8,7 @@
 // alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
 // an SSR compute and is trivially testable (npm run test:two-ways-home).
 
-import { isBoutiqueLayout, isEditorialLayout, isShowcaseLayout, type HomeLayout } from "./home-layout";
+import { isBoutiqueLayout, isEditorialLayout, isGroupBuyLayout, isShowcaseLayout, type HomeLayout } from "./home-layout";
 import {
   isGroupBuyProduct,
   slotProgress,
@@ -137,16 +137,23 @@ export type TwoWaysHomeView<T extends TwhProduct = TwhProduct> = {
  *     them — and equally what stops the entitled-but-unset branch below from
  *     dragging an owner who chose one back onto the two-ways home.
  *
+ *   • "groupbuy" (the group-buy-only website) needs the Group Buy MODULE — it
+ *     renders the round and nothing else — but no extra grant. Without the
+ *     module it is classic, and it must never fall into the module branch
+ *     below, which would turn it into the two-ways home.
+ *
  * Anything unrecognised falls through to the module branch, so a garbage config
  * value still fails closed to a layout the tenant is allowed to have.
  */
 export function resolveHomeLayout(
   entitled: boolean,
   configLayout: string | undefined | null,
+  groupBuyModule = false,
 ): HomeLayout {
   if (isBoutiqueLayout(configLayout)) return "boutique";
   if (isEditorialLayout(configLayout)) return "editorial";
   if (isShowcaseLayout(configLayout)) return "showcase";
+  if (isGroupBuyLayout(configLayout)) return groupBuyModule ? "groupbuy" : "classic";
   if (!entitled) return "classic";
   return configLayout === "classic" ? "classic" : "two-ways";
 }

@@ -10,10 +10,13 @@
 //   • only the layouts whose home carries the product grid (classic, two-ways).
 //     Boutique / editorial / showcase are owner design choices with their own
 //     catalog screen, so they keep it.
+//   • the "groupbuy" layout is this rule made explicit: its home is ALWAYS the
+//     group buy, even between rounds with nothing listed — the page carries
+//     its own empty state, and there is no catalog to fall back to.
 // Pure: no React, no DB (npm run test:gb-only-home).
 
 import type { Brand } from "@/storefront/types";
-import { isBoutiqueLayout, isEditorialLayout, isShowcaseLayout } from "./home-layout";
+import { isBoutiqueLayout, isEditorialLayout, isGroupBuyLayout, isShowcaseLayout } from "./home-layout";
 import { normalizeTwoWaysMode } from "./two-ways-mode";
 
 type GbOnlyHomeInput = Pick<
@@ -23,10 +26,11 @@ type GbOnlyHomeInput = Pick<
 
 /** True when the storefront home should render the group buy itself. */
 export function isGroupBuyOnlyHome(brand: GbOnlyHomeInput): boolean {
-  const ways = normalizeTwoWaysMode(brand.twoWaysMode);
-  if (ways.onHand !== "hidden" || ways.groupBuy === "hidden") return false;
   if (brand.groupBuyTeaser) return false;
   const layout = brand.homeLayout;
+  if (isGroupBuyLayout(layout)) return true;
+  const ways = normalizeTwoWaysMode(brand.twoWaysMode);
+  if (ways.onHand !== "hidden" || ways.groupBuy === "hidden") return false;
   if (isBoutiqueLayout(layout) || isEditorialLayout(layout) || isShowcaseLayout(layout)) return false;
   // Same "anything to show" test as the group-buy page's visibility rule.
   return !!brand.groupBuyBanner || (brand.groupBuyListingCount ?? 0) > 0;

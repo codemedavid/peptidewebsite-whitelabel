@@ -199,7 +199,8 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
         ) : (
           <>
             <CommunityShareCard />
-            <WaysCard ways={ways} setWays={setWays} />
+            {/* The group-buy-only layout owns the ways — no switches to show. */}
+            {brand.homeLayout !== "groupbuy" ? <WaysCard ways={ways} setWays={setWays} /> : null}
             {caps.productAssignment && ways.onHand === "open" ? <AllowOnHandCard initial={brand.groupBuyAllowOnHand !== false} /> : null}
             <CopyCard content={content} onEdit={() => setEditingContent(true)} />
             <LiveBannerCard

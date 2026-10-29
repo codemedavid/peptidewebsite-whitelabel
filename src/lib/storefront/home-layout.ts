@@ -1,7 +1,7 @@
 // The storefront's selectable HOME LAYOUTS — the single source of truth shared
 // by the store-admin picker, the branding.config allow-list and resolveHomeLayout.
 //
-// The five values are not the same KIND of thing, and the difference is what
+// The six values are not the same KIND of thing, and the difference is what
 // resolveHomeLayout (./two-ways-home) encodes:
 //
 //   • "classic"   — the original hero → category chips → catalog scroll.
@@ -16,12 +16,18 @@
 //   • "showcase"  — a LAYOUT CHOICE too: the merchandised home — promise bar,
 //                   split hero, round category badges, a buyable featured
 //                   shelf, promo cards, trust strip. Owner-selectable, no grant.
+//   • "groupbuy"  — the GROUP-BUY-ONLY website: the home IS the round (hero →
+//                   the group-buy listing), and the store sells no other way.
+//                   Unlike two-ways it owns the per-way switches outright — the
+//                   layout forces on-hand hidden (storedTwoWaysMode), so the
+//                   "Ways to order" panel goes. Needs the Group Buy module;
+//                   without it resolveHomeLayout falls back to classic.
 //
 // This module is deliberately tiny and dependency-free: every layout module
 // imports the enum, so anything heavier here would pull the whole storefront
 // view-model into the branding-update path.
 
-export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial", "showcase"] as const;
+export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial", "showcase", "groupbuy"] as const;
 
 export type HomeLayout = (typeof HOME_LAYOUTS)[number];
 
@@ -39,4 +45,9 @@ export function isEditorialLayout(value: unknown): boolean {
 /** As above, for the showcase layout. */
 export function isShowcaseLayout(value: unknown): boolean {
   return value === "showcase";
+}
+
+/** As above, for the group-buy-only layout. */
+export function isGroupBuyLayout(value: unknown): boolean {
+  return value === "groupbuy";
 }

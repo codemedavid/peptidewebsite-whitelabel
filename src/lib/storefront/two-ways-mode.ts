@@ -28,6 +28,8 @@
 // checkout share one contract — the same pattern as ./two-ways-cart and
 // ./on-hand-gate. Covered by npm run test:two-ways-mode.
 
+import { isGroupBuyLayout } from "./home-layout";
+
 /** What a single order path is doing right now. */
 export type WayState = "open" | "closed" | "hidden";
 
@@ -91,6 +93,33 @@ export function normalizeTwoWaysMode(value: unknown): TwoWaysMode {
     return { ...TWO_WAYS_MODE_DEFAULT };
   }
   return mode;
+}
+
+/** What the group-buy-only layout ("groupbuy") sells: the round, nothing else.
+ *  The group-buy way is OPEN rather than echoing a stored "closed" — the layout
+ *  removes the switch that could reopen it, so honouring a leftover pause would
+ *  strand the store. Pausing is the store open/closed switch's job there. */
+export const GROUP_BUY_ONLY_WAYS: Readonly<TwoWaysMode> = Object.freeze({
+  onHand: "hidden",
+  groupBuy: "open",
+});
+
+/** True on a layout that decides the ways itself, so the owner's per-way
+ *  "Ways to order" switches are moot and are not offered. */
+export function waysAreLayoutOwned(homeLayout: unknown): boolean {
+  return isGroupBuyLayout(homeLayout);
+}
+
+/**
+ * The store's per-way setting as read from RAW branding.config — the one read
+ * every server gate (checkout, on-hand gate, round save) and the brand
+ * projection share. On the group-buy-only layout the layout wins over whatever
+ * twoWaysMode holds, so a store can never be "group buy only" on the home and
+ * still sell on-hand through a stale cart or a hand-edited config.
+ */
+export function storedTwoWaysMode(config: { homeLayout?: unknown; twoWaysMode?: unknown }): TwoWaysMode {
+  if (waysAreLayoutOwned(config.homeLayout)) return { ...GROUP_BUY_ONLY_WAYS };
+  return normalizeTwoWaysMode(config.twoWaysMode);
 }
 
 /** The live-round facts the resolution folds in. */

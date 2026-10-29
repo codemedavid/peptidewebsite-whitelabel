@@ -292,11 +292,51 @@ const KGLOW_TWO_WAYS: TenantPreset = {
   ],
 };
 
+export const GROUPBUY_ONLY_ID = "groupbuy-only";
+
+/**
+ * The group-buy-only website (first: mnm-pepsabuy). The home IS the round —
+ * the store's own hero over the group-buy listing — and nothing sells on-hand.
+ * The "groupbuy" layout owns the ways (storedTwoWaysMode), so unlike K Glow
+ * there is no on-hand toggle to set and no two-ways grant to ship.
+ *
+ * Layout only: colours, fonts, hero, card design and copy all stay the
+ * tenant's own, so the shape works under any theme.
+ */
+const GROUPBUY_ONLY: TenantPreset = {
+  id: GROUPBUY_ONLY_ID,
+  name: "Group buy only",
+  tagline:
+    "The round is the home: hero, then the group-buy listing. No on-hand shelf and no Ways to order switches. Keeps the store's own theme.",
+  config: {
+    homeLayout: "groupbuy",
+    showAdminGroupBuy: true,
+    showAnalyticsGroupBuys: true,
+  },
+  off: {
+    // Kept explicit for the same reason as K Glow: never leave the layout to
+    // whatever an absent key resolves to.
+    homeLayout: "classic",
+    showAdminGroupBuy: PRESET_UNSET,
+    showAnalyticsGroupBuys: PRESET_UNSET,
+  },
+  defaults: {
+    groupBuySettings: { ...GROUP_BUY_SETTINGS_DEFAULTS },
+    groupBuyContent: {
+      ...GB_CONTENT_DEFAULTS,
+      steps: [...GB_CONTENT_DEFAULTS.steps],
+    },
+  },
+  features: [
+    FEATURES.GB_MODULE, // the layout renders nothing without it
+  ],
+};
+
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 /** Every preset, in display order. Add new store shapes here — not as another
  *  scripts/configure-<slug>.ts. */
-export const TENANT_PRESET_LIST: readonly TenantPreset[] = [KGLOW_TWO_WAYS];
+export const TENANT_PRESET_LIST: readonly TenantPreset[] = [KGLOW_TWO_WAYS, GROUPBUY_ONLY];
 
 export const TENANT_PRESETS: Record<string, TenantPreset> = Object.fromEntries(
   TENANT_PRESET_LIST.map((p) => [p.id, p]),

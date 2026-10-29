@@ -15,6 +15,8 @@
  *                              renders classic. Pair with grant-feature.ts.
  *   • "boutique"/"editorial" — owner-selectable layout choices. They need no
  *                              grant, so writing the key here is sufficient.
+ *   • "groupbuy"             — the group-buy-only website (mnm-pepsabuy). Needs
+ *                              only the Group Buy module; forces on-hand hidden.
  *
  * Validates against HOME_LAYOUTS rather than a local list, so a layout added to
  * the enum is settable here the same day — and a typo is rejected instead of

@@ -42,7 +42,7 @@ import {
 } from "@/lib/storefront/two-ways-home";
 import {
   TWO_WAYS_MODE_DEFAULT,
-  normalizeTwoWaysMode,
+  storedTwoWaysMode,
   resolveWays,
 } from "@/lib/storefront/two-ways-mode";
 import { normalizeOnHandOrder } from "@/lib/storefront/on-hand-order";
@@ -355,6 +355,13 @@ export async function loadStorefrontBrand(
   brand.customerAccountsEnabled =
     !isDemoMode() && has(FEATURES.STORE_CUSTOMER_ACCOUNTS);
 
+  // My Group Buy Order: the buyer's email + phone lookup of their round orders.
+  // Off in demo mode (the lookup reads the DB). lookupMyGroupBuyOrderAction
+  // re-checks this same entitlement server-side, so this projection only
+  // decides whether the page and its links render.
+  brand.myGroupBuyOrderEnabled =
+    !isDemoMode() && has(FEATURES.STORE_MY_GROUPBUY_ORDER);
+
   // Order-alert email (Automated package): gates the owner-only "Order
   // Notifications" store-admin view. When off the view/tile hide and no alert
   // fires — sendAdminOrderNotification re-checks this same entitlement server-side.
@@ -449,7 +456,8 @@ export async function loadStorefrontBrand(
   // The "boutique" home needs no grant — resolveHomeLayout checks it first, so
   // an unentitled tenant that picked it still gets it (see two-ways-home.ts).
   const twoWaysHomeEntitled = has(FEATURES.GB_TWO_WAYS_HOME);
-  brand.homeLayout = resolveHomeLayout(twoWaysHomeEntitled, config.homeLayout);
+  // The group-buy-only layout needs the module itself (groupBuyCaps, above).
+  brand.homeLayout = resolveHomeLayout(twoWaysHomeEntitled, config.homeLayout, brand.groupBuyCaps.enabled);
 
   // Boutique's own config (the owner-typed assurance strip). Normalized at this
   // trust boundary as well as at render, so a hand-edited branding.config can
@@ -482,8 +490,9 @@ export async function loadStorefrontBrand(
   // Buy module there is no second way to sell through, so the setting is left
   // unenforced rather than walling the store — same call the server gate makes
   // (lib/storefront/on-hand-gate).
+  // storedTwoWaysMode: on the group-buy-only layout the layout owns the ways.
   const twoWaysMode = brand.groupBuyCaps.enabled
-    ? normalizeTwoWaysMode(config.twoWaysMode)
+    ? storedTwoWaysMode(config)
     : TWO_WAYS_MODE_DEFAULT;
   brand.twoWaysMode = twoWaysMode;
   // The live round's per-variation demand, kept for the Bunuan state below.
