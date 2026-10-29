@@ -50,6 +50,7 @@ import {
   type SupplierReport,
 } from "@/lib/storefront/group-buy";
 import { resolveGroupBuyCaps, loadGroupBuys, revalidateGroupBuys } from "@/lib/storefront/group-buy-server";
+import { validateGroupBuyOrderPrefix } from "@/lib/orders/order-number-format";
 import { loadReportKits, stageSyncForSave } from "@/modules/bunuan/server";
 import {
   mergeGroupBuyInvoiceSave,
@@ -122,6 +123,7 @@ import {
 } from "@/lib/storefront/group-buy-analytics";
 import type { Order } from "@/storefront/types";
 import { pickFocusRound, pickNextRound, type FocusRound } from "@/lib/storefront/admin-dashboard-gb";
+import { buildOrderFolders, type OrderFolders } from "@/lib/storefront/order-folders";
 import * as paidAccess from "@/modules/paid-access";
 
 export type ListGroupBuysResult =
@@ -299,6 +301,7 @@ async function loadCandidateOrders(
           : { NOT: { groupBuyId: null } }),
       },
       select: {
+        id: true,
         orderNumber: true,
         status: true,
         paymentStatus: true,
@@ -449,6 +452,54 @@ export async function getGroupBuyDashboardAction(id: unknown): Promise<GroupBuyD
   }
 }
 
+// ── Orders filed per group buy ───────────────────────────────────────────────
+
+export type OrderFoldersResult =
+  | {
+      ok: true;
+      /** False when the store has no group buys — the Orders screen then opens
+       *  straight on the flat list, exactly as before. */
+      enabled: boolean;
+      folders: OrderFolders;
+      /** The rounds themselves, so a folder can open the round's full dashboard. */
+      groupBuys: GroupBuy[];
+      /** Can this actor download the round reports? (Excel reports grant +
+       *  the groupbuys staff permission the report action re-checks). */
+      canReport: boolean;
+    }
+  | { error: string };
+
+const NO_FOLDERS: OrderFolders = { live: [], upcoming: [], recent: [], archived: [] };
+
+/**
+ * The folder list the Orders screen opens on for a group-buy store: live round
+ * first, then upcoming, then recent. Gated on the ORDERS permission (not
+ * groupbuys) — a staff member who handles orders must still see them filed.
+ */
+export async function listOrderFoldersAction(): Promise<OrderFoldersResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: NOT_SIGNED_IN };
+  const { tenantId } = ctx;
+  try {
+    const caps = await resolveGroupBuyCaps(tenantId);
+    if (!caps.enabled) return { ok: true, enabled: false, folders: NO_FOLDERS, groupBuys: [], canReport: false };
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const groupBuys = await loadGroupBuys(tenantId, slug);
+    if (groupBuys.length === 0) {
+      return { ok: true, enabled: false, folders: NO_FOLDERS, groupBuys: [], canReport: false };
+    }
+    const [candidates, productNames] = await Promise.all([
+      loadCandidateOrders(tenantId, slug, groupBuys),
+      loadProductNames(tenantId, slug, groupBuys),
+    ]);
+    const folders = buildOrderFolders(groupBuys, candidates, { scheduledEnabled: caps.scheduled, productNames });
+    const canReport = caps.reports.excel && !!(await requireStaffPermission("groupbuys"));
+    return { ok: true, enabled: true, folders, groupBuys, canReport };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't load the group buy folders." };
+  }
+}
+
 // ── Home dashboard card ──────────────────────────────────────────────────────
 
 export type DashboardGroupBuyResult =
@@ -528,6 +579,10 @@ export async function getDashboardGroupBuyAction(): Promise<DashboardGroupBuyRes
  * groupbuy.product_assignment, and going live alongside another live run is
  * always rejected — exactly one active round per tenant (rule #4).
  */
+function duplicatePrefixError(prefix: string): string {
+  return `Another group buy already uses the order ID ${prefix}. Pick a new one for this round.`;
+}
+
 export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyResult> {
   const gate = await requireGroupBuyAdmin();
   if ("error" in gate) return gate;
@@ -545,6 +600,8 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
   if (gb.startsAt && gb.endsAt && gb.startsAt > gb.endsAt) {
     return { error: "The group buy can't end before it starts." };
   }
+  const prefixError = validateGroupBuyOrderPrefix(gb.orderPrefix ?? "");
+  if (prefixError) return { error: prefixError };
 
   try {
     // Single-active guard (rule #4): at most one run may be live (effective
@@ -559,6 +616,16 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     const otherLive = others.some((x) => effectiveGroupBuyStatus(x, caps.scheduled) === "active");
     if (wouldBeLive && otherLive) {
       return { error: "Another group buy is already active. Close it before opening this one." };
+    }
+    // Order IDs are a group-buy-only-store feature (on-hand hidden — the same
+    // test as isGroupBuyOnlyStore). Anywhere else the round keeps whatever it
+    // already had, so a store that later re-opens on-hand can't change one.
+    const groupBuyOnly = normalizeTwoWaysMode((await readTenantConfig(tenantId)).twoWaysMode).onHand === "hidden";
+    if (!groupBuyOnly) gb.orderPrefix = before?.orderPrefix ?? "";
+    // An order ID names one round's orders; reusing it would hand a new round
+    // numbers its old orders already hold. The unique index backs this up.
+    if (gb.orderPrefix && others.some((x) => x.orderPrefix === gb.orderPrefix)) {
+      return { error: duplicatePrefixError(gb.orderPrefix) };
     }
 
     // Reconcile before writing a stored-active row: persist the close of any
@@ -625,6 +692,9 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     // P2002 — surface the same readable message the app guard would have, never
     // the raw constraint text.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      if (String(e.meta?.target ?? "").includes("orderPrefix")) {
+        return { error: duplicatePrefixError(gb.orderPrefix ?? "") };
+      }
       return { error: "Another group buy is already active. Close it before opening this one." };
     }
     return { error: e instanceof Error ? e.message : "Couldn't save the group buy." };
@@ -1007,6 +1077,8 @@ export async function duplicateGroupBuyAction(id: unknown): Promise<SaveGroupBuy
       ...source,
       id: "",
       name: `Copy of ${source.name}`.slice(0, 200),
+      // Order IDs are one-per-round — the copy gets its own when it's opened.
+      orderPrefix: "",
       status: "draft",
       startsAt: null,
       endsAt: null,
@@ -1191,6 +1263,7 @@ export async function getGroupBuySupplierReportAction(
 /** Narrow a DB row or demo order to the report's LinkableOrder shape. Untrusted
  *  JSON columns are cast rather than re-validated — the report only reads them. */
 function toLinkableOrder(r: {
+  id?: string | null;
   orderNumber?: string | null;
   status: string;
   paymentStatus?: string | null;
@@ -1211,6 +1284,7 @@ function toLinkableOrder(r: {
 }): LinkableOrder {
   const placed = r.placedAt ?? r.date ?? "";
   return {
+    id: r.id ?? undefined,
     orderNumber: r.orderNumber ?? undefined,
     date: placed instanceof Date ? placed.toISOString() : String(placed),
     status: r.status,

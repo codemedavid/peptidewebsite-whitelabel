@@ -1,0 +1,249 @@
+/* Orders filed per group buy (AdminOrdersHub). Scoped under .sf-root and
+   prefixed .ogb- so nothing here can collide with storefront.css's cascade.
+   Colours come from the tenant's brand tokens; the status hues match the
+   order pills, so "new" and "unpaid" read the same everywhere. */
+
+.sf-root .ogb-lede {
+  margin: -6px 0 20px;
+  color: var(--brand-text-muted);
+  font-size: 14px;
+}
+
+.sf-root .ogb-section { margin: 0 0 26px; }
+.sf-root .ogb-section__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+
+/* ── Live card: the one thing on the screen happening right now ── */
+.sf-root .ogb-live {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--brand-text);
+  cursor: pointer;
+  padding: 22px 24px;
+  border-radius: var(--radius-lg, 16px);
+  border: var(--brand-border-width, 1px) solid color-mix(in srgb, var(--brand-accent) 45%, var(--brand-border));
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--brand-accent) 14%, transparent) 0%, transparent 60%),
+    var(--brand-surface);
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--brand-accent) 60%, transparent);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.sf-root .ogb-live + .ogb-live { margin-top: 12px; }
+.sf-root .ogb-live:hover { transform: translateY(-2px); box-shadow: 0 16px 36px -18px color-mix(in srgb, var(--brand-accent) 70%, transparent); }
+.sf-root .ogb-live:active { transform: translateY(0); }
+.sf-root .ogb-live:focus-visible,
+.sf-root .ogb-row:focus-visible,
+.sf-root .ogb-report:focus-visible,
+.sf-root .ogb-linkbtn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+.sf-root .ogb-live__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sf-root .ogb-live__badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand-success, #1a8a5c) 14%, transparent);
+  color: var(--brand-success, #1a8a5c);
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+}
+.sf-root .ogb-live__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+  animation: ogb-pulse 1.8s ease-out infinite;
+}
+@keyframes ogb-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+  100% { box-shadow: 0 0 0 9px transparent; }
+}
+.sf-root .ogb-live__left { font-size: 13px; font-weight: 600; color: var(--brand-text-muted); }
+.sf-root .ogb-live__name {
+  font-family: var(--brand-heading-font);
+  font-size: clamp(22px, 1.2rem + 1.4vw, 32px);
+  line-height: 1.1;
+  font-weight: 700;
+}
+.sf-root .ogb-live__meta { font-size: 13px; color: var(--brand-text-muted); }
+
+.sf-root .ogb-live__bar {
+  position: relative; display: block;
+  height: 22px; margin-top: 4px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand-text) 7%, transparent);
+  overflow: hidden;
+}
+.sf-root .ogb-live__bar > span {
+  position: absolute; inset: 0;
+  transform-origin: left center;
+  background: color-mix(in srgb, var(--brand-accent) 55%, transparent);
+}
+.sf-root .ogb-live__bar em {
+  position: relative; display: block; padding: 0 10px;
+  line-height: 22px; font-size: 12px; font-style: normal; font-weight: 700;
+  color: var(--brand-text);
+}
+.sf-root .ogb-live__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.sf-root .ogb-live__cta { font-weight: 700; color: var(--brand-accent); }
+
+/* ── Stat strip (live card + round header) ── */
+.sf-root .ogb-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 1px;
+  margin: 6px 0 0;
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-text) 9%, transparent);
+}
+.sf-root .ogb-stats > div { padding: 10px 14px; background: var(--brand-surface); }
+.sf-root .ogb-stats dt { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--brand-text-muted); }
+.sf-root .ogb-stats dd {
+  margin: 2px 0 0;
+  font-family: var(--brand-heading-font);
+  font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--brand-text);
+}
+.sf-root .ogb-stats dd.is-good { color: var(--brand-success, #1a8a5c); }
+.sf-root .ogb-stats dd.is-warn { color: #8A6B0B; }
+
+/* ── Chips + status ── */
+.sf-root .ogb-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.sf-root .ogb-chip {
+  display: inline-block; padding: 3px 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.sf-root .ogb-chip--new { background: color-mix(in srgb, #E8B931 22%, transparent); color: #7A5B00; }
+.sf-root .ogb-chip--unpaid { background: color-mix(in srgb, #D9534F 14%, transparent); color: #A5302C; }
+.sf-root .ogb-chip--calm { background: transparent; color: var(--brand-text-muted); font-weight: 500; padding-inline: 0; }
+
+.sf-root .ogb-status {
+  display: inline-block; margin-left: 8px; padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px;
+  background: color-mix(in srgb, var(--brand-text) 8%, transparent);
+  color: var(--brand-text-muted);
+}
+.sf-root .ogb-round__meta .ogb-status { margin: 0 8px 0 0; }
+.sf-root .ogb-status--active { background: color-mix(in srgb, var(--brand-success, #1a8a5c) 16%, transparent); color: var(--brand-success, #1a8a5c); }
+.sf-root .ogb-status--scheduled { background: color-mix(in srgb, #1F4E91 12%, transparent); color: #1F4E91; }
+.sf-root .ogb-status--cancelled { background: color-mix(in srgb, #D9534F 12%, transparent); color: #A5302C; }
+
+/* ── Folder rows ── */
+.sf-root .ogb-list {
+  list-style: none; margin: 0; padding: 0;
+  border: var(--brand-border-width, 1px) solid var(--brand-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--brand-surface);
+  overflow: hidden;
+}
+.sf-root .ogb-list > li + li { border-top: 1px solid color-mix(in srgb, var(--brand-text) 8%, transparent); }
+.sf-root .ogb-row {
+  display: flex; align-items: center; gap: 16px;
+  width: 100%; padding: 14px 18px;
+  font: inherit; text-align: left; color: var(--brand-text);
+  background: transparent; border: 0; cursor: pointer;
+  transition: background-color .15s ease;
+}
+.sf-root .ogb-row:hover { background: color-mix(in srgb, var(--brand-accent) 6%, transparent); }
+.sf-root .ogb-row:hover .ogb-chev { transform: translateX(3px); color: var(--brand-accent); }
+.sf-root .ogb-row__main { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.sf-root .ogb-row__name { font-weight: 700; font-size: 15px; }
+.sf-root .ogb-row__meta { font-size: 13px; color: var(--brand-text-muted); }
+.sf-root .ogb-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sf-root .ogb-row__money { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sf-root .ogb-chev { width: 18px; height: 18px; flex: none; color: var(--brand-text-muted); transition: transform .15s ease, color .15s ease; }
+
+.sf-root .ogb-nolive {
+  margin: 0 0 22px; padding: 16px 18px;
+  border: 1px dashed var(--brand-border);
+  border-radius: var(--radius-md, 12px);
+  color: var(--brand-text-muted); font-size: 14px;
+}
+.sf-root .ogb-archived { margin: -10px 0 26px; }
+.sf-root .ogb-archived .ogb-section { margin-top: 12px; }
+.sf-root .ogb-linkbtn {
+  background: none; border: 0; padding: 4px 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--brand-text-muted);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.sf-root .ogb-linkbtn:hover { color: var(--brand-text); }
+
+/* ── Round header (above the scoped orders table) ── */
+.sf-root .ogb-round {
+  margin: 0 0 18px; padding: 16px 18px;
+  border: var(--brand-border-width, 1px) solid var(--brand-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--brand-surface);
+}
+.sf-root .ogb-round__meta { margin: 0 0 10px; font-size: 13px; color: var(--brand-text-muted); }
+.sf-root .ogb-round__error { margin: 10px 0 0; font-size: 13px; color: #A5302C; }
+
+.sf-root .ogb-reports { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin-top: 14px; }
+.sf-root .ogb-reports__label {
+  flex-basis: 100%;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.sf-root .ogb-reports__off { font-size: 13px; color: var(--brand-text-muted); align-self: center; }
+.sf-root .ogb-report {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1 1 200px; padding: 12px 14px;
+  text-align: left; font: inherit; cursor: pointer;
+  color: var(--brand-surface);
+  background: var(--brand-text);
+  border: 0;
+  border-radius: var(--radius-md, 12px);
+  transition: transform .15s ease, opacity .15s ease;
+}
+.sf-root .ogb-report:hover:not(:disabled) { transform: translateY(-1px); }
+.sf-root .ogb-report:disabled { opacity: .6; cursor: progress; }
+.sf-root .ogb-report strong { font-size: 14px; }
+.sf-root .ogb-report small { font-size: 12px; opacity: .8; }
+.sf-root .ogb-report--ghost {
+  color: var(--brand-text);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--brand-border);
+}
+
+/* ── Loading ── */
+.sf-root .ogb-skeleton { display: grid; gap: 12px; }
+.sf-root .ogb-skeleton span {
+  display: block; height: 72px;
+  border-radius: var(--radius-md, 12px);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand-text) 5%, transparent) 0%, color-mix(in srgb, var(--brand-text) 10%, transparent) 50%, color-mix(in srgb, var(--brand-text) 5%, transparent) 100%);
+  background-size: 200% 100%;
+  animation: ogb-shimmer 1.3s linear infinite;
+}
+.sf-root .ogb-skeleton span:first-child { height: 180px; }
+@keyframes ogb-shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 560px) {
+  .sf-root .ogb-live { padding: 18px; }
+  .sf-root .ogb-row { padding: 12px 14px; gap: 10px; }
+  .sf-root .ogb-row__money { font-size: 13px; }
+  .sf-root .ogb-stats { grid-template-columns: 1fr 1fr; }
+  /* An odd stat out (the round header has five) spans the row instead of
+     leaving an empty grey cell. */
+  .sf-root .ogb-stats > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .sf-root .ogb-stats dd { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .ogb-live__dot,
+  .sf-root .ogb-skeleton span { animation: none; }
+  .sf-root .ogb-live,
+  .sf-root .ogb-row .ogb-chev,
+  .sf-root .ogb-report { transition: none; }
+}

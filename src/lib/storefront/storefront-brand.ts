@@ -17,7 +17,12 @@ import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
 import { pickFeatureSpotlight } from "@/lib/features/feature-spotlight";
 import { normalizeGroupBuySettings, buildGroupBuyGate } from "@/lib/storefront/group-buy";
 import { buildGroupBuyBanner } from "@/lib/storefront/group-buy-banner";
-import { normalizeHeroCountdown, resolveHeroCountdown } from "@/lib/storefront/hero-countdown";
+import {
+  catalogMissesRound,
+  countdownForListing,
+  normalizeHeroCountdown,
+  resolveHeroCountdown,
+} from "@/lib/storefront/hero-countdown";
 import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
@@ -98,15 +103,17 @@ export type StorefrontBrandOptions = {
  * Cached rows come back with createdAt as a string; dbProductToStorefront
  * accepts both.
  */
+const readCatalogRows = (tenantId: string) =>
+  withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { status: { not: "archived" } },
+      orderBy: { createdAt: "asc" },
+    }),
+  );
+
 export const loadCatalogRows = (tenantId: string) =>
   unstable_cache(
-    () =>
-      withTenant(tenantId, (db) =>
-        db.product.findMany({
-          where: { status: { not: "archived" } },
-          orderBy: { createdAt: "asc" },
-        }),
-      ),
+    () => readCatalogRows(tenantId),
     ["storefront-catalog-rows", tenantId],
     // 6h: every product/stock writer busts the tag; the timer only catches
     // direct-DB scripts that can't.
@@ -538,7 +545,14 @@ export async function loadStorefrontBrand(
           dbProductToStorefront(dp as unknown as DbProductRow, brand.currency || "₱"),
         );
   } else {
-    const rows = (await productRowsP) ?? [];
+    let rows = (await productRowsP) ?? [];
+    // The live round and the catalog are separate caches. When the cached
+    // catalog has none of the round's products (a script swapped the catalog),
+    // read it live — otherwise the group-buy page renders empty under a
+    // running countdown until the 6h timer expires.
+    if (catalogMissesRound(brand.groupBuyBanner, rows.map((r) => r.id))) {
+      rows = await readCatalogRows(tenantId);
+    }
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
   // The owner's arrangement (Admin → Products ↑/↓). Every surface that lists
@@ -610,6 +624,13 @@ export async function loadStorefrontBrand(
   // Built once the catalog (kit sizes) is final; the checkout recounts live.
   if (bunuanLines && brand.groupBuyBanner?.stage === "bunuan") {
     brand.groupBuyBanner = { ...brand.groupBuyBanner, bunuan: bunuanShopState(bunuanLines, products) };
+  }
+
+  // The hero's "closes in" timer advertises the round's listing, so it runs
+  // only while that listing has something to order — read off the FINAL
+  // catalog (after every strip), the same set the group-buy page renders.
+  if (brand.heroCountdown) {
+    brand.heroCountdown = countdownForListing(brand.heroCountdown, brand.groupBuyBanner, products) ?? undefined;
   }
 
   // How many group-buy listings exist at all, independent of any round. Between

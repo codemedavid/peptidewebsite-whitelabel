@@ -50,7 +50,7 @@ import { brandStyleVars } from "@/lib/storefront/brand-style";
 import { isOnHandBlocked, GROUP_BUY_GATE_OPEN } from "@/lib/storefront/group-buy";
 import { decideWayBlock } from "@/lib/storefront/on-hand-gate";
 import { qtyDelta } from "@/lib/storefront/qty-input";
-import { TWO_WAYS_MODE_DEFAULT } from "@/lib/storefront/two-ways-mode";
+import { TWO_WAYS_MODE_DEFAULT, isOnHandHidden } from "@/lib/storefront/two-ways-mode";
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import {
   gbScopeFromBanner,
@@ -469,7 +469,11 @@ export function StoreProvider({
       // Price-on-request items are on hand but have no fixed price — they can't
       // be bought through the cart; the customer messages the store to order.
       if (product.priceOnRequest) {
-        toast(`${product.name} is on hand — message us for the price.`);
+        toast(
+          isOnHandHidden(brand.twoWaysMode)
+            ? `Message us for the price of ${product.name}.`
+            : `${product.name} is on hand — message us for the price.`,
+        );
         return;
       }
       // Owner paused this product (Group Buys → Pricing): still listed, not
@@ -520,6 +524,7 @@ export function StoreProvider({
         baseProductId(product),
         cart.map(baseProductId),
         gbScope,
+        isOnHandHidden(brand.twoWaysMode),
       );
       if (mixViolation) {
         toast(mixViolation);

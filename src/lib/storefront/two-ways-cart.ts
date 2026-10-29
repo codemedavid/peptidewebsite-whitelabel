@@ -64,6 +64,15 @@ export const TWO_WAYS_MIX_MESSAGES = {
     "On-hand items ship now and can't join a group-buy order — please check out your group-buy items first.",
 } as const;
 
+/** The same rule on a group-buy-only store (on-hand way hidden): the stray
+ *  line is out of the round, but the store has no "on-hand" to name. */
+export const ONE_WAY_MIX_MESSAGES = {
+  gbIntoOther:
+    "Your cart has an item that isn't part of this group buy — please remove it first.",
+  otherIntoGb: "This item isn't part of the group buy, so it can't join your group-buy order.",
+  order: "Some items in your cart aren't part of this group buy — please remove them to check out.",
+} as const;
+
 /**
  * Why adding `productId` to the current cart is rejected (mixing on-hand with
  * group-buy), or null when the add is allowed. Off when no round is live, and
@@ -73,13 +82,18 @@ export function twoWaysAddViolation(
   productId: string,
   cartProductIds: readonly string[],
   scope: GroupBuyPriceScope | null | undefined,
+  onHandHidden = false,
 ): string | null {
   if (!scope || scope.coversAll || cartProductIds.length === 0) return null;
   const addingGb = isInGroupBuyScope(productId, scope);
   const cartHasGb = cartProductIds.some((id) => isInGroupBuyScope(id, scope));
   const cartHasOnHand = cartProductIds.some((id) => !isInGroupBuyScope(id, scope));
-  if (addingGb && cartHasOnHand) return TWO_WAYS_MIX_MESSAGES.gbIntoOnHand;
-  if (!addingGb && cartHasGb) return TWO_WAYS_MIX_MESSAGES.onHandIntoGb;
+  if (addingGb && cartHasOnHand) {
+    return onHandHidden ? ONE_WAY_MIX_MESSAGES.gbIntoOther : TWO_WAYS_MIX_MESSAGES.gbIntoOnHand;
+  }
+  if (!addingGb && cartHasGb) {
+    return onHandHidden ? ONE_WAY_MIX_MESSAGES.otherIntoGb : TWO_WAYS_MIX_MESSAGES.onHandIntoGb;
+  }
   return null;
 }
 
@@ -92,11 +106,13 @@ export function twoWaysAddViolation(
 export function twoWaysOrderViolation(
   productIds: readonly string[],
   scope: GroupBuyPriceScope | null | undefined,
+  onHandHidden = false,
 ): string | null {
   if (!scope || scope.coversAll) return null;
   const hasGb = productIds.some((id) => isInGroupBuyScope(id, scope));
   const hasOnHand = productIds.some((id) => !isInGroupBuyScope(id, scope));
-  return hasGb && hasOnHand
-    ? "This order mixes group-buy and on-hand items — they ship separately, so please place them as two orders."
-    : null;
+  if (!hasGb || !hasOnHand) return null;
+  return onHandHidden
+    ? ONE_WAY_MIX_MESSAGES.order
+    : "This order mixes group-buy and on-hand items — they ship separately, so please place them as two orders.";
 }

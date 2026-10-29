@@ -25,7 +25,7 @@ import {
   type GroupBuy,
   type GroupBuyCapabilities,
 } from "../src/lib/storefront/group-buy";
-import { WAY_BLOCK_MESSAGES } from "../src/lib/storefront/two-ways-mode";
+import { HIDDEN_WAY_MESSAGES, WAY_BLOCK_MESSAGES } from "../src/lib/storefront/two-ways-mode";
 
 let passed = 0;
 let failed = 0;
@@ -222,10 +222,10 @@ async function main() {
       gate: GATE_NO_ROUND,
       items: [{ productId: "p2", name: "On-hand product" }],
     });
-    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+    assert.equal(msg, HIDDEN_WAY_MESSAGES.onHand);
   });
 
-  await check("a CLOSED on-hand way blocks just the same (closed and hidden both refuse)", () => {
+  await check("a CLOSED on-hand way blocks just the same (closed and hidden both refuse; hidden says nothing about on-hand)", () => {
     const msg = decideWayBlock({
       ways: { onHand: "closed", groupBuy: "open" },
       gate: GATE_NO_ROUND,
@@ -249,7 +249,7 @@ async function main() {
       gate: GATE_ROUND_P1,
       items: [{ productId: "p1", name: "In-buy product" }],
     });
-    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+    assert.equal(msg, HIDDEN_WAY_MESSAGES.groupBuy);
   });
 
   await check("a closed group-buy way leaves on-hand items alone", () => {
@@ -304,7 +304,7 @@ async function main() {
       gate: GATE_NO_ROUND,
       items: [{ productId: "p9", name: "Semaglutide", productType: "gb" }],
     });
-    assert.equal(msg, WAY_BLOCK_MESSAGES.groupBuy);
+    assert.equal(msg, HIDDEN_WAY_MESSAGES.groupBuy);
   });
 
   await check("an OPEN group-buy way still lets a gb-tagged item through", () => {
@@ -376,7 +376,7 @@ async function main() {
       ITEMS_WITH_ONHAND,
       okDeps(CAPS_ON, [ROUND_COVERS_P1]),
     );
-    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+    assert.equal(msg, HIDDEN_WAY_MESSAGES.onHand);
   });
 
   await check("a group-buy-only store refuses on-hand items with no round running at all", async () => {
@@ -388,7 +388,7 @@ async function main() {
       [{ productId: "p2", name: "On-hand product" }],
       okDeps(CAPS_ON, []),
     );
-    assert.equal(msg, WAY_BLOCK_MESSAGES.onHand);
+    assert.equal(msg, HIDDEN_WAY_MESSAGES.onHand);
   });
 
   await check("FAILS CLOSED when the gate can't be evaluated and a way is shut", async () => {

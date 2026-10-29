@@ -83,6 +83,30 @@ export function formatOrderNumber(format: OrderNumberFormat, n: number): string 
   return `${format.prefix}${format.separator}${String(n).padStart(format.digits, "0")}`;
 }
 
+// ── Per-round order IDs (group buys) ─────────────────────────────────────────
+// The owner types an order ID when opening a round ("MNMGB123"); that round's
+// orders are numbered from its own counter: MNMGB123-0001, MNMGB123-0002…
+// Blank = the round uses the store's format above.
+
+export const GB_ORDER_PREFIX_RE = /^[A-Z0-9]{2,16}$/;
+export const GB_ORDER_DIGITS = 4;
+
+/** Upper-cased, spaces/dashes stripped — what the owner meant by "mnmgb 123". */
+export function normalizeGroupBuyOrderPrefix(raw: unknown): string {
+  return typeof raw === "string" ? raw.toUpperCase().replace(/[\s-]+/g, "").slice(0, 32) : "";
+}
+
+/** null when valid (or blank = off), else a message for the round form. */
+export function validateGroupBuyOrderPrefix(prefix: string): string | null {
+  if (!prefix || GB_ORDER_PREFIX_RE.test(prefix)) return null;
+  return "Order ID must be 2–16 letters or numbers (A–Z, 0–9), e.g. MNMGB123.";
+}
+
+/** formatGroupBuyOrderNumber("MNMGB123", 1) → "MNMGB123-0001". */
+export function formatGroupBuyOrderNumber(prefix: string, n: number): string {
+  return `${prefix}-${String(n).padStart(GB_ORDER_DIGITS, "0")}`;
+}
+
 /** A representative example for previews (sequential shows the first real number). */
 export function sampleOrderNumber(format: OrderNumberFormat): string {
   const n = format.scheme === "sequential" ? SEQ_START + 1 : 4 * 10 ** (format.digits - 1) + 217;

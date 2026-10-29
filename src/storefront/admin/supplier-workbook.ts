@@ -92,6 +92,29 @@ export async function buildSupplierWorkbook(prep: ReportPrep): Promise<Workbook>
 export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook> {
   const wb = await newWorkbook();
 
+  // Orders — the sheet the owner opens first: per order, the number and buyer
+  // on its first line, one row per item with its vials, then a blank row
+  // before the next order. Everything else lives on Order Details.
+  const simple = wb.addWorksheet("Orders");
+  simple.columns = [
+    { header: "Order", width: 12 },
+    { header: "Customer", width: 26 },
+    { header: "Product", width: 40 },
+    { header: "Vials", width: 8 },
+  ];
+  simple.getRow(1).font = { bold: true };
+  const byOrder = new Map<string, ReportPrep["orderLines"]>();
+  for (const l of prep.orderLines) byOrder.set(l.orderNumber, [...(byOrder.get(l.orderNumber) ?? []), l]);
+  for (const [orderNumber, lines] of byOrder) {
+    lines.forEach((l, i) => {
+      const row = simple.addRow(i === 0 ? [orderNumber, l.customer, l.product, l.vials] : ["", "", l.product, l.vials]);
+      if (i === 0) row.getCell(1).font = { bold: true };
+      // Same rule as Order Details: a cancelled order stays visible but struck out.
+      if (!l.counted) row.font = { strike: true, color: { argb: "FF999999" } };
+    });
+    simple.addRow([]);
+  }
+
   // Summary — label/value pairs; the note row explains demand vs committed.
   const totals = wb.addWorksheet("Summary");
   totals.columns = [
@@ -173,9 +196,9 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
   );
   perCustomer.addRow(["ALL CUSTOMERS", "", "", "", "", "", "", grand.fee, grand.total, grand.paid, grand.balance]).font = { bold: true };
 
-  // Orders — one row per line, every order incl cancelled, with a Counted flag
-  // and the full customer detail the owner reconciles payments against.
-  const orders = wb.addWorksheet("Orders");
+  // Order Details — one row per line, every order incl cancelled, with a Counted
+  // flag and the full customer detail the owner reconciles payments against.
+  const orders = wb.addWorksheet("Order Details");
   orders.columns = [
     { header: "Order", width: 12 },
     { header: "Order Date", width: 12 },

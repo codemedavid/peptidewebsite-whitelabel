@@ -1,5 +1,5 @@
 import type { TenantTx } from "@/lib/db/tenant-client";
-import { formatOrderNumber, normalizeOrderNumberFormat } from "./order-number-format";
+import { formatGroupBuyOrderNumber, formatOrderNumber, normalizeOrderNumberFormat } from "./order-number-format";
 
 /**
  * Server-side, per-tenant order-number generator (the real, DB-backed one).
@@ -31,8 +31,23 @@ function randomNumber(digits: number): number {
 export async function generateStorefrontOrderNumber(
   db: TenantTx,
   tenantId: string,
+  groupBuyId: string | null = null,
 ): Promise<string> {
   if (!tenantId) throw new Error("generateStorefrontOrderNumber() requires a tenantId");
+
+  // A round with its own order ID numbers its orders from its own counter —
+  // same row-lock guarantee as Tenant.orderSeq below, on the round's row.
+  if (groupBuyId) {
+    const round = await db.groupBuy.findFirst({ where: { id: groupBuyId }, select: { orderPrefix: true } });
+    if (round?.orderPrefix) {
+      const updated = await db.groupBuy.update({
+        where: { id: groupBuyId, tenantId },
+        data: { orderSeq: { increment: 1 } },
+        select: { orderSeq: true },
+      });
+      return formatGroupBuyOrderNumber(round.orderPrefix, updated.orderSeq);
+    }
+  }
 
   const tenant = await db.tenant.findUniqueOrThrow({
     where: { id: tenantId },

@@ -75,6 +75,11 @@ import {
 import { AdminGroupBuyPricing } from "./AdminGroupBuyPricing";
 import { PaidAccessAdmin, PaidAccessMembers, usePaidAccessWaitingCount } from "@/modules/paid-access/ui";
 import { AdminHeroCountdown } from "./AdminHeroCountdown";
+import {
+  formatGroupBuyOrderNumber,
+  normalizeGroupBuyOrderPrefix,
+  validateGroupBuyOrderPrefix,
+} from "@/lib/orders/order-number-format";
 import { isGroupBuyOnlyStore } from "../visibility";
 import {
   downloadCustomerWorkbook,
@@ -178,6 +183,7 @@ function GroupBuyModal({
       productIds: [] as string[],
       slotGoal: 0,
       batchNumber: "",
+      orderPrefix: "",
       minVials: null as number | null,
       maxVials: null as number | null,
       moqVials: null as number | null,
@@ -198,6 +204,9 @@ function GroupBuyModal({
   // clear the number to hide the progress bar for this round entirely.
   const [slotGoal, setSlotGoal] = useState<number>(seed.slotGoal ?? 0);
   const [batchNumber, setBatchNumber] = useState<string>(seed.batchNumber ?? "");
+  const [orderPrefix, setOrderPrefix] = useState<string>(seed.orderPrefix ?? "");
+  const cleanPrefix = normalizeGroupBuyOrderPrefix(orderPrefix);
+  const prefixError = validateGroupBuyOrderPrefix(cleanPrefix);
   const [minVials, setMinVials] = useState<number>(seed.minVials ?? 0);
   const [maxVials, setMaxVials] = useState<number>(seed.maxVials ?? 0);
   const [moqVials, setMoqVials] = useState<number>(seed.moqVials ?? 0);
@@ -329,6 +338,30 @@ function GroupBuyModal({
           </div>
         </div>
 
+        {/* Group-buy-only stores number each round's orders from its own ID. */}
+        {groupBuyOnly ? (
+          <div className="admin-modal__row">
+            <label className="admin-field__label" htmlFor="gb-order-prefix">Order ID</label>
+            <input
+              id="gb-order-prefix"
+              className="admin-input"
+              maxLength={32}
+              value={orderPrefix}
+              placeholder="e.g. MNMGB123 — blank uses your store's order numbers"
+              autoCapitalize="characters"
+              aria-invalid={prefixError ? true : undefined}
+              onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())}
+            />
+            <div className="admin-field__hint">
+              {prefixError
+                ? prefixError
+                : cleanPrefix
+                  ? `This round's orders are numbered ${formatGroupBuyOrderNumber(cleanPrefix, 1)}, ${formatGroupBuyOrderNumber(cleanPrefix, 2)}…`
+                  : "Blank — orders in this round keep your store's usual numbers."}
+            </div>
+          </div>
+        ) : null}
+
         {groupBuyOnly ? (
           <div className="admin-modal__row">
             <label className="admin-field__label">Minimum order (MOQ)</label>
@@ -432,9 +465,10 @@ function GroupBuyModal({
           </button>
           <button
             className="admin-btn"
-            disabled={busy || !name.trim()}
+            disabled={busy || !name.trim() || prefixError !== null}
             onClick={() =>
               onSave({
+                orderPrefix: cleanPrefix,
                 id: initial?.id ?? "",
                 name,
                 description,

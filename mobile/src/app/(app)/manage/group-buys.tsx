@@ -264,6 +264,7 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
           caps={data.caps}
           settings={data.settings}
           products={(products.data ?? []).map((p) => ({ id: p.id, name: p.name }))}
+          groupBuyOnly={ways.onHand === "hidden"}
           saving={save.isPending}
           onCancel={() => setEditor(null)}
           onSave={(patch) => save.mutate([patch], { onSuccess: () => setEditor(null), onError: fail("Couldn't save the group buy") })}

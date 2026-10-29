@@ -41,14 +41,22 @@ export type WayKey = keyof TwoWaysMode;
  *  normalizer doesn't recognise. */
 export const TWO_WAYS_MODE_DEFAULT: TwoWaysMode = { onHand: "open", groupBuy: "open" };
 
-/** Shopper-facing copy for an add/checkout refused because its way isn't
- *  selling. Deliberately says nothing about closed-vs-hidden: a hidden way
- *  doesn't exist as far as the storefront is concerned. */
+/** Shopper-facing copy for an add/checkout refused because its way is CLOSED
+ *  (shown, paused). A hidden way doesn't exist as far as the storefront is
+ *  concerned, so it gets HIDDEN_WAY_MESSAGES instead. */
 export const WAY_BLOCK_MESSAGES: Record<WayKey, string> = {
   onHand:
     "On-hand orders are paused right now — only the group buy is open. Please remove these items to check out.",
   groupBuy:
     "The group buy isn't taking orders right now. Please remove these items to check out.",
+} as const;
+
+/** The same refusal for a HIDDEN way. A store that hides on-hand sells group
+ *  buy only, so naming "on-hand orders" to its shoppers describes a way of
+ *  buying it doesn't offer (a stale cart line is the usual cause). */
+export const HIDDEN_WAY_MESSAGES: Record<WayKey, string> = {
+  onHand: "Some items in your cart aren't part of the group buy. Please remove them to check out.",
+  groupBuy: "Some items in your cart aren't available right now. Please remove them to check out.",
 } as const;
 
 const WAY_STATES: readonly WayState[] = ["open", "closed", "hidden"];
@@ -185,4 +193,10 @@ export function visibleWayCount(ways: TwoWaysMode): number {
 /** The heading above the ways split. A one-way store must never claim two. */
 export function waysHeading(ways: TwoWaysMode): string {
   return visibleWayCount(ways) > 1 ? "Two ways to order" : "How to order";
+}
+
+/** True when the store has switched its on-hand way off entirely (group-buy
+ *  only). Every shopper-facing mention of on-hand keys off this. */
+export function isOnHandHidden(value: unknown): boolean {
+  return normalizeTwoWaysMode(value).onHand === "hidden";
 }

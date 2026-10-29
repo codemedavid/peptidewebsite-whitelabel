@@ -10,10 +10,19 @@
 //     its startsAt (only with groupbuy.scheduled — without it a scheduled
 //     round never opens by itself, so a countdown to it would lie)
 //
+// It is tied to the round's LISTING too, not just its dates: a "closes in"
+// timer only runs while the group-buy page has something to order
+// (countdownForListing), so the hero can never tick above "No group buy right
+// now" (mnm-pepsabuy, 2026-10-29).
+//
 // Pure + JSON-safe (no React, no DB): storefront-brand.ts resolves it
 // server-side and the hero just ticks the clock.
 
 import { effectiveGroupBuyStatus, liveGroupBuys, type GroupBuy, type GroupBuyCapabilities } from "./group-buy";
+import type { GroupBuyBanner } from "./group-buy-banner";
+
+type RoundScope = Pick<GroupBuyBanner, "coversAll" | "productIds">;
+type ListedProduct = { id: string; available?: boolean };
 
 /** What the owner stores. Blank heading = the automatic text for the phase. */
 export type HeroCountdownConfig = {
@@ -111,6 +120,36 @@ export function resolveHeroCountdown(
     ...pick,
     heading: c.showHeading ? heroCountdownHeading(c, pick.phase, pick.roundName) : null,
   };
+}
+
+/**
+ * Keep a "closing" countdown only while the live round lists something a
+ * shopper can order — the same membership + availability rule the group-buy
+ * page applies (buildGroupBuyPageView). An "opening" timer has no listing yet,
+ * and with no banner (a paid-access teaser hides it) the timer is left as is.
+ */
+export function countdownForListing(
+  countdown: HeroCountdown | null,
+  banner: RoundScope | null | undefined,
+  products: readonly ListedProduct[],
+): HeroCountdown | null {
+  if (!countdown || countdown.phase !== "closing" || !banner) return countdown;
+  const inRound = banner.coversAll ? null : new Set(banner.productIds);
+  const listed = products.some((p) => p.available !== false && (inRound?.has(p.id) ?? true));
+  return listed ? countdown : null;
+}
+
+/**
+ * The rounds and the catalog are cached separately, so a direct-DB catalog swap
+ * can leave the rounds pointing at products the cached catalog has never seen
+ * — the round renders empty while its countdown runs. True when the live round
+ * names products and NONE of them is in the catalog: the caller then re-reads
+ * the catalog live.
+ */
+export function catalogMissesRound(banner: RoundScope | null | undefined, catalogIds: readonly string[]): boolean {
+  if (!banner || banner.coversAll || banner.productIds.length === 0) return false;
+  const ids = new Set(catalogIds);
+  return !banner.productIds.some((id) => ids.has(id));
 }
 
 export type CountdownParts = { days: number; hours: number; minutes: number; seconds: number; done: boolean };

@@ -39,9 +39,27 @@ export function supplierSheets(prep: ReportPrep): Sheet[] {
   ];
 }
 
+/** The simple Orders sheet: order no. + buyer on each order's first line, one
+ *  row per item with its vials, a blank row before the next order. */
+function orderBlocks(lines: ReportPrep["orderLines"]): Sheet["rows"] {
+  const byOrder = new Map<string, ReportPrep["orderLines"]>();
+  for (const l of lines) byOrder.set(l.orderNumber, [...(byOrder.get(l.orderNumber) ?? []), l]);
+  return [
+    { cells: ["Order", "Customer", "Product", "Vials"], style: "bold" },
+    ...[...byOrder].flatMap(([orderNumber, items]) => [
+      ...items.map((l, i) => ({
+        cells: i === 0 ? [orderNumber, l.customer, l.product, l.vials] : ["", "", l.product, l.vials],
+        style: l.counted ? undefined : ("strike" as const),
+      })),
+      { cells: [] },
+    ]),
+  ];
+}
+
 /** The owner's copy: totals, every buyer and every order line. Never for the supplier. */
 export function customerSheets(prep: ReportPrep): Sheet[] {
   return [
+    { name: "Orders", widths: [12, 26, 40, 8], rows: orderBlocks(prep.orderLines) },
     { name: "Summary", widths: [22, 70], rows: prep.totals.map((t) => ({ cells: [t.label, t.value] })) },
     {
       name: "Customers",
@@ -54,7 +72,7 @@ export function customerSheets(prep: ReportPrep): Sheet[] {
       ],
     },
     {
-      name: "Orders",
+      name: "Order Details",
       widths: [12, 12, 24, 16, 46, 18, 36, 8, 10, 16, 15, 13, 9, 46, 46],
       rows: [
         {

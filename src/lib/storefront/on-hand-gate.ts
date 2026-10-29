@@ -21,6 +21,7 @@ import {
   isGroupBuyBuyable,
   isOnHandBuyable,
   normalizeTwoWaysMode,
+  HIDDEN_WAY_MESSAGES,
   WAY_BLOCK_MESSAGES,
   type TwoWaysMode,
 } from "./two-ways-mode";
@@ -114,6 +115,7 @@ export function decideWayBlock(args: {
     if (!item.productId) continue;
     const isGroupBuy = item.productType === "gb" || inRound(item.productId);
     const way = isGroupBuy ? "groupBuy" : "onHand";
+    if (ways[way] === "hidden") return HIDDEN_WAY_MESSAGES[way];
     if (ways[way] !== "open") return WAY_BLOCK_MESSAGES[way];
   }
   return null;

@@ -54,6 +54,9 @@ export type ReportShipping = {
 /** An order as the report consumes it — the DB row and the demo fixture both
  *  narrow to this. `date` is the storefront-facing placedAt, ISO-8601. */
 export type LinkableOrder = {
+  /** The StorefrontOrder row id — lets a round's folder point back at the real
+   *  orders in the Orders screen (order-folders.ts). Optional: reports never need it. */
+  id?: string;
   orderNumber?: string;
   date: string;
   status: string;

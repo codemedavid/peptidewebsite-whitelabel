@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Brand, Order } from "../types";
 import {
   listStorefrontOrdersAction,
@@ -73,18 +73,42 @@ function PaymentStatusPill({ status }: { status: Order["paymentStatus"] }) {
   return null;
 }
 
+/**
+ * Narrow the screen to one folder of orders — a group buy's, or the ones
+ * outside every round (AdminOrdersHub). Every count, filter, search and bulk
+ * action then works on that slice only; without a scope the screen is the
+ * store-wide list it always was.
+ */
+export type OrdersScope = {
+  title: string;
+  backLabel: string;
+  onBack: () => void;
+  includes: (orderId: string) => boolean;
+  /** Rendered above the status cards — the round's numbers and reports. */
+  header?: ReactNode;
+  /** The trash is store-wide, so only the unfiltered folder offers it. */
+  showTrash?: boolean;
+};
+
 export function AdminOrders({
   brand,
   onBack,
   onView,
+  scope,
 }: {
   brand: Brand;
   onBack: () => void;
   onView: (o: Order) => void;
+  scope?: OrdersScope;
 }) {
   // Orders are DB-backed (source of truth). Load the tenant's set on mount and
   // re-fetch after deletes / on Refresh, rather than reading browser localStorage.
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setOrders] = useState<Order[]>([]);
+  const orders = useMemo(
+    () => (scope ? allOrders.filter((o) => scope.includes(o.id)) : allOrders),
+    [allOrders, scope],
+  );
+  const offersTrash = !scope || scope.showTrash === true;
   // The trash is fetched alongside the working list rather than on demand, so
   // the tab can carry a count and switching views costs nothing.
   const [trashed, setTrashed] = useState<Order[]>([]);
@@ -296,7 +320,7 @@ export function AdminOrders({
               href="#"
               onClick={(e) => {
                 e.preventDefault();
-                onBack();
+                (scope?.onBack ?? onBack)();
               }}
             >
               <svg
@@ -311,9 +335,9 @@ export function AdminOrders({
               >
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              Dashboard
+              {scope?.backLabel ?? "Dashboard"}
             </a>
-            <span>Orders Management</span>
+            <span>{scope?.title ?? "Orders Management"}</span>
           </h1>
           <button
             className="admin-btn"
@@ -336,6 +360,9 @@ export function AdminOrders({
           </button>
         </div>
 
+        {scope?.header}
+
+        {offersTrash && (
         <div className="admin-orders__views" role="tablist" aria-label="Orders or trash">
           <button
             className={`admin-btn ${showingTrash ? "" : "admin-btn--primary"}`}
@@ -365,6 +392,7 @@ export function AdminOrders({
             Trash ({trashed.length.toLocaleString()})
           </button>
         </div>
+        )}
 
         {showingTrash && (
           <div className="admin-note" style={{ marginBottom: 14 }}>
@@ -511,6 +539,7 @@ export function AdminOrders({
                   </svg>
                   Move to Trash
                 </button>
+                {offersTrash && (
                 <button
                   className="admin-btn admin-btn--danger"
                   disabled={!orders.length || busy}
@@ -529,6 +558,7 @@ export function AdminOrders({
                   </svg>
                   Move All to Trash
                 </button>
+                )}
               </>
             )}
           </div>

@@ -13,7 +13,7 @@ import { AdminAddProduct } from "./AdminAddProduct";
 import { AdminProductsList } from "./AdminProductsList";
 import { AdminCategoriesManager } from "./AdminCategoriesManager";
 import { AdminSortCategories } from "./AdminSortCategories";
-import { AdminOrders } from "./AdminOrders";
+import { AdminOrdersHub, type OrdersFolderKey } from "./AdminOrdersHub";
 import { AdminOrderDetail } from "./AdminOrderDetail";
 import { AdminShippingLocations } from "./AdminShippingLocations";
 import { AdminCouriers } from "./AdminCouriers";
@@ -135,6 +135,12 @@ export function AdminPage({
   // The round whose dedicated dashboard is open. Same master-detail shape as
   // viewingOrder — the list hands the row over, the detail view hands back.
   const [viewingGroupBuy, setViewingGroupBuy] = useState<GroupBuy | null>(null);
+  // The Orders folder that is open (a group buy, or a catch-all). Held here, not
+  // in the hub, so backing out of an order lands on the same round.
+  const [ordersFolder, setOrdersFolder] = useState<OrdersFolderKey>(null);
+  // Where the round dashboard's Back goes — the Orders folder that opened it,
+  // or the Group Buys list.
+  const [groupBuyReturn, setGroupBuyReturn] = useState<"groupbuys" | "orders">("groupbuys");
   // Which Group Buys tab to land on — "members" when the dashboard's
   // "review join requests" shortcut sent us; every other entry opens Rounds.
   const [groupBuysTab, setGroupBuysTab] = useState<GroupBuysTab>("rounds");
@@ -304,12 +310,22 @@ export function AdminPage({
   }
   if (activeView === "orders") {
     return (
-      <AdminOrders
+      <AdminOrdersHub
         brand={brand}
-        onBack={() => setView("dashboard")}
+        folder={ordersFolder}
+        onFolder={setOrdersFolder}
+        onBack={() => {
+          setOrdersFolder(null);
+          setView("dashboard");
+        }}
         onView={(o) => {
           setViewingOrder(o);
           setView("order-detail");
+        }}
+        onOpenDashboard={(gb) => {
+          setViewingGroupBuy(gb);
+          setGroupBuyReturn("orders");
+          setView("groupbuy-detail");
         }}
       />
     );
@@ -357,6 +373,7 @@ export function AdminPage({
         onBack={() => setView("dashboard")}
         onOpen={(gb) => {
           setViewingGroupBuy(gb);
+          setGroupBuyReturn("groupbuys");
           setView("groupbuy-detail");
         }}
       />
@@ -369,7 +386,7 @@ export function AdminPage({
         groupBuy={viewingGroupBuy}
         onBack={() => {
           setViewingGroupBuy(null);
-          setView("groupbuys");
+          setView(groupBuyReturn);
         }}
       />
     );

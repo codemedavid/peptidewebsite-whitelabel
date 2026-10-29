@@ -4,6 +4,8 @@
 // the demand up into one supplier order. Every capability is feature-gated — see
 // the groupbuy.* keys in src/lib/features/catalog.ts.
 
+import { normalizeGroupBuyOrderPrefix } from "@/lib/orders/order-number-format";
+
 export const GROUP_BUY_STATUSES = [
   "draft",
   "scheduled",
@@ -33,6 +35,9 @@ export type GroupBuy = {
   slotGoal: number;
   /** Owner-typed batch label ("TR30-B1"). Empty falls back to `name` on display. */
   batchNumber: string;
+  /** Owner-typed order ID ("MNMGB123") → orders MNMGB123-0001… Empty = the
+   *  store's own order numbers. Optional so older fixtures keep compiling. */
+  orderPrefix?: string;
   /** Minimum vials for the round to be viable. null = not configured. */
   minVials: number | null;
   /** Vial ceiling that progress and completion % are measured against. null =
@@ -184,6 +189,7 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     productIds,
     slotGoal: slotGoalInt(x.slotGoal),
     batchNumber: str(x.batchNumber, 64).trim(),
+    orderPrefix: normalizeGroupBuyOrderPrefix(x.orderPrefix),
     minVials: vialCount(x.minVials),
     maxVials: vialCount(x.maxVials),
     moqVials: vialCount(x.moqVials),
@@ -372,6 +378,7 @@ export type DbGroupBuyRow = {
   productIds: unknown;
   slotGoal?: number | null;
   batchNumber?: string | null;
+  orderPrefix?: string | null;
   minVials?: number | null;
   maxVials?: number | null;
   moqVials?: number | null;
@@ -393,6 +400,7 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     productIds: row.productIds,
     slotGoal: row.slotGoal ?? 0,
     batchNumber: row.batchNumber ?? "",
+    orderPrefix: row.orderPrefix ?? "",
     minVials: row.minVials ?? null,
     maxVials: row.maxVials ?? null,
     moqVials: row.moqVials ?? null,
@@ -416,6 +424,7 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
     productIds: gb.productIds,
     slotGoal: gb.slotGoal,
     batchNumber: gb.batchNumber || null,
+    orderPrefix: gb.orderPrefix || null,
     minVials: gb.minVials,
     maxVials: gb.maxVials,
     moqVials: gb.moqVials ?? null,

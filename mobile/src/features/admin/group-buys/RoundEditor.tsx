@@ -39,6 +39,7 @@ function seedRound(initial: GroupBuy | null, settings: GroupBuySettings, schedul
     productIds: [] as string[],
     slotGoal: 0,
     batchNumber: "",
+    orderPrefix: "",
     minVials: null as number | null,
     maxVials: null as number | null,
   };
@@ -54,6 +55,7 @@ export function RoundEditor({
   caps,
   settings,
   products,
+  groupBuyOnly,
   saving,
   onCancel,
   onSave,
@@ -62,6 +64,8 @@ export function RoundEditor({
   caps: GroupBuyCapabilities;
   settings: GroupBuySettings;
   products: { id: string; name: string }[];
+  /** On-hand hidden (website isGroupBuyOnlyStore) — only these stores get Order IDs. */
+  groupBuyOnly: boolean;
   saving: boolean;
   onCancel: () => void;
   onSave: (patch: Partial<GroupBuy>) => void;
@@ -81,6 +85,7 @@ export function RoundEditor({
     productIds: seed.productIds,
     slotGoal: seed.slotGoal ? String(seed.slotGoal) : "",
     batchNumber: seed.batchNumber ?? "",
+    orderPrefix: seed.orderPrefix ?? "",
     minVials: seed.minVials ? String(seed.minVials) : "",
     maxVials: seed.maxVials ? String(seed.maxVials) : "",
   };
@@ -93,6 +98,7 @@ export function RoundEditor({
   const [productIds, setProductIds] = useState<string[]>(start.productIds);
   const [slotGoal, setSlotGoal] = useState(start.slotGoal);
   const [batchNumber, setBatchNumber] = useState(start.batchNumber);
+  const [orderPrefix, setOrderPrefix] = useState(start.orderPrefix);
   const [minVials, setMinVials] = useState(start.minVials);
   const [maxVials, setMaxVials] = useState(start.maxVials);
   const [productQuery, setProductQuery] = useState("");
@@ -107,7 +113,10 @@ export function RoundEditor({
   const min = whole(minVials);
   const max = whole(maxVials);
   const rangeError = min > 0 && max > 0 && min > max ? "The minimum can't be higher than the maximum." : null;
-  const canSave = !!name.trim() && startsIso !== undefined && endsIso !== undefined && !rangeError;
+  // Same rule as the website (lib/orders/order-number-format): A–Z/0–9, 2–16.
+  const cleanPrefix = orderPrefix.toUpperCase().replace(/[\s-]+/g, "");
+  const prefixError = cleanPrefix && !/^[A-Z0-9]{2,16}$/.test(cleanPrefix) ? "Order ID must be 2–16 letters or numbers, e.g. MNMGB123." : null;
+  const canSave = !!name.trim() && startsIso !== undefined && endsIso !== undefined && !rangeError && !prefixError;
   const dirty =
     name !== start.name ||
     description !== start.description ||
@@ -118,6 +127,7 @@ export function RoundEditor({
     productIds.join() !== start.productIds.join() ||
     slotGoal !== start.slotGoal ||
     batchNumber !== start.batchNumber ||
+    orderPrefix !== start.orderPrefix ||
     minVials !== start.minVials ||
     maxVials !== start.maxVials;
 
@@ -146,6 +156,7 @@ export function RoundEditor({
           productIds,
           slotGoal: goal,
           batchNumber,
+          orderPrefix: cleanPrefix,
           // 0 means "cleared" — null stores "not configured" rather than a real 0.
           minVials: min || null,
           maxVials: max || null,
@@ -212,6 +223,22 @@ export function RoundEditor({
         autoCorrect={false}
         hint="Your label for this run, e.g. “TR30-B1”. Shown on the dashboard and in every export."
       />
+      {groupBuyOnly ? (
+        <Field
+          label="Order ID"
+          value={orderPrefix}
+          onChangeText={(v) => setOrderPrefix(v.toUpperCase().slice(0, 32))}
+          placeholder="e.g. MNMGB123 — blank uses your store's order numbers"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          hint={
+            prefixError ??
+            (cleanPrefix
+              ? `This round's orders are numbered ${cleanPrefix}-0001, ${cleanPrefix}-0002…`
+              : "Blank — orders in this round keep your store's usual numbers.")
+          }
+        />
+      ) : null}
       <View style={styles.pair}>
         <View style={{ flex: 1 }}>
           <Field

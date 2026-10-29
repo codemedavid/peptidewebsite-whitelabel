@@ -589,7 +589,7 @@ async function main() {
 
   await check("the CUSTOMER workbook opens with summary, customers and orders", () => {
     const names = customerBook.worksheets.map((w) => w.name);
-    assert.deepEqual(names, ["Summary", "Customers", "Orders"]);
+    assert.deepEqual(names, ["Orders", "Summary", "Customers", "Orders per Customer", "Order Details"]);
   });
 
   await check("PRIVACY: the supplier file leaks no customer name, phone or address", () => {
@@ -667,15 +667,15 @@ async function main() {
     assert.equal(custLabelled("Summary", "Total Cancelled Orders")[1], EXPECT.cancelledOrders);
   });
 
-  await check("Orders sheet: one row per order line, cancelled included", () => {
-    const ws = customerBook.getWorksheet("Orders");
+  await check("Order Details sheet: one row per order line, cancelled included", () => {
+    const ws = customerBook.getWorksheet("Order Details");
     assert.ok(ws);
     assert.equal(ws.rowCount - 1, rows.length, "header + one row per line");
     assert.equal(rows.length, 5);
   });
 
-  await check("Orders sheet: full customer detail lands in the right columns", () => {
-    const line = custLabelled("Orders", "KG-2001");
+  await check("Order Details sheet: full customer detail lands in the right columns", () => {
+    const line = custLabelled("Order Details", "KG-2001");
     assert.equal(line[2], "Erika Santos"); // Customer
     assert.equal(line[3], "09171234567"); // Contact Number
     assert.equal(line[4], "12 Mabini St, Poblacion, Davao City, Davao del Sur, 8000, PH");
@@ -686,14 +686,14 @@ async function main() {
     assert.equal(line[12], "Yes"); // Counted
   });
 
-  await check("Orders sheet: the cancelled line is present and marked not counted", () => {
-    const line = custLabelled("Orders", "KG-2003");
+  await check("Order Details sheet: the cancelled line is present and marked not counted", () => {
+    const line = custLabelled("Order Details", "KG-2003");
     assert.equal(line[10], "Cancelled");
     assert.equal(line[12], "No");
   });
 
-  await check("Orders sheet: the proof is a clickable link, not a download", () => {
-    const line = custLabelled("Orders", "KG-2002");
+  await check("Order Details sheet: the proof is a clickable link, not a download", () => {
+    const line = custLabelled("Order Details", "KG-2002");
     const proof = line[13] as { hyperlink?: string } | string | null;
     assert.ok(
       typeof proof === "object" && proof !== null && "hyperlink" in proof,
@@ -705,8 +705,25 @@ async function main() {
     );
   });
 
-  await check("the export contains NO order from another round", () => {
+  await check("Orders sheet: order no. + name, one row per item, a blank row between orders", () => {
     const ws = customerBook.getWorksheet("Orders");
+    assert.ok(ws);
+    assert.deepEqual((ws.getRow(1).values as unknown[]).slice(1), ["Order", "Customer", "Product", "Vials"]);
+    const grid: unknown[][] = [];
+    for (let i = 2; i <= ws.rowCount; i++) grid.push((ws.getRow(i).values as unknown[]).slice(1));
+    const starts = grid.filter((r) => typeof r[0] === "string" && r[0] !== "");
+    assert.equal(starts.length, new Set(rows.map((r) => r.orderNumber)).size, "one block per order");
+    assert.equal(grid.filter((r) => r.length && r[2]).length, rows.length, "one row per item");
+    grid.forEach((r, i) => {
+      if (i > 0 && typeof r[0] === "string" && r[0] !== "") assert.equal(grid[i - 1].length, 0, `blank row before ${r[0]}`);
+    });
+    const kg2001 = grid.findIndex((r) => r[0] === "KG-2001");
+    assert.equal(grid[kg2001][1], "Erika Santos");
+    assert.equal(grid[kg2001][3], 20);
+  });
+
+  await check("the export contains NO order from another round", () => {
+    const ws = customerBook.getWorksheet("Order Details");
     assert.ok(ws);
     const numbers: string[] = [];
     ws.eachRow((row, i) => {

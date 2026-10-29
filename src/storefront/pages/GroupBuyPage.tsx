@@ -25,7 +25,8 @@ import {
 } from "@/lib/storefront/group-buy-page";
 import { gbScopeFromBanner } from "@/lib/storefront/two-ways-cart";
 import { resolveProductImage } from "@/lib/storefront/product-image";
-import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
+import { gbStepsForWays, normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
+import { isOnHandHidden } from "@/lib/storefront/two-ways-mode";
 import { CTA_COPY } from "@/lib/storefront/product-cta";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import { roundKitProgress, type KitProgress } from "@/lib/storefront/gb-moq-kits";
@@ -76,6 +77,9 @@ export function GroupBuyPage({
   // Owner-editable GB copy — the same content object the two-ways home renders
   // (branding.config.groupBuyContent), so both surfaces stay in sync.
   const content = brand.groupBuyContent ?? normalizeGroupBuyContent(undefined);
+  // A group-buy-only store (on-hand way hidden) never points shoppers at
+  // on-hand stock it doesn't sell.
+  const onHandHidden = isOnHandHidden(brand.twoWaysMode);
   // Card Studio's "Text only" layout turns the card grid into a plain price
   // list: one row per product, no photos (mnm-pepsabuy asked for this). The
   // catalog card reads the same switch, so both listings agree.
@@ -95,8 +99,8 @@ export function GroupBuyPage({
           <div className="gbpage__empty">
             <Title className="page__title font-display">No group buy right now</Title>
             <p style={{ color: "var(--brand-text-muted)" }}>
-              There isn’t an open group-buy round at the moment. Check back soon — or browse
-              what’s on hand in the store.
+              There isn’t an open group-buy round at the moment.{" "}
+              {onHandHidden ? "Check back soon." : "Check back soon — or browse what’s on hand in the store."}
             </p>
           </div>
         </div>
@@ -186,7 +190,7 @@ export function GroupBuyPage({
         <div className="gbpage__how">
           <div className="gbpage__how-head">{content.howTitle}</div>
           <ol className="gbpage__how-list">
-            {content.steps.map((s) => renderGbCopy(s, view.deliveryEta)).map((text, i) => (
+            {gbStepsForWays(content.steps, onHandHidden).map((s) => renderGbCopy(s, view.deliveryEta)).map((text, i) => (
               <li key={i} className="gbpage__how-step">
                 <span className="gbpage__how-n">{i + 1}</span>
                 <span>{text}</span>
@@ -438,12 +442,17 @@ const gbPageCss = `
 .sf-root .gbpage__notice-copy {
   margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--brand-text-muted);
 }
-.sf-root .gbpage__status-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sf-root .gbpage__status-top {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+}
+/* A long round name wraps inside the pill and pushes the countdown to its own
+   line on phones, instead of shoving it past the banner's edge. */
 .sf-root .gbpage__pill {
   font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--brand-main); background: #fff; border-radius: 99px; padding: 5px 12px; white-space: nowrap;
+  color: var(--brand-main); background: #fff; border-radius: 99px; padding: 5px 12px;
+  max-width: 100%; overflow-wrap: anywhere;
 }
-.sf-root .gbpage__countdown { font-size: 12px; font-weight: 700; opacity: .92; }
+.sf-root .gbpage__countdown { font-size: 12px; font-weight: 700; opacity: .92; white-space: nowrap; }
 .sf-root .gbpage__slots { margin-top: 14px; }
 .sf-root .gbpage__slots-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 .sf-root .gbpage__bar { height: 7px; background: color-mix(in oklab, var(--brand-surface) 25%, transparent); border-radius: 99px; overflow: hidden; }

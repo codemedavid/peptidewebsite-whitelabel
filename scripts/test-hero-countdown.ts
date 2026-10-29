@@ -7,10 +7,14 @@
 //
 // Covers: default OFF, normalization of garbage, heading on/off + automatic
 // text + {name}, closing vs opening phase, open-ended live round, scheduled
-// rounds without groupbuy.scheduled, earliest upcoming wins, clock parts.
+// rounds without groupbuy.scheduled, earliest upcoming wins, clock parts, and
+// the link to the round's listing: a closing timer never runs over an empty
+// group-buy page, and a catalog cache that can't see the live round is caught.
 
 import {
+  catalogMissesRound,
   countdownParts,
+  countdownForListing,
   HERO_COUNTDOWN_DEFAULTS,
   HERO_COUNTDOWN_LIMITS,
   normalizeHeroCountdown,
@@ -18,6 +22,7 @@ import {
   resolveHeroCountdown,
 } from "../src/lib/storefront/hero-countdown";
 import type { GroupBuy } from "../src/lib/storefront/group-buy";
+import type { GroupBuyBanner } from "../src/lib/storefront/group-buy-banner";
 import {
   HERO_COUNTDOWN_AUTO_HEADING as APP_AUTO_HEADING,
   HERO_COUNTDOWN_LIMITS as APP_LIMITS,
@@ -127,6 +132,33 @@ eq(
 );
 eq("heading off → null heading", resolveHeroCountdown({ enabled: true, showHeading: false }, [live], SCHED, NOW)?.heading, null);
 eq("enabled but nothing coming up → null", resolveHeroCountdown({ enabled: true }, [], SCHED, NOW), null);
+
+console.log("listing link (countdown ⇄ group-buy page)");
+const banner = (patch: Partial<GroupBuyBanner>): Pick<GroupBuyBanner, "coversAll" | "productIds"> => ({
+  coversAll: false,
+  productIds: ["p1", "p2"],
+  ...patch,
+});
+const closing = resolveHeroCountdown({ enabled: true }, [live], SCHED, NOW)!;
+const opening = resolveHeroCountdown({ enabled: true }, [soon], SCHED, NOW)!;
+eq("closing + round products listed → kept", countdownForListing(closing, banner({}), [{ id: "p2" }]), closing);
+eq("closing + none of the round listed → hidden", countdownForListing(closing, banner({}), [{ id: "x" }]), null);
+eq(
+  "closing + round products all unavailable → hidden",
+  countdownForListing(closing, banner({}), [{ id: "p1", available: false }]),
+  null,
+);
+eq("closing + covers-all round with a catalog → kept", countdownForListing(closing, banner({ coversAll: true, productIds: [] }), [{ id: "x" }]), closing);
+eq("closing + covers-all round, empty catalog → hidden", countdownForListing(closing, banner({ coversAll: true, productIds: [] }), []), null);
+eq("opening phase is not tied to a listing", countdownForListing(opening, null, []), opening);
+eq("closing with no banner (paid-access teaser) → kept", countdownForListing(closing, null, []), closing);
+eq("no countdown → null", countdownForListing(null, banner({}), [{ id: "p1" }]), null);
+
+ok("catalog cache sees none of the round → stale", catalogMissesRound(banner({}), ["old1", "old2"]));
+ok("catalog has a round product → fresh", !catalogMissesRound(banner({}), ["old1", "p1"]));
+ok("no live round → never stale", !catalogMissesRound(null, []));
+ok("covers-all round → never stale", !catalogMissesRound(banner({ coversAll: true, productIds: [] }), []));
+ok("round with no products → never stale", !catalogMissesRound(banner({ productIds: [] }), []));
 
 console.log("clock");
 eq(

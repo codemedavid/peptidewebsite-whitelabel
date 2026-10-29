@@ -674,6 +674,11 @@ model GroupBuy {
   // Owner-typed batch label for the round, e.g. "TR30-B1". Blank/NULL falls back
   // to the round name everywhere it is displayed.
   batchNumber String?
+  // Owner-typed order ID for the round, e.g. "MNMGB123": its orders are numbered
+  // MNMGB123-0001, -0002… from orderSeq (lib/orders/order-number.ts). NULL = the
+  // round uses the store's own order-number format. Unique per store below.
+  orderPrefix String?
+  orderSeq    Int       @default(0)
   // Vial thresholds for the round's dashboard. minVials is the "minimum
   // requirement" the round needs to be viable; maxVials is the ceiling that
   // progress and completion % are measured against. Both NULL = not configured,
@@ -722,6 +727,7 @@ model GroupBuy {
 
   gbAllocations GbAllocation[]
 
+  @@unique([tenantId, orderPrefix])
   @@index([tenantId, status])
   @@map("group_buys")
 }

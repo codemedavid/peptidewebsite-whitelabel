@@ -32,7 +32,7 @@ import {
 } from "@/lib/storefront/variations";
 import { formatGbMoney } from "@/lib/storefront/group-buy-page";
 import { resolveProductImage } from "@/lib/storefront/product-image";
-import { normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
+import { gbStepsForWays, normalizeGroupBuyContent, renderGbCopy } from "@/lib/storefront/gb-content";
 import { ShareProductButton } from "./ShareProductButton";
 import { ProductCard } from "./Catalog";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
@@ -86,7 +86,9 @@ export function TwoWaysHome({
   const heroLine2 = brand.heroLine2 || "beautifully verified.";
   const heroSub =
     brand.heroSub ||
-    "Every batch third-party tested. Order what's on-hand today, or join the group buy and save.";
+    (onHandState === "hidden"
+      ? "Every batch third-party tested. Join the group buy and save."
+      : "Every batch third-party tested. Order what's on-hand today, or join the group buy and save.");
 
   const qtyOf = (id: string) => cart.filter((c) => baseProductId(c) === id).length;
 
@@ -289,7 +291,7 @@ export function TwoWaysHome({
           {content.howTitle}
         </div>
         <ol className="sf-twh__steps">
-          {content.steps.map((s) => renderGbCopy(s, view.gb.deliveryEta)).map((text, i) => (
+          {gbStepsForWays(content.steps, onHandState === "hidden").map((s) => renderGbCopy(s, view.gb.deliveryEta)).map((text, i) => (
             <li key={i} className="sf-twh__step">
               <span className="sf-twh__step-n">{i + 1}</span>
               <span>{text}</span>

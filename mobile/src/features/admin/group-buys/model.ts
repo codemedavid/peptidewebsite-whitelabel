@@ -22,6 +22,8 @@ export type GroupBuy = {
   productIds: string[];
   slotGoal: number;
   batchNumber: string;
+  /** Owner-typed order ID ("MNMGB123") → orders MNMGB123-0001… Empty = store numbers. */
+  orderPrefix?: string;
   minVials: number | null;
   maxVials: number | null;
   closedAt: string | null;

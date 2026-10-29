@@ -48,6 +48,21 @@ export const GB_CONTENT_DEFAULTS: Readonly<GroupBuyContent> = Object.freeze({
   terms: "Pay now to lock your slot. Ships {eta}. COA posted before shipping.",
 });
 
+/** The first default step, for a store that sells group buy only (on-hand
+ *  way hidden) — the default one invites the shopper to browse on-hand stock. */
+export const GB_ONLY_FIRST_STEP =
+  "Join the live group buy to lock in the group price on the products you want.";
+
+/**
+ * The steps to render. On a group-buy-only store the default on-hand step
+ * becomes GB_ONLY_FIRST_STEP — matched on the exact default text, so a step the
+ * owner wrote is never rewritten. Returns a new array.
+ */
+export function gbStepsForWays(steps: readonly string[], onHandHidden: boolean): string[] {
+  const onHandStep = GB_CONTENT_DEFAULTS.steps[0];
+  return steps.map((s) => (onHandHidden && s === onHandStep ? GB_ONLY_FIRST_STEP : s));
+}
+
 /**
  * Normalize the stored (untrusted) config value into a complete GroupBuyContent.
  * Per-field fallback: a blank/invalid field gets its default while the others

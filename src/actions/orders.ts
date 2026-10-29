@@ -123,6 +123,7 @@ import {
 } from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
+import { isOnHandHidden } from "@/lib/storefront/two-ways-mode";
 import { groupBuyMoqViolation, type MoqLine } from "@/lib/storefront/gb-moq-kits";
 import {
   activePaymentFee,
@@ -1048,7 +1049,11 @@ async function validateLiveOrder(
   // Two-ways split: one order never mixes group-buy (pre-order) and on-hand
   // lines — the cart blocks it, and this re-check (against the SAME scope the
   // re-price used) stops a stale/tampered client from sneaking a mix through.
-  const mixViolation = twoWaysOrderViolation(matchedProductIds(catalog, p.items), gbScope);
+  const mixViolation = twoWaysOrderViolation(
+    matchedProductIds(catalog, p.items),
+    gbScope,
+    isOnHandHidden(config.twoWaysMode),
+  );
   if (mixViolation) return { error: mixViolation };
 
   // Group-buy MOQ: the round's per-customer minimum in vials, re-checked here so
@@ -1421,7 +1426,7 @@ async function createStorefrontOrder(
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const orderNumber = await withTenant(tenantId, (db) =>
-      generateStorefrontOrderNumber(db, tenantId),
+      generateStorefrontOrderNumber(db, tenantId, p.groupBuyId ?? null),
     );
     try {
       const { row, roundClosed } = await withTenant(tenantId, async (db) => {
