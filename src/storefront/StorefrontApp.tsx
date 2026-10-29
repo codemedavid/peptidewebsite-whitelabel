@@ -60,6 +60,7 @@ const ProtocolsPage = dynamic(() => import("./pages/ProtocolsPage").then((m) => 
 const ReconstitutionPage = dynamic(() => import("./pages/ReconstitutionPage").then((m) => m.ReconstitutionPage), { ssr: false, loading: BrandPageLoader });
 const ReviewsPage = dynamic(() => import("./pages/ReviewsPage").then((m) => m.ReviewsPage), { ssr: false, loading: BrandPageLoader });
 const MerchantPage = dynamic(() => import("./pages/MerchantPage").then((m) => m.MerchantPage), { ssr: false, loading: BrandPageLoader });
+const MyGroupBuyOrderPage = dynamic(() => import("./pages/MyGroupBuyOrderPage").then((m) => m.MyGroupBuyOrderPage), { ssr: false, loading: BrandPageLoader });
 const AccountPage = dynamic(() => import("./pages/AccountPage").then((m) => m.AccountPage), { ssr: false, loading: BrandPageLoader });
 const ArticlesPage = dynamic(() => import("./pages/ArticlesPage").then((m) => m.ArticlesPage), { ssr: false, loading: BrandPageLoader });
 const AssessmentPage = dynamic(() => import("./pages/AssessmentPage").then((m) => m.AssessmentPage), { ssr: false, loading: BrandPageLoader });
@@ -86,7 +87,7 @@ const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: BrandPageLoader });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: BrandPageLoader });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account", "articles", "assessment"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account", "articles", "assessment", "my-groupbuy"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -417,6 +418,7 @@ function Shell({
       {activePage === "reviews" && <ReviewsPage brand={brand} onBack={goHome} />}
       {activePage === "merchant" && <MerchantPage brand={brand} onBack={goHome} />}
       {activePage === "account" && <AccountPage brand={brand} onBack={goHome} />}
+      {activePage === "my-groupbuy" && <MyGroupBuyOrderPage brand={brand} onBack={goHome} />}
       {activePage === "articles" && <ArticlesPage brand={brand} onBack={goHome} />}
       {activePage === "assessment" && (
         <AssessmentPage brand={brand} onBack={goHome} onCheckout={() => setCartOpen(true)} />

@@ -5,17 +5,76 @@
 // in, and disable an account — which signs it out everywhere on its next
 // request. A shopper who forgot their password messages the store; "Reset
 // password" issues a temp one to pass on (also signs them out everywhere).
+// Edit corrects name / email / phone; Delete removes the account and its
+// personal data for good (orders stay, unlinked — same purge as the app's own
+// "Delete account").
 // Staff need the "customers" permission; the server re-checks it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
 import {
+  deleteStoreCustomerAction,
   listStoreCustomersAction,
   resetStoreCustomerPasswordAction,
   setStoreCustomerStatusAction,
+  updateStoreCustomerAction,
   type StoreCustomerRow,
 } from "@/actions/customer-accounts";
+
+type CustomerDraft = Pick<StoreCustomerRow, "name" | "email" | "phone">;
+
+interface CustomerEditFormProps {
+  customer: StoreCustomerRow;
+  busy: boolean;
+  onSave: (draft: CustomerDraft) => void;
+  onCancel: () => void;
+}
+
+/** Inline editor that opens under a customer's row. */
+function CustomerEditForm({ customer, busy, onSave, onCancel }: CustomerEditFormProps) {
+  const [draft, setDraft] = useState<CustomerDraft>({
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone,
+  });
+  const set = (key: keyof CustomerDraft) => (e: ChangeEvent<HTMLInputElement>) =>
+    setDraft((d) => ({ ...d, [key]: e.target.value }));
+
+  return (
+    <form
+      className="cust-edit"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(draft);
+      }}
+    >
+      <div className="admin-field">
+        <label className="admin-field__label" htmlFor={`cust-name-${customer.id}`}>Name</label>
+        <input id={`cust-name-${customer.id}`} className="admin-input" value={draft.name} onChange={set("name")} autoFocus />
+      </div>
+      <div className="admin-field">
+        <label className="admin-field__label" htmlFor={`cust-email-${customer.id}`}>Email</label>
+        <input id={`cust-email-${customer.id}`} className="admin-input" type="email" value={draft.email} onChange={set("email")} />
+      </div>
+      <div className="admin-field">
+        <label className="admin-field__label" htmlFor={`cust-phone-${customer.id}`}>Phone</label>
+        <input id={`cust-phone-${customer.id}`} className="admin-input" type="tel" value={draft.phone} onChange={set("phone")} />
+      </div>
+      <p className="admin-field__hint">
+        Changing the email changes what they sign in with. Their password stays the same.
+      </p>
+      <div className="cust-edit__actions">
+        <button type="button" className="admin-btn admin-btn--ghost" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="submit" className="admin-btn" disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function shortDate(iso: string | null): string {
   if (!iso) return "—";
@@ -33,6 +92,8 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
   const [busyId, setBusyId] = useState<string | null>(null);
   /** The temp password just issued — shown once, on that customer's row. */
   const [issued, setIssued] = useState<{ id: string; password: string } | null>(null);
+  /** The customer whose inline edit form is open. */
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +167,55 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
       setIssued({ id: c.id, password: res.tempPassword });
     } catch {
       toast("Couldn't reset the password.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveEdit = async (c: StoreCustomerRow, draft: CustomerDraft) => {
+    if (busyId) return;
+    setBusyId(c.id);
+    try {
+      const res = await updateStoreCustomerAction(c.id, draft);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setRows((prev) => (prev ?? []).map((r) => (r.id === c.id ? { ...r, ...res.customer } : r)));
+      setEditingId(null);
+      toast("Customer updated");
+    } catch {
+      toast("Couldn't save the customer.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (c: StoreCustomerRow) => {
+    if (busyId) return;
+    const orders = c.orderCount > 0
+      ? ` Their ${c.orderCount} order${c.orderCount === 1 ? "" : "s"} stay in your Orders, no longer linked to an account.`
+      : "";
+    if (
+      !window.confirm(
+        `Permanently delete ${c.name}'s account? Their name, email, phone and community profile are removed and they're signed out everywhere.${orders} This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(c.id);
+    try {
+      const res = await deleteStoreCustomerAction(c.id);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setRows((prev) => (prev ?? []).filter((r) => r.id !== c.id));
+      if (editingId === c.id) setEditingId(null);
+      if (issued?.id === c.id) setIssued(null);
+      toast("Customer deleted");
+    } catch {
+      toast("Couldn't delete the customer.");
     } finally {
       setBusyId(null);
     }
@@ -190,6 +300,14 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
                           {c.status === "active" ? "Active" : "Disabled"}
                         </span>
                         <div className="staff-row__actions">
+                          <button
+                            className="admin-btn admin-btn--ghost"
+                            onClick={() => setEditingId(editingId === c.id ? null : c.id)}
+                            disabled={busyId === c.id}
+                            aria-expanded={editingId === c.id}
+                          >
+                            Edit
+                          </button>
                           {c.status === "active" && (
                             <button
                               className="admin-btn admin-btn--ghost"
@@ -206,8 +324,23 @@ export function AdminCustomers({ onBack }: { brand: Brand; onBack: () => void })
                           >
                             {c.status === "active" ? "Disable" : "Re-enable"}
                           </button>
+                          <button
+                            className="admin-btn admin-btn--danger"
+                            onClick={() => void remove(c)}
+                            disabled={busyId === c.id}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
+                      {editingId === c.id && (
+                        <CustomerEditForm
+                          customer={c}
+                          busy={busyId === c.id}
+                          onSave={(draft) => void saveEdit(c, draft)}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      )}
                       {issued?.id === c.id && (
                         <div className="cust-temp" role="status">
                           <div className="cust-temp__label">Temporary password</div>

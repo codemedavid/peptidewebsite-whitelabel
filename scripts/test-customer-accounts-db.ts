@@ -135,6 +135,33 @@ async function main() {
     resolveCustomerSession({ tenantId: B, customerId: anaB.id, sessionVersion: beforeReset.sessionVersion }, afterReset, B) === null,
   );
 
+  console.log("\nOwner edit (updateStoreCustomerAction's write)");
+  const editWrite = (client: typeof a, tenantId: string, id: string, data: { name: string; email: string; phone: string }) =>
+    client.storefrontCustomer.updateMany({ where: { id, tenantId }, data });
+  check(
+    "store B can't edit store A's customer (0 rows)",
+    (await editWrite(b, B, ana.id, { name: "Hijacked", email: "evil@x.com", phone: "" })).count === 0,
+  );
+  const bea = await a.storefrontCustomer.create({
+    data: { tenantId: A, name: "Bea", email: "bea@x.com", passwordHash: hashPassword("bea password") },
+  });
+  let clash = "";
+  try {
+    await editWrite(a, A, bea.id, { name: "Bea", email: "ana@x.com", phone: "" });
+  } catch (e) {
+    clash = (e as { code?: string }).code ?? "threw";
+  }
+  check("editing to another customer's email on the same store is refused (P2002)", clash === "P2002", clash);
+  check(
+    "an email used only on another store is fine",
+    (await editWrite(a, A, bea.id, { name: "Bea S", email: "only-on-b@x.com", phone: "0918" })).count === 1,
+  );
+  const beaAfter = await a.storefrontCustomer.findFirstOrThrow({ where: { id: bea.id } });
+  check(
+    "the edit keeps the password and sessions",
+    verifyPassword("bea password", beaAfter.passwordHash) && beaAfter.sessionVersion === bea.sessionVersion,
+  );
+
   console.log("\nDeleting an account keeps the order history");
   await db.storefrontCustomer.delete({ where: { id: ana.id } });
   const kept = await a.storefrontOrder.findMany({ where: { orderNumber: { in: ["A-1", "A-2"] } } });

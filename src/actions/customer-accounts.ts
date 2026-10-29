@@ -28,8 +28,10 @@ import {
   parseCustomerSignIn,
   parseCustomerProfile,
   parseCustomerPasswordChange,
+  parseAdminCustomerEdit,
   generateTempPassword,
 } from "@/lib/storefront/customer-account";
+import { purgeCustomer } from "@/lib/mobile/account-delete";
 import { ACTIVE_ORDERS_WHERE } from "@/lib/orders/trash";
 import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { toTrackedOrder, type TrackedOrder } from "@/lib/orders/tracked-order";
@@ -330,5 +332,53 @@ export async function resetStoreCustomerPasswordAction(
   } catch (e) {
     console.error("[customer-accounts] password reset failed", e);
     return { error: "Couldn't reset the password. Please try again." };
+  }
+}
+
+/** The owner corrects a customer's name, email or phone. The account keeps its
+ *  password and sessions; a new email must not already be on this store. */
+export async function updateStoreCustomerAction(
+  id: unknown,
+  input: unknown,
+): Promise<{ ok: true; customer: Pick<StoreCustomerRow, "id" | "name" | "email" | "phone"> } | Fail> {
+  const tenantId = await adminTenant();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+  if (typeof id !== "string" || !id) return { error: "Invalid request." };
+  const parsed = parseAdminCustomerEdit(input);
+  if (!parsed.ok) return { error: parsed.error };
+
+  try {
+    const res = await withTenant(tenantId, (db) =>
+      db.storefrontCustomer.updateMany({ where: { id, tenantId }, data: parsed.value }),
+    );
+    if (res.count !== 1) return { error: "Customer not found." };
+    return { ok: true, customer: { id, ...parsed.value } };
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { error: "Another customer on this store already uses that email." };
+    }
+    console.error("[customer-accounts] customer edit failed", e);
+    return { error: "Couldn't save the customer. Please try again." };
+  }
+}
+
+/** Permanently delete a customer account — the same purge as the app's own
+ *  "Delete account": personal data, community membership and every session go;
+ *  their orders stay in the store's books, unlinked from the account. */
+export async function deleteStoreCustomerAction(id: unknown): Promise<{ ok: true } | Fail> {
+  const tenantId = await adminTenant();
+  if (!tenantId) return { error: "Not signed in to the store admin." };
+  if (typeof id !== "string" || !id) return { error: "Invalid request." };
+
+  try {
+    const row = await withTenant(tenantId, (db) =>
+      db.storefrontCustomer.findFirst({ where: { id, tenantId }, select: { id: true } }),
+    );
+    if (!row) return { error: "Customer not found." };
+    await purgeCustomer(tenantId, row.id);
+    return { ok: true };
+  } catch (e) {
+    console.error("[customer-accounts] customer delete failed", e);
+    return { error: "Couldn't delete the customer. Please try again." };
   }
 }

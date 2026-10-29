@@ -66,6 +66,12 @@ export const FEATURES = {
   // Operator-grantable, default OFF (outside every plan ceiling) so no live
   // storefront grows an Account link on deploy.
   STORE_CUSTOMER_ACCOUNTS: "storefront.customer_accounts",
+  // "My Group Buy Order": a buyer types the email AND phone they checked out
+  // with and sees every order they placed in each group-buy round, merged, with
+  // what is paid and what is still owed (no account needed). Operator-grantable,
+  // default OFF (outside every plan ceiling) so no live storefront grows the
+  // page or its links on deploy.
+  STORE_MY_GROUPBUY_ORDER: "storefront.my_groupbuy_order",
   // Track-page delivery note (region → estimate card). Business/Automated
   // exclusive per the trial system; operator-grantable for legacy Starter stores.
   STORE_TRACK_NOTE: "storefront.track_note",
@@ -377,6 +383,10 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   FEATURES.STORE_COURIER_BOOKING,
   // Customer accounts. Default OFF and granted per tenant — see the key above.
   FEATURES.STORE_CUSTOMER_ACCOUNTS,
+  // My Group Buy Order. Default OFF and granted per tenant — it publishes a
+  // lookup of a buyer's round orders, so the operator decides which stores
+  // offer it. The lookup action re-checks this entitlement server-side.
+  FEATURES.STORE_MY_GROUPBUY_ORDER,
   // Timeline. Default OFF; a grant is inert until the owner writes steps and
   // switches it on in the store admin's Timeline editor.
   FEATURES.STORE_TIMELINE,
@@ -478,6 +488,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.SA_EXPORT_EXCEL]: { label: "Excel export", description: "Download the analytics view as an Excel workbook.", group: "Sales Analytics" },
   [FEATURES.SA_EXPORT_PDF]: { label: "PDF export", description: "Print / save the analytics view as a PDF report.", group: "Sales Analytics" },
 
+  [FEATURES.STORE_MY_GROUPBUY_ORDER]: { label: "My Group Buy Order", description: "A storefront page (#my-groupbuy) where a buyer types the email AND phone number they used at checkout and sees their group-buy orders per round: every checkout with its status, one merged item list, and the totals \u2014 items, admin fee, shipping, discount, amount paid and balance. Both fields must match (email or phone alone shows nothing), and the lookup is rate-limited. Adds a \u201cMy Group Buy Order\u201d nav link and a \u201cView my order\u201d link on the group-buy page. No customer account needed. Operator-grantable, default OFF.", group: "Group Buy" },
   [FEATURES.GB_MODULE]: { label: "Group buy system", description: "Master switch for the Group Buy module — the store admin's Group Buys manager and order attribution. Off hides everything group-buy.", group: "Group Buy" },
   [FEATURES.GB_CREATE]: { label: "Create group buys", description: "Lets the store owner open new group buys.", group: "Group Buy" },
   [FEATURES.GB_EDIT]: { label: "Edit group buys", description: "Lets the store owner change a group buy's details, window and status.", group: "Group Buy" },

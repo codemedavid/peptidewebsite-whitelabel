@@ -27,10 +27,14 @@ import { isGroupBuyOnlyHome } from "./gb-only-home";
  *   • Resellers — the gated wholesale page, appended when the owner opted in.
  *   • Calculator — default-on, so tenants whose stored nav predates the feature
  *     still get it. Slotted before Reviews when present, else appended.
+ *   • My Group Buy Order — operator-granted (default OFF); after Group Buy.
  *
  * Each is added only when the same href isn't already in the owner's nav, so an
  * owner who linked it themselves keeps their own label and position.
  */
+/** The buyer's "My Group Buy Order" page (pages/MyGroupBuyOrderPage.tsx). */
+export const MY_GROUPBUY_HREF = "#my-groupbuy";
+
 export function buildStorefrontNav(brand: Brand): NavItem[] {
   // .filter() already gives us a fresh array, so the unshift/push/splice below
   // can never reach the caller's stored nav.
@@ -43,6 +47,17 @@ export function buildStorefrontNav(brand: Brand): NavItem[] {
 
   if (!homeIsGroupBuy && isPageVisible(brand, "groupbuy") && !nav.some((i) => i.href === "#groupbuy")) {
     nav.unshift({ label: "Group Buy", href: "#groupbuy" });
+  }
+
+  // My Group Buy Order — only while the operator granted it (PAGE_TOGGLE). Sits
+  // right after the Group Buy link when there is one; a group-buy-only store has
+  // no such link (its home IS the round), so there it is appended and the nav is
+  // still the way in.
+  if (isPageVisible(brand, "my-groupbuy") && !nav.some((i) => i.href === MY_GROUPBUY_HREF)) {
+    const link = { label: "My Group Buy Order", href: MY_GROUPBUY_HREF };
+    const gbIdx = nav.findIndex((i) => i.href === "#groupbuy");
+    if (gbIdx >= 0) nav.splice(gbIdx + 1, 0, link);
+    else nav.push(link);
   }
 
   if (brand.showPageMerchant === true && !nav.some((i) => i.href === "#merchant")) {

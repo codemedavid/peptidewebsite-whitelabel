@@ -142,8 +142,8 @@ check("why-monthly checklist has the 8 included items", () => {
   assert.ok(WHY_MONTHLY.items.some((i) => /security/i.test(i)));
 });
 
-check("comparison table covers 14 features across the 3 plans", () => {
-  assert.strictEqual(COMPARISON.length, 14);
+check("comparison table covers 12 features across the 3 plans", () => {
+  assert.strictEqual(COMPARISON.length, 12);
   for (const row of COMPARISON) {
     assert.ok(row.label.length > 0);
     for (const v of [row.starter, row.pro, row.enterprise])
@@ -154,11 +154,10 @@ check("comparison table covers 14 features across the 3 plans", () => {
     [storefront.starter, storefront.pro, storefront.enterprise],
     [false, true, true],
   );
-  const analytics = COMPARISON.find((r) => r.label === "Analytics dashboard")!;
-  assert.deepStrictEqual(
-    [analytics.starter, analytics.pro, analytics.enterprise],
-    [false, false, true],
-  );
+  // Automated = everything in Business + Gmail order status updates, so Gmail
+  // is the only Automated-only row.
+  const automatedOnly = COMPARISON.filter((r) => r.enterprise && !r.pro).map((r) => r.label);
+  assert.deepStrictEqual(automatedOnly, ["Gmail order status updates"]);
 });
 
 check("value props are the 4 'platform, not just a website' cards", () => {

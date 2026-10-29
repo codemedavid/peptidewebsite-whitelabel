@@ -35,6 +35,8 @@ import { ShareProductButton } from "../components/ShareProductButton";
 import { imageUrl, imageSrcSet, CARD_SIZES, CARD_WIDTHS } from "@/lib/media/image-url";
 import { findProductByLinkKey } from "@/lib/storefront/product-link";
 import { isTextOnlyCard } from "../cardDesign";
+import { isPageVisible } from "../visibility";
+import { MY_GROUPBUY_HREF } from "@/lib/storefront/nav";
 
 export function GroupBuyPage({
   brand,
@@ -84,6 +86,10 @@ export function GroupBuyPage({
   // list: one row per product, no photos (mnm-pepsabuy asked for this). The
   // catalog card reads the same switch, so both listings agree.
   const listLayout = isTextOnlyCard(brand.cardDesign);
+  // "View my order" → #my-groupbuy, only while the operator granted it. On a
+  // group-buy-only store this page IS the home, so this link (and the nav one)
+  // is how a member finds their order again.
+  const myOrderLink = isPageVisible(brand, "my-groupbuy") ? <MyOrderLink /> : null;
 
   // The empty state — nothing to list at all. Keyed on the LISTING, not on the
   // round: a view-only page has no live round but plenty to show, and testing
@@ -103,6 +109,7 @@ export function GroupBuyPage({
               {onHandHidden ? "Check back soon." : "Check back soon — or browse what’s on hand in the store."}
             </p>
           </div>
+          {myOrderLink}
         </div>
       </section>
     );
@@ -157,6 +164,8 @@ export function GroupBuyPage({
             <p className="gbpage__terms">{renderGbCopy(content.terms, view.deliveryEta)}</p>
           </div>
         )}
+
+        {myOrderLink}
 
         {/* Listing header */}
         <div className="gbpage__listhead" id={embedded ? "catalog" : undefined}>
@@ -222,6 +231,23 @@ export function GroupBuyPage({
 
       <style>{gbPageCss}</style>
     </section>
+  );
+}
+
+/** The buyer's way back to what they ordered in the round (#my-groupbuy). */
+function MyOrderLink() {
+  return (
+    <a className="mygb-entry" href={MY_GROUPBUY_HREF}>
+      <span className="mygb-entry__text">
+        <strong>Already ordered?</strong> See your items, payments and balance.
+      </span>
+      <span className="mygb-entry__cta">
+        View my order
+        <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M5 12h14M13 5l7 7-7 7" />
+        </svg>
+      </span>
+    </a>
   );
 }
 

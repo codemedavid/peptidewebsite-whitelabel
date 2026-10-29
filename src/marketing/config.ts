@@ -160,9 +160,7 @@ export const COMPARISON: ComparisonRow[] = [
   row("FAQ page", false, true, true),
   row("Peptide calculator", false, true, true),
   row("Protocol library", false, true, true),
-  row("Analytics dashboard", false, false, true),
-  row("Gmail integration", false, false, true),
-  row("Automation", false, false, true),
+  row("Gmail order status updates", false, false, true),
   row("Priority support", false, true, true),
 ];
 

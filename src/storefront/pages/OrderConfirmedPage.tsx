@@ -27,6 +27,7 @@ import {
 import { activeChannels, channelUrl, channelPrefills, CHANNEL_LABELS } from "../checkout";
 import { isDirectHandoff } from "@/lib/storefront/checkout-handoff";
 import { isPageVisible } from "../visibility";
+import { MY_GROUPBUY_HREF } from "@/lib/storefront/nav";
 
 type Handoff = { orderId: string; message: string };
 
@@ -117,6 +118,9 @@ export function OrderConfirmedPage({
   // Only offer the tracker if the owner actually serves that page — pointing at
   // a hidden #track would land them back on the home page with no explanation.
   const canTrack = isPageVisible(brand, "track");
+  // A group-buy order: point the buyer at the round-wide view of everything
+  // they've ordered (only while the operator granted #my-groupbuy).
+  const canViewGbOrder = !!order?.groupBuyId && isPageVisible(brand, "my-groupbuy");
   const money = (n: number) => `${view?.currency ?? ""}${n.toLocaleString()}`;
 
   // The message the customer sends. Normally it is the one the checkout already
@@ -305,6 +309,17 @@ export function OrderConfirmedPage({
             <dd className="is-total">{money(view.totals.total)}</dd>
           </dl>
         </section>
+
+        {/* ── Group buy: everything this buyer has in the round ───────── */}
+        {canViewGbOrder && (
+          <a className="mygb-entry sf-confirm__mygb" href={MY_GROUPBUY_HREF}>
+            <span className="mygb-entry__text">
+              <strong>Ordered more than once in this group buy?</strong> See all your items,
+              payments and balance in one place.
+            </span>
+            <span className="mygb-entry__cta">View my group buy order</span>
+          </a>
+        )}
 
         {/* ── What happens next (no chat channel) ──────────────────────
             Nothing to send: the order is already stored and the seller has it.

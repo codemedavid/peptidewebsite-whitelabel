@@ -26,10 +26,48 @@ type StoreCustomer = {
 
 const shortDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "never");
 
+type CustomerDraft = Pick<StoreCustomer, "name" | "email" | "phone">;
+
+/** Inline editor that opens inside a customer's card. */
+function CustomerEditor({
+  customer,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  customer: StoreCustomer;
+  saving: boolean;
+  onSave: (draft: CustomerDraft) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<CustomerDraft>({ name: customer.name, email: customer.email, phone: customer.phone });
+  const set = (key: keyof CustomerDraft) => (value: string) => setDraft((d) => ({ ...d, [key]: value }));
+  return (
+    <View style={{ gap: SPACE.md }}>
+      <Field label="Name" value={draft.name} onChangeText={set("name")} autoCapitalize="words" />
+      <Field
+        label="Email"
+        value={draft.email}
+        onChangeText={set("email")}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        hint="Changing it changes what they sign in with. Their password stays the same."
+      />
+      <Field label="Phone" value={draft.phone} onChangeText={set("phone")} keyboardType="phone-pad" />
+      <View style={styles.editActions}>
+        <Button label="Cancel" variant="ghost" disabled={saving} onPress={onCancel} style={{ flex: 1 }} />
+        <Button label="Save" loading={saving} onPress={() => onSave(draft)} style={{ flex: 1 }} />
+      </View>
+    </View>
+  );
+}
+
 /**
  * The website's Customers view (AdminCustomers): shoppers who made an account,
  * with disable (signs them out everywhere), re-enable, and reset password (a
- * temp one for the owner to send a shopper who forgot theirs). Runs the website's own
+ * temp one for the owner to send a shopper who forgot theirs), edit (name /
+ * email / phone) and delete (personal data purged, orders kept). Runs the website's own
  * actions, gated on the "customers" permission and the store's feature.
  */
 export default function CustomerAccountsScreen() {
@@ -39,6 +77,7 @@ export default function CustomerAccountsScreen() {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const key = [...setupKeys.all(scope), "customer-accounts"];
   const list = useQuery({
@@ -79,6 +118,47 @@ export default function CustomerAccountsScreen() {
       setBusyId(null);
     }
   }
+
+  async function saveEdit(c: StoreCustomer, draft: CustomerDraft) {
+    setBusyId(c.id);
+    try {
+      const { customer } = await callAction<{ ok: true; customer: CustomerDraft & { id: string } }>("updateStoreCustomerAction", c.id, draft);
+      success();
+      qc.setQueryData<StoreCustomer[]>(key, (prev) => prev?.map((r) => (r.id === c.id ? { ...r, ...customer } : r)));
+      setEditingId(null);
+    } catch (e) {
+      Alert.alert("Couldn't save the customer", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(c: StoreCustomer) {
+    setBusyId(c.id);
+    try {
+      await callAction("deleteStoreCustomerAction", c.id);
+      success();
+      qc.setQueryData<StoreCustomer[]>(key, (prev) => prev?.filter((r) => r.id !== c.id));
+      if (editingId === c.id) setEditingId(null);
+    } catch (e) {
+      Alert.alert("Couldn't delete the customer", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const confirmDelete = (c: StoreCustomer) => {
+    const orders =
+      c.orderCount > 0 ? ` Their ${c.orderCount} order${c.orderCount === 1 ? "" : "s"} stay in your Orders, no longer linked to an account.` : "";
+    Alert.alert(
+      `Delete ${c.name}'s account?`,
+      `Their name, email, phone and community profile are removed and they're signed out everywhere.${orders} This can't be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => void remove(c) },
+      ],
+    );
+  };
 
   const confirmReset = (c: StoreCustomer) =>
     Alert.alert(`Reset ${c.name}'s password?`, "You'll get a temporary password to send them. They'll be signed out on every device.", [
@@ -142,6 +222,22 @@ export default function CustomerAccountsScreen() {
               <AppText variant="caption" color="faint">
                 {`${c.orderCount} order${c.orderCount === 1 ? "" : "s"} · Joined ${shortDate(c.joinedAt)} · Last sign-in ${shortDate(c.lastLoginAt)}`}
               </AppText>
+              {editingId === c.id ? (
+                <CustomerEditor
+                  customer={c}
+                  saving={busyId === c.id}
+                  onSave={(draft) => void saveEdit(c, draft)}
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : (
+                <Button
+                  label="Edit details"
+                  variant="secondary"
+                  icon="create-outline"
+                  disabled={!online || busyId !== null}
+                  onPress={() => setEditingId(c.id)}
+                />
+              )}
               {c.status === "active" && (
                 <Button
                   label="Reset password"
@@ -159,6 +255,13 @@ export default function CustomerAccountsScreen() {
                 disabled={!online || (busyId !== null && busyId !== c.id)}
                 onPress={() => toggle(c)}
               />
+              <Button
+                label="Delete account"
+                variant="ghost"
+                icon="trash-outline"
+                disabled={!online || busyId !== null}
+                onPress={() => confirmDelete(c)}
+              />
             </Card>
           )}
         />
@@ -170,4 +273,5 @@ export default function CustomerAccountsScreen() {
 const styles = StyleSheet.create({
   list: { padding: SPACE.lg, paddingBottom: SPACE.xxxl, flexGrow: 1 },
   head: { flexDirection: "row", alignItems: "center", gap: SPACE.md },
+  editActions: { flexDirection: "row", gap: SPACE.md },
 });

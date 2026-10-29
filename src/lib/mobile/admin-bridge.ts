@@ -136,6 +136,8 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   listStoreCustomersAction: customerAccounts.listStoreCustomersAction,
   setStoreCustomerStatusAction: customerAccounts.setStoreCustomerStatusAction,
   resetStoreCustomerPasswordAction: customerAccounts.resetStoreCustomerPasswordAction,
+  updateStoreCustomerAction: customerAccounts.updateStoreCustomerAction,
+  deleteStoreCustomerAction: customerAccounts.deleteStoreCustomerAction,
 
   // actions/subscription-payments.ts (tenant side)
   submitSubscriptionPaymentAction: subscriptionPayments.submitSubscriptionPaymentAction,

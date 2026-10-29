@@ -11019,6 +11019,21 @@
 .sf-root .cust-temp__value { font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 20px; font-weight: 600; letter-spacing: 0.08em; color: var(--brand-text); user-select: all; overflow-wrap: anywhere; }
 .sf-root .cust-temp__actions { display: flex; gap: 8px; }
 .sf-root .cust-temp .admin-field__hint { grid-column: 1 / -1; margin: 0; }
+/* Inline edit form: drops under the row like the temp password does. */
+.sf-root .staff-row:has(.cust-edit) { flex-wrap: wrap; }
+.sf-root .cust-edit {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: var(--brand-surface-2);
+}
+.sf-root .cust-edit .admin-field { margin: 0; }
+.sf-root .cust-edit .admin-field__hint { grid-column: 1 / -1; margin: 0; }
+.sf-root .cust-edit__actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 /* ── customer-accounts:end ── */
 
 /* =========================================================
@@ -11162,3 +11177,236 @@
 @media (prefers-reduced-motion: reduce) {
   .sf-root .kit-progress__fill { transition: none; }
 }
+
+/* ── my-groupbuy-order:start ─────────────────────────────────────────────────
+   #my-groupbuy — "My Group Buy Order" (FEATURES.STORE_MY_GROUPBUY_ORDER). The
+   buyer's email + phone lookup, then one card per round: state + ETA + due
+   date, the merged items with the money, and the checkouts. Reuses the account
+   page's card / field / empty styles (.acct-*); everything here is scoped to
+   .mygb* names so no earlier small-screen block can override it, and it sits
+   at the END of the file so its own phone rules win their ties. */
+
+.sf-root .mygb { --mygb-gap: clamp(16px, 2.6vw, 28px); }
+.sf-root .mygb__intro { max-width: 56ch; margin-bottom: var(--mygb-gap); }
+.sf-root .mygb__intro .page__sub { margin: 14px 0 0; }
+
+.sf-root .mygb-form { max-width: 720px; }
+.sf-root .mygb-form__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.sf-root .mygb-form__submit { justify-self: start; min-width: 200px; }
+.sf-root .mygb-form__submit:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 3px; }
+.sf-root .mygb-form__note { margin: 0; font-size: 13px; color: var(--brand-text-muted); }
+
+.sf-root .mygb__results { margin-top: var(--mygb-gap); display: flex; flex-direction: column; gap: var(--mygb-gap); }
+.sf-root .mygb__error { max-width: 720px; }
+.sf-root .mygb__empty { margin-top: 0; max-width: 720px; }
+
+/* One round */
+.sf-root .mygb-round {
+  background: var(--brand-surface);
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.sf-root .mygb-round.is-live {
+  border-color: color-mix(in oklab, var(--brand-accent) 45%, var(--brand-border));
+  box-shadow: var(--shadow-md);
+}
+.sf-root .mygb-round__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 14px 24px;
+  padding: clamp(18px, 2.6vw, 26px);
+  background: var(--brand-surface-2);
+  border-bottom: var(--brand-border-width) solid var(--brand-border);
+}
+.sf-root .mygb-round__titles { min-width: 0; }
+.sf-root .mygb-round__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.sf-root .mygb-round__state-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.sf-root .mygb-round__state.is-live { color: var(--brand-accent); }
+.sf-root .mygb-round__name {
+  margin: 8px 0 0;
+  font-family: var(--brand-heading-font);
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.2;
+  color: var(--brand-main);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  overflow-wrap: anywhere;
+}
+.sf-root .mygb-round__batch {
+  font-family: var(--brand-body-font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-surface);
+  border: var(--brand-border-width) solid var(--brand-border);
+  color: var(--brand-text);
+}
+.sf-root .mygb-round__meta { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0; }
+.sf-root .mygb-round__meta dt { font-size: 12px; color: var(--brand-text-muted); }
+.sf-root .mygb-round__meta dd { margin: 2px 0 0; font-weight: 600; color: var(--brand-text); }
+.sf-root .mygb-round__meta .is-due dd { color: var(--brand-accent); }
+
+.sf-root .mygb-round__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+.sf-root .mygb-block { padding: clamp(18px, 2.6vw, 26px); min-width: 0; }
+.sf-root .mygb-block + .mygb-block { border-left: var(--brand-border-width) solid var(--brand-border); }
+.sf-root .mygb-block__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--brand-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sf-root .mygb-block__empty { margin: 0; font-size: 14px; color: var(--brand-text-muted); }
+
+/* Merged items */
+.sf-root .mygb-lines { list-style: none; margin: 0; padding: 0; }
+.sf-root .mygb-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+  border-bottom: 1px dashed var(--brand-border);
+}
+.sf-root .mygb-line__name { color: var(--brand-text); overflow-wrap: anywhere; }
+.sf-root .mygb-line__var {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--brand-text-muted);
+}
+.sf-root .mygb-line__qty { color: var(--brand-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sf-root .mygb-line__amt { font-family: var(--brand-price-font); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Money */
+.sf-root .mygb-totals { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.sf-root .mygb-totals__row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.sf-root .mygb-totals__row dt { color: var(--brand-text-muted); }
+.sf-root .mygb-totals__row dd { margin: 0; font-family: var(--brand-price-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sf-root .mygb-totals__row.is-total {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: var(--brand-border-width) solid var(--brand-border);
+  font-weight: 700;
+}
+.sf-root .mygb-totals__row.is-total dt,
+.sf-root .mygb-totals__row.is-total dd { color: var(--brand-main); }
+.sf-root .mygb-totals__row.is-paid dd { color: var(--brand-success); }
+.sf-root .mygb-totals__row.is-owed,
+.sf-root .mygb-totals__row.is-settled {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 15px;
+}
+.sf-root .mygb-totals__row.is-owed { background: color-mix(in oklab, var(--brand-accent) 12%, var(--brand-surface)); }
+.sf-root .mygb-totals__row.is-owed dt,
+.sf-root .mygb-totals__row.is-owed dd { color: var(--brand-main); }
+.sf-root .mygb-totals__row.is-settled { background: color-mix(in oklab, var(--brand-success) 10%, var(--brand-surface)); }
+.sf-root .mygb-totals__row.is-settled dt,
+.sf-root .mygb-totals__row.is-settled dd { color: var(--brand-success); }
+
+/* Checkouts */
+.sf-root .mygb-checkouts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sf-root .mygb-checkout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "num total" "status pay" "date date";
+  gap: 4px 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: var(--radius-md);
+}
+.sf-root .mygb-checkout.is-cancelled { opacity: .62; }
+.sf-root .mygb-checkout__num { grid-area: num; font-weight: 700; color: var(--brand-main); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sf-root .mygb-checkout__total { grid-area: total; text-align: right; font-family: var(--brand-price-font); font-weight: 700; white-space: nowrap; }
+.sf-root .mygb-checkout__status { grid-area: status; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--brand-text); }
+.sf-root .mygb-checkout__pay {
+  grid-area: pay;
+  justify-self: end;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sf-root .mygb-checkout__pay.is-paid { color: var(--brand-success); background: color-mix(in oklab, var(--brand-success) 12%, var(--brand-surface)); }
+.sf-root .mygb-checkout__pay.is-pending { color: var(--brand-text-muted); background: var(--brand-surface-2); }
+.sf-root .mygb-checkout__date { grid-area: date; color: var(--brand-text-muted); }
+
+/* Entry link: the group-buy page and the order-confirmed page. */
+.sf-root .mygb-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  margin: 16px 0;
+  padding: 14px 18px;
+  border: var(--brand-border-width) solid var(--brand-border);
+  border-radius: var(--radius-md);
+  background: var(--brand-surface);
+  color: var(--brand-text);
+  font-size: 14px;
+  line-height: 1.45;
+  text-decoration: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.sf-root .mygb-entry:hover { border-color: var(--brand-accent); box-shadow: var(--shadow-sm); }
+.sf-root .mygb-entry:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .mygb-entry__text { min-width: 0; flex: 1 1 240px; }
+.sf-root .mygb-entry__text strong { color: var(--brand-main); }
+.sf-root .mygb-entry__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--brand-accent);
+  white-space: nowrap;
+}
+.sf-root .mygb-entry:hover .mygb-entry__cta { text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 760px) {
+  .sf-root .mygb-round__body { grid-template-columns: minmax(0, 1fr); }
+  .sf-root .mygb-block + .mygb-block {
+    border-left: 0;
+    border-top: var(--brand-border-width) solid var(--brand-border);
+  }
+}
+@media (max-width: 560px) {
+  .sf-root .mygb-form__fields { grid-template-columns: minmax(0, 1fr); }
+  .sf-root .mygb-form__submit { justify-self: stretch; width: 100%; min-width: 0; }
+  .sf-root .mygb-round__head { align-items: flex-start; }
+  .sf-root .mygb-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .sf-root .mygb-line__qty { grid-column: 1; grid-row: 2; }
+  .sf-root .mygb-line__amt { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
+/* ── my-groupbuy-order:end ─────────────────────────────────────────────────── */

@@ -746,6 +746,11 @@ export type Brand = {
   // default OFF). Server-projected: drives the #account page, the header's
   // Account link and the store-admin Customers view together.
   customerAccountsEnabled?: boolean;
+  // My Group Buy Order (FEATURES.STORE_MY_GROUPBUY_ORDER, operator-grantable,
+  // default OFF). Server-projected: drives the #my-groupbuy page, its nav link
+  // and the group-buy page's "View my order" link. The lookup action re-checks
+  // the entitlement, so this is presentation only.
+  myGroupBuyOrderEnabled?: boolean;
   // Server-projected from FEATURES.NOTIFY_ADMIN_ORDER: shows the store-admin
   // "Order Notifications" view (owner-only). Off → the view and its dashboard
   // tile are hidden and the order-alert email is never sent (admin-notify.ts

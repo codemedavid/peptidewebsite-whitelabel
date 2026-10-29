@@ -121,15 +121,10 @@ export const PLAN_CARDS = [
     yearlyPriceCents: 1589900,
     setupFeeCents: 199900,
     setupFeeWaived: false,
-    blurb: "Scale your business with analytics and automation.",
+    blurb: "Your Business store, plus automatic order status emails to your customers through Gmail.",
     feats: [
       "Everything in Business, plus:",
-      "Analytics dashboard",
-      "Gmail integration",
-      "Automated order notifications",
-      "Automation tools",
-      "Early access to new features",
-      "VIP support",
+      "Gmail integration for order status updates",
     ],
   },
 ] as const;

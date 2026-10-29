@@ -71,6 +71,18 @@ export function parseCustomerProfile(input: unknown): Parsed<CustomerProfile> {
   return { ok: true, value: { name, phone } };
 }
 
+/** The store owner editing a customer from the admin Customers list. Unlike
+ *  the shopper's own profile form, the email is editable here. */
+export function parseAdminCustomerEdit(input: unknown): Parsed<CustomerProfile & { email: string }> {
+  const o = obj(input);
+  const name = str(o.name).trim().slice(0, NAME_MAX);
+  const email = normalizeCustomerEmail(o.email);
+  const phone = str(o.phone).trim().slice(0, PHONE_MAX);
+  if (!name) return { ok: false, error: "Please enter a name." };
+  if (!EMAIL_RE.test(email)) return { ok: false, error: "Please enter a valid email address." };
+  return { ok: true, value: { name, email, phone } };
+}
+
 export function parseCustomerPasswordChange(input: unknown): Parsed<{ current: string; next: string }> {
   const o = obj(input);
   const current = str(o.current);

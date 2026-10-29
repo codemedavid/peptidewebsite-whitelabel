@@ -8,7 +8,7 @@ import { customerKey } from "@/lib/community/keys";
 import { isSupabaseMarker, supabaseTokenOwnsAccount } from "./exchange";
 import { rateLimit } from "@/lib/security/rate-limit";
 import type { ApiErrorCode, DeleteAccountResponse } from "./contract";
-import type { CustomerContext, MobileContext, Principal } from "./auth";
+import type { MobileContext, Principal } from "./auth";
 import { profileSubject } from "./account-profile";
 import { encodeSubject, type MobileSubject } from "./sessions";
 
@@ -117,7 +117,7 @@ export async function deleteAccount(
   if (refused) return refused;
 
   if (principal.kind === "customer") {
-    await purgeCustomer(principal.ctx);
+    await purgeCustomer(principal.ctx.tenantId, principal.ctx.customer.id);
     return { ok: true, data: { outcome: "deleted", message: DELETED_MESSAGE } };
   }
   await recordTeamRequest(principal.ctx, subject);
@@ -144,10 +144,9 @@ const BLANK_MESSAGE = {
  * Remove one customer's personal data. Every statement is a single set-based
  * write keyed on the customer — the count is fixed (10 incl. set_config), well
  * inside withTenant's round-trip budget, whatever the account's history.
+ * Also run by the store admin's Customers → Delete (actions/customer-accounts.ts).
  */
-async function purgeCustomer(ctx: CustomerContext): Promise<void> {
-  const { tenantId } = ctx;
-  const id = ctx.customer.id;
+export async function purgeCustomer(tenantId: string, id: string): Promise<void> {
   const participant = customerKey(id);
   const sessionSubject = encodeSubject({ kind: "customer", id });
   const now = new Date();

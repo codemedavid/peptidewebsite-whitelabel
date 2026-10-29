@@ -82,6 +82,9 @@ const PAGE_TOGGLE: Record<string, (b: Brand) => boolean> = {
   // Sign in / sign up / My Account. Default OFF — exists only while the
   // operator has granted customer accounts.
   account: (b) => b.customerAccountsEnabled === true,
+  // My Group Buy Order (email + phone lookup). Default OFF — exists only while
+  // the operator has granted FEATURES.STORE_MY_GROUPBUY_ORDER.
+  "my-groupbuy": (b) => b.myGroupBuyOrderEnabled === true,
   // Articles (+ #articles/<slug>). Server-derived: blog entitlement AND owner
   // toggle AND at least one published post. Undefined → hidden (fail closed).
   articles: (b) => b.showPageArticles === true,

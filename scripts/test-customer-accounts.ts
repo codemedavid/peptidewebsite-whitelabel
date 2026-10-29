@@ -22,6 +22,7 @@ import {
   parseCustomerPasswordChange,
   resolveCustomerSession,
   generateTempPassword,
+  parseAdminCustomerEdit,
   TEMP_PASSWORD_ALPHABET,
   CUSTOMER_PASSWORD_MIN,
 } from "../src/lib/storefront/customer-account";
@@ -276,6 +277,34 @@ check("the reset action rotates the session and is staff-gated", () => {
   assert.ok(fn.includes("adminTenant()"), "not behind the customers permission");
   assert.ok(fn.includes("sessionVersion: { increment: 1 }"), "reset must sign out every device");
   assert.ok(fn.includes("tenantId"), "write must be scoped to the tenant");
+});
+
+console.log("\nOwner edit + delete");
+
+check("admin edit normalizes email and keeps a phone", () => {
+  const r = parseAdminCustomerEdit({ name: "  Ana  ", email: "  ANA@X.com ", phone: " 0917 " });
+  assert.ok(r.ok);
+  if (r.ok) assert.deepEqual(r.value, { name: "Ana", email: "ana@x.com", phone: "0917" });
+});
+
+check("admin edit refuses a blank name or a bad email", () => {
+  assert.equal(parseAdminCustomerEdit({ name: " ", email: "a@b.co" }).ok, false);
+  assert.equal(parseAdminCustomerEdit({ name: "Ana", email: "not-an-email" }).ok, false);
+  assert.equal(parseAdminCustomerEdit(null).ok, false);
+});
+
+check("edit + delete are staff-gated, tenant-scoped, and delete reuses the app's purge", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const src = readFileSync("src/actions/customer-accounts.ts", "utf8");
+  for (const name of ["updateStoreCustomerAction", "deleteStoreCustomerAction"]) {
+    const start = src.indexOf(`export async function ${name}`);
+    assert.ok(start >= 0, `${name} missing`);
+    const fn = src.slice(start, src.indexOf("\n}\n", start));
+    assert.ok(fn.includes("adminTenant()"), `${name} not behind the customers permission`);
+    assert.ok(fn.includes("tenantId }"), `${name} not scoped to the tenant`);
+  }
+  const del = src.slice(src.indexOf("export async function deleteStoreCustomerAction"));
+  assert.ok(del.includes("purgeCustomer(tenantId"), "delete must run the shared purge (sessions, community, orders unlinked)");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
