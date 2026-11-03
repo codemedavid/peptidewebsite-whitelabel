@@ -12,8 +12,7 @@ import { join } from "node:path";
 import {
   decideAccountGate,
   normalizeAccountGate,
-  type AccountGateInput,
-} from "../src/lib/storefront/account-gate";
+  type AccountGateInput, isAccountGateExemptPath } from "../src/lib/storefront/account-gate";
 
 let passed = 0;
 let failed = 0;
@@ -119,6 +118,16 @@ check("the storefront page sends NOTHING to a walled-out visitor (no catalog in 
   const blocked = read("src/lib/auth/storefront-blocked.ts");
   assert.match(blocked, /evaluateVisitorGate/);
   assert.match(blocked, /evaluateAccountGate/);
+});
+
+check("the app-download link (/app) skips the wall; the shop itself never does", () => {
+  assert.equal(isAccountGateExemptPath("/app"), true);
+  assert.equal(isAccountGateExemptPath("/app/"), true);
+  for (const p of ["/", "/p/tirzepatide", "/protocols/x", "/apple", "/app/x", "/products/a", ""]) {
+    assert.equal(isAccountGateExemptPath(p), false, p);
+  }
+  const layout = read("src/app/(tenant)/(storefront)/layout.tsx");
+  assert.match(layout, /isAccountGateExemptPath\(/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

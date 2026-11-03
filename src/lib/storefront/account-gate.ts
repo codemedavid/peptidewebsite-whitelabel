@@ -38,6 +38,16 @@ export type AccountGateInput = {
 /** "off" = gate not in force; "open" = in force, visitor may pass; "blocked" = show the wall. */
 export type AccountGateDecision = "off" | "open" | "blocked";
 
+/**
+ * Storefront paths a walled-out visitor may still open. Only `/app` — the
+ * "get the PepWorld app" page a store shares so members can install the app
+ * and sign up INSIDE it. It shows the store's name, logo and download/open
+ * buttons, nothing behind the wall. Exact match: `/app/x` and `/apple` stay walled.
+ */
+export function isAccountGateExemptPath(pathname: string): boolean {
+  return pathname === "/app" || pathname === "/app/";
+}
+
 export function decideAccountGate(input: AccountGateInput): AccountGateDecision {
   if (input.demo || !input.accountsOn || !input.config.enabled) return "off";
   if (input.isAdmin || input.hasCustomer) return "open";

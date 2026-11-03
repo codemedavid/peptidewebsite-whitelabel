@@ -19,6 +19,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { PresenceBeacon } from "@/storefront/components/PresenceBeacon";
 import { evaluateAccountGate } from "@/lib/auth/account-gate-enforcement";
 import { AccountGate } from "@/storefront/components/AccountGate";
+import { isAccountGateExemptPath } from "@/lib/storefront/account-gate";
 import { BrandStyle } from "@/storefront/components/BrandStyle";
 import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
 import { BRAND } from "@/storefront/data";
@@ -114,7 +115,13 @@ export default async function StorefrontLayout({
   // first. The wall wears the store's own palette (BrandStyle from the same
   // layers the storefront composes) since it is the first screen anyone sees.
   const brandConfig = (branding?.config ?? {}) as Partial<Brand> & { accountGate?: unknown };
-  if ((await evaluateAccountGate(tenantId, brandConfig.accountGate)) === "blocked") {
+  // The app-download page (/app) stays reachable so members can install the
+  // app and create their account inside it (isAccountGateExemptPath).
+  const requestPath = (await headers()).get("x-pathname") ?? "/";
+  if (
+    !isAccountGateExemptPath(requestPath) &&
+    (await evaluateAccountGate(tenantId, brandConfig.accountGate)) === "blocked"
+  ) {
     const wallBrand: Brand = { ...BRAND, ...brandPaletteFromBranding(branding), ...brandConfig, name };
     return (
       <div style={cssVars} className="min-h-screen">
