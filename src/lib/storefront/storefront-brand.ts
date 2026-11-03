@@ -56,6 +56,7 @@ import { isDualMarket } from "@/lib/storefront/intl-market";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
+import { applyRoundExclusions } from "@/lib/storefront/variation-availability";
 import { applyGroupBuyAccess } from "@/lib/storefront/gb-access.server";
 import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
 import { getRoundDemand, type DemandLine } from "@/lib/storefront/gb-round-demand";
@@ -71,7 +72,7 @@ import { readResellerPageCopy } from "@/lib/storefront/reseller-page-copy";
 import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
 import { getBestSellerCounts } from "@/lib/storefront/best-sellers";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
-import { applyProductOrder, normalizeProductOrder } from "@/lib/storefront/product-order";
+import { arrangeStoreProducts } from "@/lib/storefront/product-order";
 import type { Brand, Product } from "@/storefront/types";
 
 /**
@@ -581,10 +582,10 @@ export async function loadStorefrontBrand(
     }
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
-  // The owner's arrangement (Admin → Products ↑/↓). Every surface that lists
-  // products in array order follows it; the catalog's default sort reads the
-  // stamped `position`.
-  products = applyProductOrder(products, normalizeProductOrder(config.productOrder));
+  // The owner's arrangement (Admin → Products ↑/↓), grouped by the Categories
+  // order when they turned that on. Every surface that lists products in array
+  // order follows it; the catalog's default sort reads the stamped `position`.
+  products = arrangeStoreProducts(products, config);
 
   // Reseller wholesale pricing is part of the SAME entitlement as the portal:
   // an unentitled tenant's catalog ships with no reseller legs at all, so the
@@ -620,6 +621,14 @@ export async function loadStorefrontBrand(
   const madeToOrderEntitled = has(FEATURES.STORE_MADE_TO_ORDER);
   brand.madeToOrderEntitled = madeToOrderEntitled;
   products = stripMadeToOrder(products, madeToOrderEntitled);
+
+  // Per-round variant exclusions: options the owner unticked for the LIVE round
+  // (GroupBuy.excludedVariations) are hidden while it runs. Stamped, never
+  // stripped — the in-store admin saves these objects (variation-availability).
+  if (brand.groupBuyBanner?.id) {
+    const liveRound = (await groupBuysP).find((r) => r.id === brand.groupBuyBanner!.id);
+    products = applyRoundExclusions(products, liveRound?.excludedVariations);
+  }
 
   // Paid group-buy access — LAST of the strips, so nothing after it can put a
   // round's products or prices back. A viewer locked out of the governing round

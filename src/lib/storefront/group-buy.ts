@@ -30,6 +30,10 @@ export type GroupBuy = {
   endsAt: string | null; // ISO — auto-close boundary
   deliveryEta: string; // customer-facing free text, e.g. "3–4 weeks after close"
   productIds: string[]; // assigned products; empty = whole catalog
+  /** productId → variation names NOT offered in THIS round (the owner unticked
+   *  "50mg" for this GB). Absent / {} = every option. Applied while the round is
+   *  the live one — see lib/storefront/variation-availability. */
+  excludedVariations?: Record<string, string[]>;
   // Slot goal for the storefront progress bar ("18 of 30 slots filled"). 0 = the
   // goal is OFF and no progress bar renders — the owner sets/clears it per round.
   slotGoal: number;
@@ -166,6 +170,18 @@ function isoOrNull(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** productId → unique, non-blank variation names; empty lists dropped. */
+export function normalizeExcludedVariations(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [id, names] of Object.entries(raw as Record<string, unknown>).slice(0, 500)) {
+    if (!id || id.length > 64 || !Array.isArray(names)) continue;
+    const clean = [...new Set(names.filter((n): n is string => typeof n === "string").map((n) => n.trim().slice(0, 80)).filter(Boolean))].slice(0, 100);
+    if (clean.length) out[id] = clean;
+  }
+  return out;
+}
+
 export function normalizeGroupBuy(input: unknown): GroupBuy {
   const x = (input ?? {}) as Record<string, unknown>;
   const status = GROUP_BUY_STATUSES.includes(x.status as GroupBuyStatus)
@@ -187,6 +203,7 @@ export function normalizeGroupBuy(input: unknown): GroupBuy {
     endsAt: isoOrNull(x.endsAt),
     deliveryEta: str(x.deliveryEta, 200),
     productIds,
+    excludedVariations: normalizeExcludedVariations(x.excludedVariations),
     slotGoal: slotGoalInt(x.slotGoal),
     batchNumber: str(x.batchNumber, 64).trim(),
     orderPrefix: normalizeGroupBuyOrderPrefix(x.orderPrefix),
@@ -376,6 +393,7 @@ export type DbGroupBuyRow = {
   endsAt: Date | null;
   deliveryEta: string;
   productIds: unknown;
+  excludedVariations?: unknown;
   slotGoal?: number | null;
   batchNumber?: string | null;
   orderPrefix?: string | null;
@@ -398,6 +416,7 @@ export function dbGroupBuyToStorefront(row: DbGroupBuyRow): GroupBuy {
     endsAt: row.endsAt?.toISOString() ?? null,
     deliveryEta: row.deliveryEta,
     productIds: row.productIds,
+    excludedVariations: row.excludedVariations ?? {},
     slotGoal: row.slotGoal ?? 0,
     batchNumber: row.batchNumber ?? "",
     orderPrefix: row.orderPrefix ?? "",
@@ -422,6 +441,7 @@ export function groupBuyToDbWrite(gb: GroupBuy) {
     endsAt: gb.endsAt ? new Date(gb.endsAt) : null,
     deliveryEta: gb.deliveryEta,
     productIds: gb.productIds,
+    excludedVariations: gb.excludedVariations ?? {},
     slotGoal: gb.slotGoal,
     batchNumber: gb.batchNumber || null,
     orderPrefix: gb.orderPrefix || null,

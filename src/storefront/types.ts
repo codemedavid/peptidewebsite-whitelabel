@@ -133,6 +133,9 @@ export type Product = {
      *  checkout) while the product's other options keep selling. Absent =
      *  listed. See lib/storefront/variation-availability. */
     available?: boolean;
+    /** Render/placement-only: the LIVE round leaves this option out
+     *  (GroupBuy.excludedVariations). Never persisted. */
+    notInRound?: boolean;
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -1230,6 +1233,10 @@ export type Brand = {
   // first = top. Products not listed follow after. See lib/storefront/
   // product-order.ts.
   productOrder?: string[];
+  // Admin → Categories switch: when true the shop lists products category by
+  // category in the Categories order (the arrangement above applies inside each
+  // category). Absent/false = off. See arrangeStoreProducts.
+  productsFollowCategories?: boolean;
 
   // Product card design chosen in the store admin's Card Studio. Persisted in
   // branding.config (same mechanism as paymentMethods). Absent → the catalog

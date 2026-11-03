@@ -182,6 +182,7 @@ function GroupBuyModal({
       endsAt,
       deliveryEta: settings.defaultDeliveryEta,
       productIds: [] as string[],
+      excludedVariations: {} as Record<string, string[]>,
       slotGoal: 0,
       batchNumber: "",
       orderPrefix: "",
@@ -201,6 +202,9 @@ function GroupBuyModal({
   const [endsAt, setEndsAt] = useState(isoToLocal(seed.endsAt));
   const [deliveryEta, setDeliveryEta] = useState(seed.deliveryEta);
   const [productIds, setProductIds] = useState<string[]>(seed.productIds);
+  // Options left OUT of this round, per product ("50mg isn't in this GB").
+  const [excluded, setExcluded] = useState<Record<string, string[]>>(seed.excludedVariations ?? {});
+  const [openOptions, setOpenOptions] = useState<string | null>(null);
   // Storefront slot-goal for the progress bar. 0 = off (no bar) — the owner can
   // clear the number to hide the progress bar for this round entirely.
   const [slotGoal, setSlotGoal] = useState<number>(seed.slotGoal ?? 0);
@@ -216,8 +220,23 @@ function GroupBuyModal({
     ? ["draft", "scheduled", "active", "closed"]
     : ["draft", "active", "closed"];
 
-  const toggleProduct = (id: string) =>
+  const toggleProduct = (id: string) => {
+    const removing = productIds.includes(id);
     setProductIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    // A product taken out of the round takes its option choices with it.
+    if (removing) setExcluded(({ [id]: _drop, ...rest }) => rest);
+  };
+  const toggleOption = (productId: string, name: string) =>
+    setExcluded((cur) => {
+      const off = cur[productId] ?? [];
+      const next = off.includes(name) ? off.filter((n) => n !== name) : [...off, name];
+      const { [productId]: _drop, ...rest } = cur;
+      return next.length ? { ...rest, [productId]: next } : rest;
+    });
+  // Only products this round covers keep exclusions (all, when none are picked).
+  const roundExcluded = Object.fromEntries(
+    Object.entries(excluded).filter(([id]) => productIds.length === 0 || productIds.includes(id)),
+  );
 
   return (
     <div className="admin-modal" onClick={onCancel}>
@@ -425,6 +444,7 @@ function GroupBuyModal({
               {productIds.length === 0
                 ? "No selection — the group buy covers the whole catalog."
                 : `${productIds.length} product${productIds.length === 1 ? "" : "s"} assigned.`}
+              {" "}Products with sizes show “options” — untick a size to leave it out of this group buy only.
             </div>
             <div
               style={{
@@ -437,16 +457,67 @@ function GroupBuyModal({
                 padding: 8,
               }}
             >
-              {products.map((p) => (
-                <label key={p.id} className="admin-check">
-                  <input
-                    type="checkbox"
-                    checked={productIds.includes(p.id)}
-                    onChange={() => toggleProduct(p.id)}
-                  />
-                  <span>{p.name}</span>
-                </label>
-              ))}
+              {products.map((p) => {
+                const options = (p.variations ?? []).map((v) => v.name);
+                const off = excluded[p.id] ?? [];
+                const inRound = productIds.length === 0 || productIds.includes(p.id);
+                const open = openOptions === p.id && inRound;
+                const onCount = options.filter((n) => !off.includes(n)).length;
+                return (
+                  <div key={p.id} style={{ display: "grid", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <label className="admin-check">
+                        <input
+                          type="checkbox"
+                          checked={productIds.includes(p.id)}
+                          onChange={() => toggleProduct(p.id)}
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                      {options.length > 0 && inRound && (
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--ghost"
+                          style={{ padding: "2px 10px", minHeight: 28, fontSize: 12, whiteSpace: "nowrap" }}
+                          aria-expanded={open}
+                          aria-controls={`gb-opts-${p.id}`}
+                          onClick={() => setOpenOptions(open ? null : p.id)}
+                        >
+                          {onCount} of {options.length} options {open ? "▴" : "▾"}
+                        </button>
+                      )}
+                    </div>
+                    {open && (
+                      <div
+                        id={`gb-opts-${p.id}`}
+                        role="group"
+                        aria-label={`${p.name} options in this group buy`}
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "4px 14px",
+                          margin: "0 0 6px 28px",
+                          padding: "6px 10px",
+                          borderLeft: "2px solid var(--brand-accent, #3b82f6)",
+                        }}
+                      >
+                        {options.map((name) => {
+                          const on = !off.includes(name);
+                          // Keep at least one option — dropping the whole
+                          // product is the checkbox above.
+                          const last = on && onCount === 1;
+                          return (
+                            <label key={name} className="admin-check" style={{ fontSize: 13, opacity: last ? 0.7 : 1 }} title={last ? "Keep at least one option — untick the product to leave it out" : undefined}>
+                              <input type="checkbox" checked={on} disabled={last} onChange={() => toggleOption(p.id, name)} />
+                              <span style={on ? undefined : { textDecoration: "line-through", color: "var(--brand-text-muted)" }}>{name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {products.length === 0 && (
                 <span className="admin-field__hint">No products yet.</span>
               )}
@@ -478,6 +549,7 @@ function GroupBuyModal({
                 endsAt: localToIso(endsAt),
                 deliveryEta,
                 productIds,
+                excludedVariations: roundExcluded,
                 slotGoal,
                 batchNumber,
                 // 0 from the number input means "cleared" — send null so

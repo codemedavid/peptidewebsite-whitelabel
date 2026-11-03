@@ -59,6 +59,8 @@ export type Variation = {
   kitSize?: number;
   /** `false` = off sale; hidden from every option builder below. */
   available?: boolean;
+  /** The live round leaves this option out — render/placement only. */
+  notInRound?: boolean;
 };
 
 /** An option offered on the product card. `variation` is absent on the product's

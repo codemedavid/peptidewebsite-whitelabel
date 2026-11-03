@@ -59,7 +59,7 @@ import {
 } from "@/lib/storefront/product-mapping";
 import { effectiveStock, applyStockMoveToProducts } from "@/lib/storefront/inventory";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
-import { unavailableLineViolation } from "@/lib/storefront/variation-availability";
+import { applyRoundExclusions, unavailableLineViolation } from "@/lib/storefront/variation-availability";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
@@ -525,7 +525,7 @@ async function stampGroupBuy(
   /** The order's product ids as resolved against the catalog (id OR name, the
    *  same way pricing resolves lines). Omitted → the client's own productIds. */
   resolvedIds?: string[],
-): Promise<(GroupBuyPriceScope & { moqVials?: number | null }) | null> {
+): Promise<(GroupBuyPriceScope & { moqVials?: number | null; excludedVariations?: Record<string, string[]> }) | null> {
   p.groupBuyId = null;
   p.groupBuyName = null;
   try {
@@ -546,7 +546,13 @@ async function stampGroupBuy(
     const coversAll = !caps.productAssignment || gb.productIds.length === 0;
     // moqVials rides along so placement enforces the per-customer minimum of
     // THIS round (gb-moq-kits) — the same round the cart read it from.
-    return { coversAll, productIds: coversAll ? [] : gb.productIds, moqVials: gb.moqVials ?? null };
+    return {
+      coversAll,
+      productIds: coversAll ? [] : gb.productIds,
+      moqVials: gb.moqVials ?? null,
+      // Options the owner unticked for THIS round — refused at the guard below.
+      excludedVariations: gb.excludedVariations ?? {},
+    };
   } catch {
     /* attribution is best-effort — never block checkout on it */
     return null;
@@ -1075,7 +1081,9 @@ async function validateLiveOrder(
   // than the product has in stock, so the admin never has to confirm an
   // order the inventory can't cover. Live-round group-buy lines are
   // pre-orders and exempt (gbScope).
-  const paused = purchasableViolation(catalog, p.items) ?? unavailableLineViolation(catalog, p.items);
+  const paused =
+    purchasableViolation(catalog, p.items) ??
+    unavailableLineViolation(applyRoundExclusions(catalog, gbScope?.excludedVariations), p.items);
   if (paused) return { error: paused };
   const violation = stockViolation(catalog, p.items, gbScope);
   if (violation) return { error: violation };

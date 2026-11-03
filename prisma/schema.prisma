@@ -704,6 +704,9 @@ model GroupBuy {
   // Product ids assigned to this group buy (groupbuy.product_assignment).
   // Empty array = the group buy covers the whole catalog.
   productIds  Json      @default("[]")
+  // Per-round variant exclusions: productId → variation names NOT offered in
+  // THIS round ("Tirzepatide 50mg isn't in this GB"). {} = every option.
+  excludedVariations Json @default("{}")
   // Storefront slot-goal for the progress bar ("18 of 30 slots filled"). 0 = the
   // goal is off and no bar renders — set/cleared per round by the store owner.
   slotGoal    Int       @default(0)

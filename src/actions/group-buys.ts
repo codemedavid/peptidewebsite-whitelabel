@@ -653,6 +653,8 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     return { error: "Scheduled group buys aren't enabled for this store." };
   }
   if (!caps.productAssignment) gb.productIds = [];
+  // Per-round variant exclusions ride the same grant as product assignment.
+  if (!caps.productAssignment) gb.excludedVariations = {};
   if (gb.startsAt && gb.endsAt && gb.startsAt > gb.endsAt) {
     return { error: "The group buy can't end before it starts." };
   }
@@ -668,6 +670,12 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     const all = await loadGroupBuys(tenantId, slug);
     const others = all.filter((x) => x.id !== gb.id);
     const before = all.find((x) => x.id === gb.id) ?? null;
+    // A save that doesn't carry the field (the Pepweb app's round editor knows
+    // nothing about per-round options) keeps the stored choices instead of
+    // putting every unticked option back on sale.
+    const sentExclusions =
+      !!input && typeof input === "object" && "excludedVariations" in (input as Record<string, unknown>);
+    if (!sentExclusions && before && caps.productAssignment) gb.excludedVariations = before.excludedVariations ?? {};
     const wouldBeLive = effectiveGroupBuyStatus(gb, caps.scheduled) === "active";
     const otherLive = others.some((x) => effectiveGroupBuyStatus(x, caps.scheduled) === "active");
     if (wouldBeLive && otherLive) {
@@ -709,6 +717,7 @@ export async function saveGroupBuyAction(input: unknown): Promise<SaveGroupBuyRe
     const data = {
       ...groupBuyToDbWrite(gb),
       productIds: gb.productIds as unknown as Prisma.InputJsonValue,
+      excludedVariations: (gb.excludedVariations ?? {}) as unknown as Prisma.InputJsonValue,
     };
     if (isEdit) {
       const row = await withTenant(tenantId, async (db) => {
@@ -1159,6 +1168,7 @@ export async function duplicateGroupBuyAction(id: unknown): Promise<SaveGroupBuy
         data: {
           ...groupBuyToDbWrite(copy),
           productIds: copy.productIds as unknown as Prisma.InputJsonValue,
+          excludedVariations: (copy.excludedVariations ?? {}) as unknown as Prisma.InputJsonValue,
           tenantId,
         },
       }),

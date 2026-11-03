@@ -11,11 +11,33 @@
 //
 // Pure; pinned by `npm run test:variation-availability`.
 
-type Listable = { available?: boolean };
+type Listable = { available?: boolean; notInRound?: boolean };
 
-/** Only a literal `false` hides an option. */
+/** Hidden when the owner switched the option off for the whole store
+ *  (`available: false`, persisted) OR the live round leaves it out
+ *  (`notInRound`, stamped at render/placement by applyRoundExclusions and
+ *  never persisted — normalizeProductInput doesn't name it). */
 export function isVariationListed(v: Listable | null | undefined): boolean {
-  return v?.available !== false;
+  return v?.available !== false && v?.notInRound !== true;
+}
+
+/**
+ * Stamp `notInRound` on the options the live round excludes (GroupBuy.
+ * excludedVariations: productId → names). Products it doesn't name come back
+ * as the same objects; no exclusions → the same array.
+ */
+export function applyRoundExclusions<
+  P extends { id: string; variations?: readonly ({ name: string } & Listable)[] | null },
+>(products: readonly P[], excluded: Readonly<Record<string, readonly string[]>> | null | undefined): P[] {
+  if (!excluded || Object.keys(excluded).length === 0) return products as P[];
+  return products.map((p) => {
+    const names = excluded[p.id];
+    if (!names?.length || !Array.isArray(p.variations)) return p;
+    return {
+      ...p,
+      variations: p.variations.map((v) => (names.includes(v.name) ? { ...v, notInRound: true } : v)),
+    };
+  });
 }
 
 /** The options a customer may see and pick, in the seller's order. */

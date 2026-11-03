@@ -15,7 +15,9 @@ import {
   isVariationListed,
   listedVariations,
   unavailableLineViolation,
+  applyRoundExclusions,
 } from "../src/lib/storefront/variation-availability";
+import { normalizeExcludedVariations } from "../src/lib/storefront/group-buy";
 import { matchesListingQuery } from "../src/lib/storefront/listing-filter";
 
 let passed = 0;
@@ -111,6 +113,41 @@ check("a product the owner switched off is refused too", () => {
 check("a bare line for a product with every option hidden is refused", () => {
   const all = { id: "p3", name: "Sema", variations: [{ name: "10mg", price: 1, available: false }] };
   assert.ok(unavailableLineViolation([all], [{ productId: "p3", name: "Sema" }]));
+});
+
+console.log("per-round exclusions");
+const plain = { id: "p1", name: "Tirzepatide", price: 416, variations: [{ name: "5mg", price: 416 }, { name: "30mg", price: 595 }, { name: "50mg", price: 960 }] };
+check("the live round's unticked option is hidden and refused — only for products it names", () => {
+  const [p, other] = applyRoundExclusions([plain, { id: "p9", name: "BPC", price: 1, variations: [{ name: "50mg", price: 1 }] }], { p1: ["50mg"] });
+  assert.deepEqual(buildProductOptions(p).map((o) => o.name), ["5mg", "30mg"]);
+  assert.ok(unavailableLineViolation([p], [{ productId: "p1", name: "Tirzepatide", variation: "50mg" }]));
+  assert.equal(unavailableLineViolation([p], [{ productId: "p1", name: "Tirzepatide", variation: "30mg" }]), null);
+  assert.deepEqual(buildProductOptions(other).map((o) => o.name), ["50mg"], "other products untouched");
+});
+check("no round / empty exclusions → same objects back (nothing hidden)", () => {
+  const list = [plain];
+  assert.equal(applyRoundExclusions(list, undefined), list);
+  assert.equal(applyRoundExclusions(list, {}), list);
+});
+check("the round flag never persists: a product save drops it", () => {
+  const [p] = applyRoundExclusions([plain], { p1: ["50mg"] });
+  const saved = normalizeProductInput(p);
+  assert.ok(!(saved.variations ?? []).some((v) => "notInRound" in v || v.available === false));
+});
+check("excludedVariations normalizer: unique trimmed names, empty lists dropped", () => {
+  assert.deepEqual(normalizeExcludedVariations({ p1: [" 50mg", "50mg", "", 3], p2: [], "": ["x"] }), { p1: ["50mg"] });
+  assert.deepEqual(normalizeExcludedVariations(null), {});
+  assert.deepEqual(normalizeExcludedVariations(["x"]), {});
+});
+
+check("guards: an app round save keeps exclusions; Inventory reads only the store-wide flag", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const gbActions = readFileSync("src/actions/group-buys.ts", "utf8");
+  assert.match(gbActions, /"excludedVariations" in/);
+  assert.match(gbActions, /gb\.excludedVariations = before\.excludedVariations/);
+  const inv = readFileSync("src/storefront/admin/AdminInventory.tsx", "utf8");
+  assert.match(inv, /v\.available === false/);
+  assert.doesNotMatch(inv, /isVariationListed\(/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

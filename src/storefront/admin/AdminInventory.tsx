@@ -5,7 +5,6 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { listProductsAction, saveProductAction } from "@/actions/products";
 import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
-import { isVariationListed } from "@/lib/storefront/variation-availability";
 
 // Low-stock threshold: at or below this (but above zero) a product is flagged
 // "Low" so the owner can restock before it sells out.
@@ -15,8 +14,11 @@ const LOW_STOCK = 5;
  *  (variation `available: false`) — one dose off sale, the rest still selling. */
 type Draft = { stock: number; available: boolean; off: string[] };
 
+// Store-wide switch ONLY (`available: false`). Not isVariationListed: that
+// also hides an option the live round leaves out (notInRound, render-time),
+// and reading it here would save a round's exclusion as a store-wide "off".
 const offOptions = (p: Product): string[] =>
-  (p.variations ?? []).filter((v) => !isVariationListed(v)).map((v) => v.name);
+  (p.variations ?? []).filter((v) => v.available === false).map((v) => v.name);
 
 const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
