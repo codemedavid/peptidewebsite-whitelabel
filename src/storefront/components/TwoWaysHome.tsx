@@ -36,6 +36,13 @@ import { gbStepsForWays, normalizeGroupBuyContent, renderGbCopy } from "@/lib/st
 import { ShareProductButton } from "./ShareProductButton";
 import { ProductCard } from "./Catalog";
 import { isOnHandBlocked } from "@/lib/storefront/group-buy";
+import {
+  ALL_CATEGORY,
+  MIN_ITEMS_FOR_SEARCH,
+  filterListing,
+  listingCategories,
+} from "@/lib/storefront/listing-filter";
+import { ListingFilter, ListingFilterEmpty } from "./ListingFilter";
 
 export function TwoWaysHome({
   brand,
@@ -53,7 +60,11 @@ export function TwoWaysHome({
   /** Navigate to the dedicated group-buy page (the open round). */
   onOpenGroupBuy: () => void;
 }) {
-  const { products, cart, addToCart, setLineQty } = useStore();
+  const { products, categories, cart, addToCart, setLineQty } = useStore();
+  // Search + category filter over the on-hand shelf — this home never renders
+  // the Catalog, so without it a long shelf could only be scrolled.
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(ALL_CATEGORY);
   const currency = brand.currency || "₱";
   // The owner shut the whole shop. Both ways still render — the shopper can see
   // what the store sells either way — but every buy control goes inert.
@@ -89,6 +100,14 @@ export function TwoWaysHome({
     (onHandState === "hidden"
       ? "Every batch third-party tested. Join the group buy and save."
       : "Every batch third-party tested. Order what's on-hand today, or join the group buy and save.");
+
+  const onHandChips = listingCategories(view.onHand.lines.map((l) => l.product), categories);
+  const activeCategory = onHandChips.some((c) => c.id === category) ? category : ALL_CATEGORY;
+  const onHandLines = filterListing(view.onHand.lines, { query, category: activeCategory }, (l) => l);
+  const resetFilter = () => {
+    setQuery("");
+    setCategory(ALL_CATEGORY);
+  };
 
   const qtyOf = (id: string) => cart.filter((c) => baseProductId(c) === id).length;
 
@@ -194,17 +213,32 @@ export function TwoWaysHome({
             Ships-now orders are paused right now — these are listed for reference only.
           </p>
         )}
+        {view.onHand.count >= MIN_ITEMS_FOR_SEARCH && (
+          <ListingFilter
+            query={query}
+            onQueryChange={setQuery}
+            categories={onHandChips}
+            category={activeCategory}
+            onCategoryChange={setCategory}
+            shown={onHandLines.length}
+            total={view.onHand.count}
+            label="Search on-hand products"
+            placeholder="Search what ships today…"
+          />
+        )}
         {view.onHand.count === 0 ? (
           <p className="sf-twh__empty">
             {gbLive
               ? "Nothing on hand right now — everything is in the open group buy."
               : "Nothing on hand right now — follow us for the next drop."}
           </p>
+        ) : onHandLines.length === 0 ? (
+          <ListingFilterEmpty query={query} onReset={resetFilter} />
         ) : brand.twoWaysOnHandStyle === "cards" ? (
           // The catalog's own cards — big photo, Card Studio design, and the
           // same on-hand gate / closed-store rules as the Products page.
           <div className="catalog__grid sf-twh__cards" data-cd-grid={brand.cardDesign?.layout || undefined}>
-            {view.onHand.lines.map((line) => (
+            {onHandLines.map((line) => (
               <ProductCard
                 key={line.product.id}
                 product={line.product}
@@ -219,7 +253,7 @@ export function TwoWaysHome({
           </div>
         ) : (
           <ul className="sf-twh__list">
-            {view.onHand.lines.map((line) => (
+            {onHandLines.map((line) => (
               <OnHandRow
                 key={line.product.id}
                 line={line}

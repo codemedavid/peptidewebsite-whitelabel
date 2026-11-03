@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from "react-native";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { callAction } from "@/features/admin/account/data";
-import { setupKeys, success } from "@/features/admin/setup/data";
+import { setupKeys, success, useAdminBrand } from "@/features/admin/setup/data";
+import { formatMoney } from "@/features/admin/catalog/currency";
+import { brandSymbol } from "@/features/admin/catalog/model";
+import { Chips } from "@/ui/kit";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
@@ -22,6 +25,20 @@ type StoreCustomer = {
   joinedAt: string;
   lastLoginAt: string | null;
   orderCount: number;
+  /** null without the Orders grant. */
+  spent: number | null;
+  lastOrderAt: string | null;
+  /** Group-buy email entry — no password to reset. */
+  emailOnly: boolean;
+  unlinkedOrders: number;
+};
+
+type Sort = "newest" | "spent" | "orders";
+const byNewest = (a: StoreCustomer, b: StoreCustomer) => b.joinedAt.localeCompare(a.joinedAt);
+const COMPARE: Record<Sort, (a: StoreCustomer, b: StoreCustomer) => number> = {
+  newest: byNewest,
+  spent: (a, b) => (b.spent ?? 0) - (a.spent ?? 0) || b.orderCount - a.orderCount || byNewest(a, b),
+  orders: (a, b) => b.orderCount - a.orderCount || (b.spent ?? 0) - (a.spent ?? 0) || byNewest(a, b),
 };
 
 const shortDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "never");
@@ -67,17 +84,22 @@ function CustomerEditor({
  * The website's Customers view (AdminCustomers): shoppers who made an account,
  * with disable (signs them out everywhere), re-enable, and reset password (a
  * temp one for the owner to send a shopper who forgot theirs), edit (name /
- * email / phone) and delete (personal data purged, orders kept). Runs the website's own
+ * email / phone) and delete (personal data purged, orders kept). With the Orders
+ * permission each card opens the account's order history. Runs the website's own
  * actions, gated on the "customers" permission and the store's feature.
  */
 export default function CustomerAccountsScreen() {
   const t = useTheme();
   const online = useOnline();
-  const { scope } = useSignedIn();
+  const { me, scope } = useSignedIn();
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [sort, setSort] = useState<Sort>("newest");
+  const brand = useAdminBrand();
+  const symbol = brand.data ? brandSymbol(brand.data) : "₱";
+  const money = (n: number) => formatMoney(Math.round(n), symbol, { decimals: false });
 
   const key = [...setupKeys.all(scope), "customer-accounts"];
   const list = useQuery({
@@ -175,7 +197,16 @@ export default function CustomerAccountsScreen() {
   };
 
   const q = query.trim().toLowerCase();
-  const rows = (list.data ?? []).filter((c) => !q || [c.name, c.email, c.phone].some((v) => v.toLowerCase().includes(q)));
+  const rows = (list.data ?? [])
+    .filter((c) => !q || [c.name, c.email, c.phone].some((v) => v.toLowerCase().includes(q)))
+    .sort(COMPARE[sort]);
+  // Spend only comes with the Orders grant — no spender sort without it.
+  const hasSpend = (list.data ?? []).some((c) => c.spent !== null);
+  const sorts: ReadonlyArray<{ key: Sort; label: string }> = [
+    { key: "newest", label: "Newest" },
+    ...(hasSpend ? [{ key: "spent" as const, label: "Top spenders" }] : []),
+    { key: "orders", label: "Most orders" },
+  ];
 
   return (
     <View style={{ flex: 1 }}>
@@ -199,6 +230,7 @@ export default function CustomerAccountsScreen() {
                 Shoppers who created an account on your store. Disabling one signs them out everywhere.
               </AppText>
               <Field label="Search" value={query} onChangeText={setQuery} placeholder="Name, email or phone" autoCapitalize="none" autoCorrect={false} />
+              <Chips options={sorts} value={sort} onChange={setSort} label="Sort customers" />
             </View>
           }
           ListEmptyComponent={
@@ -208,12 +240,21 @@ export default function CustomerAccountsScreen() {
               body={q ? `Nothing found for “${query.trim()}”.` : "When shoppers sign up on your store, they'll show up here."}
             />
           }
-          renderItem={({ item: c }) => (
+          renderItem={({ item: c, index }) => (
             <Card style={{ gap: SPACE.sm }}>
               <View style={styles.head}>
+                {sort === "spent" && !q && (c.spent ?? 0) > 0 ? (
+                  <Pill tone="success" icon="trophy-outline" size="sm" label={`#${index + 1}`} />
+                ) : null}
                 <AppText variant="bodyStrong" style={{ flex: 1 }}>
                   {c.name}
                 </AppText>
+                {c.spent !== null ? (
+                  <AppText variant="bodyStrong" style={styles.tabular}>
+                    {money(c.spent)}
+                  </AppText>
+                ) : null}
+                {c.emailOnly ? <Pill tone="info" size="sm" label="Email only" /> : null}
                 <Pill tone={c.status === "active" ? "success" : "danger"} size="sm" label={c.status === "active" ? "Active" : "Disabled"} />
               </View>
               <AppText variant="caption" color="muted">
@@ -222,6 +263,19 @@ export default function CustomerAccountsScreen() {
               <AppText variant="caption" color="faint">
                 {`${c.orderCount} order${c.orderCount === 1 ? "" : "s"} · Joined ${shortDate(c.joinedAt)} · Last sign-in ${shortDate(c.lastLoginAt)}`}
               </AppText>
+              {me.can.orders && c.unlinkedOrders > 0 ? (
+                <AppText variant="caption" color="link">
+                  {`${c.unlinkedOrders} earlier guest order${c.unlinkedOrders === 1 ? "" : "s"} to link — open Order history`}
+                </AppText>
+              ) : null}
+              {me.can.orders ? (
+                <Button
+                  label={c.orderCount > 0 ? `Order history · ${c.orderCount}` : "Order history"}
+                  icon="receipt-outline"
+                  accessibilityHint="Opens every order this customer placed"
+                  onPress={() => router.push({ pathname: "/customer-account/[id]", params: { id: c.id } })}
+                />
+              ) : null}
               {editingId === c.id ? (
                 <CustomerEditor
                   customer={c}
@@ -238,7 +292,7 @@ export default function CustomerAccountsScreen() {
                   onPress={() => setEditingId(c.id)}
                 />
               )}
-              {c.status === "active" && (
+              {c.status === "active" && !c.emailOnly && (
                 <Button
                   label="Reset password"
                   variant="secondary"
@@ -274,4 +328,5 @@ const styles = StyleSheet.create({
   list: { padding: SPACE.lg, paddingBottom: SPACE.xxxl, flexGrow: 1 },
   head: { flexDirection: "row", alignItems: "center", gap: SPACE.md },
   editActions: { flexDirection: "row", gap: SPACE.md },
+  tabular: { fontVariant: ["tabular-nums"] },
 });

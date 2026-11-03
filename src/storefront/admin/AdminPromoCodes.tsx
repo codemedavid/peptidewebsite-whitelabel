@@ -57,11 +57,14 @@ type EditingPromo = PromoCode & { _new?: boolean };
 function PromoCodeModal({
   currency,
   promo,
+  dualMarket = false,
   onCancel,
   onSave,
 }: {
   currency: string;
   promo: EditingPromo;
+  /** Dual-currency store: show the International (USD) value + minimum. */
+  dualMarket?: boolean;
   onCancel: () => void;
   onSave: (c: EditingPromo) => void;
 }) {
@@ -71,6 +74,8 @@ function PromoCodeModal({
   const [minP, setMinP]     = useState<number | string>(promo.minPurchase ?? 0);
   const [limit, setLimit]   = useState<number | string>(promo.usageLimit ?? "");
   const [expiry, setExpiry] = useState<string>(promo.expiry || "");
+  const [usdValue, setUsdValue] = useState<number | string>(promo.usdValue ?? "");
+  const [usdMin, setUsdMin] = useState<number | string>(promo.usdMinPurchase ?? "");
   const canSave = code.trim() && Number(value) > 0;
 
   return (
@@ -123,6 +128,26 @@ function PromoCodeModal({
           </div>
         </div>
 
+        {dualMarket && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+            {type === "fixed" && (
+              <div className="admin-modal__row" style={{ margin: 0 }}>
+                <label className="admin-field__label">International value (USD)</label>
+                <NumberField value={usdValue} onChange={setUsdValue} min={0} />
+              </div>
+            )}
+            <div className="admin-modal__row" style={{ margin: 0 }}>
+              <label className="admin-field__label">International min. purchase (USD)</label>
+              <NumberField value={usdMin} onChange={setUsdMin} min={0} />
+            </div>
+            <div className="admin-field__hint" style={{ gridColumn: "1 / -1" }}>
+              {type === "fixed"
+                ? "Leave the USD value blank and this code only works in the Local cart."
+                : "A percentage code works in both carts; the USD minimum applies to International orders."}
+            </div>
+          </div>
+        )}
+
         <div className="admin-modal__row">
           <label className="admin-field__label">Expiry Date</label>
           <input className="admin-input" type="date" value={expiry}
@@ -138,6 +163,9 @@ function PromoCodeModal({
               minPurchase: Number(minP) || 0,
               usageLimit: limit !== "" ? Number(limit) : null,
               expiry: expiry || null,
+              // Only positive USD amounts are stored (normalizePromoCodes).
+              usdValue: type === "fixed" && Number(usdValue) > 0 ? Number(usdValue) : undefined,
+              usdMinPurchase: Number(usdMin) > 0 ? Number(usdMin) : undefined,
             })}>
             {promo._new ? "Create Code" : "Save Changes"}
           </button>
@@ -371,6 +399,7 @@ export function AdminPromoCodes({
           <PromoCodeModal
             currency={currency}
             promo={editing}
+            dualMarket={brand.dualMarket === true}
             onCancel={() => setEditing(null)}
             onSave={save}
           />

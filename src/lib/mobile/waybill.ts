@@ -14,7 +14,9 @@ import type { OrderFilterKey, Waybill } from "./contract";
 export const WAYBILL_LIMIT = 500;
 
 const SHORT_ID_LENGTH = 6;
-const FILTERS: readonly OrderFilterKey[] = ["new", "to-fulfil", "shipped", "all"];
+const FILTERS: readonly OrderFilterKey[] = [
+  "new", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "all", "to-fulfil",
+];
 const MAX_QUERY = 80;
 const MAX_ID = 64;
 

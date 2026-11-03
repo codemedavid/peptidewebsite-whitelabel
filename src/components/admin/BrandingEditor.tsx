@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink } from "lucide-react";
 import { THEME_PRESETS } from "@/lib/theme/presets";
 import { resolveCssVars } from "@/lib/theme/resolve-css-vars";
@@ -31,7 +31,6 @@ import { BRAND } from "@/storefront/data";
 import type { Brand } from "@/storefront/types";
 import { BrandTweaksForm } from "@/storefront/tweaks/BrandTweaksForm";
 import { TweaksStyle } from "@/storefront/tweaks/controls";
-import { StorefrontLivePreview } from "@/components/admin/StorefrontLivePreview";
 import { CardDesignPicker, cardDesignLabel } from "@/components/admin/CardDesignPicker";
 import { CARD_PRESETS } from "@/storefront/cardDesign";
 import { BRAND_BORDER_WIDTH_PRESETS, borderWidthLabel } from "@/lib/storefront/brand-border";
@@ -47,11 +46,22 @@ import {
 } from "@/components/admin/branding-fields";
 import { BrandSplashEditor, splashSummary } from "@/components/admin/BrandSplashEditor";
 import { SPLASH_DESIGNS, type BrandSplash } from "@/lib/storefront/brand-splash";
+import { LivePreviewStudio } from "@/components/admin/preview/LivePreviewStudio";
+import "./branding-editor.css";
+import { DEFAULT_INTL_LOCAL } from "@/lib/storefront/intl-local/config";
+import { normalizeIntlLocalConfig } from "@/lib/storefront/intl-local/normalize";
+import { isDualMarket, normalizeIntlMarket } from "@/lib/storefront/intl-market";
+import { SiteBuilderEnvProvider, type SiteBuilderEnv } from "@/storefront/admin/site-builder/env";
+import { SiteBuilderUploadProvider } from "@/storefront/admin/site-builder/mode";
+import { IntlLocalStudio, studioTabFor, type StudioTab } from "@/storefront/admin/site-builder/studio";
+import type { Category } from "@/storefront/types";
 
 // Tenant storefronts live at `<slug>.<ROOT>`. ROOT carries its own dev port
 // (e.g. "lvh.me:3100"), and `*.lvh.me` resolves in every browser incl. Safari —
 // unlike `*.localhost`, which Safari can't reach.
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000";
+
+type EditorTab = "brand" | "hero" | "storefront" | "intl";
 
 type Props = {
   slug: string;
@@ -80,7 +90,12 @@ export function BrandingEditor({
   initialFaviconUrl,
   initialConfig,
 }: Props) {
-  const [tab, setTab] = useState<"brand" | "hero" | "storefront">("brand");
+  const [tab, setTab] = useState<EditorTab>("brand");
+  // The Intl & Local studio's own sub-tab, lifted here so the live preview's
+  // "Click to edit" can open the right panel.
+  const [studioTab, setStudioTab] = useState<StudioTab>("general");
+  // A short status line for actions that don't navigate (studio uploads etc.).
+  const [notice, setNotice] = useState("");
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [faviconUrl, setFaviconUrl] = useState(initialFaviconUrl);
   // Unlike the logo/favicon (own columns), this one lives inside branding.config
@@ -107,6 +122,7 @@ export function BrandingEditor({
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // The form needs a complete Brand; layer overrides on the design defaults and
   // seed identity from the tenant when the operator hasn't set it.
@@ -118,6 +134,22 @@ export function BrandingEditor({
       logoUrl: cfg.logoUrl || logoUrl || BRAND.logoUrl,
     }),
     [cfg, name, logoUrl],
+  );
+
+  // Unsaved-changes tracking: a fingerprint of everything Save branding writes,
+  // compared against the last saved one. Drives the save bar, ⌘S and the
+  // leave-page guard.
+  const fingerprint = JSON.stringify({ themeId, hexes, headingFont, bodyFont, cfg });
+  const [savedPrint, setSavedPrint] = useState(fingerprint);
+  const dirty = fingerprint !== savedPrint;
+
+  // The Intl & Local tab exists only for a store ON that layout.
+  const isIntlLocal = cfg.homeLayout === "intl-local";
+  const intlValue = useMemo(() => normalizeIntlLocalConfig(cfg.intlLocal ?? DEFAULT_INTL_LOCAL), [cfg.intlLocal]);
+  const previewExtras = useMemo(() => ({ name, logoUrl }), [name, logoUrl]);
+  const studioBrand: Brand = useMemo(
+    () => ({ ...storefrontBrand, dualMarket: isDualMarket({ homeLayout: cfg.homeLayout, intlMarket: cfg.intlMarket }) }),
+    [storefrontBrand, cfg.homeLayout, cfg.intlMarket],
   );
 
   const setTweak = (keyOrEdits: keyof Brand | Partial<Brand>, val?: unknown) => {
@@ -264,17 +296,111 @@ export function BrandingEditor({
   }
 
   async function onSave() {
+    if (saving) return;
     setSaving(true);
-    const res = await saveBrandingAction(slug, {
-      themeId,
-      colors: triples,
-      fonts: { heading: headingFont, body: bodyFont },
-      hero: heroTypography,
-      config: storefrontBrand as unknown as Record<string, unknown>,
-    });
-    setSaving(false);
-    if ("ok" in res) setSaved(true);
+    setSaveError("");
+    try {
+      const res = await saveBrandingAction(slug, {
+        themeId,
+        colors: triples,
+        fonts: { heading: headingFont, body: bodyFont },
+        hero: heroTypography,
+        config: storefrontBrand as unknown as Record<string, unknown>,
+      });
+      if ("ok" in res) {
+        setSaved(true);
+        setSavedPrint(fingerprint);
+      } else {
+        setSaveError(res.error === "FORBIDDEN" ? "Your session expired — sign in again to save." : res.error);
+      }
+    } catch {
+      setSaveError("Couldn't save — check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  // ⌘S / Ctrl+S saves; leaving with unsaved edits asks first.
+  const saveRef = useRef(onSave);
+  saveRef.current = onSave;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [dirty]);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(""), 3500);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+  // A store that leaves the Intl & Local layout loses that tab.
+  useEffect(() => {
+    if (tab === "intl" && !isIntlLocal) setTab("storefront");
+  }, [tab, isIntlLocal]);
+
+  // The platform's plumbing for the shared Intl & Local studio (see
+  // site-builder/env): edits land in `cfg` and ride Save branding.
+  const siteEnv = useMemo<SiteBuilderEnv>(
+    () => ({
+      toast: setNotice,
+      categories: ((cfg.categories as Category[] | undefined) ?? []).filter((c) => c.id !== "all"),
+      intl: {
+        enabled: normalizeIntlMarket(cfg.intlMarket).enabled,
+        savesImmediately: false,
+        setEnabled: async (enabled) => {
+          setCfg((c) => ({ ...c, intlMarket: { ...normalizeIntlMarket(c.intlMarket), enabled } }));
+          setSaved(false);
+          return { ok: true };
+        },
+      },
+      subscribers: null,
+    }),
+    [cfg.categories, cfg.intlMarket],
+  );
+  const studioUpload = useCallback(
+    (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "branding");
+      return uploadStorefrontImageAsAdminAction(slug, fd);
+    },
+    [slug],
+  );
+
+  // "Click to edit" in the live preview → open the controls for that part.
+  const onSelectRegion = useCallback(
+    (region: string) => {
+      if (isIntlLocal && region !== "catalog") {
+        setTab("intl");
+        setStudioTab(studioTabFor(region));
+      } else {
+        setTab(region === "hero" ? "hero" : "storefront");
+      }
+      controlsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [isIntlLocal],
+  );
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const tabs: { id: EditorTab; label: string }[] = [
+    { id: "brand", label: "Brand" },
+    { id: "hero", label: "Hero" },
+    { id: "storefront", label: "Storefront" },
+    ...(isIntlLocal ? [{ id: "intl" as const, label: "Intl & Local" }] : []),
+  ];
 
   return (
     <div>
@@ -282,11 +408,24 @@ export function BrandingEditor({
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="stylesheet" href={googleFontsUrl(headingFont, bodyFont, storefrontBrand.buttonFont, heroTitleFont, heroBodyFont)} />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div className="be-bar" data-dirty={dirty ? "1" : "0"}>
+        <div className="be-bar__title">
           <h2 className="font-heading text-xl font-bold">Branding</h2>
+          {dirty ? (
+            <span className="be-pill be-pill--warn">Unsaved changes</span>
+          ) : saved ? (
+            <span className="be-pill be-pill--ok">All changes saved</span>
+          ) : null}
+          {saveError && (
+            <span className="be-pill be-pill--err" role="alert">
+              {saveError}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
+          <span className="be-kbd" aria-hidden>
+            ⌘S
+          </span>
           <a
             href={`http://${slug}.${ROOT}`}
             target="_blank"
@@ -298,38 +437,45 @@ export function BrandingEditor({
           </a>
           {/* .sa's button reset beats single-class Tailwind utilities, so the
               primary action uses the admin's own .btn styles. */}
-          <button type="button" className="btn btn-accent" onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : saved ? (<><Check aria-hidden /> Saved</>) : "Save branding"}
+          <button type="button" className="btn btn-accent" onClick={onSave} disabled={saving || (!dirty && saved)}>
+            {saving ? "Saving…" : !dirty && saved ? (<><Check aria-hidden /> Saved</>) : "Save branding"}
           </button>
         </div>
       </div>
-      {saved && (
+      {saved && !dirty && (
         <span role="status" className="sr-only">
           Branding saved.
         </span>
+      )}
+      {notice && (
+        <div className="be-toast" role="status">
+          {notice}
+        </div>
       )}
 
       {/* ── Tabs ── */}
       {/* A segmented control, not a second underline tab bar — the tenant
           workspace tabs already sit directly above this. */}
       <div role="tablist" aria-label="Branding sections" className="seg mt-5 brand-seg">
-        {(["brand", "hero", "storefront"] as const).map((t) => (
+        {tabs.map((t) => (
           <button
-            key={t}
+            key={t.id}
             type="button"
             role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={"seg-item" + (tab === t ? " active" : "")}
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={"seg-item" + (tab === t.id ? " active" : "") + (t.id === "intl" ? " seg-item--new" : "")}
           >
-            {t === "brand" ? "Brand" : t === "hero" ? "Hero" : "Storefront"}
+            {t.label}
           </button>
         ))}
       </div>
 
-      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="be-grid mt-6">
         {/* ── Controls ── */}
-        <div className="space-y-6">
+        <div ref={controlsRef} className="space-y-6 be-controls">
+          {tab !== "intl" && (
+          <>
           {/* Theme preset + Card Studio are the shared base for every tab —
               keep them reachable from Hero and Storefront too. Both collapse
               (closed by default) so the controls column stays compact; the
@@ -392,8 +538,29 @@ export function BrandingEditor({
               }}
             />
           </CollapsibleSection>
+          </>
+          )}
 
-          {tab === "brand" ? (
+          {tab === "intl" ? (
+            // The SAME studio the store owner uses (#admin → Website Layout),
+            // here writing into the branding draft so it rides Save branding.
+            <SiteBuilderEnvProvider env={siteEnv}>
+              <SiteBuilderUploadProvider upload={studioUpload}>
+                <div className="sf-root sb sb-embed">
+                  <IntlLocalStudio
+                    brand={studioBrand}
+                    value={intlValue}
+                    onChange={(fn) => {
+                      setCfg((c) => ({ ...c, intlLocal: fn(normalizeIntlLocalConfig(c.intlLocal ?? DEFAULT_INTL_LOCAL)) }));
+                      setSaved(false);
+                    }}
+                    tab={studioTab}
+                    onTab={setStudioTab}
+                  />
+                </div>
+              </SiteBuilderUploadProvider>
+            </SiteBuilderEnvProvider>
+          ) : tab === "brand" ? (
             <>
               <div>
                 <h2 className="text-sm font-semibold">Colors</h2>
@@ -691,47 +858,18 @@ export function BrandingEditor({
         </div>
 
         {/* ── Live preview ── */}
-        {/* Sticky + self-start so the preview stays in view while the (often
-            much taller) controls column scrolls; caps at viewport height and
-            scrolls internally if the preview itself overflows. */}
-        <div className="self-start lg:sticky lg:top-6 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
-          <h2 className="mb-2 text-sm font-semibold">Live preview</h2>
-          {tab === "brand" ? (
-            <div
-              style={previewVars}
-              className="overflow-hidden rounded-[var(--radius)] border border-border bg-background text-foreground"
-            >
-              <StorefrontPreview name={name} logoUrl={logoUrl} headerBg={cfg.headerBg} headerText={cfg.headerText} />
-            </div>
-          ) : tab === "hero" ? (
-            <div className="space-y-2">
-              <div
-                style={storefrontPreviewVars}
-                className="overflow-hidden rounded-[var(--radius)] border border-border bg-background text-foreground"
-              >
-                <StorefrontPreview name={storefrontBrand.name} logoUrl={storefrontBrand.logoUrl || null} hero={storefrontBrand} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Approximate preview of the live storefront hero. Open{" "}
-                <button type="button" onClick={() => openStorefront()} className="text-accent underline">
-                  the live storefront
-                </button>{" "}
-                for the exact result.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <StorefrontLivePreview brand={storefrontBrand} />
-              <p className="text-xs text-muted-foreground">
-                Live preview of the current edits — Sections and Pages toggles
-                apply here instantly. Open{" "}
-                <button type="button" onClick={() => openStorefront()} className="text-accent underline">
-                  the live storefront
-                </button>{" "}
-                to see the saved result in a full window.
-              </p>
-            </div>
-          )}
+        {/* The tenant's REAL storefront in a device frame, fed the unsaved
+            draft (components/admin/preview). Sticky so it stays in view while
+            the much taller controls column scrolls. */}
+        <div className="be-preview">
+          <LivePreviewStudio
+            slug={slug}
+            draft={cfg}
+            extras={previewExtras}
+            previewBrand={studioBrand}
+            storefrontUrl={`http://${slug}.${ROOT}`}
+            onSelectRegion={onSelectRegion}
+          />
         </div>
       </div>
     </div>

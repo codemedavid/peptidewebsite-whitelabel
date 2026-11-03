@@ -80,7 +80,7 @@ function productsToOrderByKits(orders: readonly ReportInputOrder[], kits: Report
 /** The round header the workbook labels itself with. */
 export type ReportRound = ReportRoundWindow;
 
-export type ReportCustomer = { name?: string; email?: string; phone?: string };
+export type ReportCustomer = { name?: string; email?: string; phone?: string; whatsapp?: string; whatsappName?: string };
 export type ReportItem = { name: string; qty: number; price: number; productId?: string; variation?: string };
 /** Orders reach the workbook in the same shape the report page renders, so the
  *  export and the screen can never disagree about a customer, status or total. */
@@ -107,6 +107,10 @@ export type ReportCustomerLine = {
   email: string;
   /** Phone if given, else email, else "—" — whatever the owner would call. */
   contact: string;
+  /** WhatsApp number, "" when the store doesn't ask for one. */
+  whatsapp: string;
+  /** WhatsApp display name, "" when the store doesn't ask for one. */
+  whatsappName: string;
   address: string;
   orders: number;
   qty: number;
@@ -176,6 +180,8 @@ export function buildCustomerLines(orders: ReportInputOrder[]): ReportCustomerLi
       name: c.name?.trim() || c.email?.trim() || "Unknown",
       email: c.email?.trim() || "",
       contact: c.phone?.trim() || c.email?.trim() || "—",
+      whatsapp: c.whatsapp?.trim() || "",
+      whatsappName: c.whatsappName?.trim() || "",
       address: formatShippingAddress(o.shipping),
       orders: 0,
       qty: 0,
@@ -189,6 +195,8 @@ export function buildCustomerLines(orders: ReportInputOrder[]): ReportCustomerLi
     // A later order may carry the address an earlier one lacked — take the first
     // real one rather than letting "—" from order #1 win for the whole customer.
     if (row.address === "—") row.address = formatShippingAddress(o.shipping);
+    if (!row.whatsapp) row.whatsapp = c.whatsapp?.trim() || "";
+    if (!row.whatsappName) row.whatsappName = c.whatsappName?.trim() || "";
     byKey.set(key, row);
   }
   return [...byKey.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));

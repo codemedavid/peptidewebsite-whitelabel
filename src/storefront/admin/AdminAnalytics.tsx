@@ -1,5 +1,7 @@
 "use client";
 
+import { computeOrderTotals } from "./order-detail";
+import { isForeignCurrencyOrder } from "@/lib/storefront/markets";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Brand, Order } from "../types";
 import { listStorefrontOrdersAction } from "@/actions/orders";
@@ -186,7 +188,21 @@ export function AdminAnalytics({
   brand: Brand;
   onBack: () => void;
 }) {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setOrders] = useState<Order[]>([]);
+  // Dual-currency stores: every figure on this screen is in the STORE's
+  // currency, so orders charged in another one (International · USD) are kept
+  // out of it — ₱ + $ is not a number — and summarised on their own line.
+  const orders = useMemo(() => allOrders.filter((o) => !isForeignCurrencyOrder(o, brand.currency)), [allOrders, brand.currency]);
+  const foreign = useMemo(() => {
+    const list = allOrders.filter((o) => o.status !== "cancelled" && isForeignCurrencyOrder(o, brand.currency));
+    const byCode = new Map<string, { count: number; total: number }>();
+    for (const o of list) {
+      const code = (o.currency ?? "").toUpperCase();
+      const row = byCode.get(code) ?? { count: 0, total: 0 };
+      byCode.set(code, { count: row.count + 1, total: row.total + computeOrderTotals(o).total });
+    }
+    return [...byCode.entries()];
+  }, [allOrders, brand.currency]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadFailed, setLoadFailed] = useState<boolean>(false);
   const [range, setRange] = useState<RangeId>("30d");
@@ -541,6 +557,14 @@ export function AdminAnalytics({
           </div>
         ) : (
           <>
+            {foreign.length > 0 && (
+              <p className="admin-field__hint" role="note" style={{ margin: "0 0 14px" }}>
+                {foreign
+                  .map(([code, f]) => `${code}: ${f.count} order${f.count === 1 ? "" : "s"} · ${formatMoney(f.total, code)}`)
+                  .join(" · ")}{" "}
+                — International orders, shown separately and not included in the figures below.
+              </p>
+            )}
             <div className="admin__stats">
               {kpis.map((s) => (
                 <div key={s.label} className="admin-stat">

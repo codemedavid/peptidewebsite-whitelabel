@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/storefront/currency";
 import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
 import type { OrderDetail, OrderListResponse, OrderUpdateRequest, WaybillsResponse } from "./contract";
 import type { MobileContext } from "./auth";
-import { queueCountsFrom, statusesForFilter, toOrderDetail, toOrderSummary } from "./order-view";
+import { queueCountsFrom, statusCountsFrom, statusesForFilter, toOrderDetail, toOrderSummary } from "./order-view";
 import { loadRoundRows, scheduledRoundsOn } from "./order-rounds.server";
 import { roundFacets, roundWhere, type RoundCount, type RoundRow } from "./order-rounds";
 import { toWaybill, WAYBILL_LIMIT, type WaybillQuery } from "./waybill";
@@ -32,6 +32,18 @@ export const PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 const MAX_QUERY = 80;
 const TO_FULFIL = statusesForFilter("to-fulfil")!;
+
+/** Every status's count in ONE grouped query: the per-status tab badges plus
+ *  the two legacy queue badges derived from the same rows. */
+async function allStatusCounts(db: TenantTx) {
+  const groups = await db.storefrontOrder.groupBy({
+    by: ["status"],
+    where: ACTIVE_ORDERS_WHERE,
+    _count: { _all: true },
+  });
+  const rows = groups.map((g) => ({ status: g.status, count: g._count._all }));
+  return { counts: queueCountsFrom(rows), statusCounts: statusCountsFrom(rows) };
+}
 
 /** Both queue badges in one grouped query (see queueCountsFrom). */
 export async function queueCounts(db: TenantTx): Promise<{ new: number; toFulfil: number }> {
@@ -112,13 +124,13 @@ export async function listOrders(
           }
         : {}),
     };
-    const [rows, counts, rounds] = await Promise.all([
+    const [rows, { counts, statusCounts }, rounds] = await Promise.all([
       db.storefrontOrder.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
       }),
-      queueCounts(db),
+      allStatusCounts(db),
       cursor ? Promise.resolve(null) : roundBar(db, view),
     ]);
     const page = rows.slice(0, limit);
@@ -126,6 +138,7 @@ export async function listOrders(
       orders: page.map((r) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), currencyOf(ctx))),
       nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null,
       counts,
+      statusCounts,
       rounds,
     };
   });

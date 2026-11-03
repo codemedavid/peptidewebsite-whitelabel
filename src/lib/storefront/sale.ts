@@ -50,6 +50,38 @@ function activeDiscount(p: SaleSource): number | null {
   return discount;
 }
 
+/**
+ * A VARIATION's own markdown — the option's `salePrice` when it is genuinely a
+ * sale, else null. Same strictness as the base rule above: positive (a blank
+ * field is not a free option) and below that option's own price.
+ *
+ * WHY (owner request, 2026-11-03): "allow also to have another input if ever
+ * theres a discount for the variation". The base product's markdown was never
+ * meant for its options, so a seller who wanted 10mg on sale had no way to say
+ * it. This is that input; makeVariationEntry turns it into the clone's ordinary
+ * discount fields, so the cart, the server re-price and the app shop all charge
+ * it through effectiveBasePrice — one rule, no second copy.
+ */
+export function activeVariationSale(v: { price: number; salePrice?: number | null }): number | null {
+  const sale = Number(v.salePrice);
+  const list = Number(v.price);
+  if (!Number.isFinite(sale) || !Number.isFinite(list)) return null;
+  if (sale <= 0 || sale >= list) return null;
+  return sale;
+}
+
+/** The sale view for one marked-down list price. */
+function onSaleView(list: number, discount: number): SaleView {
+  const percent = percentOff(list, discount);
+  return {
+    price: discount,
+    compareAt: list,
+    percentOff: percent,
+    onSale: true,
+    badgeLabel: saleBadgeLabel(percent),
+  };
+}
+
 /** Is a real markdown running on this product's base price right now? */
 export function isDiscountActive(p: SaleSource): boolean {
   return activeDiscount(p) !== null;
@@ -107,13 +139,11 @@ const NO_SALE = (price: number | null): SaleView => ({
  * nothing picked. A product with no variations ignores it entirely and shows its
  * price — and its sale — immediately, which is the whole point of the fix.
  *
- * THE MARKDOWN BELONGS TO THE BASE PRICE, and only to it. A chosen variation is
- * cloned into the cart by checkout's makeVariationEntry, which deliberately
- * clears `discountEnabled`/`discountPrice` (a variation carries its own price,
- * so a base-product promo was never meant for it). Advertising a saving on a
- * variation would therefore advertise a price the cart refuses to charge — the
- * very bug this module exists to close, pointed the other way. So the sale shows
- * on a single-price product and on the "Standard" base option, and nowhere else.
+ * THE BASE MARKDOWN BELONGS TO THE BASE PRICE, and only to it. A chosen
+ * variation is cloned into the cart by checkout's makeVariationEntry, which
+ * never carries the product's `discountPrice` onto an option. What an option
+ * CAN carry is its own `salePrice` (activeVariationSale) — the clone charges
+ * exactly that, so that is exactly what a picked option advertises.
  */
 export function resolveSaleView(p: SaleSource, selectedIndex: number): SaleView {
   const options = buildProductOptions(p);
@@ -128,20 +158,16 @@ export function resolveSaleView(p: SaleSource, selectedIndex: number): SaleView 
     selectedIndex >= 0 && selectedIndex < options.length ? options[selectedIndex] : null;
   if (!selected) return NO_SALE(null);
 
-  // A real variation prices itself; only the base ("Standard") option carries the
-  // product's markdown.
-  if (selected.variation) return NO_SALE(selected.price);
+  // A real variation prices itself — with its OWN sale price when it has one;
+  // only the base ("Standard") option carries the product's markdown.
+  if (selected.variation) {
+    const own = activeVariationSale(selected.variation);
+    return own === null ? NO_SALE(selected.price) : onSaleView(selected.price, own);
+  }
 
   const discount = activeDiscount(p);
   if (discount === null) return NO_SALE(selected.price);
-  const percent = percentOff(selected.price, discount);
-  return {
-    price: discount,
-    compareAt: selected.price,
-    percentOff: percent,
-    onSale: true,
-    badgeLabel: saleBadgeLabel(percent),
-  };
+  return onSaleView(selected.price, discount);
 }
 
 /**
@@ -165,12 +191,5 @@ export function resolveBaseSaleView(p: SaleSource): SaleView {
 
   const discount = activeDiscount(p);
   if (discount === null) return NO_SALE(p.price);
-  const percent = percentOff(p.price, discount);
-  return {
-    price: discount,
-    compareAt: p.price,
-    percentOff: percent,
-    onSale: true,
-    badgeLabel: saleBadgeLabel(percent),
-  };
+  return onSaleView(p.price, discount);
 }

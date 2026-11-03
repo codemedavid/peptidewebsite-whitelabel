@@ -12,6 +12,7 @@
 import {
   GB_CONTENT_DEFAULTS,
   GB_CONTENT_LIMITS,
+  mergeGroupBuyContentSave,
   normalizeGroupBuyContent,
   renderGbCopy,
   type GroupBuyContent,
@@ -144,6 +145,41 @@ console.log("immutability");
   const b = normalizeGroupBuyContent(undefined);
   eq("defaults survive result mutation", b, GB_CONTENT_DEFAULTS);
   eq("exported defaults untouched", GB_CONTENT_DEFAULTS.howTitle, "How group buys work");
+}
+
+// ── Join button label ───────────────────────────────────────────────────────
+console.log("joinLabel");
+
+// mnm (2026-10-29) wanted "Add to cart" on its group-buy cards; every other
+// store keeps today's "Join GB".
+eq("default join label is today's button text", GB_CONTENT_DEFAULTS.joinLabel, "Join GB");
+eq("missing join label → default", normalizeGroupBuyContent({ howTitle: "X" }).joinLabel, "Join GB");
+eq("blank join label → default", normalizeGroupBuyContent({ joinLabel: "   " }).joinLabel, "Join GB");
+eq("non-string join label → default", normalizeGroupBuyContent({ joinLabel: 7 }).joinLabel, "Join GB");
+eq("owner's join label kept + trimmed", normalizeGroupBuyContent({ joinLabel: "  Add to cart " }).joinLabel, "Add to cart");
+eq("join label capped", normalizeGroupBuyContent({ joinLabel: "x".repeat(200) }).joinLabel.length,
+  GB_CONTENT_LIMITS.maxLabelLen);
+eq("custom join label leaves the other fields at default",
+  normalizeGroupBuyContent({ joinLabel: "Add to cart" }).terms, GB_CONTENT_DEFAULTS.terms);
+
+// The Pepweb app's copy editor predates joinLabel and saves only title/steps/
+// terms — that save must not wipe the owner's button text back to "Join GB".
+console.log("mergeGroupBuyContentSave");
+{
+  const stored = { howTitle: "Old", steps: ["a"], terms: "t", joinLabel: "Add to cart" };
+  eq("save without joinLabel keeps the stored one",
+    mergeGroupBuyContentSave(stored, { howTitle: "New", steps: ["b"], terms: "u" }).joinLabel, "Add to cart");
+  eq("save without joinLabel still applies the other fields",
+    mergeGroupBuyContentSave(stored, { howTitle: "New", steps: ["b"], terms: "u" }).howTitle, "New");
+  eq("save with joinLabel replaces it",
+    mergeGroupBuyContentSave(stored, { joinLabel: "Reserve" }).joinLabel, "Reserve");
+  eq("save with a blank joinLabel resets it to default",
+    mergeGroupBuyContentSave(stored, { joinLabel: "" }).joinLabel, "Join GB");
+  eq("nothing stored + no joinLabel → default",
+    mergeGroupBuyContentSave(undefined, { howTitle: "X" }).joinLabel, "Join GB");
+  const snapshot = JSON.stringify(stored);
+  mergeGroupBuyContentSave(stored, { howTitle: "New" });
+  eq("stored content is never mutated", JSON.stringify(stored), snapshot);
 }
 
 // ── Result ──────────────────────────────────────────────────────────────────

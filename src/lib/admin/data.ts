@@ -422,6 +422,8 @@ export type TenantContactChannels = {
   requireProofOfPayment: boolean;
   /** Whether checkout hides the Email field (default false). */
   checkoutHideEmail: boolean;
+  /** Whether checkout asks for a WhatsApp number (default false). */
+  checkoutWhatsapp: boolean;
   /** Whether the super admin has granted the Storefront Notice Modal (default false). */
   noticeModalGranted: boolean;
 };
@@ -446,6 +448,7 @@ export async function getTenantContactChannels(
     // Absent → required (historical default); only an explicit false opts out.
     requireProofOfPayment: config.requireProofOfPayment !== false,
     checkoutHideEmail: config.checkoutHideEmail === true,
+    checkoutWhatsapp: config.checkoutWhatsapp === true,
     // Absent → not granted; only the operator's explicit grant enables it.
     noticeModalGranted:
       !!config.noticeModal &&

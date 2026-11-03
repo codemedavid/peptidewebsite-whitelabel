@@ -6,10 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import type { DashboardResponse, InsightsRange } from "@contract";
 import { dashboardApi, insightsApi, qk } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
+import { TopCustomers } from "@/features/customers/TopCustomers";
 import { OrderCard } from "@/features/orders/OrderCard";
 import { SalesHero } from "@/features/insights/SalesHero";
 import { CommunitySwitchCard } from "@/features/community/CommunitySwitchCard";
 import { useCommunityAccess } from "@/features/community/hooks/useInbox";
+import { LiveStrip } from "@/features/live/LiveStrip";
 import { StoreSwitchCard } from "@/features/store/StoreSwitchCard";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE } from "@/theme/tokens";
@@ -133,6 +135,8 @@ export default function Home() {
           </AppText>
         </View>
 
+        {me.can.analytics ? <LiveStrip /> : null}
+
         {me.can.analytics ? (
           sales.isError && !sales.data ? (
             <ErrorState message={sales.error?.message ?? "Couldn't load sales."} onRetry={() => void sales.refetch()} />
@@ -178,6 +182,8 @@ export default function Home() {
                 </Panel>
               </View>
             ) : null}
+
+            <TopCustomers />
 
             {data.recent.length > 0 ? (
               <View>

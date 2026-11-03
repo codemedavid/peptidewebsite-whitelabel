@@ -7,6 +7,7 @@
 // Editable collections are persisted to localStorage (per the prototype, which
 // "persists to disk"). The brand config is treated as static tenant defaults.
 
+import { cartMarketOf, type Market } from "@/lib/storefront/markets";
 import {
   createContext,
   useCallback,
@@ -155,6 +156,11 @@ export type Store = {
   removeLine: (productId: string) => void;
   /** Empty the cart (after a successful checkout hand-off). */
   clearCart: () => void;
+  /** Dual-currency stores: which market's cart `cart` is, and how many units
+   *  each holds. Always "local" (and an empty international cart) elsewhere. */
+  cartMarket: Market;
+  setCartMarket: (market: Market) => void;
+  cartCounts: Record<Market, number>;
 
   toast: (msg: string) => void;
   toastMsg: string;
@@ -281,7 +287,24 @@ export function StoreProvider({
   const [reviews, setReviewsState] = useState<Review[]>(
     brandSeed.reviews ?? SEED_REVIEWS,
   );
-  const [cart, setCart] = useState<Product[]>([]);
+  // One cart per MARKET. Every store but a dual-currency one only ever uses
+  // "local", so for them this is exactly the single cart it always was. A
+  // dual-currency store keeps its Local (₱) and International (USD) carts
+  // apart — they check out separately, in their own currency — and `cart` is
+  // whichever one the shopper has open (see lib/storefront/markets.ts).
+  const [carts, setCarts] = useState<Record<Market, Product[]>>({ local: [], international: [] });
+  const [cartMarket, setCartMarket] = useState<Market>("local");
+  const cart = carts[cartMarket];
+  const setCartFor = useCallback((market: Market, next: React.SetStateAction<Product[]>) => {
+    setCarts((all) => ({
+      ...all,
+      [market]: typeof next === "function" ? (next as (p: Product[]) => Product[])(all[market]) : next,
+    }));
+  }, []);
+  const setCart = useCallback(
+    (next: React.SetStateAction<Product[]>) => setCartFor(cartMarket, next),
+    [cartMarket, setCartFor],
+  );
   const [toastMsg, setToastMsg] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -516,13 +539,22 @@ export function StoreProvider({
         toast(wayBlock);
         return;
       }
+      // Dual-currency stores: the product lands in ITS market's cart (an
+      // International listing is a USD view — see marketCatalog), and that cart
+      // opens, so a shopper never adds to one cart while looking at the other.
+      const target: Market = brand.dualMarket ? cartMarketOf(product) : "local";
+      const tcart = carts[target];
+      const addTo = (u: React.SetStateAction<Product[]>) => {
+        setCartFor(target, u);
+        if (brand.dualMarket) setCartMarket(target);
+      };
       // Two-ways split: on-hand items ship now, group-buy items ship after the
       // round closes — one cart never mixes the two paths. Rejected here (the
       // friendliest spot); placeStorefrontOrderAction re-checks server-side.
       const gbScope = gbScopeFromBanner(brand.groupBuyBanner ?? null);
       const mixViolation = twoWaysAddViolation(
         baseProductId(product),
-        cart.map(baseProductId),
+        tcart.map(baseProductId),
         gbScope,
         isOnHandHidden(brand.twoWaysMode),
       );
@@ -533,7 +565,7 @@ export function StoreProvider({
       // Smart Checkout cart restriction: with mixed-cart prevention on, a
       // product from a second category is rejected here (the friendliest spot —
       // before it's in the cart). Checkout re-validates server-side regardless.
-      const restriction = addToCartViolation(product, cart, brand.checkoutRules);
+      const restriction = addToCartViolation(product, tcart, brand.checkoutRules);
       if (restriction) {
         toast(restriction);
         return;
@@ -551,7 +583,7 @@ export function StoreProvider({
       // gb-tagged products, exactly the set checkout re-prices at gbPrice.
       // placeStorefrontOrderAction applies the same exemption server-side.
       if (isGroupBuyPreorder({ id: baseProductId(product), productType: product.productType }, gbScope)) {
-        setCart((c) => [...c, ...Array.from({ length: n }, () => entry)]);
+        addTo((c) => [...c, ...Array.from({ length: n }, () => entry)]);
         return;
       }
       // Per-variation cap: a TRACKED variation (its own numeric stock) counts
@@ -567,8 +599,8 @@ export function StoreProvider({
       const tracked = variationStock(product, optionName) !== undefined;
       const stock = effectiveStock(product, optionName);
       const inCart = tracked
-        ? cart.filter((p) => p.id === entry.id).length
-        : cart.filter((p) => baseProductId(p) === baseProductId(product)).length;
+        ? tcart.filter((p) => p.id === entry.id).length
+        : tcart.filter((p) => baseProductId(p) === baseProductId(product)).length;
       const room = Math.max(0, stock - inCart);
       if (room < n) {
         toast(
@@ -578,9 +610,9 @@ export function StoreProvider({
         );
       }
       if (room <= 0) return;
-      setCart((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
+      addTo((c) => [...c, ...Array.from({ length: Math.min(n, room) }, () => entry)]);
     },
-    [cart, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner, brand.twoWaysMode],
+    [carts, setCartFor, toast, brand.checkoutRules, brand.groupBuyGate, brand.groupBuyBanner, brand.twoWaysMode, brand.dualMarket],
   );
 
   // Set a line to an ABSOLUTE quantity — what QtyField hands back when a
@@ -636,13 +668,13 @@ export function StoreProvider({
       next.splice(i, 1);
       return next;
     });
-  }, []);
+  }, [setCart]);
 
   const removeLine = useCallback((productId: string) => {
     setCart((c) => c.filter((p) => p.id !== productId));
-  }, []);
+  }, [setCart]);
 
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => setCart([]), [setCart]);
 
   // Order Ratio Control — auto-add mode. When the owner runs the peptide→bac-water
   // floor in "auto_add", keep the default bac-water line synced to the required
@@ -659,6 +691,8 @@ export function StoreProvider({
     // would manufacture the very surplus the cap blocks — the customer would be
     // handed a cart that can't check out.
     if (r.direction !== "floor") return;
+    // Bac water is a local (₱) product: never auto-added to a USD cart.
+    if (cartMarket !== "local") return;
     if (!rules.enabled || !r.enabled || r.mode !== "auto_add" || !r.defaultBacWaterProductId) return;
     const bacProduct = products.find((p) => p.id === r.defaultBacWaterProductId);
     if (!bacProduct) return;
@@ -689,7 +723,7 @@ export function StoreProvider({
         return true;
       });
     });
-  }, [cart, products, brand.groupBuyRules]);
+  }, [cart, cartMarket, setCart, products, brand.groupBuyRules]);
 
   // Payment methods persist to the DB (not localStorage) so every device sees
   // the owner's configured set. The server action gates on the storefront-admin
@@ -996,6 +1030,8 @@ export function StoreProvider({
     protocols, setProtocols,
     reviews, setReviews,
     cart, addToCart, setLineQty, decrementCart, removeLine, clearCart,
+    cartMarket, setCartMarket,
+    cartCounts: { local: carts.local.length, international: carts.international.length },
     toast, toastMsg,
   };
 

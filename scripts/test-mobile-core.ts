@@ -36,6 +36,7 @@ import {
   statusMovesStock,
   ORDER_FILTERS,
   statusesForFilter,
+  statusCountsFrom,
   queueCountsFrom,
 } from "../src/lib/mobile/order-view";
 import { buildNewOrderPush, triageExpoTicket } from "../src/lib/mobile/push-message";
@@ -385,11 +386,18 @@ test("stock-moving statuses are flagged for confirmation (not for imported order
 test("filters map to real statuses only", () => {
   assert.deepEqual(
     ORDER_FILTERS.map((f) => f.key),
-    ["new", "to-fulfil", "shipped", "all"],
+    ["new", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "all", "to-fulfil"],
   );
   assert.deepEqual(statusesForFilter("new"), ["new"]);
   assert.deepEqual(statusesForFilter("to-fulfil"), ["confirmed", "processing", "ready"]);
-  assert.deepEqual(statusesForFilter("shipped"), ["shipped", "delivered"]);
+  // One tab per status: "shipped" no longer folds delivered in.
+  assert.deepEqual(statusesForFilter("shipped"), ["shipped"]);
+  assert.deepEqual(statusesForFilter("delivered"), ["delivered"]);
+  assert.deepEqual(statusesForFilter("cancelled"), ["cancelled"]);
+  assert.deepEqual(
+    statusCountsFrom([{ status: "new", count: 2 }, { status: "ready", count: 1 }, { status: "weird", count: 9 }]),
+    { new: 2, ready: 1 },
+  );
   assert.equal(statusesForFilter("all"), null);
   assert.equal(statusesForFilter("bogus"), null);
 });

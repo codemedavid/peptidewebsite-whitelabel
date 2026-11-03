@@ -206,7 +206,7 @@ const B4: Order = {
   paymentProof: null,
   groupBuyId: ROUND_B.id,
   groupBuyName: ROUND_B.name,
-  customer: { name: "Erika Santos", email: "erika@example.com", phone: "09171234567" },
+  customer: { name: "Erika Santos", email: "erika@example.com", phone: "09171234567", whatsapp: "+639175550101" },
   shipping: ADDRESS,
   items: [{ name: "TR30 Tirzepatide 30mg", productId: P_TR30, qty: 17, price: 1200 }],
 };
@@ -598,7 +598,7 @@ async function main() {
       ws.eachRow((row) => {
         for (const cell of row.values as unknown[]) {
           if (typeof cell !== "string") continue;
-          if (/Erika|Santos|0917|Mabini|imagekit/i.test(cell)) leaked.push(cell);
+          if (/Erika|Santos|0917|555|Mabini|imagekit/i.test(cell)) leaked.push(cell);
         }
       });
     }
@@ -627,10 +627,11 @@ async function main() {
     const erika = custLabelled("Customers", "Erika Santos");
     assert.equal(erika[1], "erika@example.com", "email");
     assert.equal(erika[2], "09171234567", "contact");
-    assert.equal(erika[3], 2, "KG-2001 + KG-2004 roll into one row");
-    assert.equal(erika[4], 20 + 17, "vials across both orders");
-    assert.equal(erika[5], (20 + 17) * 1200, "spend across both orders");
-    assert.ok(String(erika[6]).includes("Mabini"), "shipping address");
+    assert.equal(erika[3], "+639175550101", "WhatsApp from her later order fills the row");
+    assert.equal(erika[5], 2, "KG-2001 + KG-2004 roll into one row");
+    assert.equal(erika[6], 20 + 17, "vials across both orders");
+    assert.equal(erika[7], (20 + 17) * 1200, "spend across both orders");
+    assert.ok(String(erika[8]).includes("Mabini"), "shipping address");
   });
 
   await check("Customers sheet: the cancelled buyer is not owed anything", () => {
@@ -646,8 +647,8 @@ async function main() {
   });
 
   await check("Customers sheet: the TOTAL row reconciles with the dashboard", () => {
-    assert.equal(custLabelled("Customers", "TOTAL")[4], EXPECT.totalVials);
-    assert.equal(custLabelled("Customers", "TOTAL")[5], EXPECT.totalSales);
+    assert.equal(custLabelled("Customers", "TOTAL")[6], EXPECT.totalVials);
+    assert.equal(custLabelled("Customers", "TOTAL")[7], EXPECT.totalSales);
   });
 
   await check("Products to Order sheet: 37 / 22 / 15 in the actual cells", () => {
@@ -678,23 +679,25 @@ async function main() {
     const line = custLabelled("Order Details", "KG-2001");
     assert.equal(line[2], "Erika Santos"); // Customer
     assert.equal(line[3], "09171234567"); // Contact Number
-    assert.equal(line[4], "12 Mabini St, Poblacion, Davao City, Davao del Sur, 8000, PH");
-    assert.equal(line[5], "TR30 Batch #2"); // Batch
-    assert.equal(line[7], 20); // Vials
-    assert.equal(line[9], "GCash"); // Payment Method
-    assert.equal(line[10], "Confirmed"); // Payment Status
-    assert.equal(line[12], "Yes"); // Counted
+    assert.equal(line[4], ""); // WhatsApp — KG-2001 was placed without one
+    assert.equal(line[6], "12 Mabini St, Poblacion, Davao City, Davao del Sur, 8000, PH");
+    assert.equal(line[7], "TR30 Batch #2"); // Batch
+    assert.equal(line[9], 20); // Vials
+    assert.equal(line[11], "GCash"); // Payment Method
+    assert.equal(line[12], "Confirmed"); // Payment Status
+    assert.equal(line[14], "Yes"); // Counted
+    assert.equal(custLabelled("Order Details", "KG-2004")[4], "+639175550101"); // WhatsApp
   });
 
   await check("Order Details sheet: the cancelled line is present and marked not counted", () => {
     const line = custLabelled("Order Details", "KG-2003");
-    assert.equal(line[10], "Cancelled");
-    assert.equal(line[12], "No");
+    assert.equal(line[12], "Cancelled");
+    assert.equal(line[14], "No");
   });
 
   await check("Order Details sheet: the proof is a clickable link, not a download", () => {
     const line = custLabelled("Order Details", "KG-2002");
-    const proof = line[13] as { hyperlink?: string } | string | null;
+    const proof = line[15] as { hyperlink?: string } | string | null;
     assert.ok(
       typeof proof === "object" && proof !== null && "hyperlink" in proof,
       "proof cell must be a hyperlink",

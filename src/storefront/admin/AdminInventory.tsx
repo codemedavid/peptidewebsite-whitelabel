@@ -1,36 +1,72 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { listProductsAction, saveProductAction } from "@/actions/products";
 import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
+import { isVariationListed } from "@/lib/storefront/variation-availability";
 
 // Low-stock threshold: at or below this (but above zero) a product is flagged
 // "Low" so the owner can restock before it sells out.
 const LOW_STOCK = 5;
 
+/** A row's pending edit. `off` = the names of the options switched off
+ *  (variation `available: false`) — one dose off sale, the rest still selling. */
+type Draft = { stock: number; available: boolean; off: string[] };
+
+const offOptions = (p: Product): string[] =>
+  (p.variations ?? []).filter((v) => !isVariationListed(v)).map((v) => v.name);
+
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
+
+/** The product to save: stock, availability and each option's on/off flag;
+ *  every other field rides along unchanged so the upsert can't clobber it. */
+function withDraft(p: Product, d: Draft): Product {
+  const variations = p.variations?.map((v) => {
+    const { available: _drop, ...rest } = v;
+    return d.off.includes(v.name) ? { ...rest, available: false } : rest;
+  });
+  return { ...p, stock: d.stock, available: d.available, ...(variations ? { variations } : {}) };
+}
+
 export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => void }) {
   const { products, setProducts, toast } = useStore();
   // Per-row pending edits, keyed by product id. A row is "dirty" once its draft
   // diverges from the stored product.
-  const [drafts, setDrafts] = useState<Record<string, { stock: number; available: boolean }>>({});
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const currency = brand.currency || "₱";
 
-  const draftFor = (p: Product) =>
-    drafts[p.id] ?? { stock: p.stock ?? 0, available: p.available !== false };
+  const draftFor = (p: Product): Draft =>
+    drafts[p.id] ?? { stock: p.stock ?? 0, available: p.available !== false, off: offOptions(p) };
 
   const isDirty = (p: Product) => {
     const d = drafts[p.id];
     if (!d) return false;
-    return d.stock !== (p.stock ?? 0) || d.available !== (p.available !== false);
+    return (
+      d.stock !== (p.stock ?? 0) ||
+      d.available !== (p.available !== false) ||
+      !sameSet(d.off, offOptions(p))
+    );
   };
 
-  const setDraft = (p: Product, patch: Partial<{ stock: number; available: boolean }>) =>
+  const setDraft = (p: Product, patch: Partial<Draft>) =>
     setDrafts((prev) => ({ ...prev, [p.id]: { ...draftFor(p), ...patch } }));
+
+  // One option on/off. Switching the LAST option off takes the whole product
+  // off sale (nothing is left to sell); switching one back on lists it again —
+  // so the product checkbox never contradicts its options.
+  const toggleOption = (p: Product, name: string, on: boolean) => {
+    const d = draftFor(p);
+    const off = on ? d.off.filter((n) => n !== name) : [...d.off.filter((n) => n !== name), name];
+    const total = p.variations?.length ?? 0;
+    const available = off.length >= total ? false : on ? true : d.available;
+    setDraft(p, { off, available });
+  };
 
   const adjust = (p: Product, delta: number) =>
     setDraft(p, { stock: Math.max(0, draftFor(p).stock + delta) });
@@ -43,7 +79,7 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
     const d = draftFor(p);
     setSavingId(p.id);
     try {
-      const res = await saveProductAction({ ...p, stock: d.stock, available: d.available, currency });
+      const res = await saveProductAction({ ...withDraft(p, d), currency });
       if ("error" in res) {
         toast(res.error);
         return;
@@ -176,8 +212,10 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
               {products.map((p) => {
                 const d = draftFor(p);
                 const tag = stockTag(p, d.stock);
+                const options = p.variations ?? [];
                 return (
-                  <tr key={p.id}>
+                  <Fragment key={p.id}>
+                  <tr className={options.length ? "admin-inv-row--has-options" : undefined}>
                     <td className="admin-cell-product">
                       <span className="admin-cell-product__name">{p.name}</span>
                       <div className="admin-cell-product__desc">{p.description}</div>
@@ -243,6 +281,38 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
                       </button>
                     </td>
                   </tr>
+                  {options.length > 0 && (
+                    <tr className="admin-inv-options">
+                      <td colSpan={6}>
+                        <fieldset className="admin-inv-options__set">
+                          <legend className="admin-inv-options__legend">
+                            Options on sale
+                            <span>
+                              {options.length - d.off.length} of {options.length}
+                            </span>
+                          </legend>
+                          {options.map((v) => {
+                            const on = !d.off.includes(v.name);
+                            return (
+                              <label
+                                key={v.name}
+                                className={`admin-inv-option${on ? "" : " is-off"}`}
+                                title={on ? `Take ${v.name} off sale` : `Put ${v.name} back on sale`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={(e) => toggleOption(p, v.name, e.target.checked)}
+                                />
+                                <span>{v.name}</span>
+                              </label>
+                            );
+                          })}
+                        </fieldset>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
               {products.length === 0 && (

@@ -3676,6 +3676,79 @@
   margin: 0;
 }
 
+/* Inventory: per-option on/off chips under a product with variations. One
+   dose can go off sale (variation available:false) while the rest sell. */
+.sf-root .admin-inv-row--has-options td { border-bottom-color: transparent; }
+.sf-root .admin-inv-options td { padding-top: 0; }
+.sf-root .admin-inv-options__set {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0 0 4px;
+  border: 0;
+  min-width: 0;
+}
+.sf-root .admin-inv-options__legend {
+  float: left;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 6px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--brand-text-muted);
+}
+.sf-root .admin-inv-options__legend span { font-weight: 500; font-variant-numeric: tabular-nums; }
+.sf-root .admin-inv-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 45%, var(--brand-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-accent) 10%, var(--brand-surface));
+  color: var(--brand-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--duration-fast, 150ms), border-color var(--duration-fast, 150ms), color var(--duration-fast, 150ms), transform var(--duration-fast, 150ms);
+}
+.sf-root .admin-inv-option input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.sf-root .admin-inv-option::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--brand-accent);
+}
+.sf-root .admin-inv-option:hover { border-color: var(--brand-accent); }
+.sf-root .admin-inv-option:active { transform: scale(.97); }
+.sf-root .admin-inv-option:has(input:focus-visible) {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+.sf-root .admin-inv-option.is-off {
+  border-style: dashed;
+  border-color: var(--brand-border);
+  background: transparent;
+  color: var(--brand-text-muted);
+  text-decoration: line-through;
+}
+.sf-root .admin-inv-option.is-off::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--brand-text-muted); }
+
 /* ── Hero Section editor ─────────────────────────────────────────────────────
    Two-column workspace (copy form + sticky live preview). All colour/type is
    driven from the tenant's --brand-* tokens so the editor themes per store. */
@@ -4793,12 +4866,34 @@
    ========================================================= */
 .sf-root .admin-orders__stats {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* All Orders + the 7 statuses: one row of 8, never a lone orphan tile. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 24px;
 }
-@media (max-width: 1200px) { .sf-root .admin-orders__stats { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 700px) { .sf-root .admin-orders__stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1200px) { .sf-root .admin-orders__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1201px) {
+  .sf-root .admin-orders__stats .admin-stat-mini { padding: 16px; }
+  .sf-root .admin-orders__stats .admin-stat-mini__label { white-space: nowrap; }
+}
+/* Phones: the tiles become wrapping pills (label + count), matching the
+   Payment row below, so both filters sit on the first screen instead of the
+   Payment row ("Not confirmed") hiding under eight tall cards. */
+@media (max-width: 700px) {
+  .sf-root .admin-orders__stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .sf-root .admin-orders__stats .admin-stat-mini {
+    display: inline-flex; align-items: center; gap: 8px;
+    width: auto; min-height: 40px; padding: 0 12px;
+    border-radius: var(--radius-pill);
+  }
+  .sf-root .admin-orders__stats .admin-stat-mini:hover { transform: none; }
+  .sf-root .admin-orders__stats .admin-stat-mini__label { margin: 0; font-size: 13px; font-weight: 600; }
+  .sf-root .admin-orders__stats .admin-stat-mini__value {
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .sf-root .admin-orders__payfilter { margin-top: 0; }
+}
 
 .sf-root .admin-stat-mini {
   background: var(--brand-surface);
@@ -4830,12 +4925,94 @@
   letter-spacing: -0.02em;
 }
 .sf-root .admin-stat-mini[data-tint="new"]      .admin-stat-mini__value { color: #8A6B0B; }
-.sf-root .admin-stat-mini[data-tint="confirmed"].admin-stat-mini__value { color: #1F4E91; }
+.sf-root .admin-stat-mini[data-tint="confirmed"] .admin-stat-mini__value { color: #1F4E91; }
 .sf-root .admin-stat-mini[data-tint="processing"] .admin-stat-mini__value { color: var(--brand-accent); }
 .sf-root .admin-stat-mini[data-tint="ready"]    .admin-stat-mini__value { color: #0B7C7A; }
 .sf-root .admin-stat-mini[data-tint="shipped"]  .admin-stat-mini__value { color: #7A4FCF; }
 .sf-root .admin-stat-mini[data-tint="delivered"] .admin-stat-mini__value { color: #1F8A5B; }
 .sf-root .admin-stat-mini[data-tint="cancelled"] .admin-stat-mini__value { color: #C82846; }
+
+/* The tiles are buttons (keyboard + screen-reader filters), so shed the UA
+   button look and keep the card. */
+.sf-root button.admin-stat-mini {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  min-width: 0;
+}
+.sf-root .admin-stat-mini__label,
+.sf-root .admin-stat-mini__value { display: block; }
+.sf-root .admin-stat-mini:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .admin-stat-mini:active { transform: translateY(0); }
+
+/* Payment filter: one row of chips under the status tiles. "Not confirmed" is
+   the owner's to-do, so it carries the folders' unpaid red when chosen. */
+.sf-root .admin-orders__payfilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 20px;
+}
+.sf-root .admin-orders__payfilter-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+  margin-right: 4px;
+}
+.sf-root .admin-orders__paychip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: var(--brand-border-width) solid var(--brand-border);
+  background: var(--brand-surface);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-text);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.sf-root .admin-orders__paychip:hover { border-color: color-mix(in srgb, var(--brand-accent) 40%, transparent); }
+.sf-root .admin-orders__paychip:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .admin-orders__paychip-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-surface-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.sf-root .admin-orders__paychip[aria-pressed="true"] {
+  background: var(--brand-text);
+  border-color: var(--brand-text);
+  color: var(--brand-surface);
+}
+.sf-root .admin-orders__paychip[aria-pressed="true"] .admin-orders__paychip-count {
+  background: color-mix(in srgb, var(--brand-surface) 22%, transparent);
+}
+.sf-root .admin-orders__paychip--unpaid[aria-pressed="true"] { background: #A5302C; border-color: #A5302C; color: #fff; }
+.sf-root .admin-orders__paychip--paid[aria-pressed="true"] { background: #1F8A5B; border-color: #1F8A5B; color: #fff; }
+.sf-root .admin-orders__payfilter-clear {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  min-height: 40px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .sf-root .admin-orders__search {
   background: var(--brand-surface);
@@ -10798,6 +10975,25 @@
 .sf-root .acct-auth__intro { padding-top: clamp(0px, 4vw, 48px); }
 .sf-root .acct-auth__intro .page__sub { margin: 16px 0 0; max-width: 34ch; }
 
+/* Members-only wall (components/AccountGate): the same split, standing alone as
+   the first screen, so it carries the store's mark and fills the viewport. */
+.sf-root .acct-gate {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  background: var(--brand-background);
+}
+.sf-root .acct-gate > .page__container { width: 100%; }
+.sf-root .acct-gate__logo {
+  display: block;
+  height: 56px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  margin: 0 0 var(--acct-gap);
+}
+
 .sf-root .acct-card {
   background: var(--brand-surface);
   border: var(--brand-border-width) solid var(--brand-border);
@@ -11410,3 +11606,82 @@
   .sf-root .mygb-line__amt { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 }
 /* ── my-groupbuy-order:end ─────────────────────────────────────────────────── */
+
+/* ==========================================================================
+   Hero variant: "wellness" — gradient wordmark on the accent, a short gradient
+   rule, an optional small-caps eyebrow, and a soft grid + flowing measuring-tape
+   ribbon + floating leaves behind the copy. All painted from --brand-* tokens
+   so any tenant adopts its own palette. Appended last so the variant rules win
+   their cascade without touching the shared hero styles.
+   ========================================================================== */
+.sf-root .hero[data-variant="wellness"] { text-align: center; overflow: hidden; }
+
+.sf-root .hero__bg--wellness {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  background:
+    radial-gradient(70% 55% at 50% 30%, color-mix(in srgb, var(--brand-accent) 16%, transparent) 0%, transparent 72%),
+    linear-gradient(180deg, var(--brand-background) 0%, color-mix(in srgb, var(--brand-accent) 7%, var(--brand-background)) 100%);
+}
+/* soft blueprint grid */
+.sf-root .hero__bg--wellness::before {
+  content: ""; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--brand-main) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-main) 7%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: radial-gradient(100% 90% at 50% 20%, #000 55%, transparent 100%);
+          mask-image: radial-gradient(100% 90% at 50% 20%, #000 55%, transparent 100%);
+}
+/* measuring-tape ribbon, right edge */
+.sf-root .hero__measure {
+  position: absolute; top: 0; right: -2%; height: 100%; width: min(46%, 560px);
+  color: var(--brand-main); pointer-events: none;
+}
+/* floating leaves (CSS leaf = one rounded-opposite-corners square) */
+.sf-root .hero[data-variant="wellness"] .hero__leaf {
+  position: absolute; display: block;
+  background: color-mix(in srgb, var(--brand-accent) 42%, transparent);
+  border-radius: 0 60% 0 60%;
+}
+.sf-root .hero__leaf--1 { width: 26px; height: 26px; top: 22%; left: 10%; transform: rotate(28deg); opacity: 0.5; }
+.sf-root .hero__leaf--2 { width: 16px; height: 16px; top: 64%; left: 16%; transform: rotate(-18deg); opacity: 0.4; }
+.sf-root .hero__leaf--3 { width: 20px; height: 20px; bottom: 14%; left: 46%; transform: rotate(48deg); opacity: 0.35; }
+
+.sf-root .hero__inner--wellness { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+/* chip: white pill, accent outline (her look) */
+.sf-root .hero[data-variant="wellness"] .hero__chip {
+  background: color-mix(in srgb, var(--brand-surface) 88%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--brand-main) 32%, transparent);
+  color: var(--brand-main);
+  backdrop-filter: blur(4px);
+}
+.sf-root .hero[data-variant="wellness"] .hero__headline { margin: 0; line-height: 0.98; letter-spacing: -0.02em; }
+/* gradient wordmark on the second line */
+.sf-root .hero[data-variant="wellness"] .hero__headline .font-display { color: var(--brand-text); }
+.sf-root .hero[data-variant="wellness"] .hero__headline-accent {
+  display: inline-block;
+  background: linear-gradient(100deg, var(--brand-main) 8%, var(--brand-accent) 92%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  font-style: normal;
+}
+/* short gradient rule under the headline */
+.sf-root .hero__rule {
+  display: block; width: 120px; height: 5px; border-radius: 999px; margin: 6px auto 2px;
+  background: linear-gradient(90deg, var(--brand-main), var(--brand-accent));
+}
+.sf-root .hero__eyebrow {
+  margin: 4px 0 0; font-weight: 800; font-size: 13px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--brand-text);
+}
+.sf-root .hero[data-variant="wellness"] .hero__sub { max-width: 620px; margin-inline: auto; color: var(--brand-text-muted, color-mix(in srgb, var(--brand-text) 62%, transparent)); }
+.sf-root .hero[data-variant="wellness"] .hero__ctas { justify-content: center; margin-top: 10px; }
+
+@media (max-width: 640px) {
+  .sf-root .hero__measure { opacity: 0.6; right: -14%; width: 70%; }
+  .sf-root .hero[data-variant="wellness"] .hero__leaf--3 { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .hero[data-variant="wellness"] .hero__leaf { display: none; }
+}

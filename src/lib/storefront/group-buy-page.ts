@@ -23,6 +23,8 @@ import {
   hasDoseToken,
   type Variation,
 } from "./variations";
+import { listedVariations } from "./variation-availability";
+import { activeVariationSale } from "./sale";
 
 const DAY_MS = 86_400_000;
 
@@ -86,7 +88,7 @@ export function gbDisplayName(
   const base = (name || "").trim();
   if (hasDoseToken(base)) return base;
 
-  const names = (Array.isArray(variations) ? variations : [])
+  const names = listedVariations(variations)
     .map((v) => (v?.name || "").trim())
     .filter((n) => n !== "");
   if (names.length === 0) return base;
@@ -168,7 +170,10 @@ export function gbPageOptions(product: GbPageProduct, currency: string): GbPageO
   return buildProductOptions(product).map((option) => {
     const priced = groupBuyLine({
       ...product,
-      price: option.price,
+      // A variation's own sale price lowers its regular price exactly as the
+      // cart's clone does (makeVariationEntry), so the GB page can't advertise
+      // more than unitPrice's Math.min charges.
+      price: option.variation ? (activeVariationSale(option.variation) ?? option.price) : option.price,
       gbPrice: option.variation ? option.variation.gbPrice : product.gbPrice,
     });
     return {

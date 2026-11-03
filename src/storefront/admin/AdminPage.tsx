@@ -24,6 +24,7 @@ import { AdminPaymentMethods } from "./AdminPaymentMethods";
 import { AdminOrderNotifications } from "./AdminOrderNotifications";
 import { AdminBilling } from "./AdminBilling";
 import { AdminNoticeModal } from "./AdminNoticeModal";
+import { AdminAnnouncementPopup } from "./AdminAnnouncementPopup";
 import { AdminStoreStatus } from "./AdminStoreStatus";
 import { AdminCurrency } from "./AdminCurrency";
 import { AdminTrackNote } from "./AdminTrackNote";
@@ -45,6 +46,7 @@ import { AdminCardStudio } from "./AdminCardStudio";
 import { AdminAccountSettings } from "./AdminAccountSettings";
 import { AdminDataExport } from "./AdminDataExport";
 import { AdminHeroSettings } from "./AdminHeroSettings";
+import { AdminSiteBuilder } from "./site-builder/AdminSiteBuilder";
 import { AdminBannerSettings } from "./AdminBannerSettings";
 import { isAdminViewVisible, isAdminModuleLocked } from "../visibility";
 import { AdminUpgrade } from "./AdminUpgrade";
@@ -53,6 +55,8 @@ import { SubscriptionBanner } from "./SubscriptionBanner";
 import { TrialPlansScreen } from "./TrialPlansScreen";
 import { AdminStaffList } from "./AdminStaffList";
 import { AdminCustomers } from "./AdminCustomers";
+import { AdminCustomerProfile } from "./AdminCustomerProfile";
+import type { CustomerLookup } from "@/lib/storefront/customer-profile";
 import { AdminStaffForm } from "./AdminStaffForm";
 import { isViewAllowed, type StaffActor } from "./staff-permissions";
 import { getStorefrontAdminSessionAction, type StaffListItem } from "@/actions/storefront-staff";
@@ -88,12 +92,15 @@ const VIEWS = [
   "groupbuy-detail",
   "groupbuy",
   "hero",
+  "site-layout",
   "banner",
+  "popup",
   "account",
   "export",
   "staff",
   "staff-form",
   "customers",
+  "customer-profile",
   "notify",
   "notice",
   "store-status",
@@ -106,7 +113,7 @@ const VIEWS = [
 type View = (typeof VIEWS)[number];
 
 /** Detail views that need a row handed over by their list — never an entry point. */
-const DETAIL_VIEWS: ReadonlySet<string> = new Set(["order-detail", "groupbuy-detail", "staff-form"]);
+const DETAIL_VIEWS: ReadonlySet<string> = new Set(["order-detail", "groupbuy-detail", "staff-form", "customer-profile"]);
 
 /**
  * The first view: the one the Pepweb app asked for (app-embed.ts), if it names a
@@ -122,10 +129,13 @@ function initialView(): View {
 export function AdminPage({
   brand,
   onLogout,
+  onSessionLost,
   onExitToSite,
 }: {
   brand: Brand;
   onLogout: () => void;
+  /** The server says no one is signed in: show the sign-in, stay on #admin. */
+  onSessionLost: () => void;
   onExitToSite: () => void;
 }) {
   const { toast, toastMsg, setProducts } = useStore();
@@ -145,6 +155,14 @@ export function AdminPage({
   // "review join requests" shortcut sent us; every other entry opens Rounds.
   const [groupBuysTab, setGroupBuysTab] = useState<GroupBuysTab>("rounds");
   const [editingStaff, setEditingStaff] = useState<StaffListItem | null>(null);
+  // The customer whose order history is open, and where its Back goes — the
+  // Customers list or the dashboard's Top customers panel.
+  const [viewingCustomer, setViewingCustomer] = useState<{
+    lookup: CustomerLookup;
+    returnTo: "customers" | "dashboard";
+  } | null>(null);
+  // An order opened from a customer's history returns there, not to Orders.
+  const [orderReturn, setOrderReturn] = useState<"orders" | "customer-profile">("orders");
 
   // Who is signed in (owner | staff with permissions). Re-loaded server-side so a
   // suspended/removed staff session resolves to "none" and is logged out.
@@ -163,7 +181,7 @@ export function AdminPage({
     getStorefrontAdminSessionAction().then((info) => {
       if (cancelled) return;
       if (info.kind === "none") {
-        onLogout();
+        onSessionLost();
         return;
       }
       setActor(
@@ -188,7 +206,7 @@ export function AdminPage({
     return () => {
       cancelled = true;
     };
-  }, [onLogout, needsFullCatalog, setProducts]);
+  }, [onSessionLost, needsFullCatalog, setProducts]);
 
   // Don't flash the full menu before we know who the actor is — a staff member
   // must never momentarily see modules they aren't permitted.
@@ -320,6 +338,7 @@ export function AdminPage({
         }}
         onView={(o) => {
           setViewingOrder(o);
+          setOrderReturn("orders");
           setView("order-detail");
         }}
         onOpenDashboard={(gb) => {
@@ -337,7 +356,28 @@ export function AdminPage({
         order={viewingOrder}
         onBack={() => {
           setViewingOrder(null);
-          setView("orders");
+          setView(orderReturn);
+        }}
+      />
+    );
+  }
+  if (activeView === "customer-profile" && viewingCustomer) {
+    const { lookup, returnTo } = viewingCustomer;
+    return (
+      <AdminCustomerProfile
+        // A new customer is a fresh profile — never the last one's filter state.
+        key={lookup.kind === "account" ? lookup.id : lookup.email}
+        brand={brand}
+        lookup={lookup}
+        backLabel={returnTo === "customers" ? "Customers" : "Dashboard"}
+        onBack={() => {
+          setViewingCustomer(null);
+          setView(returnTo);
+        }}
+        onOpenOrder={(o) => {
+          setViewingOrder(o);
+          setOrderReturn("customer-profile");
+          setView("order-detail");
         }}
       />
     );
@@ -393,9 +433,31 @@ export function AdminPage({
   }
   if (activeView === "groupbuy") return <AdminGroupBuyRules brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "hero") return <AdminHeroSettings brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "site-layout") return <AdminSiteBuilder brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "banner") return <AdminBannerSettings brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "popup") return <AdminAnnouncementPopup brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "account") return <AdminAccountSettings onBack={() => setView("dashboard")} />;
-  if (activeView === "customers") return <AdminCustomers brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "customers") {
+    return (
+      <AdminCustomers
+        brand={brand}
+        onBack={() => setView("dashboard")}
+        onOpenPromo={
+          isAdminViewVisible(brand, "promo") && isViewAllowed(actor, "promo") && !isAdminModuleLocked(brand, "promo")
+            ? () => setView("promo")
+            : undefined
+        }
+        onOpenProfile={
+          isViewAllowed(actor, "customer-profile")
+            ? (id) => {
+                setViewingCustomer({ lookup: { kind: "account", id }, returnTo: "customers" });
+                setView("customer-profile");
+              }
+            : undefined
+        }
+      />
+    );
+  }
   if (activeView === "export") return <AdminDataExport onBack={() => setView("dashboard")} />;
   if (activeView === "access-code") return <AdminAccessCode brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "reseller") {
@@ -479,6 +541,10 @@ export function AdminPage({
             caps={caps}
             greetingName={displayName}
             onOpen={openView}
+            onOpenCustomer={(email) => {
+              setViewingCustomer({ lookup: { kind: "email", email }, returnTo: "dashboard" });
+              setView("customer-profile");
+            }}
             canGroupBuys={canSeeGroupBuyPanel(brand, actor)}
             onOpenGroupBuyJoins={() => {
               setGroupBuysTab("members");

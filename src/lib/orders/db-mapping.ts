@@ -13,6 +13,7 @@
 // `orderType`, `deletedAt`) are deliberately NOT handled by normalizeOrderInput
 // and are stamped from the row instead. See dbOrderToStorefront.
 
+import { isMarket } from "@/lib/storefront/markets";
 import { isOrderStatus } from "@/lib/storefront/order-status";
 import { normalizeOrderPaymentFee } from "@/lib/storefront/payment-fee";
 import { normalizeCustomerNote } from "@/lib/orders/customer-note";
@@ -171,6 +172,10 @@ export function normalizeOrderInput(input: unknown): Order {
   return {
     id: str(o.id, 64),
     orderNumber: str(o.orderNumber, 64) || undefined,
+    // Dual-currency stores: which cart the order came from. Only a known market
+    // survives; the server decides what (if anything) it means — and the
+    // client's `currency`, if any, is dropped here: it is always server-stamped.
+    ...(isMarket(o.market) ? { market: o.market } : {}),
     status,
     paymentStatus: o.paymentStatus === "paid" ? "paid" : "pending",
     paymentMethod: str(o.paymentMethod, 120),
@@ -179,6 +184,8 @@ export function normalizeOrderInput(input: unknown): Order {
       name: str(c.name, 200),
       email: str(c.email, 200),
       phone: str(c.phone, 60),
+      ...(str(c.whatsapp, 60).trim() ? { whatsapp: str(c.whatsapp, 60).trim() } : {}),
+      ...(str(c.whatsappName, 120).trim() ? { whatsappName: str(c.whatsappName, 120).trim() } : {}),
       contactMethod: str(c.contactMethod, 60),
     },
     shipping: {
@@ -228,6 +235,8 @@ export function normalizeOrderInput(input: unknown): Order {
 /** Map a storefront_orders DB row to the storefront Order type the UI renders. */
 export type DbOrderRow = {
   id: string;
+  /** Absent until the column exists (db push) — see schema.prisma. */
+  currency?: string | null;
   orderNumber: string;
   status: string;
   paymentStatus: string;
@@ -297,7 +306,11 @@ export function dbOrderToStorefront(row: DbOrderRow): Order {
   const deletedAt =
     row.deletedAt instanceof Date ? row.deletedAt.toISOString() : row.deletedAt || null;
   const withDeleted = deletedAt ? { ...withType, deletedAt } : withType;
+  // The charge currency rides the same rule — server-stamped, from the ROW
+  // only. Absent / "" = the store's own currency.
+  const currency = typeof row.currency === "string" ? row.currency.trim() : "";
+  const withCurrency = currency ? { ...withDeleted, currency } : withDeleted;
   // Server stamps on stored lines and the Ligwak re-total ride the same rule:
   // from the ROW only. storedItems is index-aligned with normalizeItems.
-  return { ...withDeleted, items: storedItems(row.items), ...rowAllocation(row) };
+  return { ...withCurrency, items: storedItems(row.items), ...rowAllocation(row) };
 }

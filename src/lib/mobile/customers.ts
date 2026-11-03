@@ -19,6 +19,9 @@ import type {
   CustomerSort,
 } from "./contract";
 import { toOrderSummary } from "./order-view";
+import { customerKeyOf } from "../storefront/customer-profile";
+
+export { customerKeyOf };
 
 const DAY = 24 * 60 * 60 * 1000;
 const STORE_UTC_OFFSET_MS = 8 * 60 * 60 * 1000; // Asia/Manila
@@ -26,17 +29,6 @@ const LAPSED_AFTER_DAYS = 60;
 const LOYAL_ORDERS = 3;
 const DETAIL_ORDERS = 50;
 const FAVOURITES = 5;
-const MIN_PHONE_DIGITS = 7;
-
-/** Raw identity key: "e:<email>" → "p:<digits>" → "n:<name>"; null when anonymous. */
-export function customerKeyOf(order: Pick<Order, "customer">): string | null {
-  const email = (order.customer?.email ?? "").trim().toLowerCase();
-  if (email) return `e:${email}`;
-  const digits = (order.customer?.phone ?? "").replace(/\D/g, "");
-  if (digits.length >= MIN_PHONE_DIGITS) return `p:${digits}`;
-  const name = (order.customer?.name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  return name ? `n:${name}` : null;
-}
 
 /** Opaque, URL-safe id for a raw key — the app never sees the email in a path. */
 export function customerId(rawKey: string): string {

@@ -1,3 +1,5 @@
+import type { IntlLocalConfig } from "@/lib/storefront/intl-local/config";
+import type { Market, ProductMarket } from "@/lib/storefront/markets";
 import type { GbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import type { BrandSplash } from "@/lib/storefront/brand-splash";
 
@@ -16,6 +18,7 @@ import type { SortCategory } from "@/lib/storefront/sort-categories";
 import type { ArticleSummary } from "@/lib/storefront/articles";
 import type { AssessmentConfig } from "@/lib/storefront/assessment";
 import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
+import type { StoredPopup } from "@/lib/storefront/announcement-popup";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { TimelineConfig } from "@/lib/storefront/timeline";
 import type { BrandTrial } from "@/lib/trial/trial-state";
@@ -114,12 +117,22 @@ export type Product = {
     price: number;
     stock?: number;
     gbPrice?: number;
+    /** This option's own sale price (opt-in). Real only when positive and below
+     *  `price` — see activeVariationSale in lib/storefront/sale.ts. */
+    salePrice?: number;
     image?: string;
     extraImages?: string[];
     includes?: string;
     /** Vials per supplier kit for THIS option (Bunuan/Ligwak kits are per
      *  variation). Absent = the product's vialsPerKit. See lib/storefront/gb-kits. */
     kitSize?: number;
+    /** This option's International (USD) price. Absent = the option isn't sold
+     *  internationally. See lib/storefront/markets.ts. */
+    usdPrice?: number;
+    /** `false` = this option is off sale (hidden from customers, refused at
+     *  checkout) while the product's other options keep selling. Absent =
+     *  listed. See lib/storefront/variation-availability. */
+    available?: boolean;
   }[];
   /** Set on a CART ENTRY that represents a chosen variation (a catalog product
    *  is cloned with the variation's price + a composite `id`). `variantOf` is the
@@ -171,6 +184,17 @@ export type Product = {
    *  stores). Drives the group buy's kit progress and the supplier report's
    *  kits-to-order. Absent = not set. See lib/storefront/gb-moq-kits. */
   vialsPerKit?: number;
+  /** Dual-currency stores (Intl & Local layout): where the product is sold —
+   *  "local" (absent, every existing product), "international" or "both".
+   *  Stored in `metadata.market`. See lib/storefront/markets.ts. */
+  market?: ProductMarket;
+  /** International (USD) list price; absent = not priced in USD. */
+  usdPrice?: number;
+  /** International sale price, used while `discountEnabled`. */
+  usdDiscountPrice?: number;
+  /** Set on a MARKET VIEW of the product (the shop page it is listed on and
+   *  the cart it lands in) — never persisted. Absent = local. */
+  sellMarket?: Market;
 };
 
 /** `image` is the owner's uploaded picture for the category's storefront tile /
@@ -237,6 +261,12 @@ export type Order = {
   id: string;
   /** Tenant-facing formatted code, e.g. ABC-1001. Assigned at checkout hand-off. */
   orderNumber?: string;
+  /** Dual-currency stores: the cart this order came from. Sent by the checkout;
+   *  the server re-derives prices, fees and currency from it. */
+  market?: Market;
+  /** The currency the order was charged in ("USD", "PHP"…), stamped server-side.
+   *  Absent / "" = the store's own currency (every order before dual markets). */
+  currency?: string;
   status: OrderStatus;
   paymentStatus: "pending" | "paid";
   paymentMethod: string;
@@ -245,6 +275,10 @@ export type Order = {
     name: string;
     email: string;
     phone: string;
+    /** Only on stores that ask for it (Brand.checkoutWhatsapp). */
+    whatsapp?: string;
+    /** The buyer's WhatsApp display name — asked together with `whatsapp`. */
+    whatsappName?: string;
     contactMethod: string;
   };
   shipping: {
@@ -389,6 +423,10 @@ export type PromoCode = {
   type: "fixed" | "percent";
   value: number;
   minPurchase: number;
+  /** Dual-currency stores: a fixed code's value in USD (unset = the code
+   *  doesn't apply to International orders), and the USD minimum spend. */
+  usdValue?: number;
+  usdMinPurchase?: number;
   usageLimit: number | null;
   used: number;
   expiry: string | null;
@@ -416,6 +454,10 @@ export type PaymentMethod = {
    *  back to the checkout methods, so untagged stores behave as before.
    *  See paidAccessMethodsOf (lib/mobile/shop-checkout). */
   paidAccess?: boolean;
+  /** Dual-currency stores: which cart(s) offer this method. Absent = Local
+   *  only, so existing methods never appear on International orders. QR PH is
+   *  never International. See lib/storefront/intl-market. */
+  markets?: { local: boolean; international: boolean };
 };
 
 export type FaqItem = { q: string; a: string };
@@ -566,6 +608,12 @@ export type Brand = {
   // through @/lib/storefront/notice-modal. Absent → feature off.
   noticeModal?: NoticeModalConfig;
 
+  // Announcement Pop-up — the owner's own news / new-drop / promo pop-up (store
+  // admin → Announcement Pop-up). Owner-managed, default off, no operator grant.
+  // Normalized on save (server) and at render through
+  // @/lib/storefront/announcement-popup. Absent → off.
+  announcementPopup?: StoredPopup;
+
   // Track-order delivery note — the per-tenant informational card shown on the
   // Track Order page, under the order-number search box. Single-flag gate: the
   // store owner switches it on + edits the copy (trackNote.enabled, store admin's
@@ -644,6 +692,22 @@ export type Brand = {
   // default for every tenant: this template ships no promises of its own.
   // Normalized through @/lib/storefront/boutique-home at render and on save.
   boutique?: BoutiqueConfig;
+
+  // The Intl & Local layout's whole editable surface (branding.config.intlLocal)
+  // — every heading, menu item, card, image, colour and section switch. Set by
+  // storefront-brand.ts only while homeLayout is "intl-local"; normalized
+  // through @/lib/storefront/intl-local/normalize on read and on save.
+  intlLocal?: IntlLocalConfig;
+  /** Dual-currency (Local ₱ + International USD) is live: the store is on the
+   *  Intl & Local layout and hasn't switched International off. Server-stamped
+   *  by storefront-brand.ts — never read branding.config.intlMarket for this. */
+  dualMarket?: boolean;
+  /** Set ONLY by the dev-only sample page: the checkout refuses to place an
+   *  order (the page runs on a real store's host with made-up products). */
+  checkoutPreviewOnly?: boolean;
+  /** International checkout settings (USD shipping rates). Raw config; read
+   *  through lib/storefront/intl-market. */
+  intlMarket?: unknown;
 
   // The editorial layout's own slice of config — currently just how many
   // featured cards sit on a row (2 or 3), set by the operator. Absent = the
@@ -863,7 +927,9 @@ export type Brand = {
   headerShowCart: boolean;
   headerShowCta: boolean;
 
-  heroVariant: "centered" | "split" | "editorial" | "card" | "minimal" | "spotlight" | "wordmark";
+  heroVariant: "centered" | "split" | "editorial" | "card" | "minimal" | "spotlight" | "wordmark" | "wellness";
+  // Small caps line between the headline and subtext (wellness hero). "" = hidden.
+  heroEyebrow?: string;
   heroShowLogo: boolean;
   // Hero logo card size (px). Unset = the storefront.css default for the variant.
   // Larger values shrink the surrounding whitespace by enlarging the logo card.
@@ -1046,6 +1112,9 @@ export type Brand = {
   /** Drop the Email field from checkout (see lib/storefront/checkout-fields).
    *  Absent/false = Email shown and required, as before. */
   checkoutHideEmail?: boolean;
+  /** Ask for the buyer's WhatsApp number at checkout (see
+   *  lib/storefront/checkout-fields). Absent/false = not asked, as before. */
+  checkoutWhatsapp?: boolean;
   // Link-preview / SEO description — shown when the storefront URL is shared
   // (WhatsApp, social, search). Falls back to a generic line when blank.
   metaDescription?: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { methodMarkets, methodSellsIn, normalizeMethodMarkets } from "@/lib/storefront/intl-market";
 import { useRef, useState } from "react";
 import type { Brand, PaymentMethod } from "../types";
 import { useStore } from "../store";
@@ -10,9 +11,11 @@ import { QRPH_FEE_PERCENT } from "@/lib/storefront/payment-fee";
 type EditingMethod = PaymentMethod & { _new?: boolean };
 
 function AdminPaymentMethodForm({
+  brand,
   method,
   qrphEntitled,
   paidAccessEntitled,
+  dualMarket,
   onCancel,
   onSave,
 }: {
@@ -25,6 +28,9 @@ function AdminPaymentMethodForm({
   /** Whether this tenant has Paid Access group buys (GB module + paid access).
    *  Same hide-don't-clear rule as qrphEntitled. */
   paidAccessEntitled: boolean;
+  /** Dual-currency store: show the Local / International cart ticks. Same
+   *  hide-don't-clear rule as the tags above. */
+  dualMarket: boolean;
   onCancel: () => void;
   onSave: (m: EditingMethod) => void;
 }) {
@@ -34,6 +40,7 @@ function AdminPaymentMethodForm({
   const [qrImage, setQrImage] = useState<string>(method.qrImage || "");
   const [qrph, setQrph]       = useState<boolean>(method.qrph === true);
   const [paidAccess, setPaidAccess] = useState<boolean>(method.paidAccess === true);
+  const [markets, setMarkets] = useState(methodMarkets(method));
   const [drag, setDrag]       = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -77,7 +84,19 @@ function AdminPaymentMethodForm({
         <div className="admin-form__bar-spacer"></div>
         <button className="admin-form__cancel" onClick={onCancel}>Cancel</button>
         <button className="admin-form__save"
-          onClick={() => onSave({ ...method, name, number, account, qrImage, qrph, paidAccess })}
+          onClick={() =>
+            onSave({
+              ...method,
+              name,
+              number,
+              account,
+              qrImage,
+              qrph,
+              paidAccess,
+              // Only a non-default choice is stored (absent = Local only).
+              markets: normalizeMethodMarkets(markets),
+            })
+          }
           disabled={!canSave}>
           Save
         </button>
@@ -111,6 +130,39 @@ function AdminPaymentMethodForm({
               placeholder="ACCOUNT NAME"
               onChange={(e) => setAccount(e.target.value)} />
           </div>
+
+          {dualMarket && (
+            <div className="admin-field" style={{ marginBottom: 22 }}>
+              <span className="admin-field__label">Show this method in</span>
+              <div className="admin-form__inline-row" style={{ gap: 18 }}>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={markets.local}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMarkets({ ...markets, local: e.target.checked })}
+                  />
+                  <span>Local cart ({brand.currency || "₱"})</span>
+                </label>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={markets.international && !qrph}
+                    disabled={qrph}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setMarkets({ ...markets, international: e.target.checked })
+                    }
+                  />
+                  <span>International cart (USD)</span>
+                </label>
+              </div>
+              <div className="admin-field__hint">
+                Each cart checks out with its own payment methods — e.g. GCash for Local, PayPal or a
+                USD bank account for International.
+                {qrph ? " QR PH is a peso payment, so it's Local only." : ""}
+                {!markets.local && !markets.international ? " Tick at least one, or no shopper will see this method." : ""}
+              </div>
+            </div>
+          )}
 
           {qrphEntitled && (
             <div className="admin-field" style={{ marginBottom: 22 }}>
@@ -295,6 +347,7 @@ export function AdminPaymentMethods({
         method={editing}
         qrphEntitled={qrphEntitled}
         paidAccessEntitled={paidAccessEntitled}
+        dualMarket={brand.dualMarket === true}
         onCancel={() => setEditing(null)}
         onSave={save}
       />
@@ -361,6 +414,13 @@ export function AdminPaymentMethods({
                   {paidAccessEntitled && m.paidAccess && (
                     <span className="pay-row__tag" title="Shown only on the group buy join payment step">
                       Join fee
+                    </span>
+                  )}
+                  {brand.dualMarket === true && (
+                    <span className="pay-row__tag" title="Which cart offers this method">
+                      {[methodSellsIn(m, "local") && "Local", methodSellsIn(m, "international") && "International"]
+                        .filter(Boolean)
+                        .join(" + ") || "Hidden"}
                     </span>
                   )}
                 </div>

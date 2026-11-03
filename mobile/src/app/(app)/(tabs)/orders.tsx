@@ -8,9 +8,13 @@ import { useOrderList } from "@/features/orders/hooks";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList } from "@/ui/feedback";
-import { Segmented } from "@/ui/inputs";
+import { Chips } from "@/ui/kit";
 
-const FILTER_KEYS: OrderFilterKey[] = ["new", "to-fulfil", "shipped", "all"];
+// One tab per real order status, plus All (owner request 2026-11-03). "to-fulfil"
+// stays a valid deep link (Home "To ship" tile) though it has no tab of its own.
+const FILTER_KEYS: OrderFilterKey[] = [
+  "new", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "all", "to-fulfil",
+];
 const SEARCH_DEBOUNCE_MS = 350;
 
 const EMPTY: Record<OrderFilterKey, { title: string; body: string }> = {
@@ -22,10 +26,15 @@ const EMPTY: Record<OrderFilterKey, { title: string; body: string }> = {
     title: "Nothing to fulfil",
     body: "Confirmed orders waiting to be packed or shipped show up here.",
   },
+  confirmed: { title: "No confirmed orders", body: "Orders you've accepted but not started yet show up here." },
+  processing: { title: "Nothing processing", body: "Orders being prepared show up here." },
+  ready: { title: "Nothing ready to ship", body: "Packed orders waiting for the courier show up here." },
   shipped: {
-    title: "Nothing shipped yet",
-    body: "Orders you mark as shipped or delivered show up here.",
+    title: "Nothing in transit",
+    body: "Orders you mark as shipped show up here until they're delivered.",
   },
+  delivered: { title: "No delivered orders", body: "Orders received by the customer show up here." },
+  cancelled: { title: "No cancelled orders", body: "Orders you cancel show up here." },
   all: {
     title: "No orders yet",
     body: "When customers order from your website, you'll see them here.",
@@ -56,12 +65,20 @@ export default function Orders() {
   const list = useOrderList(filter, q);
   const orders = useMemo(() => list.data?.pages.flatMap((p) => p.orders) ?? [], [list.data]);
   const counts = list.data?.pages[0]?.counts;
+  const byStatus = list.data?.pages[0]?.statusCounts;
 
-  const segments = [
-    { key: "new" as const, label: "New", count: counts?.new },
-    { key: "to-fulfil" as const, label: "To fulfil", count: counts?.toFulfil },
-    { key: "shipped" as const, label: "Shipped" },
-    { key: "all" as const, label: "All" },
+  // Badges only on the statuses that need action; finished ones stay quiet.
+  const segments: { key: OrderFilterKey; label: string; count?: number }[] = [
+    { key: "new", label: "New", count: byStatus?.new ?? counts?.new },
+    { key: "confirmed", label: "Confirmed", count: byStatus?.confirmed },
+    { key: "processing", label: "Processing", count: byStatus?.processing },
+    { key: "ready", label: "Ready to ship", count: byStatus?.ready },
+    { key: "shipped", label: "Shipped", count: byStatus?.shipped },
+    { key: "delivered", label: "Delivered" },
+    { key: "cancelled", label: "Cancelled" },
+    { key: "all", label: "All" },
+    // Only shown while a "To ship" deep link has it selected.
+    ...(filter === "to-fulfil" ? [{ key: "to-fulfil" as const, label: "To fulfil", count: counts?.toFulfil }] : []),
   ];
 
   return (
@@ -114,7 +131,7 @@ export default function Orders() {
             <Ionicons name="trash-outline" size={20} color={t.colors.textMuted} />
           </Pressable>
         </View>
-        <Segmented segments={segments} value={filter} onChange={setFilter} />
+        <Chips options={segments} value={filter} onChange={setFilter} label="Order status" />
       </View>
 
       {list.isPending ? (

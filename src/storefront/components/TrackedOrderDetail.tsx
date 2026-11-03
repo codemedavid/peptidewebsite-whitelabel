@@ -5,6 +5,7 @@
 // history (both feed it the same TrackedOrder shape), so a shopper sees one
 // order the same way wherever they open it.
 
+import { orderCurrencySymbol } from "@/lib/storefront/markets";
 import type { Order, OrderStatusEvent } from "../types";
 import type { TrackedOrder } from "@/lib/orders/tracked-order";
 
@@ -97,7 +98,9 @@ function formatDateTime(iso?: string): string {
 }
 
 export function TrackedOrderDetail({ order: result, currency }: { order: TrackedOrder; currency: string }) {
-  const money = (n: number) => `${currency}${n.toLocaleString()}`;
+  // A USD order (dual-currency store) prints in USD, whatever the store's symbol.
+  const symbol = orderCurrencySymbol(result, currency);
+  const money = (n: number) => `${symbol}${n.toLocaleString()}`;
   return (
     <>
       <div className="track-result">

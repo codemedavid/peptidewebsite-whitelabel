@@ -344,6 +344,18 @@ export async function saveCheckoutHideEmailAction(
   return patchCheckoutConfig(slug, { checkoutHideEmail: hide === true });
 }
 
+/**
+ * Ask for the buyer's WhatsApp number on the tenant's storefront checkout.
+ * Stored in `branding.config` as `checkoutWhatsapp` (see
+ * lib/storefront/checkout-fields). Absent/false → not asked (historical default).
+ */
+export async function saveCheckoutWhatsappAction(
+  slug: string,
+  ask: boolean,
+): Promise<SaveResult> {
+  return patchCheckoutConfig(slug, { checkoutWhatsapp: ask === true });
+}
+
 /** Operator-only read-modify-write of top-level checkout flags in the shared
  *  `branding.config` blob — never clobbers the rest of the storefront config. */
 async function patchCheckoutConfig(

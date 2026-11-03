@@ -23,6 +23,9 @@ export type GroupBuyContent = {
   steps: string[];
   /** Live-round terms line (banner/card); `{eta}` behaves the same. */
   terms: string;
+  /** The group-buy card's buy button ("Join GB"). mnm sells its rounds as a
+   *  plain cart, so its owner wanted "Add to cart" here instead. */
+  joinLabel: string;
 };
 
 /** Input caps — generous for copy, tight enough to keep the config JSON sane. */
@@ -30,6 +33,7 @@ export const GB_CONTENT_LIMITS = {
   maxSteps: 6,
   maxTitleLen: 80,
   maxTextLen: 300,
+  maxLabelLen: 24,
 } as const;
 
 /** What renders when `{eta}` has no live round ETA to substitute. */
@@ -46,6 +50,7 @@ export const GB_CONTENT_DEFAULTS: Readonly<GroupBuyContent> = Object.freeze({
     "Your order ships {eta}, COA posted before shipping.",
   ]) as unknown as string[],
   terms: "Pay now to lock your slot. Ships {eta}. COA posted before shipping.",
+  joinLabel: "Join GB",
 });
 
 /** The first default step, for a store that sells group buy only (on-hand
@@ -92,14 +97,35 @@ export function normalizeGroupBuyContent(input: unknown): GroupBuyContent {
       ? raw.terms.trim().slice(0, GB_CONTENT_LIMITS.maxTextLen)
       : "";
 
+  const joinLabel =
+    typeof raw.joinLabel === "string"
+      ? raw.joinLabel.trim().slice(0, GB_CONTENT_LIMITS.maxLabelLen)
+      : "";
+
   return {
     howTitle: title || GB_CONTENT_DEFAULTS.howTitle,
     steps: steps.length > 0 ? steps : [...GB_CONTENT_DEFAULTS.steps],
     terms: terms || GB_CONTENT_DEFAULTS.terms,
+    joinLabel: joinLabel || GB_CONTENT_DEFAULTS.joinLabel,
   };
 }
 
 /** Replace every `{eta}` with the round's delivery ETA (or the fallback). */
 export function renderGbCopy(text: string, deliveryEta: string): string {
   return text.replaceAll("{eta}", deliveryEta || ETA_FALLBACK);
+}
+
+/**
+ * The content a copy-editor save should persist. A save that does not carry a
+ * `joinLabel` key keeps the stored one — the Pepweb app's editor only knows
+ * title/steps/terms, and without this an app save quietly reset mnm's
+ * "Add to cart" back to "Join GB". An explicit blank still resets to default.
+ */
+export function mergeGroupBuyContentSave(stored: unknown, input: unknown): GroupBuyContent {
+  const raw =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  if ("joinLabel" in raw) return normalizeGroupBuyContent(raw);
+  return normalizeGroupBuyContent({ ...raw, joinLabel: normalizeGroupBuyContent(stored).joinLabel });
 }

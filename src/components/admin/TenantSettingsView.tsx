@@ -19,6 +19,7 @@ import {
   saveAdminPasswordAction,
   saveRequirePaymentProofAction,
   saveCheckoutHideEmailAction,
+  saveCheckoutWhatsappAction,
   saveNoticeModalGrantAction,
   saveGbPaymentModeAction,
 } from "@/actions/branding";
@@ -97,6 +98,7 @@ type Props = {
   /** Whether checkout requires a proof-of-payment upload. */
   initialRequireProofOfPayment: boolean;
   initialCheckoutHideEmail: boolean;
+  initialCheckoutWhatsapp: boolean;
   /** Whether the super admin has granted the Storefront Notice Modal for this tenant. */
   initialNoticeModalGranted: boolean;
   /** Checkout admin-fee config + the store's currency symbol for display. */
@@ -145,6 +147,7 @@ export function TenantSettingsView({
   initialMetaDescription,
   initialRequireProofOfPayment,
   initialCheckoutHideEmail,
+  initialCheckoutWhatsapp,
   initialNoticeModalGranted,
   initialAdminFee,
   adminFeeEntitled,
@@ -165,6 +168,7 @@ export function TenantSettingsView({
   const [channels, setChannels] = useState<ContactChannel[]>(initialChannels);
   const [requireProof, setRequireProof] = useState(initialRequireProofOfPayment);
   const [hideEmail, setHideEmail] = useState(initialCheckoutHideEmail);
+  const [askWhatsapp, setAskWhatsapp] = useState(initialCheckoutWhatsapp);
   // Notice Modal grant — a standalone per-tenant operator switch (default OFF).
   // Saved immediately on toggle (its own flow, never marks a section dirty), with
   // optimistic state + revert on failure, mirroring the admin-fee master toggle.
@@ -209,6 +213,7 @@ export function TenantSettingsView({
     channels: JSON.stringify(initialChannels),
     requireProof: initialRequireProofOfPayment,
     hideEmail: initialCheckoutHideEmail,
+    askWhatsapp: initialCheckoutWhatsapp,
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
     metaDescription: initialMetaDescription,
@@ -238,7 +243,9 @@ export function TenantSettingsView({
     digits !== baseline.current.digits;
   const channelsDirty = JSON.stringify(channels) !== baseline.current.channels;
   const proofDirty =
-    requireProof !== baseline.current.requireProof || hideEmail !== baseline.current.hideEmail;
+    requireProof !== baseline.current.requireProof ||
+    hideEmail !== baseline.current.hideEmail ||
+    askWhatsapp !== baseline.current.askWhatsapp;
   const copyDirty =
     title !== baseline.current.title ||
     note !== baseline.current.note ||
@@ -323,7 +330,7 @@ export function TenantSettingsView({
   async function saveProof(): Promise<boolean> {
     setSaving("proof");
     setErrors((e) => ({ ...e, proof: undefined }));
-    // Two independent flags share this card; save only the one(s) changed.
+    // Independent flags share this card; save only the one(s) changed.
     let res: Awaited<ReturnType<typeof saveRequirePaymentProofAction>> = { ok: true };
     if (requireProof !== baseline.current.requireProof) {
       res = await saveRequirePaymentProofAction(slug, requireProof);
@@ -331,9 +338,12 @@ export function TenantSettingsView({
     if ("ok" in res && hideEmail !== baseline.current.hideEmail) {
       res = await saveCheckoutHideEmailAction(slug, hideEmail);
     }
+    if ("ok" in res && askWhatsapp !== baseline.current.askWhatsapp) {
+      res = await saveCheckoutWhatsappAction(slug, askWhatsapp);
+    }
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, requireProof, hideEmail };
+      baseline.current = { ...baseline.current, requireProof, hideEmail, askWhatsapp };
       setSaved((s) => ({ ...s, proof: true }));
       return true;
     }
@@ -450,6 +460,7 @@ export function TenantSettingsView({
     setChannels(JSON.parse(b.channels));
     setRequireProof(b.requireProof);
     setHideEmail(b.hideEmail);
+    setAskWhatsapp(b.askWhatsapp);
     setTitle(b.title);
     setNote(b.note);
     setMetaDescription(b.metaDescription);
@@ -901,6 +912,35 @@ export function TenantSettingsView({
                   />
                 </div>
               </div>
+              <div className="set-row">
+                <div>
+                  <div className="set-row-label">Ask for a WhatsApp number</div>
+                  <div className="set-row-help">
+                    Adds a required WhatsApp number field under Phone. It shows on the order and
+                    in the group-buy customer report.
+                  </div>
+                </div>
+                <div className="set-row-control">
+                  <span
+                    className={"switch" + (askWhatsapp ? " on" : "")}
+                    role="switch"
+                    aria-checked={askWhatsapp}
+                    aria-label="Ask for a WhatsApp number at checkout"
+                    tabIndex={0}
+                    onClick={() => {
+                      setAskWhatsapp((v) => !v);
+                      setSaved((s) => ({ ...s, proof: false }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setAskWhatsapp((v) => !v);
+                        setSaved((s) => ({ ...s, proof: false }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -919,6 +959,7 @@ export function TenantSettingsView({
                   onClick={() => {
                     setRequireProof(baseline.current.requireProof);
                     setHideEmail(baseline.current.hideEmail);
+                    setAskWhatsapp(baseline.current.askWhatsapp);
                     setErrors((e) => ({ ...e, proof: undefined }));
                   }}
                 >

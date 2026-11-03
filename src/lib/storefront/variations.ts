@@ -8,6 +8,7 @@
 // editor never meant to allow.
 
 import { formatMoney } from "./currency";
+import { listedVariations } from "./variation-availability";
 
 /**
  * A dose written into a name — "5mg", "0.1 mg", "10ml", "500mcg", "10iu".
@@ -46,6 +47,9 @@ export type Variation = {
   price: number;
   stock?: number;
   gbPrice?: number;
+  /** THIS option's own sale price — opt-in like `gbPrice`. Only real when it is
+   *  positive and BELOW `price` (see activeVariationSale in ./sale). */
+  salePrice?: number;
   image?: string;
   extraImages?: string[];
   /** What THIS option ships with, one item per line ("10 pcs syringes"). Shown
@@ -53,6 +57,8 @@ export type Variation = {
   includes?: string;
   /** Vials per supplier kit for this option (Bunuan/Ligwak) — see Product.variations. */
   kitSize?: number;
+  /** `false` = off sale; hidden from every option builder below. */
+  available?: boolean;
 };
 
 /** An option offered on the product card. `variation` is absent on the product's
@@ -68,8 +74,9 @@ export type ProductOption = {
  *  storefront `Product` type (and its import cycle back into components). */
 type OptionSource = { price: number; variations?: Variation[] };
 
-const variationsOf = (p: OptionSource): Variation[] =>
-  Array.isArray(p.variations) ? p.variations : [];
+/** The options a CUSTOMER may pick — an option the owner switched off
+ *  (`available: false`) is skipped by every builder in this module. */
+const variationsOf = (p: OptionSource): Variation[] => listedVariations(p.variations);
 
 /**
  * The options a customer can choose between on the product card.

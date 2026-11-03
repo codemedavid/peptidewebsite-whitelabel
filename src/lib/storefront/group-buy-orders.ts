@@ -65,7 +65,7 @@ export type LinkableOrder = {
   paymentProof?: string | null;
   groupBuyId?: string | null;
   groupBuyName?: string | null;
-  customer?: { name?: string; email?: string; phone?: string };
+  customer?: { name?: string; email?: string; phone?: string; whatsapp?: string; whatsappName?: string };
   shipping?: ReportShipping;
   items: ReportOrderItem[];
   /** The buyer's checkout note. Reaches the owner's own customer workbook only
@@ -298,6 +298,10 @@ export type RoundOrderRow = {
   orderNumber: string;
   customer: string;
   contact: string;
+  /** The buyer's WhatsApp number, "" when the store doesn't ask for one. */
+  whatsapp: string;
+  /** The buyer's WhatsApp display name, "" when the store doesn't ask for one. */
+  whatsappName: string;
   address: string;
   product: string;
   productId: string | null;
@@ -335,6 +339,8 @@ export function buildRoundOrderRows(
     const paymentStatus = displayPaymentStatus(o);
     const customer = o.customer?.name?.trim() || o.customer?.email?.trim() || "—";
     const contact = o.customer?.phone?.trim() || o.customer?.email?.trim() || "—";
+    const whatsapp = o.customer?.whatsapp?.trim() || "";
+    const whatsappName = o.customer?.whatsappName?.trim() || "";
     const address = formatShippingAddress(o.shipping);
     const batch = o.groupBuyName?.trim() || round.name || "—";
     for (const it of o.items ?? []) {
@@ -342,6 +348,8 @@ export function buildRoundOrderRows(
         orderNumber: o.orderNumber ?? "—",
         customer,
         contact,
+        whatsapp,
+        whatsappName,
         address,
         product: it.name,
         productId: it.productId ?? null,

@@ -229,6 +229,36 @@ export function Hero({
         {ctas}
       </div>
     );
+  } else if (variant === "wellness") {
+    // Wellness / measured look: gradient wordmark on the accent, a short gradient
+    // rule under the headline, an optional "trusted by" eyebrow, and a soft grid
+    // + flowing measuring-tape ribbon + leaves painted behind it — all from
+    // --brand-* tokens. No logo card (the headline carries the brand).
+    const eyebrow = brand.heroEyebrow?.trim();
+    content = (
+      <>
+        <div className="hero__bg hero__bg--wellness" aria-hidden="true">
+          <svg className="hero__measure" viewBox="0 0 420 900" fill="none" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+            <path d="M360 -40 C210 150 400 330 250 470 C120 590 300 760 170 940" stroke="currentColor" strokeWidth="78" strokeOpacity="0.12" strokeLinecap="round" />
+            {Array.from({ length: 11 }).map((_, i) => (
+              <line key={i} x1={300 + (i % 2 ? 0 : 10)} y1={40 + i * 80} x2={356} y2={40 + i * 80} stroke="currentColor" strokeWidth="4" strokeOpacity="0.2" strokeLinecap="round" transform={`rotate(${18 - i * 3} 330 ${40 + i * 80})`} />
+            ))}
+          </svg>
+          <span className="hero__leaf hero__leaf--1" />
+          <span className="hero__leaf hero__leaf--2" />
+          <span className="hero__leaf hero__leaf--3" />
+        </div>
+        <div className="container hero__inner hero__inner--wellness">
+          {chip}
+          {headline}
+          <span className="hero__rule" aria-hidden="true" />
+          {eyebrow && <p className="hero__eyebrow">{eyebrow}</p>}
+          {sub}
+          {countdown}
+          {ctas}
+        </div>
+      </>
+    );
   } else {
     // "centered" (default) and "spotlight" share the bg + inner layout
     content = (

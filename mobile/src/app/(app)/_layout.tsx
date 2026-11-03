@@ -8,6 +8,7 @@ import { usePrefetchAdmin } from "@/features/admin/usePrefetchAdmin";
 import { useShop } from "@/features/shop/ShopProvider";
 import { hasBeenAsked, rebindIfGranted } from "@/notifications/push";
 import { LiveOrders } from "@/notifications/LiveOrders";
+import { PresenceBeacon } from "@/features/live/PresenceBeacon";
 import { useNotificationRouting } from "@/notifications/useNotificationRouting";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -78,6 +79,8 @@ export default function AppLayout() {
         <Stack.Screen name="profile" options={{ title: "Your profile" }} />
         <Stack.Screen name="customers" options={{ title: "Customers" }} />
         <Stack.Screen name="customer/[key]" options={{ title: "" }} />
+        <Stack.Screen name="customer-account/[id]" options={{ title: "" }} />
+        <Stack.Screen name="live" options={{ title: "Live now" }} />
         {/* Native store-management screens (titles set in each screen). */}
         <Stack.Screen name="manage/products" />
         <Stack.Screen name="manage/product-edit" />
@@ -162,6 +165,8 @@ export default function AppLayout() {
       </Stack.Protected>
     </Stack>
     {me.can.orders ? <LiveOrders /> : null}
+    {/* Customers only: tells the store this shopper is live (features/live). */}
+    {!admin ? <PresenceBeacon /> : null}
     </View>
   );
 }

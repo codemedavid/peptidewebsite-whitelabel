@@ -18,9 +18,13 @@ export type VariationDraft = {
   price: string;
   stock: string;
   gbPrice: string;
+  /** This option's own sale price; "" = not on sale. */
+  salePrice: string;
   image: string;
   /** Photos beyond the main one, in gallery order. */
   extraImages?: string[];
+  /** false = option off sale (set on the website's Inventory screen). */
+  available?: boolean;
 };
 
 export type ProductDraft = {
@@ -91,8 +95,10 @@ export function draftFromProduct(p: CatalogProduct | null, firstCategoryId: stri
       price: s(v.price),
       stock: s(v.stock),
       gbPrice: s(v.gbPrice),
+      salePrice: s(v.salePrice),
       image: v.image ?? "",
       ...(v.extraImages?.length ? { extraImages: v.extraImages } : {}),
+      ...(v.available === false ? { available: false } : {}),
     })),
     stock: s(p?.stock ?? 0),
     featured: p?.featured === true,
@@ -191,11 +197,17 @@ export function toSavePayload(d: ProductDraft, initial: CatalogProduct | null, c
       // wipe a price set there.
       const gb = toNum(v.gbPrice);
       const withGb = gb > 0 ? { ...withStock, gbPrice: gb } : withStock;
+      // The option's own sale price — positive only (the storefront honours it
+      // only below the option's price; see activeVariationSale on the website).
+      const sale = toNum(v.salePrice);
+      const withSale = sale > 0 ? { ...withGb, salePrice: sale } : withGb;
       const image = v.image.trim();
-      const withImage = image ? { ...withGb, image } : withGb;
+      const withImage = image ? { ...withSale, image } : withSale;
       // The server rebuilds each variation from the payload, so the extras
       // must ride along or they'd be erased.
-      return v.extraImages?.length ? { ...withImage, extraImages: v.extraImages } : withImage;
+      const withExtras = v.extraImages?.length ? { ...withImage, extraImages: v.extraImages } : withImage;
+      // An option switched off on the website's Inventory screen stays off.
+      return v.available === false ? { ...withExtras, available: false } : withExtras;
     })
     .filter((v) => v.name);
 
@@ -257,7 +269,7 @@ export const VARIATION_PRESETS = ["Vials only", "Complete set"] as const;
 
 const norm = (name: string) => name.trim().toLowerCase();
 
-export const blankVariation = (name = ""): VariationDraft => ({ name, price: "", stock: "", gbPrice: "", image: "" });
+export const blankVariation = (name = ""): VariationDraft => ({ name, price: "", stock: "", gbPrice: "", salePrice: "", image: "" });
 
 /** Add a preset once: names a blank row if there is one, else appends. */
 export function applyVariationPreset(items: readonly VariationDraft[], preset: string): VariationDraft[] {

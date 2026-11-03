@@ -22,12 +22,17 @@
 //                   layout forces on-hand hidden (storedTwoWaysMode), so the
 //                   "Ways to order" panel goes. Needs the Group Buy module;
 //                   without it resolveHomeLayout falls back to classic.
+//   • "intl-local" — a LAYOUT CHOICE: the fully owner-editable "Intl & Local"
+//                   template (mega-menu header, hero, two market cards, learn
+//                   cards, community + newsletter bands, footer, floating
+//                   contact). All its copy/colours live in branding.config.
+//                   intlLocal. Owner-selectable, no grant.
 //
 // This module is deliberately tiny and dependency-free: every layout module
 // imports the enum, so anything heavier here would pull the whole storefront
 // view-model into the branding-update path.
 
-export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial", "showcase", "groupbuy"] as const;
+export const HOME_LAYOUTS = ["classic", "two-ways", "boutique", "editorial", "showcase", "groupbuy", "intl-local"] as const;
 
 export type HomeLayout = (typeof HOME_LAYOUTS)[number];
 
@@ -50,4 +55,9 @@ export function isShowcaseLayout(value: unknown): boolean {
 /** As above, for the group-buy-only layout. */
 export function isGroupBuyLayout(value: unknown): boolean {
   return value === "groupbuy";
+}
+
+/** As above, for the Intl & Local layout. */
+export function isIntlLocalLayout(value: unknown): boolean {
+  return value === "intl-local";
 }

@@ -15,6 +15,9 @@ import { COLLAPSED_COOKIE, THEME_COOKIE, parseShellPrefs } from "@/components/ad
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (pathname.endsWith("/login")) return <>{children}</>;
+  // The branding editor's live-preview frame is a bare storefront inside an
+  // <iframe>: no admin chrome (it renders the tenant's site, nothing else).
+  if (pathname.includes("/preview-frame/")) return <>{children}</>;
 
   const jar = await cookies();
   const prefs = parseShellPrefs(jar.get(THEME_COOKIE)?.value, jar.get(COLLAPSED_COOKIE)?.value);

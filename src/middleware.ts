@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshSupabaseSession } from "@/lib/auth/middleware-session";
 import { rollGateCookie } from "@/lib/auth/gate-roll";
-import { clearStoreAdminSessionOnDocumentLoad } from "@/lib/auth/admin-session-reset";
 import { mobileCorsHeaders } from "@/lib/mobile/cors";
 
 const ROOT = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost:3000").replace(
@@ -144,13 +143,9 @@ export async function middleware(req: NextRequest) {
     await rollGateCookie(req, res);
   }
 
-  // Store admin (`#admin`) signs out on every refresh: the storefront is a
-  // hash-routed SPA, so a refresh is just a top-level document load of this
-  // page — and that's the only moment we can catch, since Server Components
-  // can't delete cookies. A no-op for the SPA's own server actions and RSC
-  // fetches (so saves never sign you out) and for visitors with no admin
-  // cookie (so anonymous storefront responses stay Set-Cookie-free).
-  clearStoreAdminSessionOnDocumentLoad(req, res, !isAdmin && !isApex);
+  // The store admin (`#admin`) signing out on refresh is decided in the
+  // browser, not here (lib/auth/admin-refresh-logout.ts): a document load of
+  // "/" can't tell a refreshed dashboard from the shop opened in another tab.
 
   if (cors) for (const [name, value] of Object.entries(cors)) res.headers.set(name, value);
 

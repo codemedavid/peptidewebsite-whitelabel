@@ -27,6 +27,7 @@ export const HERO_VARIANTS: readonly HeroVariant[] = [
   "minimal",
   "spotlight",
   "wordmark",
+  "wellness",
 ];
 
 const VARIANT_SET = new Set<string>(HERO_VARIANTS);

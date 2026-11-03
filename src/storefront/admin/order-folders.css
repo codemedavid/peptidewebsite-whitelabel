@@ -247,3 +247,21 @@
   .sf-root .ogb-row .ogb-chev,
   .sf-root .ogb-report { transition: none; }
 }
+
+/* ── Live round shortcuts (TodoShortcuts) ── */
+.sf-root .ogb-live-wrap + .ogb-live-wrap { margin-top: 12px; }
+.sf-root .ogb-todo { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sf-root .ogb-todo__btn {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 16px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid transparent;
+  font: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: filter .15s ease, transform .15s ease;
+}
+.sf-root .ogb-todo__btn:hover { filter: brightness(0.96); transform: translateY(-1px); }
+.sf-root .ogb-todo__btn:active { transform: translateY(0); }
+.sf-root .ogb-todo__btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .ogb-todo__btn--new { background: color-mix(in srgb, #E8B931 24%, var(--brand-surface)); color: #6B4F00; border-color: color-mix(in srgb, #E8B931 50%, transparent); }
+.sf-root .ogb-todo__btn--unpaid { background: color-mix(in srgb, #D9534F 14%, var(--brand-surface)); color: #9A2B27; border-color: color-mix(in srgb, #D9534F 40%, transparent); }

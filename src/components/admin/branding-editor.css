@@ -1,0 +1,74 @@
+/* Super Admin → tenant → Branding (BrandingEditor). Scoped .sa, on the admin's
+ * own tokens so light and dark themes both hold. */
+
+/* Sticky save bar: always in reach, and it says when there's work to save. */
+.sa .be-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 -4px; padding: 12px 4px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms;
+}
+.sa .be-bar[data-dirty="1"] { border-bottom-color: var(--border-c); }
+.sa .be-bar__title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.sa .be-pill {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.sa .be-pill--warn { background: color-mix(in srgb, var(--warning, #d97706) 16%, transparent); color: var(--warning, #b45309); }
+.sa .be-pill--ok { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.sa .be-pill--err { background: color-mix(in srgb, var(--danger, #dc2626) 14%, transparent); color: var(--danger, #dc2626); }
+.sa .be-kbd {
+  display: none; padding: 2px 7px; border: 1px solid var(--border-c); border-bottom-width: 2px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; color: var(--ink-500);
+}
+@media (hover: hover) and (min-width: 900px) { .sa .be-kbd { display: inline-block; } }
+
+/* The new tab reads as new. */
+.sa .seg-item--new::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%;
+  background: var(--accent); vertical-align: middle;
+}
+
+/* Workspace: a roomier controls column beside a sticky, full-height preview. */
+.sa .be-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (min-width: 1100px) {
+  .sa .be-grid { grid-template-columns: minmax(360px, 440px) minmax(0, 1fr); }
+  .sa .be-preview { position: sticky; top: 76px; }
+}
+.sa .be-controls { min-width: 0; }
+
+.sa .be-toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 60; translate: -50% 0;
+  padding: 10px 16px; border-radius: 12px; background: var(--ink-900); color: var(--bg);
+  font-size: 13px; font-weight: 600; box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.5);
+  animation: be-toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes be-toast-in { from { opacity: 0; translate: -50% 8px; } }
+
+/* The shared Intl & Local studio, embedded: its storefront-admin classes read
+ * --brand-* tokens, so point those at the Super Admin's own. */
+.sa .sf-root.sb-embed {
+  --brand-text: var(--ink-900);
+  --brand-text-muted: var(--ink-500);
+  --brand-surface: var(--bg);
+  --brand-surface-2: var(--bg-subtle);
+  --brand-background: transparent;
+  --brand-accent: var(--accent);
+  --brand-main: var(--accent);
+  --brand-button-text: var(--accent-ink, #fff);
+  --brand-success: var(--success);
+  --brand-border: var(--border-c);
+  --brand-border-width: 1px;
+  --gutter: 0px;
+  background: transparent;
+  color: var(--ink-900);
+  font-family: inherit;
+}
+.sa .sf-root.sb-embed .sb-tabs { top: 64px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sa .be-toast { animation: none; }
+}

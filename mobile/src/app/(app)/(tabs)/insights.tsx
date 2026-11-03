@@ -6,6 +6,7 @@ import type { InsightsRange, InsightsResponse } from "@contract";
 import { insightsApi, qk } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { revenuePoints } from "@/features/insights/SalesHero";
+import { LiveStrip } from "@/features/live/LiveStrip";
 import { STATUS_META } from "@/features/orders/status";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
@@ -180,6 +181,8 @@ export default function Insights() {
           </AppText>
           <Chips options={RANGES} value={range} onChange={setRange} label="Report period" />
         </View>
+
+        <LiveStrip />
 
         {q.isPending ? (
           <SkeletonList rows={4} />

@@ -9,6 +9,8 @@
 // Shared between the editors, their save actions, and the checkout/order
 // pipeline so every surface normalizes the value identically.
 
+import { positivePrice } from "./markets";
+
 export const ADMIN_FEE_LABEL_MAX = 60;
 export const ADMIN_FEE_LABEL_DEFAULT = "Admin fee";
 /** Hard ceiling on the configurable amount — guards against typos like 1e12. */
@@ -32,6 +34,9 @@ export type AdminFeeConfig = {
   /** Group-buy stores: charge the fee on a buyer's FIRST order in a round only.
    *  Their add-on orders in the same round carry no fee (admin-fee-once.ts). */
   oncePerGroupBuy: boolean;
+  /** Dual-currency stores: the fixed fee in USD for International orders.
+   *  Absent = a fixed fee isn't charged on them (lib/storefront/intl-market). */
+  usdAmount?: number;
 };
 
 /** What an order actually charged (Order.adminFee) — a snapshot at placement. */
@@ -46,6 +51,7 @@ export function normalizeAdminFee(input: unknown): AdminFeeConfig {
   const amount = Number.isFinite(rawAmount)
     ? Math.min(ADMIN_FEE_AMOUNT_MAX, Math.max(0, Math.round(rawAmount * 100) / 100))
     : 0;
+  const usdAmount = positivePrice(x.usdAmount);
   const rawPercent = Number(x.percent);
   const percent = Number.isFinite(rawPercent)
     ? Math.min(ADMIN_FEE_PERCENT_MAX, Math.max(0, Math.round(rawPercent * 100) / 100))
@@ -57,6 +63,7 @@ export function normalizeAdminFee(input: unknown): AdminFeeConfig {
     amount,
     percent,
     oncePerGroupBuy: x.oncePerGroupBuy === true,
+    ...(usdAmount ? { usdAmount } : {}),
   };
 }
 
@@ -68,7 +75,12 @@ export function normalizeAdminFee(input: unknown): AdminFeeConfig {
  */
 export function mergeAdminFeeInput(stored: unknown, input: unknown): AdminFeeConfig {
   const next = (input ?? {}) as Record<string, unknown>;
-  const keep = "oncePerGroupBuy" in next ? {} : { oncePerGroupBuy: normalizeAdminFee(stored).oncePerGroupBuy };
+  const prev = normalizeAdminFee(stored);
+  // Same rule for the USD amount: an editor that doesn't show it keeps it.
+  const keep = {
+    ...("oncePerGroupBuy" in next ? {} : { oncePerGroupBuy: prev.oncePerGroupBuy }),
+    ...("usdAmount" in next ? {} : { usdAmount: prev.usdAmount }),
+  };
   return normalizeAdminFee({ ...next, ...keep });
 }
 

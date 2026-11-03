@@ -1,0 +1,89 @@
+/* Branding editor → live preview (LivePreviewStudio). Scoped .sa .lps and
+ * built on the Super Admin tokens (--bg*, --ink-*, --border-c, --accent*), so
+ * it follows the admin's light / dark theme. The storefront itself lives in
+ * the iframe and is untouched by any of this. */
+
+.sa .lps { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.sa .lps-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px; border: 1px solid var(--border-c); border-radius: 14px;
+  background: var(--bg-elevated);
+}
+.sa .lps-live {
+  display: inline-flex; align-items: center; gap: 7px; padding: 0 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-500);
+}
+.sa .lps-live span {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--ink-300);
+  transition: background-color 200ms;
+}
+.sa .lps-live[data-ready="1"] span {
+  background: var(--success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 22%, transparent);
+  animation: lps-pulse 2.4s ease-in-out infinite;
+}
+@keyframes lps-pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--success) 8%, transparent); } }
+
+.sa .lps-seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--bg-subtle); }
+.sa .lps-seg button {
+  display: inline-grid; place-items: center; width: 34px; height: 30px; border: 0; border-radius: 8px;
+  background: none; color: var(--ink-500); cursor: pointer; transition: background-color 150ms, color 150ms;
+}
+.sa .lps-seg button:hover { color: var(--ink-900); }
+.sa .lps-seg button.is-on { background: var(--bg); color: var(--ink-900); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+
+.sa .lps-page {
+  height: 34px; padding: 0 30px 0 12px; border: 1px solid var(--border-c); border-radius: 10px;
+  background: var(--bg); color: var(--ink-900); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.sa .lps-spacer { flex: 1; }
+.sa .lps-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-c); border-radius: 10px; background: var(--bg); color: var(--ink-700);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 150ms;
+}
+.sa .lps-btn:hover { border-color: var(--border-strong); color: var(--ink-900); }
+.sa .lps-btn.is-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.sa .lps-icon {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border-c);
+  border-radius: 10px; background: var(--bg); color: var(--ink-500); cursor: pointer;
+}
+.sa .lps-icon:hover { color: var(--ink-900); border-color: var(--border-strong); }
+.sa .lps-seg button:focus-visible,
+.sa .lps-btn:focus-visible,
+.sa .lps-icon:focus-visible,
+.sa .lps-page:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The stage: the device sits centred on a soft canvas; the frame is scaled to
+ * fit the column but keeps the device's real CSS width. */
+.sa .lps-host {
+  position: relative; display: flex; justify-content: center; overflow: hidden;
+  height: clamp(560px, calc(100vh - 230px), 1100px);
+  border-radius: 16px; border: 1px solid var(--border-c);
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink-300) 45%, transparent) 1px, transparent 0) 0 0 / 18px 18px,
+    var(--bg-canvas, var(--bg-subtle));
+}
+.sa .lps-device { position: relative; overflow: hidden; background: #fff; transition: width 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+.sa .lps-host[data-device="phone"] .lps-device,
+.sa .lps-host[data-device="tablet"] .lps-device {
+  margin-block: 14px; height: calc(100% - 28px) !important; border-radius: 26px;
+  box-shadow: 0 0 0 8px var(--ink-900), 0 24px 60px -20px rgb(0 0 0 / 0.45);
+}
+.sa .lps-frame { display: block; border: 0; transform-origin: 0 0; background: #fff; }
+.sa .lps-problem {
+  padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5;
+  background: color-mix(in srgb, var(--warning, #d97706) 12%, var(--bg)); color: var(--ink-900);
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 35%, transparent);
+}
+.sa .lps-problem a, .sa .lps-problem button {
+  color: var(--accent); font: inherit; font-weight: 700; background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.sa .lps-note { margin: 0; font-size: 12px; color: var(--ink-500); text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sa .lps-live[data-ready="1"] span { animation: none; }
+  .sa .lps-device { transition: none; }
+}

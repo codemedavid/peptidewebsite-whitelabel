@@ -30,7 +30,7 @@ export type MemberOrderInput = {
   status: string;
   paymentStatus?: string;
   customerAccountId?: string | null;
-  customer?: { name?: string; email?: string; phone?: string };
+  customer?: { name?: string; email?: string; phone?: string; whatsapp?: string; whatsappName?: string };
   shipping?: ReportShipping & { fee?: number };
   items: ReportOrderItem[];
   adminFee?: ChargeLine | null;
@@ -38,8 +38,12 @@ export type MemberOrderInput = {
   discount?: (ChargeLine & { code: string }) | null;
 };
 
-/** The Orders screen's own total for one checkout (computeOrderTotals). */
-function checkoutTotals(o: MemberOrderInput) {
+/** Just what decides WHO placed an order — see identityKeys. */
+export type MemberIdentitySource = Pick<MemberOrderInput, "customerAccountId" | "customer">;
+
+/** The Orders screen's own total for one checkout (computeOrderTotals). Exported
+ *  so the member tracker (gb-participation) totals a checkout the same way. */
+export function checkoutTotals(o: Pick<MemberOrderInput, "items" | "shipping" | "adminFee" | "paymentFee" | "discount">) {
   const input: TotalsInput = {
     items: o.items ?? [],
     shipping: { fee: Number(o.shipping?.fee) || 0 } as TotalsInput["shipping"],
@@ -73,6 +77,10 @@ export type MemberOrder = {
   name: string;
   email: string;
   contact: string;
+  /** Newest WhatsApp number the member gave, "" when none. */
+  whatsapp: string;
+  /** Newest WhatsApp display name the member gave, "" when none. */
+  whatsappName: string;
   address: string;
   checkouts: MemberCheckout[];
   products: MemberProductLine[];
@@ -85,7 +93,7 @@ export type MemberOrder = {
   adminFee: number;
 };
 
-function identityKeys(o: MemberOrderInput, index: number): string[] {
+function identityKeys(o: MemberIdentitySource, index: number): string[] {
   const c = o.customer ?? {};
   const email = emailKey(c.email);
   const phone = phoneKey(c.phone);
@@ -100,8 +108,9 @@ function identityKeys(o: MemberOrderInput, index: number): string[] {
   return [name ? `n:${name}` : `o:${index}`];
 }
 
-/** Union-find over orders: two orders that share any identity key merge. */
-function groupIndexes(orders: readonly MemberOrderInput[]): number[][] {
+/** Union-find over orders: two orders that share any identity key merge.
+ *  Exported for the member tracker, which must agree on who is the same member. */
+export function groupIndexes(orders: readonly MemberIdentitySource[]): number[][] {
   const parent = orders.map((_, i) => i);
   const find = (i: number): number => {
     let root = i;
@@ -159,6 +168,8 @@ function buildMember(orders: readonly MemberOrderInput[]): MemberOrder {
     name: pick((o) => o.customer?.name) || email || "Unknown",
     email,
     contact: phone || email || "—",
+    whatsapp: pick((o) => o.customer?.whatsapp),
+    whatsappName: pick((o) => o.customer?.whatsappName),
     address: latest.map((o) => formatShippingAddress(o.shipping)).find((a) => a !== "—") ?? "—",
     checkouts,
     products: mergeProducts(sorted),

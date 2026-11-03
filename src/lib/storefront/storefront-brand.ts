@@ -25,6 +25,7 @@ import {
 } from "@/lib/storefront/hero-countdown";
 import { isGroupBuyProduct } from "@/lib/storefront/two-ways";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
+import { normalizeAnnouncementPopup } from "@/lib/storefront/announcement-popup";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeTimeline } from "@/lib/storefront/timeline";
 import { normalizeReviews, normalizeReviewDescStyle } from "@/lib/storefront/reviews";
@@ -50,6 +51,8 @@ import { normalizeGroupBuyContent } from "@/lib/storefront/gb-content";
 import { normalizeGroupBuyLiveBanner } from "@/lib/storefront/gb-live-banner";
 import { normalizeDefaultProductImage } from "@/lib/storefront/product-image";
 import { normalizeBoutiqueConfig } from "@/lib/storefront/boutique-home";
+import { normalizeIntlLocalConfig } from "@/lib/storefront/intl-local/normalize";
+import { isDualMarket } from "@/lib/storefront/intl-market";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
@@ -377,6 +380,13 @@ export async function loadStorefrontBrand(
   brand.noticeModal = noticeModal;
   brand.showAdminNotice = noticeModal.operatorEnabled;
 
+  // Announcement Pop-up: owner-managed (no grant). Sanitized here so a legacy or
+  // hand-edited blob can never reach the storefront unsafe.
+  brand.announcementPopup = normalizeAnnouncementPopup(config.announcementPopup);
+
+  // Wellness-hero eyebrow (small caps line under the headline). Plain string.
+  brand.heroEyebrow = typeof config.heroEyebrow === "string" ? config.heroEyebrow.slice(0, 120) : undefined;
+
   // Track-order delivery note: sanitize the stored config so a legacy/absent blob
   // is always safe. Business/Automated exclusive since the trial system
   // (FEATURES.STORE_TRACK_NOTE): unentitled tenants keep their saved copy but the
@@ -464,6 +474,13 @@ export async function loadStorefrontBrand(
   // never push unbounded copy into the layout.
   brand.boutique = normalizeBoutiqueConfig(config.boutique);
   brand.editorial = normalizeEditorialConfig(config.editorial);
+  // The Intl & Local template's whole editable surface. Only materialised for
+  // tenants on that layout or who saved a draft of it in the store admin —
+  // every other store keeps a lighter Brand payload.
+  if (brand.homeLayout === "intl-local" || config.intlLocal) brand.intlLocal = normalizeIntlLocalConfig(config.intlLocal);
+  // Two markets (₱ + USD) only on that layout, decided here so every surface
+  // reads one server-made flag. Checked against the RESOLVED layout.
+  brand.dualMarket = isDualMarket({ homeLayout: brand.homeLayout, intlMarket: config.intlMarket });
 
   // On-hand shelf order — "per-vial-first" leads with the single per-vial
   // listings and drops the multi-vial kits underneath (K Glow). Unset keeps

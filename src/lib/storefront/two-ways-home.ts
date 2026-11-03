@@ -8,7 +8,7 @@
 // alongside the on-hand shelf. Pure + JSON-safe (no React, no DB), so it drives
 // an SSR compute and is trivially testable (npm run test:two-ways-home).
 
-import { isBoutiqueLayout, isEditorialLayout, isGroupBuyLayout, isShowcaseLayout, type HomeLayout } from "./home-layout";
+import { isBoutiqueLayout, isEditorialLayout, isGroupBuyLayout, isIntlLocalLayout, isShowcaseLayout, type HomeLayout } from "./home-layout";
 import {
   isGroupBuyProduct,
   slotProgress,
@@ -153,6 +153,7 @@ export function resolveHomeLayout(
   if (isBoutiqueLayout(configLayout)) return "boutique";
   if (isEditorialLayout(configLayout)) return "editorial";
   if (isShowcaseLayout(configLayout)) return "showcase";
+  if (isIntlLocalLayout(configLayout)) return "intl-local";
   if (isGroupBuyLayout(configLayout)) return groupBuyModule ? "groupbuy" : "classic";
   if (!entitled) return "classic";
   return configLayout === "classic" ? "classic" : "two-ways";

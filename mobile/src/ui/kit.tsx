@@ -64,7 +64,8 @@ export function Chips<K extends string>({
   onBand,
   label,
 }: {
-  options: ReadonlyArray<{ key: K; label: string }>;
+  /** `count` (optional) renders a small badge after the label when > 0. */
+  options: ReadonlyArray<{ key: K; label: string; count?: number }>;
   value: K;
   onChange: (k: K) => void;
   /** Rendered on the dark hero band. */
@@ -91,6 +92,7 @@ export function Chips<K extends string>({
             key={o.key}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            accessibilityLabel={o.count ? `${o.label}, ${o.count}` : o.label}
             onPress={() => {
               if (active) return;
               tap();
@@ -104,6 +106,7 @@ export function Chips<K extends string>({
           >
             <AppText variant="label" color={active ? activeFg : idle}>
               {o.label}
+              {o.count ? ` · ${o.count > 99 ? "99+" : o.count}` : ""}
             </AppText>
           </Pressable>
         );

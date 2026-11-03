@@ -95,6 +95,7 @@ const FORBIDDEN_KEYS = [
   "nav",
   "banner",
   "noticeModal",
+  "announcementPopup",
   // server-projected — recomputed per request, never stored
   "groupBuyCaps",
   "groupBuyGate",

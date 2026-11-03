@@ -79,6 +79,7 @@ type Edit = {
   price?: number;
   stock?: number | null;
   gbPrice?: number | null;
+  salePrice?: number | null;
   image?: string | null;
   kitSize?: number | null;
 };
@@ -126,6 +127,15 @@ function parseEdit(raw: unknown, position: number): Edit | VariationPlanError {
     edit.gbPrice = gbPrice.value > 0 ? gbPrice.value : null;
   }
 
+  const salePrice = readNumber(o.salePrice);
+  if (salePrice.kind === "invalid") return { error: `"${name}" has an unreadable sale price.` };
+  // 0 and null both mean "not on sale" — the option sells at its own price.
+  if (salePrice.kind === "clear") edit.salePrice = null;
+  if (salePrice.kind === "value") {
+    if (salePrice.value < 0) return { error: `"${name}" cannot have a negative sale price.` };
+    edit.salePrice = salePrice.value > 0 ? salePrice.value : null;
+  }
+
   const kitSize = readNumber(o.kitSize);
   if (kitSize.kind === "invalid") return { error: `"${name}" has an unreadable kit size.` };
   // 0 and null both mean "no kit size of its own" — the product's vialsPerKit applies.
@@ -166,6 +176,8 @@ function patch(current: Variation, edit: Edit): Variation {
   else if (edit.stock !== undefined) next.stock = edit.stock;
   if (edit.gbPrice === null) delete next.gbPrice;
   else if (edit.gbPrice !== undefined) next.gbPrice = edit.gbPrice;
+  if (edit.salePrice === null) delete next.salePrice;
+  else if (edit.salePrice !== undefined) next.salePrice = edit.salePrice;
   if (edit.image === null) delete next.image;
   else if (edit.image !== undefined) next.image = edit.image;
   if (edit.kitSize === null) delete next.kitSize;

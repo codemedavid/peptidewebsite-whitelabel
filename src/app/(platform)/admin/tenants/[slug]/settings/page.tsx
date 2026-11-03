@@ -51,6 +51,7 @@ export default async function TenantSettingsPage({
       initialMetaDescription={contact.metaDescription}
       initialRequireProofOfPayment={contact.requireProofOfPayment}
       initialCheckoutHideEmail={contact.checkoutHideEmail}
+      initialCheckoutWhatsapp={contact.checkoutWhatsapp}
       initialNoticeModalGranted={contact.noticeModalGranted}
       initialAdminFee={adminFee}
       adminFeeEntitled={adminFee.entitled}

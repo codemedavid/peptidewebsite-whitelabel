@@ -120,7 +120,8 @@ function brand(b: Partial<Brand>): Brand {
 console.log("\nhome-layout — the four selectable layouts");
 
 check("HOME_LAYOUTS carries editorial (and the later showcase) alongside the existing three", () => {
-  assert.deepEqual([...HOME_LAYOUTS], ["classic", "two-ways", "boutique", "editorial", "showcase"]);
+  // A prefix check: later layouts (groupbuy, intl-local, …) append after these.
+  assert.deepEqual(HOME_LAYOUTS.slice(0, 5), ["classic", "two-ways", "boutique", "editorial", "showcase"]);
 });
 
 check("isEditorialLayout matches the stored value exactly and fails closed", () => {

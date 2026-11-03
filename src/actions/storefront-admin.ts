@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeMethodMarkets } from "@/lib/storefront/intl-market";
 import { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { isDemoMode, getDemoBranding, saveDemoBranding } from "@/lib/demo/fixtures";
@@ -24,6 +25,7 @@ import { normalizeFaqGroups } from "@/lib/storefront/faq";
 import { normalizeCoaReports } from "@/lib/storefront/coa";
 import { normalizeReviews } from "@/lib/storefront/reviews";
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
+import { preparePopupForSave, validatePopup, normalizeAnnouncementPopup } from "@/lib/storefront/announcement-popup";
 import { normalizeTrackNote } from "@/lib/storefront/track-note";
 import { normalizeTimeline } from "@/lib/storefront/timeline";
 import { categoryImage } from "@/lib/storefront/categories";
@@ -194,6 +196,12 @@ function normalizeMethods(input: unknown): PaymentMethod[] {
       // Paid Access join-fee account (never offered at checkout); same
       // only-when-set rule so untagged methods keep their stored shape.
       ...(o.paidAccess === true ? { paidAccess: true } : {}),
+      // Dual-currency stores: which cart(s) offer the method. Only a
+      // non-default choice persists (absent = Local only).
+      ...((): { markets?: { local: boolean; international: boolean } } => {
+        const markets = normalizeMethodMarkets(o.markets);
+        return markets ? { markets } : {};
+      })(),
     };
   });
 }
@@ -849,6 +857,39 @@ export async function saveBannerAction(input: unknown): Promise<ActionResult> {
   const banner = normalizeBanner(input);
   const current = await readConfig(tenantId);
   const config = { ...current, banner };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true };
+}
+
+/**
+ * Persist the Announcement Pop-up (store admin → Announcement Pop-up) into
+ * branding.config.announcementPopup. Gated on the "popup" staff module. The
+ * payload is re-normalized, re-validated and re-versioned here, so a client can
+ * neither smuggle unsafe links/images nor pin a stale version.
+ */
+export async function saveAnnouncementPopupAction(input: unknown): Promise<ActionResult> {
+  const ctx = await requireStaffPermission("popup");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const draft = normalizeAnnouncementPopup(input);
+  const problems = validatePopup(draft);
+  if (problems.length > 0) return { error: problems[0].message };
+
+  const slug = await getTenantSlug();
+  const current = await readConfig(tenantId);
+  const config = { ...current, announcementPopup: preparePopupForSave(draft) };
 
   if (isDemoMode()) {
     saveDemoBranding(tenantId, { config });

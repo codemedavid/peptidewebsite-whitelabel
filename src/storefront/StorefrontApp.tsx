@@ -4,14 +4,16 @@
 // design prototype): header + footer persist across the home/sub-pages, while
 // #admin renders the password-gated store admin with its own chrome.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { StoreProvider, useStore } from "./store";
-import type { Brand, Product } from "./types";
+import type { Brand, Category, Product } from "./types";
 import { BRAND } from "./data";
 import { Header } from "./components/Header";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { NoticeModal } from "./components/NoticeModal";
+import { AnnouncementPopup } from "./components/AnnouncementPopup";
+import { isNoticeModalVisible } from "@/lib/storefront/notice-modal";
 import { StorePaused } from "./components/StorePaused";
 import { StoreClosedNotice } from "./components/StoreClosedNotice";
 // The fallback every code-split route below renders while its chunk downloads.
@@ -26,7 +28,14 @@ import { Catalog } from "./components/Catalog";
 import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
 import { buildCategoryTiles, normalizeAssurances } from "@/lib/storefront/boutique-home";
-import { isBoutiqueLayout, isEditorialLayout, isShowcaseLayout } from "@/lib/storefront/home-layout";
+import { isBoutiqueLayout, isEditorialLayout, isIntlLocalLayout, isShowcaseLayout } from "@/lib/storefront/home-layout";
+import { DEFAULT_INTL_LOCAL, type IntlLocalConfig } from "@/lib/storefront/intl-local/config";
+import { marketCatalog, type Market } from "@/lib/storefront/markets";
+import { buildFooterSocials, normalizeSocialHref } from "@/lib/storefront/footer-links";
+import { IlNavProvider, type IlNavHandlers } from "./components/intl-local/il-nav";
+import { IntlLocalStyle } from "./components/intl-local/il-style";
+import type { IlResolvedSocial } from "./components/intl-local/IntlLocalHeader";
+import { subscribeNewsletterAction } from "@/actions/intl-local";
 import { promiseBarVars } from "@/lib/storefront/showcase-home";
 import { Footer } from "./components/Footer";
 import { TrustStrip } from "./components/TrustStrip";
@@ -43,6 +52,7 @@ import {
   signOutStorefrontAdminAction,
 } from "@/actions/storefront-admin";
 import { redeemAppHandoffAction } from "@/actions/app-handoff";
+import { isAdminPageReload, readNavigationType } from "@/lib/auth/admin-refresh-logout";
 import { takeAppHandoff } from "./app-embed";
 import { TextColorsStyle } from "./components/TextColorsStyle";
 import { BrandStyle } from "./components/BrandStyle";
@@ -84,10 +94,17 @@ const ShowcasePromiseBar = dynamic(() => import("./components/ShowcasePromiseBar
 // the home above it is not code-split — a spinner where the nav should be is
 // worse than the few KB it costs the tenants who chose it.
 const EditorialRail = dynamic(() => import("./components/EditorialRail").then((m) => m.EditorialRail), { ssr: false });
+// Opt-in, fully owner-editable "Intl & Local" home (brand.homeLayout ===
+// "intl-local"). Its header, footer and contact button are CHROME on every
+// route, so like the editorial rail they load with no fallback.
+const IntlLocalHome = dynamic(() => import("./components/intl-local/IntlLocalHome").then((m) => m.IntlLocalHome), { ssr: false, loading: BrandPageLoader });
+const IntlLocalHeader = dynamic(() => import("./components/intl-local/IntlLocalHeader").then((m) => m.IntlLocalHeader), { ssr: false });
+const IntlLocalFooter = dynamic(() => import("./components/intl-local/IntlLocalFooter").then((m) => m.IntlLocalFooter), { ssr: false });
+const IntlLocalFab = dynamic(() => import("./components/intl-local/IntlLocalFooter").then((m) => m.IntlLocalFab), { ssr: false });
 const AdminLogin = dynamic(() => import("./admin/AdminLogin").then((m) => m.AdminLogin), { ssr: false, loading: BrandPageLoader });
 const AdminPage = dynamic(() => import("./admin/AdminPage").then((m) => m.AdminPage), { ssr: false, loading: BrandPageLoader });
 
-const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account", "articles", "assessment", "my-groupbuy"];
+const ROUTES = ["track", "faq", "coa", "protocols", "calculator", "reviews", "merchant", "groupbuy", "catalog", "admin", "order-confirmed", "account", "articles", "assessment", "my-groupbuy", "shop-local", "shop-international"];
 
 function pageFromHash(): string {
   if (typeof window === "undefined") return "home";
@@ -124,7 +141,7 @@ function Shell({
   initialProductKey?: string | null;
   initialProtocolKey?: string | null;
 }) {
-  const { brand, products, categories, cart, addToCart } = useStore();
+  const { brand, products, categories, cart, addToCart, cartCounts, setCartMarket } = useStore();
   const [category, setCategory] = useState("all");
   // "Explore GB #N" scope toggle — default OFF so the normal view is the full
   // catalog; opting in narrows it to the live round's products (presentation only).
@@ -142,6 +159,8 @@ function Shell({
   // verifyAdmin below.
   const [adminAuth, setAdminAuth] = useState<"checking" | "in" | "out">("out");
   const [cartOpen, setCartOpen] = useState(false);
+  // The Notice Modal was closed this page load — releases the announcement pop-up.
+  const [noticeClosed, setNoticeClosed] = useState(false);
   // Drives the top progress bar — fires immediately on any hash navigation so
   // users get instant visual feedback even before the JS chunk loads.
   const [navKey, setNavKey] = useState(0);
@@ -154,7 +173,29 @@ function Shell({
 
   // A toggled-off sub-page should behave as if it isn't there: treat its hash
   // as "home" so direct visits land on the storefront instead of a blank shell.
-  const activePage = page === "admin" || isPageVisible(brand, page) ? page : "home";
+  const visiblePage = page === "admin" || isPageVisible(brand, page) ? page : "home";
+  // Dual-currency (Intl & Local) stores have one shop page per market. On any
+  // other store those routes collapse to the ordinary shop / home, so a shared
+  // link can never land on an empty page.
+  const dual = brand.dualMarket === true && isIntlLocalLayout(brand.homeLayout);
+  const activePage =
+    !dual && visiblePage === "shop-local" ? "catalog" : !dual && visiblePage === "shop-international" ? "home" : visiblePage;
+  // Which market's shop is on screen. The plain catalog route (search, a
+  // category link) is the Local shop on a dual store.
+  const shopMarket: Market | null = !dual
+    ? null
+    : activePage === "shop-international"
+      ? "international"
+      : activePage === "shop-local" || activePage === "catalog"
+        ? "local"
+        : null;
+  // Both carts' units on a dual store; the one cart everywhere else.
+  const cartUnits = dual ? cartCounts.local + cartCounts.international : cart.length;
+  const openCart = () => {
+    // Open the cart of the shop the shopper is in; elsewhere keep the last one.
+    if (shopMarket) setCartMarket(shopMarket);
+    setCartOpen(true);
+  };
 
   // Exactly what the catalog grid renders — the boutique tiles are built from
   // this same list so a tile's count can never disagree with the shelf it opens.
@@ -175,11 +216,9 @@ function Shell({
     setProtocolKey((prev) => protocolKeyFromHash() ?? prev);
 
     // The admin gate is a REAL server session — always ask the server, never a
-    // cached client-side hint. Store-admin sessions are killed on every document
-    // load (middleware → lib/auth/admin-session-reset.ts), so the sessionStorage
-    // flag this used to trust optimistically would be wrong on exactly the case
-    // it existed for: it survives a refresh, the session doesn't. Trusting it
-    // could only flash the admin UI for a session the server had already ended.
+    // cached client-side hint. Refreshing the admin page ends that session (see
+    // below), so a sessionStorage flag — which survives a refresh — would be
+    // wrong on exactly the case it existed for.
     const verifyAdmin = () => {
       setAdminAuth("checking");
       // Inside the Pepweb app, a one-time handoff token signs this WebView in
@@ -190,7 +229,16 @@ function Shell({
         .then((ok) => setAdminAuth(ok ? "in" : "out"))
         .catch(() => setAdminAuth("out"));
     };
-    if (pageFromHash() === "admin") verifyAdmin();
+    if (pageFromHash() === "admin") {
+      // A refresh OF THE ADMIN PAGE signs the owner out (and only that — opening
+      // the shop in another tab no longer does; lib/auth/admin-refresh-logout.ts).
+      if (isAdminPageReload(readNavigationType(window.performance), window.location.hash)) {
+        setAdminAuth("out");
+        void signOutStorefrontAdminAction().catch(() => {});
+      } else {
+        verifyAdmin();
+      }
+    }
 
     const onHash = () => {
       const next = pageFromHash();
@@ -229,12 +277,24 @@ function Shell({
     void signOutStorefrontAdminAction().catch(() => {});
     goHome();
   };
+  // The session ended under the dashboard (expired, staff removed). Show the
+  // sign-in right here on #admin. This used to be logoutAdmin, which also sent
+  // the owner to the shop with no visible way back. Stable identity: AdminPage
+  // re-checks the session whenever this changes.
+  const adminSessionLost = useCallback(() => setAdminAuth("out"), []);
+  // "View website" opens the shop in its own tab and leaves the dashboard
+  // where it was — the owner's way back is just the tab they came from.
+  const viewSiteFromAdmin = () => {
+    window.open("/", "_blank", "noopener");
+  };
   const boutique = isBoutiqueLayout(brand.homeLayout);
   const editorial = isEditorialLayout(brand.homeLayout);
   const showcase = isShowcaseLayout(brand.homeLayout);
+  const intlLocal = isIntlLocalLayout(brand.homeLayout);
+  const ilConfig: IntlLocalConfig = brand.intlLocal ?? DEFAULT_INTL_LOCAL;
   // Every owner-selectable layout keeps the full grid off the home, so "go to
   // the catalog" is a ROUTE on each of them rather than a scroll down the home.
-  const catalogIsOwnScreen = boutique || editorial || showcase;
+  const catalogIsOwnScreen = boutique || editorial || showcase || intlLocal;
   // Group-buy-only store (on-hand hidden): the home IS the group buy, so the
   // separate #groupbuy page and the catalog would list the same round twice.
   const gbOnlyHome = isGroupBuyOnlyHome(brand);
@@ -320,6 +380,31 @@ function Shell({
     return target.kind === "none" ? undefined : targetHandler(target);
   })();
 
+  // Intl & Local wiring: one navigator for every menu item, card, button and
+  // footer link, and the social list the top bar and footer share.
+  const ilHandlers: IlNavHandlers = {
+    onRoute: goToRoute,
+    onHome: goHome,
+    onCatalog: (id) => {
+      setCategory(id || "all");
+      goToRoute("catalog");
+    },
+    onHomeScreen: activePage === "home",
+  };
+  const ilSocials: IlResolvedSocial[] = !intlLocal
+    ? []
+    : ilConfig.footer.useStoreSocials
+      ? buildFooterSocials({ ...brand, footerShowSocials: true }).map((s, i) => ({
+          id: `store-${i}`,
+          icon: s.icon,
+          href: s.href,
+          label: s.label || s.icon,
+        }))
+      : ilConfig.footer.socials.flatMap((s) => {
+          const href = normalizeSocialHref(s.url);
+          return href ? [{ id: s.id, icon: s.platform, href, label: s.platform }] : [];
+        });
+
   // Admin — password-gated, no site chrome (branding editor still available).
   if (activePage === "admin") {
     return (
@@ -328,7 +413,12 @@ function Shell({
         {adminAuth === "checking" ? (
           <BrandPageLoader />
         ) : adminAuth === "in" ? (
-          <AdminPage brand={brand} onLogout={logoutAdmin} onExitToSite={goHome} />
+          <AdminPage
+            brand={brand}
+            onLogout={logoutAdmin}
+            onSessionLost={adminSessionLost}
+            onExitToSite={viewSiteFromAdmin}
+          />
         ) : (
           <AdminLogin brand={brand} onSuccess={() => setAdminAuth("in")} />
         )}
@@ -345,7 +435,7 @@ function Shell({
   }
 
   return (
-    <>
+    <MaybeIlNav on={intlLocal} brand={brand} categories={categories} config={ilConfig} handlers={ilHandlers}>
       <TextColorsStyle textColors={brand.textColors} />
       {navKey > 0 && <div key={navKey} className="sf-nav-progress" />}
       {brand.showHeader !== false && editorial && (
@@ -369,7 +459,26 @@ function Shell({
         />
       )}
 
-      {brand.showHeader !== false && !editorial && (
+      {brand.showHeader !== false && intlLocal && (
+        <IntlLocalHeader
+          config={ilConfig}
+          storeName={brand.name}
+          storeLogoUrl={brand.logoUrl}
+          logoCurve={brand.logoCurve}
+          socials={ilSocials}
+          cartCount={cartUnits}
+          onCart={openCart}
+          onHome={goHome}
+          onSearch={(q) => {
+            setQuery(q);
+            // Search the shop the shopper is in (International stays International).
+            if (shopMarket === "international") window.location.hash = "shop-international";
+            else goToRoute("catalog");
+          }}
+        />
+      )}
+
+      {brand.showHeader !== false && !editorial && !intlLocal && (
         <Header
           brand={membersOnly ? { ...brand, ctaLabel: accessCta } : brand}
           cartCount={cart.length}
@@ -405,7 +514,16 @@ function Shell({
 
       {/* Per-tenant notice/disclaimer — pops on every visit when the operator has
           granted it AND the owner enabled it (gate lives in the modal). */}
-      <NoticeModal brand={brand} />
+      <NoticeModal brand={brand} onDismiss={() => setNoticeClosed(true)} />
+
+      {/* Owner's announcement / new-drop / promo pop-up. Waits for the notice
+          above so two dialogs never stack. */}
+      <AnnouncementPopup
+        brand={brand}
+        products={products}
+        blocked={isNoticeModalVisible(brand.noticeModal) && !noticeClosed}
+        onRoute={goToRoute}
+      />
 
       {activePage === "track" && <TrackOrderPage brand={brand} onBack={goHome} />}
       {activePage === "order-confirmed" && <OrderConfirmedPage brand={brand} onBack={goHome} />}
@@ -529,6 +647,29 @@ function Shell({
         />
       )}
 
+      {(activePage === "home" || activePage === "catalog" || shopMarket !== null) && intlLocal && (
+        <IntlLocalHome
+          // A shared product link opens its quick view, which lives on the
+          // shop screen — so a product link lands there, not on the home.
+          view={activePage === "home" && !productKey ? "home" : "catalog"}
+          brand={brand}
+          config={ilConfig}
+          market={shopMarket}
+          // Each market lists only what it sells, at its own prices
+          // (lib/storefront/markets — the USD view for International).
+          products={shopMarket ? marketCatalog(visibleProducts, shopMarket) : visibleProducts}
+          category={category}
+          query={query}
+          onQueryChange={setQuery}
+          onCategoryChange={setCategory}
+          onAddToCart={addToCart}
+          openProductSlug={productKey}
+          gbScope={gbScope}
+          onGbScope={setGbScope}
+          onSubscribe={subscribeNewsletterAction}
+        />
+      )}
+
       {(activePage === "home" || activePage === "catalog") && !catalogIsOwnScreen && !gbOnlyHome && brand.homeLayout === "two-ways" && (
         <TwoWaysHome
           brand={brand}
@@ -589,21 +730,57 @@ function Shell({
         </>
       )}
 
-      {brand.showFooter !== false && <Footer brand={brand} />}
+      {brand.showFooter !== false && !intlLocal && <Footer brand={brand} />}
+      {brand.showFooter !== false && intlLocal && (
+        <IntlLocalFooter footer={ilConfig.footer} storeName={brand.name} socials={ilSocials} />
+      )}
+      {intlLocal && (
+        <IntlLocalFab
+          fab={ilConfig.fab}
+          isHidden={cartOpen}
+          isRaised={cartUnits > 0 && brand.headerShowCart !== false}
+        />
+      )}
 
-      {cart.length > 0 && brand.headerShowCart !== false && (
-        <button className="cart-fab" aria-label={`Cart (${cart.length})`} onClick={() => setCartOpen(true)}>
+      {cartUnits > 0 && brand.headerShowCart !== false && (
+        <button className="cart-fab" aria-label={`Cart (${cartUnits})`} onClick={openCart}>
           <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={22} height={22}>
             <circle cx="9" cy="21" r="1" />
             <circle cx="20" cy="21" r="1" />
             <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
           </svg>
-          <span className="count">{cart.length}</span>
+          <span className="count">{cartUnits}</span>
         </button>
       )}
 
       <CartCheckout open={cartOpen} onClose={() => setCartOpen(false)} />
-    </>
+    </MaybeIlNav>
+  );
+}
+
+/** The Intl & Local navigator + theme around the storefront tree — and a
+ *  plain pass-through for every other layout. */
+function MaybeIlNav({
+  on,
+  brand,
+  categories,
+  config,
+  handlers,
+  children,
+}: {
+  on: boolean;
+  brand: Brand;
+  categories: Category[];
+  config: IntlLocalConfig;
+  handlers: IlNavHandlers;
+  children: React.ReactNode;
+}) {
+  if (!on) return <>{children}</>;
+  return (
+    <IlNavProvider brand={brand} categories={categories} infoPages={config.infoPages} handlers={handlers}>
+      <IntlLocalStyle theme={config.theme} scope='.sf-root[data-sf-home="intl-local"]' />
+      {children}
+    </IlNavProvider>
   );
 }
 
@@ -613,6 +790,7 @@ export function StorefrontApp({
   tenantKey,
   initialProduct,
   initialProtocol,
+  children,
 }: {
   brand?: Brand;
   products?: Product[];
@@ -625,6 +803,9 @@ export function StorefrontApp({
   /** Link key of the protocol the /protocols/<key> server route was asked for,
    *  so the Protocols page opens on that protocol. Undefined everywhere else. */
   initialProtocol?: string | null;
+  /** Rendered inside the store, after the storefront. Only the platform
+   *  admin's live-preview frame uses it, to push draft edits in via setTweak. */
+  children?: React.ReactNode;
 }) {
   return (
     <div
@@ -642,12 +823,15 @@ export function StorefrontApp({
             ? "editorial"
             : isShowcaseLayout(brand?.homeLayout)
               ? "showcase"
-              : undefined
+              : isIntlLocalLayout(brand?.homeLayout)
+                ? "intl-local"
+                : undefined
       }
     >
       <BrandStyle brand={brand} />
       <StoreProvider brand={brand} products={products} tenantKey={tenantKey}>
         <Shell initialProductKey={initialProduct} initialProtocolKey={initialProtocol} />
+        {children}
       </StoreProvider>
     </div>
   );

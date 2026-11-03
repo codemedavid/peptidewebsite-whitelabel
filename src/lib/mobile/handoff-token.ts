@@ -5,8 +5,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * /api/mobile/v1/admin/handoff for a token, opens the store's `/#admin` in a
  * WebView and passes the token in by injected script (never the URL). The
  * storefront trades it for the ordinary `sf_admin_session` cookie through
- * redeemAppHandoffAction — a Server Action, so the document-load session reset
- * (lib/auth/admin-session-reset.ts) never sees it.
+ * redeemAppHandoffAction — a Server Action, so the refresh sign-out
+ * (lib/auth/admin-refresh-logout.ts) never sees it.
  *
  * The token only NAMES a mobile session; it grants nothing on its own. The
  * redeemer re-loads that session and re-runs the app's own checks (live, not

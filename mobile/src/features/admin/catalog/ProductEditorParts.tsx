@@ -242,6 +242,17 @@ export function PhotoStrip({
 
 // ── Variations ───────────────────────────────────────────────────────────────
 
+/** What the storefront will do with a typed sale price (mirrors the website's
+ *  activeVariationSale): null when blank, a warning when it would be ignored. */
+function toSaleHint(price: string, sale: string): string | null {
+  const s = Number(sale);
+  if (!sale.trim() || !(s > 0)) return null;
+  const p = Number(price) || 0;
+  if (!(p > 0) || s >= p) return "Sale price must be lower than the price to take effect.";
+  const off = Math.round(((p - s) / p) * 100);
+  return off >= 1 ? `On sale — ${off}% off. Shoppers see the price struck through.` : "On sale. Shoppers see the price struck through.";
+}
+
 export function VariationsEditor({
   items,
   update,
@@ -372,6 +383,19 @@ export function VariationsEditor({
               />
             </View>
           </View>
+          <Field
+            label={`Sale price (${currency})`}
+            value={it.salePrice}
+            onChangeText={(v) => patch(i, { salePrice: numeric(v) })}
+            keyboardType="decimal-pad"
+            placeholder="Optional — leave blank for no sale"
+            accessibilityHint="A discounted price for this option. It only applies when it is lower than the price."
+          />
+          {toSaleHint(it.price, it.salePrice) ? (
+            <AppText variant="caption" color="muted">
+              {toSaleHint(it.price, it.salePrice)}
+            </AppText>
+          ) : null}
           <View style={{ gap: SPACE.xs }}>
             <AppText variant="caption" color="muted">
               {it.image || it.extraImages?.length ? "More photos of this option — tap one to move, set as main or remove." : "Add photos — the first becomes this option's main photo."}

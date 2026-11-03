@@ -14,7 +14,7 @@ import { resolveActor, storeAvailability } from "@/lib/mobile/auth";
  * (lib/mobile/handoff-token.ts). The app's WebView injects a 60s token; the
  * booting SPA (StorefrontApp.verifyAdmin) trades it here for the ordinary
  * `sf_admin_session` cookie. Being a Server Action, this request is never a
- * document load, so admin-session-reset.ts leaves the fresh cookie alone.
+ * page reload, so the refresh sign-out (admin-refresh-logout.ts) never fires.
  *
  * The token only NAMES a mobile session. Everything the app API checks on each
  * call is re-checked here against the database before a cookie is issued:

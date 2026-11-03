@@ -192,7 +192,9 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
-export type OrderFilterKey = "new" | "to-fulfil" | "shipped" | "all";
+/** One tab per real status, plus "all". "to-fulfil" (confirmed + processing +
+ *  ready) is kept as an alias for the Home "To ship" tile and older app builds. */
+export type OrderFilterKey = OrderStatus | "to-fulfil" | "all";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -293,6 +295,9 @@ export type OrderListResponse = {
   orders: OrderSummary[];
   nextCursor: string | null;
   counts: { new: number; toFulfil: number };
+  /** Active (non-trashed) orders per status, for the per-status tabs. Optional
+   *  so an older server's response still type-checks in a newer app. */
+  statusCounts?: Partial<Record<OrderStatus, number>>;
   /** First page only (null on later pages): rounds with orders in this view, live first. */
   rounds: OrderRoundFacet[] | null;
 };
@@ -1188,3 +1193,54 @@ export type FlagActionRequest = { action: "restore" | "confirm" | "reopen"; teac
 export type FlagActionResult = { status: FlagStatus; exampleId?: string | null };
 /** ban = out of the community AND the account can't sign in again; unban reverses both. */
 export type MemberSanctionRequest = { action: "mute" | "unmute" | "ban" | "unban" };
+
+// ── Live now (who is on the store this minute) ───────────────────────────────
+// lib/presence/live.ts. Website visitors are anonymous; a customer signed in to
+// the app shows by name. Places are city-level, from the request's IP headers.
+
+export type LiveSurface = "web" | "app";
+/** The furthest a visitor has got, in funnel order. */
+export type LiveStage = "browsing" | "product" | "cart" | "checkout";
+
+/** POST /presence (the customer app). The website posts the same shape plus a visitorId. */
+export type PresenceBeatRequest = {
+  stage: LiveStage;
+  /** Product id (or link key) on screen, for the product stage. */
+  productRef?: string | null;
+  cartItems?: number;
+  /** The visitor left (app backgrounded, tab hidden): drop them right away. */
+  leave?: boolean;
+};
+
+export type LiveVisitor = {
+  id: string;
+  surface: LiveSurface;
+  stage: LiveStage;
+  /** "Davao City" — null when the request carried no location. */
+  place: string | null;
+  /** Signed-in app customer's name; null = anonymous website visitor. */
+  who: string | null;
+  productName: string | null;
+  cartItems: number;
+  /** "₱3,400.00" when the website reported a cart value. */
+  cartLabel: string | null;
+  /** Seconds since their last heartbeat. */
+  lastSeenSecs: number;
+  /** Seconds since they arrived. */
+  onSiteSecs: number;
+};
+
+export type LiveResponse = {
+  total: number;
+  web: number;
+  app: number;
+  stages: Record<LiveStage, number>;
+  /** Checkout first, then cart, product, browsing — capped for the phone. */
+  visitors: LiveVisitor[];
+  /** Live visitors beyond the feed cap. */
+  more: number;
+  places: RankedRow[];
+  /** Distinct visitors seen in the last 24 hours. */
+  last24h: number;
+  asOf: string;
+};

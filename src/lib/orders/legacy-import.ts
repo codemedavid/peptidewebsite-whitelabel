@@ -498,3 +498,64 @@ export function mapLegacyOrder(row: LegacyOrderRow, opts: MapLegacyOrderOptions)
     imported: true,
   };
 }
+
+// ── Re-pulling a store that is still selling on its old site ─────────────────
+
+/** The columns of an already-imported row that a re-pull may refresh. */
+export interface LegacySyncCurrent {
+  status: string;
+  paymentStatus: string;
+  trackingNumber: string;
+  courier: string;
+  statusHistory: unknown;
+}
+
+export interface LegacySyncPatch {
+  status: OrderStatus;
+  paymentStatus: "pending" | "paid";
+  trackingNumber: string;
+  courier: string;
+  statusHistory: OrderStatusEvent[];
+}
+
+/** Max events the importer itself ever writes: placed, then where it ended up. */
+const IMPORT_HISTORY_MAX = 2;
+
+/**
+ * True while a row's history is still exactly the shape the importer writes
+ * (`new`, then at most one final status, ending on the row's status). Every
+ * status change made in the whitelabel admin appends an event, so anything else
+ * means someone worked the order HERE — and the old site must not overwrite it.
+ */
+function isUntouchedImport(current: LegacySyncCurrent): boolean {
+  const h = current.statusHistory;
+  if (!Array.isArray(h) || h.length === 0 || h.length > IMPORT_HISTORY_MAX) return false;
+  const first = h[0] as { status?: unknown } | null;
+  const last = h[h.length - 1] as { status?: unknown } | null;
+  return first?.status === "new" && last?.status === current.status;
+}
+
+/**
+ * What a re-pull should write onto an already-imported order, or null when the
+ * row was edited here or nothing changed. Blank legacy tracking/courier never
+ * wipes a value we hold. Stock is unaffected: the row stays `imported`.
+ */
+export function planLegacyStatusSync(
+  current: LegacySyncCurrent,
+  fresh: ImportedOrder,
+): LegacySyncPatch | null {
+  if (!isUntouchedImport(current)) return null;
+  const patch: LegacySyncPatch = {
+    status: fresh.status,
+    paymentStatus: fresh.paymentStatus,
+    trackingNumber: fresh.trackingNumber || current.trackingNumber,
+    courier: fresh.courier || current.courier,
+    statusHistory: fresh.statusHistory,
+  };
+  const unchanged =
+    patch.status === current.status &&
+    patch.paymentStatus === current.paymentStatus &&
+    patch.trackingNumber === current.trackingNumber &&
+    patch.courier === current.courier;
+  return unchanged ? null : patch;
+}

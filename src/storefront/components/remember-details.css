@@ -64,6 +64,13 @@
 .sf-root .sf-cart__saved-edit:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .sf-root .sf-cart__saved-name { margin: 4px 0 0; font-size: 16px; font-weight: 700; color: var(--brand-text); }
 .sf-root .sf-cart__saved-line { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--brand-text-muted); overflow-wrap: anywhere; }
+/* A returning group-buy member: "already paid" before they read the total. */
+.sf-root .sf-cart__saved-welcome {
+  margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
+  font-size: 13px; font-weight: 600; line-height: 1.45;
+  color: color-mix(in oklab, var(--brand-success, #1F8A5B) 80%, var(--brand-text));
+  background: color-mix(in oklab, var(--brand-success, #1F8A5B) 12%, var(--brand-surface));
+}
 .sf-root .sf-cart__saved .sf-cart__remember-forget { align-self: flex-start; margin-top: 6px; font-size: 12.5px; }
 
 /* Admin-fee line while the server checks "already paid this round"

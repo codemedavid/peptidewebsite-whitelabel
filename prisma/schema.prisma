@@ -119,6 +119,7 @@ model Tenant {
   // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
   communityMembers         CommunityMember[]
   accountProfiles          AccountProfile[]
+  livePresence             LivePresence[]
   communityChannels        CommunityChannel[]
   communityTopics          CommunityTopic[]
   communityConversations   CommunityConversation[]
@@ -537,6 +538,10 @@ model StorefrontOrder {
   // buyer asked for, and would republish the buyer's words on a page reachable
   // with only an order number. Never patched by the admin (see cleanPatch).
   customerNote   String   @default("")
+  // The currency the order was charged in ("USD", "PHP"…), server-stamped for
+  // dual-currency (Intl & Local) stores. "" = the store's own currency — every
+  // order placed before dual markets. See lib/storefront/markets.ts.
+  currency       String   @default("")
   placedAt       DateTime @default(now()) // the storefront-facing order date
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt
@@ -1252,6 +1257,35 @@ model AccountProfile {
 
   @@unique([tenantId, subject])
   @@map("account_profiles")
+}
+
+// "Live now": one row per visitor currently (or recently) on the store — the
+// website or the customer app (lib/presence/live.ts). A heartbeat upserts it
+// every 30s; the admin's Live screen reads rows seen in the last 75s. City-level
+// location only, from the platform's IP headers — the IP itself is never kept.
+// Rows older than 24h are pruned. surface: web | app ·
+// stage: browsing | product | cart | checkout.
+model LivePresence {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visitorId   String
+  surface     String
+  stage       String   @default("browsing")
+  productRef  String?
+  cartItems   Int      @default(0)
+  cartValue   Float    @default(0)
+  currency    String?
+  customerId  String?
+  city        String?
+  region      String?
+  country     String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([tenantId, visitorId])
+  @@index([tenantId, lastSeenAt])
+  @@map("live_presence")
 }
 
 // A store owner or staff member asked to delete their account from the app

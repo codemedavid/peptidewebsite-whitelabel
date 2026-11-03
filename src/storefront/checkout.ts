@@ -9,7 +9,7 @@ import type { Brand, ContactChannel, ContactChannelType, PaymentMethod, Product 
 import { instagramDmUrl } from "@/lib/storefront/contact-channels";
 import { isGroupBuyProduct, groupBuyLine, isInGroupBuyScope, type GroupBuyPriceScope } from "@/lib/storefront/two-ways";
 import { buildProductOptions, hasDoseToken } from "@/lib/storefront/variations";
-import { effectiveBasePrice } from "@/lib/storefront/sale";
+import { activeVariationSale, effectiveBasePrice } from "@/lib/storefront/sale";
 import {
   RESELLER_MIN_QTY,
   parentProductId,
@@ -37,6 +37,13 @@ export type CheckoutCustomer = {
   city: string;
   province: string;
   postal: string;
+  /** International (USD) cart only — the Local checkout ships domestically. */
+  country?: string;
+  /** Only on stores that ask for it (Brand.checkoutWhatsapp). */
+  whatsapp?: string;
+  /** The name the buyer shows on WhatsApp, so the owner can find the chat
+   *  (asked together with `whatsapp`). */
+  whatsappName?: string;
 };
 
 export const EMPTY_CUSTOMER: CheckoutCustomer = {
@@ -91,18 +98,24 @@ export function variationEntryId(productId: string, variationName: string): stri
 
 export function makeVariationEntry(
   product: Product,
-  variation: { name: string; price: number; gbPrice?: number },
+  variation: { name: string; price: number; gbPrice?: number; salePrice?: number },
 ): Product {
   const gbPrice = Math.max(0, Number(variation.gbPrice) || 0);
+  const price = Math.max(0, Number(variation.price) || 0);
+  // The BASE product's markdown never reaches an option — but the option's OWN
+  // sale price does. It rides the clone as the ordinary discount fields, so
+  // effectiveBasePrice/unitPrice (cart, server re-price, app shop) charge it
+  // with no second copy of the rule.
+  const sale = activeVariationSale({ price, salePrice: variation.salePrice });
   return {
     ...product,
     id: variationEntryId(product.id, variation.name),
     name: `${product.name} — ${variation.name}`,
-    price: Math.max(0, Number(variation.price) || 0),
+    price,
     variantOf: product.id,
     variantName: variation.name,
-    discountEnabled: false,
-    discountPrice: 0,
+    discountEnabled: sale !== null,
+    discountPrice: sale ?? 0,
     reseller: undefined,
     // ...but `wholesale` IS carried over, deliberately. The MOQ and wholesale
     // price belong to the PARENT product and every option shares them, which is
@@ -509,6 +522,8 @@ export function buildOrderMessage(
     // Blank when the store hides the Email field (checkoutHideEmail).
     ...(customer.email.trim() ? [`Email: ${customer.email}`] : []),
     `Phone: ${customer.phone}`,
+    ...(customer.whatsappName?.trim() ? [`WhatsApp name: ${customer.whatsappName.trim()}`] : []),
+    ...(customer.whatsapp?.trim() ? [`WhatsApp: ${customer.whatsapp.trim()}`] : []),
     `Ship to: ${ship || "—"}`,
     ...noteLines,
     ...paymentLines,

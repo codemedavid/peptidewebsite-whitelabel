@@ -13,7 +13,7 @@ import type { AdminBrand } from "@/features/admin/bridge";
 
 export type Category = { id: string; label: string };
 
-export type Variation = { name: string; price: number; stock?: number; gbPrice?: number; image?: string; extraImages?: string[] };
+export type Variation = { name: string; price: number; stock?: number; gbPrice?: number; salePrice?: number; image?: string; extraImages?: string[]; available?: boolean };
 
 /** A product exactly as listProductsAction / saveProductAction return it. */
 export type CatalogProduct = {

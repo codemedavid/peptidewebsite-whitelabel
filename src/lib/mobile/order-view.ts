@@ -42,11 +42,35 @@ export const ORDER_FILTERS: ReadonlyArray<{
   label: string;
   statuses: OrderStatus[] | null;
 }> = [
+  // One tab per real status (owner request 2026-11-03: "1 panel for each").
   { key: "new", label: "New", statuses: ["new"] },
-  { key: "to-fulfil", label: "To fulfil", statuses: ["confirmed", "processing", "ready"] },
-  { key: "shipped", label: "Shipped", statuses: ["shipped", "delivered"] },
+  { key: "confirmed", label: "Confirmed", statuses: ["confirmed"] },
+  { key: "processing", label: "Processing", statuses: ["processing"] },
+  { key: "ready", label: "Ready to ship", statuses: ["ready"] },
+  { key: "shipped", label: "Shipped", statuses: ["shipped"] },
+  { key: "delivered", label: "Delivered", statuses: ["delivered"] },
+  { key: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
   { key: "all", label: "All", statuses: null },
+  // Alias kept for the Home "To ship" tile and older app builds.
+  { key: "to-fulfil", label: "To fulfil", statuses: ["confirmed", "processing", "ready"] },
 ];
+
+/** Every filter key the API accepts. */
+export const ORDER_FILTER_KEYS: readonly OrderFilterKey[] = ORDER_FILTERS.map((f) => f.key);
+
+/** Per-status counts from one grouped count (statuses outside the seven are ignored). */
+export function statusCountsFrom(
+  groups: ReadonlyArray<{ status: string; count: number }>,
+): Partial<Record<OrderStatus, number>> {
+  const out: Partial<Record<OrderStatus, number>> = {};
+  for (const g of groups) {
+    if ((ORDER_STATUSES as readonly string[]).includes(g.status)) {
+      const k = g.status as OrderStatus;
+      out[k] = (out[k] ?? 0) + g.count;
+    }
+  }
+  return out;
+}
 
 /** The statuses a filter selects; null = no status filter (all, or unknown key). */
 export function statusesForFilter(key: unknown): OrderStatus[] | null {

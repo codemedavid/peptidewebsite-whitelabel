@@ -12,6 +12,8 @@ import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
 import "@/storefront/editorial.css";
 import "@/storefront/showcase.css";
+import "@/storefront/section-background.css";
+import "@/storefront/intl-local.css";
 import { StoreProvider } from "@/storefront/store";
 import type { Brand } from "@/storefront/types";
 import { fontStack } from "@/lib/theme/tokens";

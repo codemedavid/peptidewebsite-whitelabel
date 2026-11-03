@@ -9,6 +9,7 @@ import { effectiveStock, productOutOfStock } from "@/lib/storefront/inventory";
 import { isMadeToOrder, MADE_TO_ORDER_LABEL } from "@/lib/storefront/made-to-order";
 import { percentOff, saleBadgeLabel } from "@/lib/storefront/sale";
 import { buildProductOptions } from "@/lib/storefront/variations";
+import { listedVariations } from "@/lib/storefront/variation-availability";
 import { normalizeStoreStatus, STORE_CLOSED_BLOCK_MESSAGE } from "@/lib/storefront/store-status";
 import { makeVariationEntry, unitPrice } from "@/storefront/checkout";
 import { SEED_CATEGORIES } from "@/storefront/data";
@@ -96,7 +97,8 @@ export function toShopProduct(p: Product, ctx: MapContext): ShopProduct {
     ...(badge ? { badge } : {}),
     isGroupBuy: isGroupBuyProduct(p) && isInGroupBuyScope(p.id, ctx.scope),
     baseSelectable: options.length === 0 || options.some((o) => !o.variation),
-    variations: (p.variations ?? []).map((v) => toVariation(p, v, ctx)),
+    // Options the owner switched off never reach the app's picker.
+    variations: listedVariations(p.variations).map((v) => toVariation(p, v, ctx)),
   };
 }
 

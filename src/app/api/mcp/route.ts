@@ -239,6 +239,8 @@ const PRODUCT_SCHEMA = {
           price: { type: "number" },
           stock: { type: "number" },
           gbPrice: { type: "number" },
+          // This option's own sale price (below its price = on sale; 0/absent = not).
+          salePrice: { type: "number" },
           // Vials per supplier kit for this option (Bunuan/Ligwak kits are per variation).
           kitSize: { type: "number" },
           // Hosted http(s) photo for this option — the connector can set the
@@ -408,6 +410,11 @@ const VARIATION_EDIT_SCHEMA = {
       type: "number",
       description:
         "This option's own group-buy price. Only used on group-buy products. 0 or null means the option has no group price and sells at its own price.",
+    },
+    salePrice: {
+      type: "number",
+      description:
+        "This option's own sale (discounted) price. Must be below the option's price to take effect; the storefront then shows it struck-through against the price. 0 or null takes the option off sale.",
     },
     kitSize: {
       type: "number",

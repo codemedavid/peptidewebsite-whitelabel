@@ -1,5 +1,7 @@
 "use server";
 
+import { normalizeIntlLocalConfig } from "@/lib/storefront/intl-local/normalize";
+import { normalizeIntlMarket } from "@/lib/storefront/intl-market";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -156,6 +158,18 @@ export async function saveBranding(
     select: { id: true },
   });
   if (!tenant) return { error: `Tenant not found: ${data.slug}` };
+
+  // The Intl & Local editor rides this save in the platform admin. Its blobs are
+  // coerced through the SAME normalizers the store admin's save uses, so an
+  // operator save can never store an unsafe link, colour or image source.
+  if (data.config) {
+    const cfg = data.config as Record<string, unknown>;
+    data.config = {
+      ...cfg,
+      ...(cfg.intlLocal !== undefined ? { intlLocal: normalizeIntlLocalConfig(cfg.intlLocal) } : {}),
+      ...(cfg.intlMarket !== undefined ? { intlMarket: normalizeIntlMarket(cfg.intlMarket) } : {}),
+    };
+  }
 
   await prisma.branding.upsert({
     where: { tenantId: tenant.id },

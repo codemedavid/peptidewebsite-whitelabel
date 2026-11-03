@@ -54,6 +54,7 @@ import {
   mapLegacyOrder,
   importOrderNumber,
   legacyOrderRowFromJson,
+  planLegacyStatusSync,
   type LegacyCatalogProduct,
 } from "../src/lib/orders/legacy-import";
 import { planStatusChange, inventoryMove } from "../src/lib/storefront/order-status";
@@ -697,6 +698,78 @@ check("defaults are unchanged for dump imports: no proof, note → shipping", ()
   assert.equal(legacy.paymentProofUrl, null);
   assert.equal(legacy.shippingNote, "Leave at the guard house");
   assert.equal(legacy.customerNote, "");
+});
+
+// ─────────────── status sync (re-pull from a still-live old store) ───────────
+// A store that keeps selling on its old site while it migrates moves orders on
+// (confirmed → delivered) AFTER the first import. A re-run must carry those
+// moves onto rows nobody touched here — and never overwrite an owner's edit.
+
+const SYNC_PLACED = "2026-10-01T10:00:00.000Z";
+const SYNC_TOUCHED = "2026-10-02T09:00:00.000Z";
+const syncFresh = (over: Partial<ReturnType<typeof mapLegacyOrder>> = {}) => ({
+  ...mapLegacyOrder(J, { index: PEPPY_INDEX, orderNumber: "S-1", notesAs: "customer" }),
+  status: "delivered" as const,
+  paymentStatus: "paid" as const,
+  trackingNumber: "LM-123",
+  courier: "LALAMOVE",
+  statusHistory: [
+    { status: "new" as const, at: SYNC_PLACED },
+    { status: "delivered" as const, at: "2026-10-05T12:00:00.000Z" },
+  ],
+  ...over,
+});
+const asImported = {
+  status: "confirmed",
+  paymentStatus: "paid",
+  trackingNumber: "",
+  courier: "LALAMOVE",
+  statusHistory: [
+    { status: "new", at: SYNC_PLACED },
+    { status: "confirmed", at: SYNC_TOUCHED },
+  ] as unknown,
+};
+
+check("sync: an untouched imported row takes the old store's newer status", () => {
+  const patch = planLegacyStatusSync(asImported, syncFresh());
+  assert.ok(patch);
+  assert.equal(patch.status, "delivered");
+  assert.equal(patch.trackingNumber, "LM-123");
+  assert.deepEqual(patch.statusHistory.map((e) => e.status), ["new", "delivered"]);
+});
+
+check("sync: nothing to change → null (re-runs are no-ops)", () => {
+  const fresh = syncFresh();
+  const same = { ...asImported, status: "delivered", trackingNumber: "LM-123", statusHistory: fresh.statusHistory };
+  assert.equal(planLegacyStatusSync(same, fresh), null);
+});
+
+check("sync: a row the owner re-statused HERE is left alone", () => {
+  const edited = {
+    ...asImported,
+    status: "cancelled",
+    statusHistory: [
+      { status: "new", at: SYNC_PLACED },
+      { status: "confirmed", at: SYNC_TOUCHED },
+      { status: "cancelled", at: "2026-10-03T08:00:00.000Z" },
+    ],
+  };
+  assert.equal(planLegacyStatusSync(edited, syncFresh()), null);
+});
+
+check("sync: a history that does not match the row's status is treated as edited", () => {
+  assert.equal(planLegacyStatusSync({ ...asImported, status: "shipped" }, syncFresh()), null);
+  assert.equal(planLegacyStatusSync({ ...asImported, statusHistory: "garbage" }, syncFresh()), null);
+});
+
+check("sync: a blank legacy tracking/courier never wipes ours", () => {
+  const patch = planLegacyStatusSync(
+    { ...asImported, trackingNumber: "KEEP-1", courier: "JNT" },
+    syncFresh({ trackingNumber: "", courier: "" }),
+  );
+  assert.ok(patch);
+  assert.equal(patch.trackingNumber, "KEEP-1");
+  assert.equal(patch.courier, "JNT");
 });
 
 // ──────────────────────────── summary ───────────────────────────────────────

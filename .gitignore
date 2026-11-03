@@ -31,3 +31,6 @@ inspiration/
 # local build output + raw video assets (too large for git)
 .next-*/
 videos/
+
+# Local scratch from agent sessions (member/order dumps, build output)
+/private/

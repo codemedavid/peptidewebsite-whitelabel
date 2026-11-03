@@ -40,14 +40,18 @@ const FIELD_MAX: Record<keyof CheckoutCustomer, number> = {
   name: 120,
   email: 160,
   phone: 40,
+  whatsapp: 40,
+  whatsappName: 120,
   address: 300,
   barangay: 120,
+  country: 80,
   city: 120,
   province: 120,
   postal: 20,
 };
 
 const FIELD_KEYS = Object.keys(FIELD_MAX) as (keyof CheckoutCustomer)[];
+const OPTIONAL_KEYS: ReadonlySet<keyof CheckoutCustomer> = new Set(["country", "whatsapp", "whatsappName"]);
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
@@ -65,7 +69,13 @@ export function sanitizeSavedDetails(raw: unknown): CheckoutCustomer | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const source = raw as Record<string, unknown>;
   const out = Object.fromEntries(
-    FIELD_KEYS.map((key) => [key, cleanField(source[key], FIELD_MAX[key])]),
+    FIELD_KEYS.flatMap((key) => {
+      const value = cleanField(source[key], FIELD_MAX[key]);
+      // `country` (International carts only) and `whatsapp` (stores that ask
+      // for it) are optional: absent, not "", so everyone else's saved details
+      // keep exactly the shape they always had.
+      return OPTIONAL_KEYS.has(key) && !value ? [] : [[key, value]];
+    }),
   ) as CheckoutCustomer;
   return FIELD_KEYS.some((key) => out[key]) ? out : null;
 }

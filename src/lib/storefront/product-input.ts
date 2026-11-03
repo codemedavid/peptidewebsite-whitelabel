@@ -8,6 +8,7 @@
 // `normalizeProductInput → productToDbWrite` can be asserted end to end without
 // a DB or a session (see scripts/test-product-add-gates.ts).
 
+import { normalizeProductMarket, positivePrice } from "./markets";
 import { normalizeVialsPerKit } from "@/lib/storefront/gb-moq-kits";
 import { toProductClass } from "@/lib/storefront/product-class";
 import { normalizeHostedImageUrl } from "@/lib/storefront/product-image";
@@ -68,14 +69,22 @@ export function normalizeProductInput(input: unknown): Product {
       const includes = cleanIncludes(x.includes);
       // The option's own kit size (Bunuan/Ligwak) — same trap: name it or a save drops it.
       const kitSize = normalizeVialsPerKit(x.kitSize);
+      // The option's International (USD) price — same trap: name it or a save drops it.
+      const usdPrice = positivePrice(x.usdPrice);
+      // The option's own sale price — same trap: name it or a save drops it.
+      const salePrice = positivePrice(x.salePrice);
       return {
         ...base,
         ...(tracked ? { stock: Math.max(0, Math.round(num(raw))) } : {}),
         ...(gb > 0 ? { gbPrice: gb } : {}),
+        ...(salePrice ? { salePrice } : {}),
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
         ...(includes ? { includes } : {}),
         ...(kitSize ? { kitSize } : {}),
+        ...(usdPrice ? { usdPrice } : {}),
+        // Option off sale — same trap: name it or a save puts it back on sale.
+        ...(x.available === false ? { available: false } : {}),
       };
     })
     .filter((v) => v.name);
@@ -124,6 +133,12 @@ export function normalizeProductInput(input: unknown): Product {
     // Vials per supplier kit (group-buy-only stores). Round-tripped for the same
     // reason as madeToOrder: every admin save funnels through here.
     vialsPerKit: normalizeVialsPerKit(o.vialsPerKit),
+    // Dual-currency market tag + USD prices. Same round-trip contract as
+    // madeToOrder: every admin save funnels through here, so a key dropped here
+    // would silently pull a product off the International shop on any edit.
+    market: normalizeProductMarket(o.market) === "local" ? undefined : normalizeProductMarket(o.market),
+    usdPrice: positivePrice(o.usdPrice),
+    usdDiscountPrice: positivePrice(o.usdDiscountPrice),
     // The editor's "Order ratio class" tag. Narrowed to a real ProductClass, so
     // an unknown value becomes undefined and Order Ratio Control falls back to
     // its name heuristic — never passed through raw. Dropping this key silently

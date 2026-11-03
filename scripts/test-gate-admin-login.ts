@@ -7,8 +7,8 @@
  * access wall INSTEAD of the SPA — so the SPA (and with it the `#admin` email +
  * password form) never mounts. The gate's admin exemption
  * (gate-enforcement.ts → requireStorefrontAdmin) only helps someone who is
- * ALREADY signed in, and `sf_admin_session` is deleted on every document load
- * (admin-session-reset.ts), so a store owner arriving at `<slug>.<root>/#admin`
+ * ALREADY signed in, and `sf_admin_session` used to be deleted on every document
+ * load (since narrowed to admin-page reloads — admin-refresh-logout.ts), so a store owner arriving at `<slug>.<root>/#admin`
  * was forced to type the visitor code before they could type their credentials.
  *
  * The fix is client-side, because the hash is: while the wall is up, it reads

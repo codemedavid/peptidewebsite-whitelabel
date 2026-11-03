@@ -30,6 +30,15 @@
  *   npx tsx --env-file=.env scripts/import-legacy-orders.ts --tenant=thepeppylab \
  *       --rest=.migration/thepeppylab/orders.json --rehost-proofs --apply
  *
+ * A store still selling on its old site while it migrates: re-export, then add
+ * --sync-status to also carry status/payment/tracking moves (confirmed →
+ * delivered) onto rows imported earlier. Only rows whose history is still the
+ * importer's own shape are touched — anything worked in the whitelabel admin is
+ * left alone. Stock never moves (rows stay `imported`).
+ *
+ *   npx tsx --env-file=.env scripts/import-legacy-orders.ts --tenant=slimmetry \
+ *       --rest=.migration/slimmetry-2026-11-03/orders.json --rehost-proofs --sync-status --apply
+ *
  * Covered by scripts/test-legacy-order-import.ts (the mapping) — this file is
  * the I/O shell around it.
  */
@@ -45,6 +54,8 @@ import {
   buildCatalogIndex,
   mapLegacyOrder,
   importOrderNumber,
+  planLegacyStatusSync,
+  type LegacySyncPatch,
   type LegacyCatalogProduct,
   type LegacyOrderRow,
   type ImportedOrder,
@@ -64,6 +75,9 @@ const PREFIX = flag("prefix", "HPG-IMP");
 const DUMP = flag("dump", "db_cluster-05-08-2026@01-12-58.backup");
 const REST = flag("rest", "");
 const REHOST_PROOFS = process.argv.includes("--rehost-proofs");
+/** Also refresh status/payment/tracking on rows imported earlier, for a store
+ *  still selling on its old site. Rows worked in the whitelabel are skipped. */
+const SYNC_STATUS = process.argv.includes("--sync-status");
 /** Parallel proof transfers — enough to be quick, few enough to be polite. */
 const PROOF_CONCURRENCY = 6;
 /** Insert in chunks so one oversized statement can't stall the pooler. */
@@ -174,6 +188,8 @@ async function main() {
   const existing = await db.storefrontOrder.count({ where: { tenantId: tenant.id } });
   console.log(`\n  tenant currently holds ${existing} order(s)`);
 
+  const syncPlan = SYNC_STATUS ? await planStatusSync(tenant.id, mapped) : [];
+
   if (!APPLY) {
     console.log("\n  DRY RUN — nothing written. Re-run with --apply to import.\n");
     return;
@@ -227,12 +243,85 @@ async function main() {
     console.log(`  wrote ${String(written).padStart(4)}/${ready.length}`);
   }
 
+  if (syncPlan.length > 0) await applyStatusSync(tenant.id, syncPlan);
+
   const after = await db.storefrontOrder.count({ where: { tenantId: tenant.id } });
   const importedCount = await db.storefrontOrder.count({
     where: { tenantId: tenant.id, imported: true },
   });
   console.log(`\n  inserted ${written} new order(s) (${mapped.length - written} already present)`);
   console.log(`  tenant now holds ${after} order(s), ${importedCount} of them imported\n`);
+}
+
+interface SyncItem {
+  clientId: string;
+  orderNumber: string | null;
+  from: string;
+  patch: LegacySyncPatch;
+}
+
+/** Which already-imported rows the old site has moved on since the last pull. */
+async function planStatusSync(tenantId: string, mapped: ImportedOrder[]): Promise<SyncItem[]> {
+  const byClient = new Map(mapped.map((o) => [o.clientId, o]));
+  const rows = await db.storefrontOrder.findMany({
+    where: { tenantId, imported: true, clientId: { in: [...byClient.keys()] } },
+    select: {
+      clientId: true,
+      orderNumber: true,
+      status: true,
+      paymentStatus: true,
+      trackingNumber: true,
+      courier: true,
+      statusHistory: true,
+    },
+  });
+  let edited = 0;
+  const plan: SyncItem[] = [];
+  for (const row of rows) {
+    const fresh = row.clientId ? byClient.get(row.clientId) : undefined;
+    if (!fresh || !row.clientId) continue;
+    const current = {
+      status: row.status,
+      paymentStatus: row.paymentStatus ?? "",
+      trackingNumber: row.trackingNumber ?? "",
+      courier: row.courier ?? "",
+      statusHistory: row.statusHistory,
+    };
+    const patch = planLegacyStatusSync(current, fresh);
+    if (patch) plan.push({ clientId: row.clientId, orderNumber: row.orderNumber, from: row.status, patch });
+    else if (current.status !== fresh.status) edited++;
+  }
+
+  const moves = new Map<string, number>();
+  for (const s of plan) {
+    const key = `${s.from} → ${s.patch.status}`;
+    moves.set(key, (moves.get(key) ?? 0) + 1);
+  }
+  console.log(`\n  status sync  ${plan.length} imported order(s) changed on the old site`);
+  for (const [move, n] of [...moves].sort((a, b) => b[1] - a[1])) {
+    console.log(`    ${String(n).padStart(4)}  ${move}`);
+  }
+  if (edited > 0) console.log(`    ${edited} differ but were worked here — left alone`);
+  return plan;
+}
+
+/** Write the sync, scoped by tenant + imported so it can only touch import rows. */
+async function applyStatusSync(tenantId: string, plan: SyncItem[]): Promise<void> {
+  let done = 0;
+  for (const { clientId, patch } of plan) {
+    const res = await db.storefrontOrder.updateMany({
+      where: { tenantId, clientId, imported: true },
+      data: {
+        status: patch.status,
+        paymentStatus: patch.paymentStatus,
+        trackingNumber: patch.trackingNumber,
+        courier: patch.courier,
+        statusHistory: patch.statusHistory as unknown as Prisma.InputJsonValue,
+      },
+    });
+    done += res.count;
+  }
+  console.log(`  synced ${done}/${plan.length} imported order(s)`);
 }
 
 function readRestRows(path: string): LegacyOrderRow[] {

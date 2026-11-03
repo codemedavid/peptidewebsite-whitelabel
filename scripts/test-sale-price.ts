@@ -39,7 +39,7 @@ import {
   resolveSaleView,
   saleBadgeLabel,
 } from "../src/lib/storefront/sale";
-import { unitPrice } from "../src/storefront/checkout";
+import { authoritativeItemPrice, makeVariationEntry, unitPrice } from "../src/storefront/checkout";
 import { buildTwoWaysHomeView } from "../src/lib/storefront/two-ways-home";
 import type { Product } from "../src/storefront/types";
 
@@ -195,6 +195,46 @@ check("picking a real variation shows ITS price and no sale — the promo is the
   assert.equal(five.price, 3000);
   assert.equal(five.compareAt, null);
   assert.equal(five.onSale, false);
+});
+
+// ── a variation's OWN sale price (owner request 2026-11-03) ──
+const optSale = product({
+  id: "opt-sale",
+  price: 1000,
+  variations: [
+    { name: "5mg", price: 1000 },
+    { name: "10mg", price: 2000, salePrice: 1500 },
+    { name: "20mg", price: 3000, salePrice: 3000 }, // not below price → ignored
+  ],
+});
+
+check("a variation with its own sale price advertises it", () => {
+  const ten = resolveSaleView(optSale, 1);
+  assert.equal(ten.price, 1500);
+  assert.equal(ten.compareAt, 2000);
+  assert.equal(ten.onSale, true);
+  assert.equal(ten.badgeLabel, "25% off");
+});
+
+check("the cart and the server charge exactly the advertised variation sale", () => {
+  const clone = makeVariationEntry(optSale, optSale.variations![1]);
+  assert.equal(unitPrice(clone), resolveSaleView(optSale, 1).price);
+  assert.equal(
+    authoritativeItemPrice({ productId: "opt-sale", name: "x", qty: 1, variation: "10mg" }, [optSale]),
+    1500,
+  );
+});
+
+check("a variation sale at or above its price is ignored everywhere", () => {
+  const twenty = resolveSaleView(optSale, 2);
+  assert.equal(twenty.onSale, false);
+  assert.equal(twenty.price, 3000);
+  assert.equal(unitPrice(makeVariationEntry(optSale, optSale.variations![2])), 3000);
+});
+
+check("an option without a sale price is untouched by a sibling's sale", () => {
+  assert.equal(resolveSaleView(optSale, 0).onSale, false);
+  assert.equal(unitPrice(makeVariationEntry(optSale, optSale.variations![0])), 1000);
 });
 
 check("an index past the end of the option list is treated as no selection", () => {

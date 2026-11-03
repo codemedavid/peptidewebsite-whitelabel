@@ -27,9 +27,36 @@ const ALL_FIELDS: readonly CheckoutField[] = [
   { key: "postal", label: "Postal code", required: false },
 ];
 
-/** The fields to render (and validate) for this store's checkout. */
-export function checkoutFields(brand: Pick<Brand, "checkoutHideEmail">): CheckoutField[] {
-  return brand.checkoutHideEmail === true
-    ? ALL_FIELDS.filter((f) => f.key !== "email")
-    : [...ALL_FIELDS];
+/** A dual-currency store's International cart ships abroad: a barangay means
+ *  nothing there, and the country is the one line the courier can't guess. */
+const INTL_FIELDS: readonly CheckoutField[] = [
+  { key: "name", label: "Full name", required: true },
+  { key: "email", label: "Email", required: true, type: "email" },
+  { key: "phone", label: "Phone (with country code)", required: true, type: "tel" },
+  { key: "address", label: "Street address", required: true },
+  { key: "city", label: "City", required: true },
+  { key: "province", label: "State / Province / Region", required: false },
+  { key: "postal", label: "Postal / ZIP code", required: true },
+  { key: "country", label: "Country", required: true },
+];
+
+/** Asked right after Phone on stores that message buyers on WhatsApp
+ *  (`checkoutWhatsapp`, mnm-pepsabuy) — the name + number land in the order and
+ *  the group-buy customer report. The NAME is how the owner finds the buyer's
+ *  chat: a number alone shows up as whatever the buyer called themselves. */
+const WHATSAPP_FIELDS: readonly CheckoutField[] = [
+  { key: "whatsappName", label: "WhatsApp name", required: true },
+  { key: "whatsapp", label: "WhatsApp number", required: true, type: "tel" },
+];
+
+/** The fields to render (and validate) for this store's checkout. `market`
+ *  is the cart being checked out on a dual-currency store. */
+export function checkoutFields(
+  brand: Pick<Brand, "checkoutHideEmail" | "checkoutWhatsapp">,
+  market?: "local" | "international" | null,
+): CheckoutField[] {
+  const base = market === "international" ? INTL_FIELDS : ALL_FIELDS;
+  const shown = brand.checkoutHideEmail === true ? base.filter((f) => f.key !== "email") : base;
+  if (brand.checkoutWhatsapp !== true) return [...shown];
+  return shown.flatMap((f) => (f.key === "phone" ? [f, ...WHATSAPP_FIELDS] : [f]));
 }

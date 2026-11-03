@@ -19,6 +19,7 @@ import { useStore } from "../store";
 import { QtyField } from "./QtyField";
 import type { ContactChannel, Order, PromoCode } from "../types";
 import { adminFeeWaivedAction, uploadPaymentProofAction, placeStorefrontOrderAction } from "@/actions/orders";
+import { getMyCheckoutDetailsAction } from "@/actions/customer-accounts";
 import { classifyProofFile } from "@/lib/upload/image-file";
 import { settleUpload } from "@/lib/upload/settle";
 import { activeAdminFee, normalizeAdminFee } from "@/lib/storefront/admin-fee";
@@ -71,6 +72,9 @@ import {
 import { STORE_CLOSED_BLOCK_MESSAGE, isStoreClosed } from "@/lib/storefront/store-status";
 import { PAY_LATER_CHECKOUT_NOTE, isPayLaterCart } from "@/lib/storefront/gb-payment-mode";
 import { useCustomerAccount } from "../customer-account-client";
+import { applyMarketConfig } from "@/lib/storefront/intl-market";
+import { marketCatalog } from "@/lib/storefront/markets";
+import { reportPresence } from "@/storefront/presence";
 import "./remember-details.css";
 
 type Step = "cart" | "details" | "payment";
@@ -80,10 +84,36 @@ type Step = "cart" | "details" | "payment";
 const FEE_WAIVER_DEBOUNCE_MS = 500;
 
 export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { brand, cart, products, refreshProducts, paymentMethods, couriers, shippingLocations, promoCodes, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast } = useStore();
+  const store = useStore();
+  const { cart, products, refreshProducts, couriers, setOrders, setMyOrders, setLineQty, removeLine, clearCart, toast, cartMarket } = store;
+  // Dual-currency stores check each cart out on ITS market's view of the
+  // checkout settings — currency, shipping rates, payment methods, admin fee
+  // and promo codes (lib/storefront/intl-market). The server builds the same
+  // view from the order's market, so this is display, never authority. Every
+  // other store gets its settings exactly as before.
+  const market = store.brand.dualMarket ? cartMarket : null;
+  const view = useMemo(
+    () =>
+      market
+        ? applyMarketConfig(
+            {
+              ...store.brand,
+              paymentMethods: store.paymentMethods,
+              shippingLocations: store.shippingLocations,
+              promoCodes: store.promoCodes,
+            },
+            market,
+          )
+        : null,
+    [market, store.brand, store.paymentMethods, store.shippingLocations, store.promoCodes],
+  );
+  const brand = view ?? store.brand;
+  const paymentMethods = (view?.paymentMethods as typeof store.paymentMethods | undefined) ?? store.paymentMethods;
+  const shippingLocations = (view?.shippingLocations as typeof store.shippingLocations | undefined) ?? store.shippingLocations;
+  const promoCodes = (view?.promoCodes as typeof store.promoCodes | undefined) ?? store.promoCodes;
   const [step, setStep] = useState<Step>("cart");
   // Per store: a store that never emails buyers can drop the Email field.
-  const fields = checkoutFields(brand);
+  const fields = checkoutFields(brand, market);
   const [customer, setCustomer] = useState<CheckoutCustomer>(EMPTY_CUSTOMER);
   // A signed-in shopper (customer accounts) gets their contact fields prefilled.
   // Only EMPTY fields are filled, so nothing the buyer typed is ever overwritten.
@@ -116,6 +146,24 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     setHasSavedDetails(true);
     setCustomer((c) => mergeSavedDetails(c, saved));
   }, []);
+  // A signed-in member's details follow their ACCOUNT, not just this browser:
+  // the latest order's address fills any field still empty, on any device, so a
+  // group-buy top-up from a new phone is the same one-card checkout.
+  const accountId = account?.email ?? null;
+  useEffect(() => {
+    if (!accountId) return;
+    let live = true;
+    getMyCheckoutDetailsAction()
+      .then((details) => {
+        if (!live || !details) return;
+        setCustomer((c) => mergeSavedDetails(c, details));
+        if (details.address.trim()) setHasSavedDetails(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [accountId]);
   const forgetDetails = () => {
     forgetSavedDetails();
     setHasSavedDetails(false);
@@ -183,7 +231,10 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     const b = brand.groupBuyBanner;
     return b ? { coversAll: b.coversAll, productIds: b.productIds } : null;
   }, [brand.groupBuyBanner]);
-  const lines = useMemo(() => liveCartLines(cart, products), [cart, products]);
+  // A market cart re-reads its lines from THAT market's catalog — the USD view
+  // for International — or every refresh would put peso prices back.
+  const catalog = useMemo(() => (market ? marketCatalog(products, market) : products), [market, products]);
+  const lines = useMemo(() => liveCartLines(cart, catalog), [cart, catalog]);
   // Pay-after-close group buy (brand.gbPaymentMode): a round cart is placed
   // without paying — no payment step, no proof — and settled after the round
   // closes. The server re-decides at placement (orders.ts stampGroupBuyInvoice);
@@ -221,6 +272,17 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   const directHandoff = useMemo(() => isDirectHandoff(brand), [brand]);
   const payMethods = useMemo(() => activePaymentMethods(paymentMethods), [paymentMethods]);
   const currency = brand.currency || lines[0]?.product.currency || "";
+  // "Live now": tell the presence beacon where this shopper is (cart drawer,
+  // checkout step) and what is in their cart. Display-only for the store owner.
+  useEffect(() => {
+    reportPresence({
+      cartOpen: open,
+      checkoutStep: step,
+      cartItems: lines.reduce((n, l) => n + l.qty, 0),
+      cartValue: subtotal,
+      currency: currency || null,
+    });
+  }, [open, step, lines, subtotal, currency]);
   // Per-tenant admin fee (super admin toggle, branding.config.adminFee) — a flat
   // charge on top of the items. Displayed here for transparency; the AUTHORITATIVE
   // value is re-stamped server-side at placement from the same config.
@@ -351,8 +413,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // server-side at placement, so the gate can't be bypassed.
   const rules = useMemo(() => normalizeCheckoutRules(brand.checkoutRules), [brand.checkoutRules]);
   const checkoutViolations = useMemo(
-    () => checkoutRuleViolations(lines, products, brand.checkoutRules),
-    [lines, products, brand.checkoutRules],
+    () => checkoutRuleViolations(lines, catalog, brand.checkoutRules),
+    [lines, catalog, brand.checkoutRules],
   );
   // Order Ratio Control — the peptide→bac-water floor, merged into the same
   // violation list so it renders (and blocks strict mode) exactly like a
@@ -526,7 +588,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     }
   }, [appliedPromo, subtotal, currency]);
 
-  const missing = fields.filter((f) => f.required && !customer[f.key].trim());
+  const missing = fields.filter((f) => f.required && !(customer[f.key] ?? "").trim());
   const detailsValid = missing.length === 0;
   const showDetailsCard = hasSavedDetails && detailsValid && !editingDetails;
   const savedAddress = [customer.address, customer.barangay, customer.city, customer.province, customer.postal]
@@ -589,6 +651,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
     // One stable idempotency key per logical order, reused across retries so a
     // committed-but-unacknowledged write isn't duplicated on the next attempt.
+    // The dev-only sample page (app/(tenant)/intl-local-preview) runs on a real
+    // store's host with made-up products: it must never place an order.
+    if (store.brand.checkoutPreviewOnly) {
+      toast("Sample page — checkout is turned off here.");
+      return;
+    }
     const draftId =
       draftIdRef.current ??
       (draftIdRef.current =
@@ -606,6 +674,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     // idempotency key the server stores as clientId — not the DB primary key.
     const draft: Order = {
       id: draftId,
+      // Which cart this is. The server re-derives the currency, prices and
+      // fees from it — the client never names its own currency.
+      ...(market ? { market } : {}),
       status: "new",
       paymentStatus: requiresPayment && proof ? "paid" : "pending",
       paymentMethod: selectedMethod?.name || "",
@@ -614,6 +685,12 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
+        ...(brand.checkoutWhatsapp === true && customer.whatsapp?.trim()
+          ? { whatsapp: customer.whatsapp.trim() }
+          : {}),
+        ...(brand.checkoutWhatsapp === true && customer.whatsappName?.trim()
+          ? { whatsappName: customer.whatsappName.trim() }
+          : {}),
         // Where the order came from, for the owner's order detail. A store with
         // no channel records the site itself rather than leaving this blank.
         contactMethod: channel ? CHANNEL_LABELS[channel.type] : DIRECT_CONTACT_METHOD,
@@ -624,7 +701,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         city: customer.city,
         province: customer.province,
         postal: customer.postal,
-        country: "Philippines",
+        // The Local checkout ships domestically; the International one asks.
+        country: market === "international" ? (customer.country ?? "").trim() : "Philippines",
         region: "",
         // The fee this checkout DISPLAYED. The server re-derives the
         // authoritative fee from config by `locationId` (like the admin fee), so
@@ -800,7 +878,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
         <header className="sf-cart__head">
           <h2 className="sf-cart__title">
             {step === "cart"
-              ? "Your cart"
+              ? market === "international"
+                ? "International cart"
+                : market === "local"
+                  ? "Local cart"
+                  : "Your cart"
               : step === "payment"
                 ? "Payment"
                 : brand.checkoutTitle || "Complete your order"}
@@ -811,6 +893,27 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             </svg>
           </button>
         </header>
+
+        {/* Dual-currency stores keep two carts — one per market, each checked out
+            on its own in its own currency. Switchable only on the cart step, so
+            a half-filled checkout form never silently changes cart. */}
+        {market && step === "cart" && (
+          <div className="sf-cart__markets" role="tablist" aria-label="Choose a cart">
+            {(["local", "international"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={cartMarket === m}
+                className={`sf-cart__market${cartMarket === m ? " is-active" : ""}`}
+                onClick={() => store.setCartMarket(m)}
+              >
+                {m === "local" ? `Local · ${store.brand.currency || "₱"}` : "International · USD"}
+                <span className="sf-cart__market-count">{store.cartCounts[m]}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="sf-cart__body">
           {lines.length === 0 ? (
@@ -913,8 +1016,14 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
               )}
               {showDetailsCard ? (
                 <section className="sf-cart__saved" aria-label="Your details">
+                  {feeWaived && configuredFee && (
+                    <p className="sf-cart__saved-welcome" role="status">
+                      Welcome back! This adds to your group-buy order. Your {configuredFee.label.toLowerCase()} is
+                      already paid.
+                    </p>
+                  )}
                   <div className="sf-cart__saved-head">
-                    <span className="sf-cart__saved-eyebrow">Ordering as</span>
+                    <span className="sf-cart__saved-eyebrow">{account ? "Ordering as · from your account" : "Ordering as"}</span>
                     <button type="button" className="sf-cart__saved-edit" onClick={() => setEditingDetails(true)}>
                       Edit
                     </button>
@@ -939,9 +1048,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     </span>
                     <input
                       type={f.type || "text"}
-                      value={customer[f.key]}
+                      value={customer[f.key] ?? ""}
                       required={f.required}
-                      aria-invalid={touched && f.required && !customer[f.key].trim() ? true : undefined}
+                      aria-invalid={touched && f.required && !(customer[f.key] ?? "").trim() ? true : undefined}
                       onChange={(e) => set(f.key, e.target.value)}
                     />
                   </label>

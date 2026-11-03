@@ -129,6 +129,8 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     { header: "Customer", width: 26 },
     { header: "Email", width: 28 },
     { header: "Contact Number", width: 16 },
+    { header: "WhatsApp", width: 16 },
+    { header: "WhatsApp Name", width: 20 },
     { header: "Orders", width: 9 },
     { header: "Vials", width: 8 },
     { header: "Total", width: 12 },
@@ -136,11 +138,13 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
   ];
   customers.getRow(1).font = { bold: true };
   for (const c of prep.customerLines) {
-    customers.addRow([c.name, c.email, c.contact, c.orders, c.qty, c.total, c.address]);
+    customers.addRow([c.name, c.email, c.contact, c.whatsapp, c.whatsappName, c.orders, c.qty, c.total, c.address]);
   }
   customers.addRow([]);
   customers.addRow([
     "TOTAL",
+    "",
+    "",
     "",
     "",
     prep.counts.activeOrders,
@@ -155,6 +159,8 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
   perCustomer.columns = [
     { header: "Customer", width: 24 },
     { header: "Contact Number", width: 16 },
+    { header: "WhatsApp", width: 16 },
+    { header: "WhatsApp Name", width: 20 },
     { header: "Email", width: 26 },
     { header: "Product", width: 38 },
     { header: "Qty", width: 7 },
@@ -171,11 +177,15 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     m.products.forEach((p, i) => {
       const product = p.variation && !p.product.includes(p.variation) ? `${p.product} — ${p.variation}` : p.product;
       perCustomer.addRow(
-        i === 0 ? [m.name, m.contact, m.email, product, p.qty, p.amount] : ["", "", "", product, p.qty, p.amount],
+        i === 0
+          ? [m.name, m.contact, m.whatsapp, m.whatsappName, m.email, product, p.qty, p.amount]
+          : ["", "", "", "", "", product, p.qty, p.amount],
       );
     });
     perCustomer.addRow([
       `${m.name} — total`,
+      "",
+      "",
       "",
       "",
       "",
@@ -194,7 +204,7 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     (t, m) => ({ total: t.total + m.total, paid: t.paid + m.paid, balance: t.balance + m.balance, fee: t.fee + m.adminFee }),
     { total: 0, paid: 0, balance: 0, fee: 0 },
   );
-  perCustomer.addRow(["ALL CUSTOMERS", "", "", "", "", "", "", grand.fee, grand.total, grand.paid, grand.balance]).font = { bold: true };
+  perCustomer.addRow(["ALL CUSTOMERS", "", "", "", "", "", "", "", "", grand.fee, grand.total, grand.paid, grand.balance]).font = { bold: true };
 
   // Order Details — one row per line, every order incl cancelled, with a Counted
   // flag and the full customer detail the owner reconciles payments against.
@@ -204,6 +214,8 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     { header: "Order Date", width: 12 },
     { header: "Customer", width: 24 },
     { header: "Contact Number", width: 16 },
+    { header: "WhatsApp", width: 16 },
+    { header: "WhatsApp Name", width: 20 },
     { header: "Shipping Address", width: 46 },
     { header: "Batch", width: 18 },
     { header: "Product", width: 36 },
@@ -227,6 +239,8 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
       Number.isNaN(placedAt.getTime()) ? l.orderDate : placedAt,
       l.customer,
       l.contact,
+      l.whatsapp,
+      l.whatsappName,
       l.address,
       l.batch,
       l.product,
@@ -241,9 +255,9 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
     ]);
     row.getCell(2).numFmt = "yyyy-mm-dd";
     // A packing instruction is only useful if it's readable in the cell.
-    row.getCell(15).alignment = { wrapText: true, vertical: "top" };
+    row.getCell(17).alignment = { wrapText: true, vertical: "top" };
     // The proof stays a clickable link — the owner opens it, never re-downloads it.
-    if (l.proofUrl) row.getCell(14).value = { text: l.proofUrl, hyperlink: l.proofUrl };
+    if (l.proofUrl) row.getCell(16).value = { text: l.proofUrl, hyperlink: l.proofUrl };
     // Cancelled lines are present for the audit trail but must never be mistaken
     // for something to order, so they are struck out.
     if (!l.counted) row.font = { strike: true, color: { argb: "FF999999" } };

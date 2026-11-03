@@ -16,6 +16,8 @@
 // withTenant); demo mode round-trips against .demo-data/group-buys.json.
 
 import { Prisma } from "@prisma/client";
+import type { ParticipationOrder } from "@/lib/storefront/gb-participation";
+import { checkoutTotals } from "@/lib/storefront/gb-member-orders";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { prisma } from "@/lib/db/prisma";
@@ -92,7 +94,11 @@ import {
 } from "@/lib/demo/fixtures";
 import { requireAnyStaffPermission } from "@/lib/auth/staff-guard";
 import type { Product } from "@/storefront/types";
-import { normalizeGroupBuyContent, type GroupBuyContent } from "@/lib/storefront/gb-content";
+import {
+  mergeGroupBuyContentSave,
+  normalizeGroupBuyContent,
+  type GroupBuyContent,
+} from "@/lib/storefront/gb-content";
 import { normalizeVialsPerKit } from "@/lib/storefront/gb-moq-kits";
 import { normalizeGroupBuyLiveBanner, type GroupBuyLiveBannerConfig } from "@/lib/storefront/gb-live-banner";
 import { normalizeHeroCountdown, type HeroCountdownConfig } from "@/lib/storefront/hero-countdown";
@@ -500,6 +506,56 @@ export async function listOrderFoldersAction(): Promise<OrderFoldersResult> {
   }
 }
 
+// ── Member tracker ───────────────────────────────────────────────────────────
+
+export type GroupBuyParticipationResult =
+  | { ok: true; enabled: false }
+  | { ok: true; enabled: true; orders: ParticipationOrder[] }
+  | { error: string };
+
+/**
+ * Every group-buy order, attributed to its round exactly as the Orders folders
+ * file it (resolveRoundOrders), slimmed to what the member tracker counts. The
+ * period filter runs in the browser (gb-participation), so switching from
+ * "December" to "Last 3 months" never re-queries. Gated like the Orders screen.
+ */
+export async function getGroupBuyParticipationAction(): Promise<GroupBuyParticipationResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: NOT_SIGNED_IN };
+  const { tenantId } = ctx;
+  try {
+    const caps = await resolveGroupBuyCaps(tenantId);
+    if (!caps.enabled) return { ok: true, enabled: false };
+    const slug = (await getTenantSlug()) ?? tenantId;
+    const rounds = await loadGroupBuys(tenantId, slug);
+    if (rounds.length === 0) return { ok: true, enabled: true, orders: [] };
+    const candidates = await loadCandidateOrders(tenantId, slug, rounds);
+    const windows = rounds.map(toAnalyticsRound);
+    const orders = windows.flatMap((round) =>
+      resolveRoundOrders(round, candidates, windows).orders.map(
+        (o): ParticipationOrder => ({
+          roundId: round.id,
+          roundName: o.groupBuyName?.trim() || round.name,
+          date: o.date,
+          status: o.status,
+          total: checkoutTotals(o).total,
+          customerAccountId: o.customerAccountId ?? null,
+          customer: {
+            name: o.customer?.name,
+            email: o.customer?.email,
+            phone: o.customer?.phone,
+            whatsapp: o.customer?.whatsapp,
+            whatsappName: o.customer?.whatsappName,
+          },
+        }),
+      ),
+    );
+    return { ok: true, enabled: true, orders };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't load the member tracker." };
+  }
+}
+
 // ── Home dashboard card ──────────────────────────────────────────────────────
 
 export type DashboardGroupBuyResult =
@@ -869,14 +925,16 @@ export async function saveGroupBuyContentAction(
   const gate = await requireGroupBuyAdmin();
   if ("error" in gate) return gate;
   const { tenantId, slug } = gate;
-  const content = normalizeGroupBuyContent(input);
+  let content: GroupBuyContent;
 
   try {
     if (isDemoMode()) {
       const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
+      content = mergeGroupBuyContentSave(current.groupBuyContent, input);
       saveDemoBranding(slug, { config: { ...current, groupBuyContent: content } });
     } else {
       const current = await readTenantConfig(tenantId);
+      content = mergeGroupBuyContentSave(current.groupBuyContent, input);
       const config = { ...current, groupBuyContent: content } as Prisma.InputJsonValue;
       await prisma.branding.upsert({
         where: { tenantId },

@@ -18,6 +18,7 @@ import {
   type VariationDraft,
 } from "./variation-presets";
 import { MAX_INCLUDES_LENGTH, unpricedVariationNames } from "@/lib/storefront/variations";
+import { activeVariationSale, percentOff } from "@/lib/storefront/sale";
 import { resolveSelectableCategories } from "@/lib/storefront/categories";
 import { assignableSortCategories } from "@/lib/storefront/sort-categories";
 import { MAX_PHOTOS_PER_ITEM } from "@/lib/storefront/product-photos";
@@ -134,9 +135,28 @@ type VariationsEditorProps = {
    *  rather than called directly so this editor stays a plain form component and
    *  the parent keeps owning every server action. */
   onUpload: (file: File) => Promise<{ url?: string; error?: string }>;
+  /** Dual-currency stores: show a USD price column per option. */
+  usd?: boolean;
 };
 
-function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEditorProps) {
+/** The line under a variation row about its sale price, or null when there is
+ *  nothing to say. Mirrors activeVariationSale so the editor tells the owner
+ *  exactly what the storefront will do with the figure they typed. */
+function saleHint(it: Variation): string | null {
+  const raw = it.salePrice;
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const price = Number(it.price) || 0;
+  const sale = activeVariationSale({ price, salePrice: Number(raw) });
+  if (sale === null) {
+    return Number(raw) > 0
+      ? "Sale price must be lower than the price to take effect — it is ignored for now."
+      : null;
+  }
+  const off = percentOff(price, sale);
+  return `On sale — ${off >= 1 ? `${off}% off` : "a small markdown"}. Shoppers see the price struck through.`;
+}
+
+function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: VariationsEditorProps) {
   const add = () => onChange([...items, { name: "", price: "" }]);
   const upd = (i: number, patch: Partial<Variation>) =>
     onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
@@ -212,7 +232,9 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "48px 1fr 130px 110px 44px 36px",
+            gridTemplateColumns: usd
+              ? "48px 1fr 110px 110px 100px 100px 44px 36px"
+              : "48px 1fr 120px 120px 110px 44px 36px",
             gap: 10,
             alignItems: "center",
           }}
@@ -255,6 +277,32 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
               upd(i, { price: e.target.value })
             }
           />
+          {/* The option's own discount. Blank = not on sale. Only a figure BELOW
+              the price takes effect (activeVariationSale) — the hint under the
+              row says so rather than letting a typo silently do nothing. */}
+          <input
+            className="admin-input"
+            type="number"
+            min="0"
+            placeholder="Sale price"
+            title="Optional. A discounted price for this option — the store shows it with the regular price struck through. Leave blank for no sale."
+            aria-label={`Sale price for ${it.name || "this option"}`}
+            value={it.salePrice ?? ""}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => upd(i, { salePrice: e.target.value })}
+          />
+          {usd && (
+            <input
+              className="admin-input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="USD price"
+              title="This option's International price in USD. Leave blank to not sell it internationally."
+              aria-label={`USD price for ${it.name || "this option"}`}
+              value={it.usdPrice ?? ""}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => upd(i, { usdPrice: e.target.value })}
+            />
+          )}
           <input
             className="admin-input"
             type="number"
@@ -289,6 +337,11 @@ function VariationsEditor({ items, currency, onChange, onUpload }: VariationsEdi
             ×
           </button>
         </div>
+        {saleHint(it) && (
+          <div className="admin-field__hint" role="status" style={{ marginTop: -4, paddingLeft: 58 }}>
+            {saleHint(it)}
+          </div>
+        )}
         {openRow === i && (
           <div className="admin-photo-strip__row">
             <div className="admin-field__hint">
@@ -477,6 +530,12 @@ export function AdminAddProduct({
   // Vials per supplier kit — group-buy-only stores (gb-moq-kits). Blank = not set.
   const [vialsPerKit, setVialsPerKit] = useState<number | string>(initial?.vialsPerKit ?? "");
   const [discount, setDiscount]     = useState<number | string>(initial?.discountPrice ?? 0);
+  // Dual-currency stores (Intl & Local layout): where the product sells and its
+  // International (USD) prices. Absent on every existing product = Local only.
+  const dualMarket = brand.dualMarket === true;
+  const [market, setMarket] = useState<"local" | "international" | "both">(initial?.market ?? "local");
+  const [usdPrice, setUsdPrice] = useState<number | string>(initial?.usdPrice ?? "");
+  const [usdDiscount, setUsdDiscount] = useState<number | string>(initial?.usdDiscountPrice ?? "");
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
   // Group Buy product: lists under the storefront's Group Buy section (priced by
   // gbPrice) instead of on-hand. gbPrice is the per-unit group-buy price.
@@ -658,7 +717,23 @@ export function AdminAddProduct({
           // The option's packing list, only when there is one (the server trims
           // and caps it again in normalizeProductInput).
           const includes = (v.includes ?? "").trim();
-          return includes ? { ...withExtras, includes } : withExtras;
+          const withIncludes = includes ? { ...withExtras, includes } : withExtras;
+          // Fields this form doesn't edit ride along untouched — the payload is
+          // the WHOLE product, so a missing key reads as "cleared".
+          const usd = Number(v.usdPrice);
+          // The option's own sale price, only when one was typed (the server
+          // keeps positives only; the storefront honours it only below price).
+          const sale = Number(v.salePrice);
+          return {
+            ...withIncludes,
+            ...(v.gbPrice ? { gbPrice: v.gbPrice } : {}),
+            ...(sale > 0 ? { salePrice: sale } : {}),
+            ...(v.kitSize ? { kitSize: v.kitSize } : {}),
+            ...(usd > 0 ? { usdPrice: usd } : {}),
+            // Off sale (Inventory → per-option Available) — a dropped key would
+            // put the option back on sale.
+            ...(v.available === false ? { available: false } : {}),
+          };
         })
         .filter((v) => v.name),
       stock: Number(stock) || 0,
@@ -670,6 +745,11 @@ export function AdminAddProduct({
       vialsPerKit: Number(vialsPerKit) > 0 ? Number(vialsPerKit) : undefined,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
+      // Sent even when the store isn't dual-currency, so switching the layout
+      // off and on never loses a product's USD prices.
+      market,
+      usdPrice: Number(usdPrice) > 0 ? Number(usdPrice) : undefined,
+      usdDiscountPrice: Number(usdDiscount) > 0 ? Number(usdDiscount) : undefined,
       productType: isGroupBuy ? "gb" : "onhand",
       gbPrice: isGroupBuy ? Number(gbPrice) || 0 : 0,
       // Carried through untouched — this editor has no control for either flag
@@ -834,6 +914,64 @@ export function AdminAddProduct({
           </div>
         </div>
 
+        {/* ---------- Markets (dual-currency stores) ---------- */}
+        {dualMarket && (
+          <div className="admin-form__card">
+            <h2 className="admin-form__section">🌏 Markets</h2>
+            <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
+              Your store sells in two shops: Local ({currency}) and International (USD). Choose
+              where this product sells. International shoppers pay the USD price you set here —
+              prices are never converted automatically.
+            </div>
+            <div className="admin-form__row">
+              <div className="admin-field">
+                <label className="admin-field__label" htmlFor="pf-market">Sell in</label>
+                <select
+                  id="pf-market"
+                  className="admin-select"
+                  value={market}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setMarket(e.target.value as "local" | "international" | "both")}
+                >
+                  <option value="local">Local shop only ({currency})</option>
+                  <option value="international">International shop only (USD)</option>
+                  <option value="both">Both shops</option>
+                </select>
+              </div>
+              {market !== "local" && (
+                <div className="admin-field">
+                  <label className="admin-field__label">International price (USD)</label>
+                  <NumberField value={usdPrice} onChange={setUsdPrice} min={0} />
+                </div>
+              )}
+            </div>
+            {market !== "local" && (
+              <>
+                {discountOn && (
+                  <div className="admin-field" style={{ marginTop: 12 }}>
+                    <label className="admin-field__label">International sale price (USD)</label>
+                    <NumberField value={usdDiscount} onChange={setUsdDiscount} min={0} />
+                    <p className="admin-field__hint">Leave blank to sell at the full USD price during your sale.</p>
+                  </div>
+                )}
+                {variations.length > 0 && (
+                  <p className="admin-field__hint">Set each option&rsquo;s USD price in the Variations list below — an option without one isn&rsquo;t sold internationally.</p>
+                )}
+                {isGroupBuy && (
+                  <p className="admin-field__hint" role="note" style={{ color: "var(--danger, #b42318)" }}>
+                    Group-buy products sell in the Local shop only.
+                  </p>
+                )}
+                {!isGroupBuy && !(Number(usdPrice) > 0) && !variations.some((v) => Number(v.usdPrice) > 0) && (
+                  <p className="admin-field__hint" role="note" style={{ color: "var(--danger, #b42318)" }}>
+                    Add a USD price — without one this product won&rsquo;t appear in the International shop.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* ---------- Variations ---------- */}
         <div className="admin-form__card">
           <h2 className="admin-form__section">🧬 Variations</h2>
@@ -842,13 +980,16 @@ export function AdminAddProduct({
             5mg / 10mg, or the shortcuts below for selling vials on their own
             versus the complete set — each with its own price ({currency}).
             Customers pick the option on the storefront. Leave empty to sell the
-            product as a single option at the base price above.
+            product as a single option at the base price above. To put one option
+            on sale, type its discounted price in &ldquo;Sale price&rdquo; &mdash; leave it
+            blank for no sale.
           </div>
           <VariationsEditor
             items={variations}
             currency={currency}
             onChange={setVariations}
             onUpload={uploadPhoto}
+            usd={dualMarket && market !== "local"}
           />
           {unpriced.length > 0 && (
             <div

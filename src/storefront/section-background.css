@@ -1,0 +1,41 @@
+/* The reusable SectionBackground layers (src/lib/storefront/section-background.ts).
+ *
+ * The element paints its own colour; the uploaded image and the overlay are two
+ * pseudo-element LAYERS behind the content (isolation: isolate keeps their
+ * z-index: -1 inside this element). Opacity is applied to those layers only,
+ * so text, buttons and icons inside always stay fully opaque, and the layers
+ * never take pointer events, so they can't block a click.
+ *
+ * Deliberately not scoped to one layout: any template that renders bgProps()
+ * gets the same behaviour from this one sheet. */
+
+.sbg {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: var(--sbg-color, transparent);
+}
+
+.sbg::before,
+.sbg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.sbg::before {
+  background-image: var(--sbg-image, none);
+  background-position: var(--sbg-position, center);
+  background-size: var(--sbg-size, cover);
+  background-repeat: no-repeat;
+  opacity: var(--sbg-image-opacity, 0);
+}
+
+/* Paint order: the overlay (::after) sits above the image (::before). */
+.sbg::after {
+  background: var(--sbg-overlay, transparent);
+  opacity: var(--sbg-overlay-opacity, 0);
+}

@@ -12,7 +12,8 @@ import { signInStoreAdminAction } from "@/actions/storefront-staff";
  * Credentials are verified server-side (both principals against a scrypt hash)
  * and, on success, the server issues a signed session cookie carrying who you
  * are — the sole source of truth for which screen to show. That cookie is
- * deliberately killed on every page refresh (lib/auth/admin-session-reset.ts),
+ * deliberately ended when the admin page is refreshed
+ * (lib/auth/admin-refresh-logout.ts),
  * so nothing is cached client-side that could outlive it.
  */
 /**

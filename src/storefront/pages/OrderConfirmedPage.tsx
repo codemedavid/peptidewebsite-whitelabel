@@ -15,6 +15,7 @@
 //     gone — WhatsApp, Viber, Messenger, Telegram, Instagram and Gmail all take
 //     the same path through this page.
 
+import { orderCurrencySymbol } from "@/lib/storefront/markets";
 import { useEffect, useMemo, useState } from "react";
 import type { Brand } from "../types";
 import { useStore } from "../store";
@@ -106,7 +107,16 @@ export function OrderConfirmedPage({
   }, [myOrders, handoff]);
 
   const view = useMemo(
-    () => (order ? buildOrderConfirmation(order, products, { currency: brand.currency }) : null),
+    () =>
+      order
+        ? buildOrderConfirmation(order, products, {
+            // The order's own currency (an International order is USD).
+            currency: orderCurrencySymbol(
+              { currency: order.currency || (order.market === "international" ? "USD" : "") },
+              brand.currency,
+            ),
+          })
+        : null,
     [order, products, brand.currency],
   );
 

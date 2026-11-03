@@ -34,6 +34,10 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "sort-categories", label: "Product Sort Categories" },
   { key: "hero", label: "Hero Section" },
   { key: "banner", label: "Announcement Banner" },
+  { key: "popup", label: "Announcement Pop-up" },
+  // The Intl & Local website template editor (layout copy, images, menus) and
+  // its newsletter subscriber list.
+  { key: "site-layout", label: "Website Layout" },
   { key: "orders", label: "Orders" },
   { key: "customers", label: "Customers" },
   { key: "inv", label: "Inventory" },
@@ -92,6 +96,8 @@ export function quickActionToView(quickActionId: string): string {
  */
 export function permissionViewFor(view: string): string {
   if (view === "order-detail") return "orders";
+  // A customer's order history is a view onto orders, so it needs that grant.
+  if (view === "customer-profile") return "orders";
   // A round's dedicated dashboard is a sub-view of the Group Buys manager, so it
   // inherits that grant rather than needing one of its own — otherwise a
   // #groupbuy-detail deep-link would be reachable without the groupbuys module.

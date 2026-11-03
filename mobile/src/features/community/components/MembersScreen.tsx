@@ -139,6 +139,7 @@ function ApplicationCard({
   onReject,
   onReseller,
   onAdmin,
+  onOrders,
 }: {
   row: MemberApplication;
   /** The store team sees contact details and the reseller / admin switches. */
@@ -150,6 +151,8 @@ function ApplicationCard({
   onReject: () => void;
   onReseller: (next: boolean) => void;
   onAdmin: (next: boolean) => void;
+  /** Opens the member's order history — store team with the Orders grant only. */
+  onOrders?: () => void;
 }) {
   const name = row.displayName || row.email.split("@")[0] || "Member";
   // Community admins can't act on another admin, or take back someone removed — only the store team can.
@@ -178,6 +181,9 @@ function ApplicationCard({
           <Contact icon="mail-outline" value={row.email} onPress={() => void Linking.openURL(`mailto:${row.email}`)} />
           <Contact icon="call-outline" value={row.phone || "No number given"} onPress={dial ? () => void Linking.openURL(`tel:${dial}`) : undefined} />
         </View>
+      ) : null}
+      {onOrders ? (
+        <ChatButton label="Order history" icon="receipt-outline" tone="outline" accessibilityLabel={`${name}'s order history`} onPress={onOrders} />
       ) : null}
       {isTeam && row.status === "approved" ? (
         <>
@@ -328,6 +334,8 @@ export function MembersScreen({ asTab = false, headerRight }: { asTab?: boolean;
   const b = useChatBrand();
   const { me } = useSignedIn();
   const isTeam = me.community.isModerator;
+  // Order history is a store tool: the team's Orders grant, never a community admin's.
+  const canSeeOrders = me.can.orders;
   const joinMode = me.community.joinMode;
   const open = joinMode === "open";
   // An open community has no queue: start on the people already in.
@@ -442,6 +450,11 @@ export function MembersScreen({ asTab = false, headerRight }: { asTab?: boolean;
               onReject={() => setRejecting(item)}
               onReseller={(next) => setReseller(item, next)}
               onAdmin={(next) => setAdmin(item, next)}
+              onOrders={
+                canSeeOrders
+                  ? () => router.push({ pathname: "/customer-account/[id]", params: { id: item.customerId } })
+                  : undefined
+              }
             />
           )}
         />

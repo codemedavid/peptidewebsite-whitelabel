@@ -1,9 +1,11 @@
 "use client";
 
+import { isForeignCurrencyOrder } from "@/lib/storefront/markets";
 import { useEffect, useMemo, useState } from "react";
 import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { AdminIcon } from "./shared";
+import { isAdminViewVisible } from "../visibility";
 import { listStorefrontOrdersAction } from "@/actions/orders";
 import {
   buildAttentionAlerts,
@@ -12,10 +14,12 @@ import {
   buildRecentOrders,
   buildRevenueSeries,
   buildStockPanel,
+  buildTopCustomers,
   dashboardLayoutFor,
   formatDashboardMoney,
   type DashboardCaps,
 } from "@/lib/storefront/admin-dashboard";
+import type { TopCustomerRow } from "@/lib/storefront/customer-profile";
 import type { GroupBuy } from "@/lib/storefront/group-buy";
 import {
   buildGroupBuyAlerts,
@@ -24,6 +28,8 @@ import {
   GB_VIEW_ROUND,
 } from "@/lib/storefront/admin-dashboard-gb";
 import { GroupBuyPanel, useGroupBuyPanel } from "./DashboardGroupBuy";
+import { customerInitials } from "./AdminCustomerProfile";
+import "./customer-profile.css";
 
 /**
  * The redesigned dashboard body (Tenant Admin Redesign → 1A). Every number comes
@@ -54,11 +60,92 @@ function sparkPath(values: number[]): { line: string; area: string } {
   return { line, area: `${line} L660 170 L0 170 Z` };
 }
 
+function formatSince(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000));
+  if (Number.isNaN(days)) return "—";
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return days < 30 ? `${days}d ago` : formatDay(iso);
+}
+
+interface TopCustomersPanelProps {
+  rows: TopCustomerRow[];
+  currency: unknown;
+  /** Absent → rows are read-only. Rows without an email are never openable. */
+  onOpenCustomer?: (email: string) => void;
+  /** Opens the Customers list (accounts), when this store has it. */
+  onViewAll?: () => void;
+}
+
+/** The store's best buyers by total spent; an inviting empty state before the first sale. */
+function TopCustomersPanel({ rows, currency, onOpenCustomer, onViewAll }: TopCustomersPanelProps) {
+  return (
+    <section className="adm-panel" aria-labelledby="adm-top-customers">
+      <header className="adm-panel__head">
+        <div>
+          <h2 id="adm-top-customers" className="adm-panel__title">
+            Top spenders
+          </h2>
+          <p className="adm-panel__sub">Customers ranked by total spent</p>
+        </div>
+        {onViewAll && (
+          <button type="button" className="adm-link" onClick={onViewAll}>
+            Customers →
+          </button>
+        )}
+      </header>
+      {rows.length === 0 ? (
+        <p className="cpf-top__empty">Your best buyers show up here after their first order.</p>
+      ) : (
+        <ol className="cpf-top">
+          {rows.map((r, i) => {
+            const figure = formatDashboardMoney(r.spent, currency);
+            const sub = `${r.orders} ${r.orders === 1 ? "order" : "orders"} · last ${formatSince(r.lastAt)}`;
+            const body = (
+              <>
+                <span className="cpf-top__rank">{i + 1}</span>
+                <span className="cpf-top__avatar" aria-hidden="true">
+                  {customerInitials(r.name)}
+                </span>
+                <span className="cpf-top__who">
+                  <span className="cpf-top__name">{r.name}</span>
+                  <span className="cpf-top__sub">{sub}</span>
+                </span>
+                <span className="cpf-top__figure">{figure}</span>
+              </>
+            );
+            return (
+              <li key={r.key}>
+                {onOpenCustomer && r.email ? (
+                  <button
+                    type="button"
+                    className="cpf-top__row"
+                    data-rank={i + 1}
+                    onClick={() => onOpenCustomer(r.email)}
+                    aria-label={`${r.name}, ${figure}. Open order history`}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div className="cpf-top__row" data-rank={i + 1}>
+                    {body}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function AdminDashboard({
   brand,
   caps,
   greetingName,
   onOpen,
+  onOpenCustomer,
   onAddProduct,
   canGroupBuys = false,
   onOpenGroupBuyJoins,
@@ -68,6 +155,8 @@ export function AdminDashboard({
   caps: DashboardCaps;
   greetingName: string;
   onOpen: (view: string) => void;
+  /** Opens a buyer's order history, by the email they check out with. */
+  onOpenCustomer?: (email: string) => void;
   onAddProduct: () => void;
   /** Group Buys module on AND granted to this actor — swaps "Stock levels"
    *  for the live-round panel (lib/storefront/admin-dashboard-gb). */
@@ -93,7 +182,12 @@ export function AdminDashboard({
     if (view === GB_VIEW_JOINS || view === GB_VIEW_ROUND) return onOpen(GB_VIEW_MANAGE);
     onOpen(view);
   };
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setOrders] = useState<Order[]>([]);
+  // Dual-currency stores: the tiles, revenue chart and recent list are the
+  // STORE's money; International (USD) orders are counted on their own line
+  // (Analytics) and listed in Orders, never summed into peso figures.
+  const orders = useMemo(() => allOrders.filter((o) => !isForeignCurrencyOrder(o, brand.currency)), [allOrders, brand.currency]);
+  const foreignCount = allOrders.length - orders.length;
 
   // Orders back the KPI tiles, the attention list and the recent-orders table.
   // Skipped entirely for an actor without the grant — the builders return empty
@@ -121,6 +215,7 @@ export function AdminDashboard({
   const revenue = useMemo(() => buildRevenueSeries({ caps, orders }), [caps, orders]);
   const stock = useMemo(() => buildStockPanel(products), [products]);
   const recent = useMemo(() => buildRecentOrders({ caps, orders }), [caps, orders]);
+  const topCustomers = useMemo(() => buildTopCustomers({ caps, orders }), [caps, orders]);
   const gbPanel = gb.status === "ready" ? gb.panel : null;
   const alerts = useMemo(
     () => [
@@ -276,6 +371,11 @@ export function AdminDashboard({
               </header>
               <div className="adm-revenue__figure">
                 <span className="adm-revenue__total">{formatDashboardMoney(revenue.total, brand.currency)}</span>
+                {foreignCount > 0 && (
+                  <span className="adm-table__muted" title="International (USD) orders are reported separately in Analytics">
+                    + {foreignCount} International order{foreignCount === 1 ? "" : "s"}
+                  </span>
+                )}
                 {revenue.deltaPct !== null && (
                   <span
                     className="adm-revenue__delta"
@@ -346,6 +446,15 @@ export function AdminDashboard({
                 ))}
               </ul>
             </section>
+          )}
+
+          {caps.orders && (
+            <TopCustomersPanel
+              rows={topCustomers}
+              currency={brand.currency}
+              onOpenCustomer={onOpenCustomer}
+              onViewAll={isAdminViewVisible(brand, "customers") ? () => onOpen("customers") : undefined}
+            />
           )}
 
           {layout === "analytics" && stockPanel}

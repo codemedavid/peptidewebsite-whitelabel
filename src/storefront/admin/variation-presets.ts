@@ -26,6 +26,18 @@ export type VariationDraft = {
   /** What this option ships with, one item per line. `undefined` = the editor's
    *  "What's included" box is closed; "" = open but empty (saves as nothing). */
   includes?: string;
+  /** This option's International (USD) price — dual-currency stores only.
+   *  "" / absent = the option isn't sold internationally. */
+  usdPrice?: number | string;
+  /** This option's own sale price. "" / absent = not on sale; a value at or
+   *  above `price` is ignored by the storefront (activeVariationSale). */
+  salePrice?: number | string;
+  /** Carried through untouched: set in Group Buys → Pricing / the kit editor,
+   *  never in this form. Dropping them made every product save wipe them. */
+  gbPrice?: number;
+  kitSize?: number;
+  /** false = off sale, toggled on the Inventory screen — carried through. */
+  available?: boolean;
 };
 
 /**

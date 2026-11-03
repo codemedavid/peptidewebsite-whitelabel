@@ -10,6 +10,7 @@
 // client checkout and the server placement can import the exact same validity +
 // amount math and never disagree on what a code is worth.
 
+import { positivePrice } from "./markets";
 import type { PromoCode } from "@/storefront/types";
 
 /** Coerce untrusted client/config input into clean PromoCode rows. */
@@ -37,6 +38,10 @@ export function normalizePromoCodes(input: unknown): PromoCode[] {
       used: Math.max(0, Math.round(Number(o.used) || 0)),
       expiry: typeof o.expiry === "string" && o.expiry ? o.expiry.slice(0, 40) : null,
       active: o.active !== false,
+      // Dual-currency stores: the International (USD) value + minimum. Only
+      // positive amounts persist; absent = a fixed code doesn't apply to USD.
+      ...(positivePrice(o.usdValue) ? { usdValue: positivePrice(o.usdValue) } : {}),
+      ...(positivePrice(o.usdMinPurchase) ? { usdMinPurchase: positivePrice(o.usdMinPurchase) } : {}),
     });
   }
   return out;

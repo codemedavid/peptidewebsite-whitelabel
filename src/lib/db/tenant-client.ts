@@ -81,6 +81,8 @@ const TENANT_MODELS = new Set<string>([
   "communityModerationRule",
   // Personal app-account profiles (lib/mobile/account-profile.ts)
   "accountProfile",
+  // "Live now" visitor heartbeats (lib/presence/live.ts)
+  "livePresence",
 ]);
 
 const SCOPED_READS = new Set([

@@ -47,7 +47,13 @@ export function CustomerSection({ order }: { order: OrderDetail }) {
     <View>
       <SectionLabel>Customer</SectionLabel>
       <Card padded={false}>
-        <Row icon="person-outline" label={name || "Customer"} detail={contactMethod ? `Prefers ${contactMethod}` : undefined} />
+        <Row
+          icon="person-outline"
+          label={name || "Customer"}
+          detail={copied === "name" ? "Name copied ✓" : contactMethod ? `Prefers ${contactMethod} · tap to copy` : name ? "Tap to copy name" : undefined}
+          onPress={name ? () => copy("name", name) : undefined}
+          trailing={name ? <Ionicons name={copied === "name" ? "checkmark" : "copy-outline"} size={18} color={t.colors.textFaint} /> : undefined}
+        />
         {canChat ? (
           <>
             <Divider inset={62} />
@@ -66,17 +72,27 @@ export function CustomerSection({ order }: { order: OrderDetail }) {
             <Row
               icon="call-outline"
               label={phone}
-              detail="Tap to call"
+              detail={copied === "phone" ? "Number copied ✓" : "Tap to call · copy icon to copy"}
               onPress={() => void Linking.openURL(`tel:${digits(phone)}`)}
               trailing={
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Text ${name || "the customer"}`}
-                  hitSlop={10}
-                  onPress={() => void Linking.openURL(`sms:${digits(phone)}`)}
-                >
-                  <Ionicons name="chatbubble-outline" size={20} color={t.brand.link} />
-                </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.lg }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Copy ${name ? `${name}'s` : "the customer's"} number`}
+                    hitSlop={10}
+                    onPress={() => copy("phone", phone)}
+                  >
+                    <Ionicons name={copied === "phone" ? "checkmark" : "copy-outline"} size={20} color={t.brand.link} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Text ${name || "the customer"}`}
+                    hitSlop={10}
+                    onPress={() => void Linking.openURL(`sms:${digits(phone)}`)}
+                  >
+                    <Ionicons name="chatbubble-outline" size={20} color={t.brand.link} />
+                  </Pressable>
+                </View>
               }
             />
           </>

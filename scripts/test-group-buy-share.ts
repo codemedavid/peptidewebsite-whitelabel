@@ -57,7 +57,7 @@ const product = (id: string, over: Partial<ShopProduct> = {}): ShopProduct => ({
   ...over,
 });
 
-const content = { howTitle: "How it works", steps: ["Pay to lock a slot.", "Ships {eta}."], terms: "Ships {eta}." };
+const content = { howTitle: "How it works", steps: ["Pay to lock a slot.", "Ships {eta}."], terms: "Ships {eta}.", joinLabel: "Join GB" };
 const OPEN = { onHand: "open", groupBuy: "open" } as const;
 
 console.log("\nbuildShopGroupBuy");

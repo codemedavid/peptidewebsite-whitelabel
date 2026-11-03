@@ -53,6 +53,9 @@ const OWNER_LAYOUTS: Record<string, Brand["homeLayout"]> = {
   "Showcase — promise bar, split hero, featured shelf": "showcase",
   // Sells by group buy ONLY — needs the Group Buy module, else it renders classic.
   "Group buy only — the round is the home": "groupbuy",
+  // Content lives in branding.config.intlLocal, edited by the store owner in
+  // #admin → Website Layout (defaults apply until they edit it).
+  "Intl & Local — mega-menu, market cards, learn cards": "intl-local",
 };
 
 /** Shown, but not selectable, for a tenant the operator granted it to — so

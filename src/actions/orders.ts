@@ -15,6 +15,8 @@
 // folder — never persisted as a base64 data URL. In demo mode (no DB / no
 // ImageKit) the same operations round-trip against the file-backed demo store.
 
+import { isMarket, marketCatalog, marketCurrencyCode, type Market } from "@/lib/storefront/markets";
+import { applyMarketConfig, isDualMarket } from "@/lib/storefront/intl-market";
 import type { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
@@ -51,11 +53,13 @@ import {
   nextDemoOrderNumber,
 } from "@/lib/demo/fixtures";
 import {
+  currencySymbolToIso,
   dbProductToStorefront,
   type DbProductRow as DbProductRowMap,
 } from "@/lib/storefront/product-mapping";
 import { effectiveStock, applyStockMoveToProducts } from "@/lib/storefront/inventory";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
+import { unavailableLineViolation } from "@/lib/storefront/variation-availability";
 import {
   activeAdminFee,
   ADMIN_FEE_LABEL_DEFAULT,
@@ -786,6 +790,9 @@ function orderToDbCreate(tenantId: string, p: Order) {
     // Written once, at placement. There is deliberately no path that updates it
     // afterwards — cleanPatch does not accept it (see updateStorefrontOrderAction).
     customerNote: p.customerNote ?? "",
+    // Only dual-currency (market) orders carry one; every other order leaves the
+    // column at its "" default, so this write path is unchanged for them.
+    ...(p.currency ? { currency: p.currency } : {}),
     placedAt: new Date(p.date),
   };
 }
@@ -918,7 +925,18 @@ async function validateLiveOrder(
   // tag-invalidated tenant cache, so checkout charges exactly what the
   // storefront (which renders from the same cache) displayed.
   const { branding } = await getTenantContext(tenantId);
-  const config = (branding?.config ?? {}) as Record<string, unknown>;
+  const storedConfig = (branding?.config ?? {}) as Record<string, unknown>;
+  // Dual-currency stores: the order is checked out on ITS market's view of the
+  // config (currency, shipping rates, payment methods, fees, promos — see
+  // lib/storefront/intl-market) and priced from that market's catalog below.
+  // Only a store that really sells in two markets may name one; anything else
+  // asking for International is refused rather than quietly charged in pesos.
+  const market: Market | null =
+    isMarket(p.market) && isDualMarket(storedConfig) ? p.market : null;
+  if (p.market === "international" && market !== "international") {
+    return { error: "International orders aren't open on this store." };
+  }
+  const config = market ? applyMarketConfig(storedConfig, market) : storedConfig;
 
   // The owner closed the shop (store admin → Store Status). Checked here,
   // before the catalog load and any write, for the same reason the trial-pause
@@ -958,10 +976,22 @@ async function validateLiveOrder(
   // lives in product metadata and outlives a revoked grant, so an unentitled
   // tenant's placement catalog must not carry it. This is the boundary a stale
   // tab or a hand-rolled request has to clear — the storefront's strip is UX.
-  const catalog = stripMadeToOrder(
+  const catalogAll = stripMadeToOrder(
     catalogResold,
     await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER),
   );
+  // A market order is priced from that market's catalog — for International,
+  // the USD view of each product. Every line must be IN it: an unmatched line
+  // would otherwise keep the price the browser sent (repriceItems only rewrites
+  // lines it can match), which is how a peso product could ride into a USD cart.
+  const catalog = market ? marketCatalog(catalogAll, market) : catalogAll;
+  if (market) {
+    const stray = p.items.find(
+      (it) => !catalog.some((x) => (it.productId ? x.id === it.productId : x.name === it.name)),
+    );
+    if (stray) return { error: `"${stray.name}" isn't sold in this shop — please remove it from your cart.` };
+    p.currency = marketCurrencyCode(market, currencySymbolToIso(String(storedConfig.currency ?? "")));
+  }
   // Tenant slug (used for group-buy attribution + the on-hand gate below).
   const slug = (await getTenantSlug()) ?? tenantId;
   // Group-buy attribution FIRST — it decides whether this order is in a live
@@ -971,7 +1001,11 @@ async function validateLiveOrder(
   // name) — so a line sent without a productId can't slip past attribution or
   // the access gate while still being priced and stocked as a round product.
   const resolvedIds = matchedProductIds(catalog, p.items);
-  const gbScope = await stampGroupBuy(p, tenantId, slug, resolvedIds);
+  // Group buys are local only: an International order never joins a round.
+  const gbScope =
+    market === "international"
+      ? ((p.groupBuyId = null), (p.groupBuyName = null), null)
+      : await stampGroupBuy(p, tenantId, slug, resolvedIds);
   // Gated group-buy access (Paid Access): an order in a gated round needs the buyer's
   // ACTIVE membership (lib/storefront/gb-access.server). Its own fail-closed
   // read, not the best-effort stamp above — a hand-rolled request or a stale tab
@@ -1041,7 +1075,7 @@ async function validateLiveOrder(
   // than the product has in stock, so the admin never has to confirm an
   // order the inventory can't cover. Live-round group-buy lines are
   // pre-orders and exempt (gbScope).
-  const paused = purchasableViolation(catalog, p.items);
+  const paused = purchasableViolation(catalog, p.items) ?? unavailableLineViolation(catalog, p.items);
   if (paused) return { error: paused };
   const violation = stockViolation(catalog, p.items, gbScope);
   if (violation) return { error: violation };
@@ -1113,6 +1147,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
   }
 
   if (isDemoMode()) {
+    // The demo order path has no market-aware pricing; refuse rather than
+    // charge a USD cart in pesos.
+    if (p.market) return { error: "Two-currency checkout isn't available in demo mode." };
     const slug = (await getTenantSlug()) ?? tenantId;
     const id = p.id || `o-${Date.now()}`;
     // Idempotent retry: the same draft id was already stored → return it, don't
@@ -1170,7 +1207,8 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       if (violation) return { error: violation };
     }
     repriceItems(p.items, demoProducts, demoGbScope, demoWholesaleScope);
-    const demoPaused = purchasableViolation(demoProducts, p.items);
+    const demoPaused =
+      purchasableViolation(demoProducts, p.items) ?? unavailableLineViolation(demoProducts, p.items);
     if (demoPaused) return { error: demoPaused };
     const demoViolation = stockViolation(demoProducts, p.items, demoGbScope);
     if (demoViolation) return { error: demoViolation };

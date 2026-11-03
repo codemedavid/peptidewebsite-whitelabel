@@ -6,7 +6,9 @@
 // password. Only routed while the operator has granted customer accounts
 // (visibility.ts PAGE_TOGGLE.account); every action re-checks server-side.
 
+import { orderCurrencySymbol } from "@/lib/storefront/markets";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { Brand } from "../types";
 import { BackLink } from "../components/BackLink";
 import { PAID_ACCESS_JOIN_RETURN_KEY as GB_JOIN_RETURN_KEY } from "@/modules/paid-access/ui";
@@ -28,6 +30,7 @@ import { notifyCustomerAccountChanged } from "../customer-account-client";
 type Mode = "signin" | "signup";
 
 export function AccountPage({ brand, onBack }: { brand: Brand; onBack: () => void }) {
+  const router = useRouter();
   const [account, setAccount] = useState<CustomerAccount | null | undefined>(undefined);
 
   useEffect(() => {
@@ -43,8 +46,13 @@ export function AccountPage({ brand, onBack }: { brand: Brand; onBack: () => voi
   const onAccount = (a: CustomerAccount | null) => {
     setAccount(a);
     notifyCustomerAccountChanged(a);
+    // Signed out: re-run the layout so a members-only store puts its sign-in
+    // wall back up (lib/storefront/account-gate.ts). A no-op everywhere else.
+    if (!a) {
+      router.refresh();
+      return;
+    }
     // Came here from a paid group buy's "Sign in to join": go straight back.
-    if (!a) return;
     try {
       if (sessionStorage.getItem(GB_JOIN_RETURN_KEY)) {
         sessionStorage.removeItem(GB_JOIN_RETURN_KEY);
@@ -73,8 +81,27 @@ export function AccountPage({ brand, onBack }: { brand: Brand; onBack: () => voi
 
 // ── Signed out ────────────────────────────────────────────────────────────────
 
-function AuthCard({ brand, onAccount }: { brand: Brand; onAccount: (a: CustomerAccount) => void }) {
-  const [mode, setMode] = useState<Mode>("signin");
+/** Sub-copy under each heading. The members-only wall (AccountGate) overrides
+ *  it, because there the account is the way IN, not a checkout convenience. */
+export type AuthCardCopy = { signin: string; signup: string };
+
+const ACCOUNT_PAGE_COPY: AuthCardCopy = {
+  signin: "Sign in to see your orders and check out faster.",
+  signup: "Keep every order in one place, with live status and tracking.",
+};
+
+export function AuthCard({
+  brand,
+  onAccount,
+  copy = ACCOUNT_PAGE_COPY,
+  initialMode = "signin",
+}: {
+  brand: Pick<Brand, "name">;
+  onAccount: (a: CustomerAccount) => void;
+  copy?: AuthCardCopy;
+  initialMode?: Mode;
+}) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,11 +134,7 @@ function AuthCard({ brand, onAccount }: { brand: Brand; onAccount: (a: CustomerA
       <div className="acct-auth__intro">
         <p className="acct__eyebrow">{brand.name}</p>
         <h1 className="page__title">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
-        <p className="page__sub">
-          {mode === "signin"
-            ? "Sign in to see your orders and check out faster."
-            : "Keep every order in one place, with live status and tracking."}
-        </p>
+        <p className="page__sub">{mode === "signin" ? copy.signin : copy.signup}</p>
       </div>
 
       <form className="acct-card" onSubmit={submit} noValidate>
@@ -284,7 +307,10 @@ function MyAccount({
                         {units} item{units === 1 ? "" : "s"}
                         {o.paymentStatus === "paid" ? " · Paid" : ""}
                       </span>
-                      <span className="acct-order__total">{money(o.total)}</span>
+                      <span className="acct-order__total">
+                        {/* The order's own currency (an International order is USD). */}
+                        {`${orderCurrencySymbol(o, currency)}${o.total.toLocaleString()}`}
+                      </span>
                       <svg className="acct-order__chev" viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
                         <path d="m6 9 6 6 6-6" />
                       </svg>

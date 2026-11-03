@@ -1,5 +1,6 @@
 "use client";
 
+import { orderCurrencySymbol } from "@/lib/storefront/markets";
 import { useCallback, useState } from "react";
 import type { Brand, Order } from "../types";
 import { useStore } from "../store";
@@ -143,7 +144,8 @@ export function AdminOrderDetail({
 
   /** Every figure on this screen is the STORE's money, so it prints in the
    *  store's currency — not the peso this screen used to assume. */
-  const money = (n: number) => formatOrderMoney(n, brand.currency);
+  // …in the currency THIS order was charged in (an International order is USD).
+  const money = (n: number) => formatOrderMoney(n, orderCurrencySymbol(o, brand.currency));
 
   const totals = computeOrderTotals(o);
   const addressLine = buildAddressLine(o.shipping);
@@ -269,6 +271,24 @@ export function AdminOrderDetail({
                     {o.customer?.phone && <CopyButton value={o.customer.phone} />}
                   </div>
                 </div>
+                {o.customer?.whatsappName && (
+                  <div className="od-field">
+                    <div className="od-field-label">WhatsApp name</div>
+                    <div className="od-field-value-row">
+                      <span className="od-field-value">{o.customer.whatsappName}</span>
+                      <CopyButton value={o.customer.whatsappName} />
+                    </div>
+                  </div>
+                )}
+                {o.customer?.whatsapp && (
+                  <div className="od-field">
+                    <div className="od-field-label">WhatsApp</div>
+                    <div className="od-field-value-row">
+                      <span className="od-field-value">{o.customer.whatsapp}</span>
+                      <CopyButton value={o.customer.whatsapp} />
+                    </div>
+                  </div>
+                )}
                 <div className="od-field">
                   <div className="od-field-label">Contact Method</div>
                   <div className="od-field-value-row">

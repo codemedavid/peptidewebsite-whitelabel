@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { Brand, Courier, ShippingLocation } from "../types";
 import { useStore } from "../store";
+import { saveIntlMarketAction } from "@/actions/intl-local";
+import { normalizeIntlMarket } from "@/lib/storefront/intl-market";
+import { INTL_CURRENCY, type Market } from "@/lib/storefront/markets";
 
 // ─── ShippingLocationModal ────────────────────────────────────────────────────
 
@@ -203,7 +206,33 @@ export function AdminShippingLocations({
   brand: Brand;
   onBack: () => void;
 }) {
-  const { shippingLocations, setShippingLocations, couriers } = useStore();
+  const store = useStore();
+  const { couriers } = store;
+  // Dual-currency stores keep TWO rate lists: the local one (₱) and the
+  // International one (USD, branding.config.intlMarket). Same editor for both;
+  // only where the list lives and its currency differ.
+  const dual = brand.dualMarket === true;
+  const [market, setMarket] = useState<Market>("local");
+  const intl = dual && market === "international";
+  const shippingLocations = intl
+    ? normalizeIntlMarket(store.brand.intlMarket).shippingLocations
+    : store.shippingLocations;
+  const setShippingLocations = (next: ShippingLocation[]) => {
+    if (!intl) return store.setShippingLocations(next);
+    const prev = store.brand.intlMarket;
+    store.setTweak({ intlMarket: { ...normalizeIntlMarket(prev), shippingLocations: next } });
+    void saveIntlMarketAction({ shippingLocations: next })
+      .then((res) => {
+        if ("error" in res) {
+          store.setTweak({ intlMarket: prev });
+          store.toast(res.error);
+        }
+      })
+      .catch(() => {
+        store.setTweak({ intlMarket: prev });
+        store.toast("Couldn't save — please try again.");
+      });
+  };
   const [editing, setEditing] = useState<ShippingLocationEditing | null>(null);
 
   // Courier name for a location's courierId — for the list rows. Falls back to
@@ -257,7 +286,7 @@ export function AdminShippingLocations({
     );
   };
 
-  const currency = brand.currency ?? "₱";
+  const currency = intl ? INTL_CURRENCY.symbol : brand.currency ?? "₱";
 
   return (
     <div className="admin">
@@ -318,6 +347,32 @@ export function AdminShippingLocations({
             Add New
           </button>
         </div>
+
+        {dual && (
+          <div className="admin-form__inline-row" role="tablist" aria-label="Shipping rates for" style={{ gap: 8, marginBottom: 16 }}>
+            {(["local", "international"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={market === m}
+                className={market === m ? "admin-btn" : "admin-btn admin-btn--ghost"}
+                onClick={() => {
+                  setEditing(null);
+                  setMarket(m);
+                }}
+              >
+                {m === "local" ? `Local rates (${brand.currency || "₱"})` : "International rates (USD)"}
+              </button>
+            ))}
+          </div>
+        )}
+        {intl && (
+          <p className="admin-field__hint" style={{ marginBottom: 14 }}>
+            What International (USD) orders pay for shipping. Link each rate to a courier (e.g. DHL) — the
+            International checkout only offers couriers that have a rate here.
+          </p>
+        )}
 
         <div className="admin-ship-list">
           {shippingLocations.map((l) => (

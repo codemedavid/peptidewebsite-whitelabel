@@ -1,5 +1,6 @@
 "use client";
 
+import { orderCurrencySymbol } from "@/lib/storefront/markets";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Brand, Order } from "../types";
 import {
@@ -10,6 +11,21 @@ import {
   bulkUpdateStorefrontOrderStatusAction,
 } from "@/actions/orders";
 import { formatMoney } from "@/lib/storefront/currency";
+import {
+  applyOrderFilter,
+  isFiltered,
+  paymentCounts,
+  statusCounts,
+  type OrderListFilter,
+  type PaymentFilter,
+  type StatusFilter,
+} from "@/lib/storefront/order-list-filter";
+
+const PAYMENT_OPTIONS: { value: PaymentFilter; label: string }[] = [
+  { value: "all", label: "All payments" },
+  { value: "unpaid", label: "Not confirmed" },
+  { value: "paid", label: "Paid" },
+];
 
 const STATUS_OPTIONS: { value: Order["status"]; label: string }[] = [
   { value: "new", label: "New" },
@@ -88,6 +104,8 @@ export type OrdersScope = {
   header?: ReactNode;
   /** The trash is store-wide, so only the unfiltered folder offers it. */
   showTrash?: boolean;
+  /** Open already filtered — the hub's "Review 3 new" / "Confirm 5 payments". */
+  initialFilter?: OrderListFilter;
 };
 
 export function AdminOrders({
@@ -114,7 +132,8 @@ export function AdminOrders({
   const [trashed, setTrashed] = useState<Order[]>([]);
   const [view, setView] = useState<"active" | "trash">("active");
   const [loading, setLoading] = useState<boolean>(true);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<StatusFilter>(scope?.initialFilter?.status ?? "all");
+  const [payment, setPayment] = useState<PaymentFilter>(scope?.initialFilter?.payment ?? "all");
   const [query, setQuery] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<Order["status"]>("confirmed");
@@ -122,7 +141,7 @@ export function AdminOrders({
 
   /** Order totals are the STORE's money — printed in the store's currency, not
    *  the peso this table used to hardcode. */
-  const money = (n: number) => formatMoney(n, brand.currency);
+  const money = (n: number, o?: Order) => formatMoney(n, o ? orderCurrencySymbol(o, brand.currency) : brand.currency);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -144,32 +163,26 @@ export function AdminOrders({
     setView(next);
     setSelected(new Set());
     setFilter("all");
+    setPayment("all");
   };
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const stats = useMemo(() => {
-    const s: Record<string, number> = {};
-    for (const o of orders) {
-      s[o.status] = (s[o.status] || 0) + 1;
-    }
-    return s;
-  }, [orders]);
-
-  const totalAll =
-    (stats.new || 0) +
-    (stats.confirmed || 0) +
-    (stats.processing || 0) +
-    (stats.ready || 0) +
-    (stats.shipped || 0) +
-    (stats.delivered || 0) +
-    (stats.cancelled || 0);
+  // Each facet counts under the other's choice, so a tile's number is exactly
+  // what clicking it shows (lib/storefront/order-list-filter.ts).
+  const stats = useMemo(() => statusCounts(orders, payment), [orders, payment]);
+  const payStats = useMemo(() => paymentCounts(orders, filter), [orders, filter]);
+  const activeFilter: OrderListFilter = { status: filter, payment };
+  const clearFilters = () => {
+    setFilter("all");
+    setPayment("all");
+  };
 
   const filtered = useMemo(() => {
-    let list = visible;
-    if (filter !== "all") list = list.filter((o) => o.status === filter);
+    // The trash has no tiles to set a filter from, so it is never filtered.
+    let list = showingTrash ? visible : applyOrderFilter(visible, { status: filter, payment });
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter(
@@ -182,62 +195,11 @@ export function AdminOrders({
       );
     }
     return list;
-  }, [visible, filter, query]);
+  }, [visible, showingTrash, filter, payment, query]);
 
-  const cards: {
-    id: string;
-    label: string;
-    value: number;
-    tint: string;
-  }[] = [
-    {
-      id: "all",
-      label: "All Orders",
-      value: totalAll || orders.length,
-      tint: "all",
-    },
-    {
-      id: "new",
-      label: "New",
-      value: stats.new ?? orders.filter((o) => o.status === "new").length,
-      tint: "new",
-    },
-    {
-      id: "confirmed",
-      label: "Confirmed",
-      value: stats.confirmed ?? 0,
-      tint: "confirmed",
-    },
-    {
-      id: "processing",
-      label: "Processing",
-      value: stats.processing ?? 0,
-      tint: "processing",
-    },
-    {
-      id: "ready",
-      label: "Ready",
-      value: stats.ready ?? 0,
-      tint: "ready",
-    },
-    {
-      id: "shipped",
-      label: "Shipped",
-      value: stats.shipped ?? 0,
-      tint: "shipped",
-    },
-    {
-      id: "delivered",
-      label: "Delivered",
-      value: stats.delivered ?? 0,
-      tint: "delivered",
-    },
-    {
-      id: "cancelled",
-      label: "Cancelled",
-      value: stats.cancelled ?? 0,
-      tint: "cancelled",
-    },
+  const cards: { id: StatusFilter; label: string }[] = [
+    { id: "all", label: "All Orders" },
+    ...STATUS_OPTIONS.map((s) => ({ id: s.value, label: s.label })),
   ];
 
   const toggle = (id: string) => {
@@ -403,21 +365,45 @@ export function AdminOrders({
         )}
 
         {!showingTrash && (
-        <div className="admin-orders__stats">
+        <>
+        <div className="admin-orders__stats" role="group" aria-label="Filter by order status">
           {cards.map((c) => (
-            <div
+            <button
+              type="button"
               key={c.id}
               className={`admin-stat-mini ${filter === c.id ? "is-active" : ""}`}
-              data-tint={c.tint}
+              data-tint={c.id}
+              aria-pressed={filter === c.id}
               onClick={() => setFilter(c.id)}
             >
-              <div className="admin-stat-mini__label">{c.label}</div>
-              <div className="admin-stat-mini__value">
-                {c.value.toLocaleString()}
-              </div>
-            </div>
+              <span className="admin-stat-mini__label">{c.label}</span>
+              <span className="admin-stat-mini__value">
+                {stats[c.id].toLocaleString()}
+              </span>
+            </button>
           ))}
         </div>
+        <div className="admin-orders__payfilter" role="group" aria-label="Filter by payment">
+          <span className="admin-orders__payfilter-label">Payment</span>
+          {PAYMENT_OPTIONS.map((p) => (
+            <button
+              type="button"
+              key={p.value}
+              className={`admin-orders__paychip admin-orders__paychip--${p.value}`}
+              aria-pressed={payment === p.value}
+              onClick={() => setPayment(p.value)}
+            >
+              {p.label}
+              <span className="admin-orders__paychip-count">{payStats[p.value].toLocaleString()}</span>
+            </button>
+          ))}
+          {isFiltered(activeFilter) && (
+            <button type="button" className="admin-orders__payfilter-clear" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
+        </div>
+        </>
         )}
 
         <div className="admin-orders__search">
@@ -625,11 +611,11 @@ export function AdminOrders({
               <div>
                 <div className="admin-order-card__col-label">Total</div>
                 <div className="admin-order-card__col-main">
-                  {money(totalOf(o))}
+                  {money(totalOf(o), o)}
                 </div>
                 <div className="admin-order-card__col-sub">
-                  + {money(o.shipping?.fee || 0)} shipping
-                  {(o.adminFee?.amount ?? 0) > 0 && <> · + {money(o.adminFee!.amount)} fee</>}
+                  + {money(o.shipping?.fee || 0, o)} shipping
+                  {(o.adminFee?.amount ?? 0) > 0 && <> · + {money(o.adminFee!.amount, o)} fee</>}
                 </div>
               </div>
               <div>
@@ -694,7 +680,16 @@ export function AdminOrders({
               ? "Loading orders…"
               : showingTrash
                 ? "The trash is empty — nothing has been deleted."
-                : "No orders match the current filter."}
+                : payment === "unpaid" && !query.trim()
+                  ? "All caught up — no payments waiting to be confirmed here."
+                  : "No orders match the current filter."}
+            {!loading && !showingTrash && isFiltered(activeFilter) && (
+              <div style={{ marginTop: 14 }}>
+                <button type="button" className="admin-btn" onClick={clearFilters}>
+                  Show all orders
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -31,6 +31,10 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
   // Raw string so partial entries ("12.") don't fight the field; parsed on save.
   const [amount, setAmount] = useState(initial.amount > 0 ? String(initial.amount) : "");
   const [oncePerGroupBuy, setOncePerGroupBuy] = useState(initial.oncePerGroupBuy);
+  // Dual-currency stores: the same fee for International (USD) orders. Blank =
+  // International orders carry no fee (a peso amount is never charged in USD).
+  const dualMarket = brand.dualMarket === true;
+  const [usdAmount, setUsdAmount] = useState(initial.usdAmount ? String(initial.usdAmount) : "");
   const [saving, setSaving] = useState(false);
 
   const currency = brand.currency ?? "₱";
@@ -53,6 +57,9 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
         mode: initial.mode,
         percent: initial.percent,
         oncePerGroupBuy,
+        // Sent only where the field is shown; elsewhere the server keeps the
+        // stored value (mergeAdminFeeInput).
+        ...(dualMarket ? { usdAmount: Number(usdAmount) || 0 } : {}),
       });
       const res = await saveStoreAdminFeeAction(value);
       if ("error" in res) {
@@ -180,6 +187,24 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
                 )}
               </div>
 
+              {dualMarket && (
+                <div className="admin-field" style={{ maxWidth: 240, marginTop: 14, marginBottom: 4 }}>
+                  <label className="admin-field__label">International amount (USD)</label>
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={usdAmount}
+                    placeholder="No fee on USD orders"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsdAmount(e.target.value)}
+                  />
+                  <div className="admin-field__hint">
+                    Charged on International cart orders. Leave blank to charge no fee there.
+                  </div>
+                </div>
+              )}
+
               <div className="admin-field" style={{ marginTop: 14, marginBottom: 4 }}>
                 <label className="admin-check">
                   <input
@@ -192,7 +217,7 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
                 <div className="admin-field__hint">
                   For group buys: a customer pays the fee on their first order in a
                   round only. Orders they add later in the same round carry no fee.
-                  Customers are matched by email or phone number.
+                  Signed-in customers are matched by their account; guests by email or phone number.
                 </div>
               </div>
             </>

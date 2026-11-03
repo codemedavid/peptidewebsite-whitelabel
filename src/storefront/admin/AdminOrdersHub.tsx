@@ -17,12 +17,14 @@ import type { GroupBuy } from "@/lib/storefront/group-buy";
 import type { ReportPrep } from "@/lib/storefront/group-buy-report";
 import { formatMoney } from "@/lib/storefront/currency";
 import { AdminOrders, type OrdersScope } from "./AdminOrders";
+import type { OrderListFilter } from "@/lib/storefront/order-list-filter";
 import { downloadCustomerWorkbook, downloadSupplierWorkbook } from "./supplier-workbook";
 import type { Brand, Order } from "../types";
 import "./order-folders.css";
+import { GbMemberTracker } from "./GbMemberTracker";
 
 /** null = the folder list; a round; or one of the two catch-all folders. */
-export type OrdersFolderKey = null | "all" | "outside" | `round:${string}`;
+export type OrdersFolderKey = null | "all" | "outside" | "members" | `round:${string}`;
 
 type Loaded = Extract<OrderFoldersResult, { ok: true }>;
 type Money = (n: number) => string;
@@ -104,6 +106,27 @@ function Stats({ items }: { items: { label: string; value: string; tone?: "good"
         </div>
       ))}
     </dl>
+  );
+}
+
+/** One tap from the live round to what needs doing: its new orders, or its
+ *  payments still to confirm. Sits beside the card, never inside it — the card
+ *  is itself a button. */
+function TodoShortcuts({ f, onOpenFiltered }: { f: OrderFolder; onOpenFiltered: (filter: OrderListFilter) => void }) {
+  if (!f.newOrders && !f.unpaidOrders) return null;
+  return (
+    <div className="ogb-todo" role="group" aria-label={`Shortcuts for ${f.name}`}>
+      {f.newOrders > 0 && (
+        <button type="button" className="ogb-todo__btn ogb-todo__btn--new" onClick={() => onOpenFiltered({ status: "new", payment: "all" })}>
+          Review {plural(f.newOrders, "new order")} →
+        </button>
+      )}
+      {f.unpaidOrders > 0 && (
+        <button type="button" className="ogb-todo__btn ogb-todo__btn--unpaid" onClick={() => onOpenFiltered({ status: "all", payment: "unpaid" })}>
+          Confirm {plural(f.unpaidOrders, "payment")} →
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -315,6 +338,8 @@ export function AdminOrdersHub({
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  // The filter a shortcut opened the folder with; a plain open clears it.
+  const [preset, setPreset] = useState<OrderListFilter | null>(null);
   const money = useCallback((n: number) => formatMoney(n, brand.currency), [brand.currency]);
 
   const load = useCallback(async () => {
@@ -348,6 +373,7 @@ export function AdminOrdersHub({
       ...base,
       title: f.name,
       includes: (id: string) => ids.has(id),
+      initialFilter: preset ?? undefined,
       header: (
         <RoundHeader
           key={f.id}
@@ -359,16 +385,24 @@ export function AdminOrdersHub({
         />
       ),
     };
-  }, [data, folder, money, onFolder, onOpenDashboard]);
+  }, [data, folder, money, onFolder, onOpenDashboard, preset]);
 
   // A store with no rounds (or a load that failed) keeps the plain list —
   // orders must always be reachable; folders are only an organising layer.
   if (!loading && (failed || !data?.enabled)) {
     return <AdminOrders brand={brand} onBack={onBack} onView={onView} />;
   }
+  if (folder === "members" && data?.enabled) return <GbMemberTracker brand={brand} onBack={() => onFolder(null)} />;
   if (folder && scope) return <AdminOrders brand={brand} onBack={onBack} onView={onView} scope={scope} />;
 
-  const open = (f: OrderFolder) => onFolder(`round:${f.id}`);
+  const open = (f: OrderFolder) => {
+    setPreset(null);
+    onFolder(`round:${f.id}`);
+  };
+  const openFiltered = (f: OrderFolder, filter: OrderListFilter) => {
+    setPreset(filter);
+    onFolder(`round:${f.id}`);
+  };
 
   return (
     <div className="admin">
@@ -389,7 +423,12 @@ export function AdminOrdersHub({
           <>
             {data.folders.live.length > 0 ? (
               <section className="ogb-section" aria-label="Live now">
-                {data.folders.live.map((f) => <LiveCard key={f.id} f={f} money={money} onOpen={() => open(f)} />)}
+                {data.folders.live.map((f) => (
+                  <div key={f.id} className="ogb-live-wrap">
+                    <LiveCard f={f} money={money} onOpen={() => open(f)} />
+                    <TodoShortcuts f={f} onOpenFiltered={(filter) => openFiltered(f, filter)} />
+                  </div>
+                ))}
               </section>
             ) : (
               <div className="ogb-nolive">No group buy is open right now — past rounds are below.</div>
@@ -409,6 +448,7 @@ export function AdminOrdersHub({
               <ul className="ogb-list">
                 <PlainRow title="Outside a group buy" meta="On-hand orders and anything placed between rounds" onOpen={() => onFolder("outside")} />
                 <PlainRow title="All orders" meta="Every order in one list, plus the trash" onOpen={() => onFolder("all")} />
+                <PlainRow title="Member tracker" meta="How many group buys each member joined — by month, last 3 months, or all time" onOpen={() => onFolder("members")} />
               </ul>
             </section>
           </>

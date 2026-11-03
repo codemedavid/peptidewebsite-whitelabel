@@ -101,7 +101,7 @@ export function NoticeModalCard({
  * mounted flag so it never renders during SSR (no hydration flash), closes on Esc
  * / the Agree button, locks body scroll and moves focus into the dialog while open.
  */
-export function NoticeModal({ brand }: { brand: Brand }) {
+export function NoticeModal({ brand, onDismiss }: { brand: Brand; onDismiss?: () => void }) {
   const config: NoticeModalConfig | undefined = brand.noticeModal;
   const [mounted, setMounted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -113,10 +113,15 @@ export function NoticeModal({ brand }: { brand: Brand }) {
 
   const open = mounted && !dismissed && isNoticeModalVisible(config);
 
+  function dismiss() {
+    setDismissed(true);
+    onDismiss?.();
+  }
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDismissed(true);
+      if (e.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -133,7 +138,7 @@ export function NoticeModal({ brand }: { brand: Brand }) {
 
   return (
     <div className="sf-notice-overlay" role="presentation">
-      <NoticeModalCard config={config} onAgree={() => setDismissed(true)} agreeRef={agreeRef} />
+      <NoticeModalCard config={config} onAgree={dismiss} agreeRef={agreeRef} />
     </div>
   );
 }

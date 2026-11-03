@@ -89,9 +89,9 @@ export function AccessCodeGate({
   // Signed in. The server issued `sf_admin_session`, so re-rendering the layout
   // re-runs evaluateVisitorGate — which exempts a verified admin — and the store
   // replaces this wall with the SPA, still on `#admin`. This must be a
-  // router.refresh() and NOT a hard reload: a document load is exactly what
-  // middleware kills the admin session on (lib/auth/admin-session-reset.ts), so
-  // reloading here would sign the owner straight back out.
+  // router.refresh() and NOT a hard reload: a reload of `#admin` is exactly what
+  // ends the admin session (lib/auth/admin-refresh-logout.ts), so reloading
+  // here would sign the owner straight back out.
   const onAdminSignedIn = () => {
     setStatus("unlocking");
     router.refresh();

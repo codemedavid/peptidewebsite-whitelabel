@@ -87,7 +87,9 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
 
   // ── Occasional ───────────────────────────────────────────────────────────
   { view: "hero", label: "Hero Section", hint: "Homepage headline & tagline", icon: "sparkle", tint: "yellow", group: "occasional" },
+  { view: "site-layout", label: "Website Layout", hint: "Intl & Local template: text, menus, images", icon: "palette", tint: "pink", group: "occasional" },
   { view: "banner", label: "Announcement Banner", hint: "Promo bar under the header", icon: "bell", tint: "orange", group: "occasional" },
+  { view: "popup", label: "Announcement Pop-up", hint: "News, new drops & promo codes", icon: "sparkle", tint: "pink", group: "occasional" },
   { view: "design", label: "Card Studio", hint: "Product card designs", icon: "palette", tint: "purple", group: "occasional" },
   { view: "fee", label: "Checkout Fee", hint: "Shipping / service fee", icon: "tag", tint: "yellow", group: "occasional" },
   { view: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan", group: "occasional" },

@@ -361,6 +361,7 @@ const READABLE_KEYS = [
   "coaReports",
   "reviews",
   "noticeModal",
+  "announcementPopup",
   "trackNote",
   "storeStatus",
   "checkoutRules",

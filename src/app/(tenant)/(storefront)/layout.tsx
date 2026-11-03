@@ -15,10 +15,21 @@ import { BrandSplash } from "@/storefront/components/BrandSplash";
 import { normalizeBrandSplash } from "@/lib/storefront/brand-splash";
 import { brandLoaderDesign, brandLoaderVars } from "@/lib/storefront/brand-loader";
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
+import { hasFeature } from "@/lib/features/entitlements";
+import { PresenceBeacon } from "@/storefront/components/PresenceBeacon";
+import { evaluateAccountGate } from "@/lib/auth/account-gate-enforcement";
+import { AccountGate } from "@/storefront/components/AccountGate";
+import { BrandStyle } from "@/storefront/components/BrandStyle";
+import { brandPaletteFromBranding } from "@/lib/theme/resolve-css-vars";
+import { BRAND } from "@/storefront/data";
+import type { Brand } from "@/storefront/types";
 import "@/storefront/storefront.css";
 import "@/storefront/boutique.css";
 import "@/storefront/editorial.css";
 import "@/storefront/showcase.css";
+import "@/storefront/section-background.css";
+import "@/storefront/intl-local.css";
+import "@/storefront/announcement-popup.css";
 // Imported last so the splash rules never land in storefront.css's cascade
 // (see brand-splash.css header: that file has a recorded override hazard).
 import "@/storefront/brand-splash.css";
@@ -94,6 +105,30 @@ export default async function StorefrontLayout({
     );
   }
   const gateHeartbeat = gateDecision.status === "unlocked" ? <GateHeartbeat /> : null;
+  // "Live now" for the owner's app — only on plans that can see it (Sales
+  // Analytics), so other stores' visitors send no heartbeats at all.
+  const presenceBeacon = (await hasFeature(tenantId, FEATURES.STORE_SALES_ANALYTICS)) ? <PresenceBeacon /> : null;
+
+  // ── Members-only sign-in wall ───────────────────────────────────────────────
+  // Checked after the access code, so a store running both asks for the code
+  // first. The wall wears the store's own palette (BrandStyle from the same
+  // layers the storefront composes) since it is the first screen anyone sees.
+  const brandConfig = (branding?.config ?? {}) as Partial<Brand> & { accountGate?: unknown };
+  if ((await evaluateAccountGate(tenantId, brandConfig.accountGate)) === "blocked") {
+    const wallBrand: Brand = { ...BRAND, ...brandPaletteFromBranding(branding), ...brandConfig, name };
+    return (
+      <div style={cssVars} className="min-h-screen">
+        <BrandStyle brand={wallBrand} />
+        <link rel="stylesheet" href={googleFontsUrl(wallBrand.headingFont || "Inter", wallBrand.bodyFont || "Inter")} />
+        <AccountGate
+          storeName={name}
+          logoUrl={brandConfig.logoUrl || branding?.logoUrl}
+          adminLoginTitle={brandConfig.adminLoginTitle}
+          adminLoginSub={brandConfig.adminLoginSub}
+        />
+      </div>
+    );
+  }
 
   // ── Branded loading screen ─────────────────────────────────────────────────
   // Default ON for every tenant: normalizeBrandSplash fails on, so a store
@@ -178,6 +213,7 @@ export default async function StorefrontLayout({
       className="min-h-screen bg-background text-foreground"
     >
       {gateHeartbeat}
+      {presenceBeacon}
       {splash.enabled ? (
         <BrandSplash splash={splash} storeName={name} brandingLogoUrl={branding?.logoUrl} />
       ) : null}

@@ -9,6 +9,7 @@
 // server component, a "use server" action, or a test without pulling in either
 // runtime.
 
+import { positivePrice } from "./markets";
 import type { Product } from "@/storefront/types";
 import { toProductClass, type ProductClass } from "./product-class";
 import { normalizeHostedImageUrl } from "./product-image";
@@ -102,6 +103,11 @@ export type ProductMetadata = {
   madeToOrder?: true;
   /** Vials per supplier kit — see Product.vialsPerKit. Absent = not set. */
   vialsPerKit?: number;
+  /** Dual-currency market tag — persisted only as "international" / "both"
+   *  (absent = local). USD prices persist only when positive. See markets.ts. */
+  market?: "international" | "both";
+  usdPrice?: number;
+  usdDiscountPrice?: number;
 };
 
 /** One persisted variation. See ProductMetadata.variations. */
@@ -110,10 +116,14 @@ type VariationMeta = {
   price: number;
   stock?: number;
   gbPrice?: number;
+  salePrice?: number;
   image?: string;
   extraImages?: string[];
   includes?: string;
   kitSize?: number;
+  usdPrice?: number;
+  /** Persisted only as `false` (option off sale). */
+  available?: boolean;
 };
 
 /** The DB write payload (no id/tenantId/sku/slug — the action owns those). */
@@ -251,6 +261,11 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     freeShipping: meta.freeShipping === true,
     madeToOrder: meta.madeToOrder === true,
     vialsPerKit: normalizeVialsPerKit(meta.vialsPerKit),
+    // Dual-currency fields — absent on every product that predates them, which
+    // reads as "local, no USD price": exactly how it has always sold.
+    ...(meta.market === "international" || meta.market === "both" ? { market: meta.market } : {}),
+    ...(positivePrice(meta.usdPrice) ? { usdPrice: positivePrice(meta.usdPrice) } : {}),
+    ...(positivePrice(meta.usdDiscountPrice) ? { usdDiscountPrice: positivePrice(meta.usdDiscountPrice) } : {}),
   };
 }
 
@@ -341,15 +356,25 @@ function cleanVariations(
       const includes = cleanIncludes(x?.includes);
       // The option's own kit size (Bunuan/Ligwak); absent = the product's vialsPerKit.
       const kitSize = normalizeVialsPerKit(x?.kitSize);
+      // The option's International (USD) price — opt-in, positive only.
+      const usdPrice = positivePrice(x?.usdPrice);
+      // The option's own sale price — opt-in, positive only. Whether it is a
+      // REAL markdown (below the option's price) is decided at read time by
+      // activeVariationSale, so a later price edit can't strand a stale rule.
+      const salePrice = positivePrice(x?.salePrice);
       return {
         name,
         price,
         ...(hasStock ? { stock: Math.max(0, Math.round(x!.stock as number)) } : {}),
         ...(hasGb ? { gbPrice: gb } : {}),
+        ...(salePrice ? { salePrice } : {}),
         ...(image ? { image } : {}),
         ...(extraImages.length ? { extraImages } : {}),
         ...(includes ? { includes } : {}),
         ...(kitSize ? { kitSize } : {}),
+        ...(usdPrice ? { usdPrice } : {}),
+        // Off sale — only `false` persists, so every listed option keeps its shape.
+        ...(x?.available === false ? { available: false } : {}),
       };
     })
     .filter((x) => x.name);
@@ -422,6 +447,9 @@ export function productToDbWrite(
       freeShipping: p.freeShipping ? true : undefined,
       madeToOrder: p.madeToOrder ? true : undefined,
       vialsPerKit: normalizeVialsPerKit(p.vialsPerKit),
+      market: p.market === "international" || p.market === "both" ? p.market : undefined,
+      usdPrice: positivePrice(p.usdPrice),
+      usdDiscountPrice: positivePrice(p.usdDiscountPrice),
     }),
   };
 }

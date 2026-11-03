@@ -986,6 +986,7 @@ function StorefrontCopyModal({
   const [howTitle, setHowTitle] = useState(initial.howTitle);
   const [steps, setSteps] = useState<string[]>(initial.steps);
   const [terms, setTerms] = useState(initial.terms);
+  const [joinLabel, setJoinLabel] = useState(initial.joinLabel);
 
   const setStep = (i: number, value: string) =>
     setSteps((cur) => cur.map((s, j) => (j === i ? value : s)));
@@ -1069,6 +1070,21 @@ function StorefrontCopyModal({
           <span className="admin-field__hint">Preview: {termsPreview}</span>
         </div>
 
+        <div className="admin-modal__row">
+          <label className="admin-field__label" htmlFor="gb-join-label">Product button text</label>
+          <input
+            id="gb-join-label"
+            className="admin-input"
+            value={joinLabel}
+            maxLength={GB_CONTENT_LIMITS.maxLabelLen}
+            placeholder="Join GB"
+            onChange={(e) => setJoinLabel(e.target.value)}
+          />
+          <span className="admin-field__hint">
+            The button on each group-buy product, e.g. &quot;Add to cart&quot;.
+          </span>
+        </div>
+
         {error && (
           <div className="admin-modal__row" role="alert" style={{ color: "#d33", fontSize: 13 }}>
             {error}
@@ -1082,7 +1098,7 @@ function StorefrontCopyModal({
           <button
             className="admin-btn"
             disabled={busy}
-            onClick={() => onSave(normalizeGroupBuyContent({ howTitle, steps, terms }))}
+            onClick={() => onSave(normalizeGroupBuyContent({ howTitle, steps, terms, joinLabel }))}
           >
             {busy ? "Saving…" : "Save copy"}
           </button>

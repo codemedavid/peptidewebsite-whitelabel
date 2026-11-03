@@ -29,6 +29,9 @@ export type TrackedOrder = {
   refundReference?: string;
   /** The store changed this order's lines ("Changed by the store"). */
   changedByStore?: boolean;
+  /** The currency the order was charged in (dual-currency stores); absent =
+   *  the store's own. Read through orderCurrencySymbol. */
+  currency?: string;
 };
 
 export function toTrackedOrder(o: Order): TrackedOrder {
@@ -53,5 +56,6 @@ export function toTrackedOrder(o: Order): TrackedOrder {
     ...(o.refundStatus ? { refundStatus: o.refundStatus } : {}),
     ...(o.refundReference ? { refundReference: o.refundReference } : {}),
     ...(o.storeEditedAt ? { changedByStore: true } : {}),
+    ...(o.currency ? { currency: o.currency } : {}),
   };
 }

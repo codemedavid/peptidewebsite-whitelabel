@@ -75,7 +75,8 @@ const css = (): string =>
 console.log("\nhome-layout — showcase is the fifth layout");
 
 check("HOME_LAYOUTS carries showcase after the existing four", () => {
-  assert.deepEqual([...HOME_LAYOUTS], ["classic", "two-ways", "boutique", "editorial", "showcase"]);
+  // A prefix check: later layouts (groupbuy, intl-local, …) append after these.
+  assert.deepEqual(HOME_LAYOUTS.slice(0, 5), ["classic", "two-ways", "boutique", "editorial", "showcase"]);
 });
 
 check("isShowcaseLayout matches the stored value exactly and fails closed", () => {

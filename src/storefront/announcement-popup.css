@@ -1,0 +1,343 @@
+/* ==========================================================================
+   Announcement Pop-up — the owner's news / new-drop / promo pop-up
+   (components/AnnouncementPopup.tsx). Themed ONLY from the tenant's --brand-*
+   tokens, so each store's palette, fonts and border carry over with nothing
+   stored. Own file (imported after storefront.css) so its rules never sit in
+   that file's long cascade. Motion is transform/opacity only.
+   ========================================================================== */
+.sf-root .sf-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1190; /* just under the Notice Modal (1200) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--brand-text, #1d1a24) 55%, transparent);
+  backdrop-filter: blur(4px);
+  animation: sf-popup-fade 0.25s ease;
+}
+
+.sf-root .sf-popup {
+  --sf-popup-radius: 20px;
+  position: relative;
+  width: 440px;
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  border: var(--brand-border-width, 1px) solid var(--brand-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--sf-popup-radius);
+  box-shadow:
+    0 2px 6px color-mix(in srgb, var(--brand-text, #000) 10%, transparent),
+    0 28px 70px color-mix(in srgb, var(--brand-main, #000) 28%, transparent);
+  animation: sf-popup-rise 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sf-root .sf-popup--split.has-image {
+  width: 760px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* ── close ─────────────────────────────────────────────────────────────── */
+.sf-root .sf-popup__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-surface, #fff) 88%, transparent);
+  color: var(--brand-text, #241d2e);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  transition: transform var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-popup__close:hover { transform: scale(1.06); }
+.sf-root .sf-popup__close:active { transform: scale(0.96); }
+
+/* ── media ─────────────────────────────────────────────────────────────── */
+.sf-root .sf-popup__media {
+  position: relative;
+  aspect-ratio: var(--sf-popup-aspect, 1);
+  max-height: 46dvh;
+  overflow: hidden;
+  background: var(--brand-surface-2, #f4f1f7);
+}
+.sf-root .sf-popup__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sf-root .sf-popup--split .sf-popup__media {
+  aspect-ratio: auto;
+  max-height: none;
+  min-height: 100%;
+}
+
+/* Poster: the photo fills the card and the text sits on a scrim at the foot. */
+.sf-root .sf-popup--poster.has-image {
+  display: grid;
+  color: #fff;
+}
+.sf-root .sf-popup--poster .sf-popup__media,
+.sf-root .sf-popup--poster .sf-popup__body {
+  grid-area: 1 / 1;
+}
+.sf-root .sf-popup--poster .sf-popup__media {
+  max-height: 78dvh;
+  min-height: 420px;
+  aspect-ratio: var(--sf-popup-aspect, 0.8);
+}
+.sf-root .sf-popup--poster .sf-popup__body {
+  align-self: end;
+  position: relative;
+  padding-top: 96px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, #000 80%, var(--brand-main, #1d1a24)) 0%,
+    color-mix(in srgb, color-mix(in srgb, #000 70%, var(--brand-main, #1d1a24)) 62%, transparent) 62%,
+    transparent 100%
+  );
+}
+.sf-root .sf-popup--poster .sf-popup__title,
+.sf-root .sf-popup--poster .sf-popup__message { color: #fff; }
+.sf-root .sf-popup--poster .sf-popup__later { color: rgba(255, 255, 255, 0.86); }
+
+/* ── body ──────────────────────────────────────────────────────────────── */
+.sf-root .sf-popup__body {
+  padding: 22px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sf-root .sf-popup--split .sf-popup__body {
+  justify-content: center;
+  padding: 40px 32px;
+}
+
+.sf-root .sf-popup__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-main, #7c5ca8);
+  background: color-mix(in srgb, var(--brand-main, #7c5ca8) 12%, var(--brand-surface, #fff));
+}
+.sf-root .sf-popup__badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sf-root .sf-popup__badge--drop,
+.sf-root .sf-popup__badge--promo {
+  color: var(--brand-accent, #e94b7d);
+  background: color-mix(in srgb, var(--brand-accent, #e94b7d) 13%, var(--brand-surface, #fff));
+}
+.sf-root .sf-popup__badge--drop::before { animation: sf-popup-pulse 1.6s ease-in-out infinite; }
+
+.sf-root .sf-popup__title {
+  margin: 2px 0 0;
+  font-family: var(--brand-heading-font, inherit);
+  font-size: clamp(1.45rem, 1.1rem + 1.4vw, 1.9rem);
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--brand-text, #241d2e);
+  overflow-wrap: anywhere;
+  padding-right: 28px;
+}
+.sf-root .sf-popup.has-image .sf-popup__title { padding-right: 0; }
+
+.sf-root .sf-popup__message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  color: var(--brand-text-muted, #5e5768);
+}
+
+/* ── promo code chip ───────────────────────────────────────────────────── */
+.sf-root .sf-popup__code {
+  margin-top: 4px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--brand-main, #7c5ca8) 55%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-main, #7c5ca8) 6%, var(--brand-surface, #fff));
+  color: var(--brand-text, #241d2e);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-popup__code:hover {
+  background: color-mix(in srgb, var(--brand-main, #7c5ca8) 11%, var(--brand-surface, #fff));
+}
+.sf-root .sf-popup__code-label {
+  font-size: 12px;
+  color: var(--brand-text-muted, #6b6474);
+}
+.sf-root .sf-popup__code-value {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.sf-root .sf-popup__code-action {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--brand-main, #7c5ca8);
+}
+
+/* ── actions ───────────────────────────────────────────────────────────── */
+.sf-root .sf-popup__actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sf-root .sf-popup__primary {
+  padding: 14px 18px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--brand-button, #7c5ca8), var(--brand-button-2, var(--brand-button, #5f4386)));
+  color: var(--brand-button-text, #fff);
+  font-family: var(--brand-button-font, inherit);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--brand-button, #7c5ca8) 34%, transparent);
+  transition: transform var(--duration-fast, 150ms) ease, filter var(--duration-fast, 150ms) ease;
+}
+.sf-root .sf-popup__primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.sf-root .sf-popup__primary:active { transform: translateY(0) scale(0.99); }
+.sf-root .sf-popup__later {
+  padding: 8px;
+  border: none;
+  background: none;
+  color: var(--brand-text-muted, #6b6474);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sf-root .sf-popup__later:hover { text-decoration: underline; }
+
+.sf-root .sf-popup__close:focus-visible,
+.sf-root .sf-popup__primary:focus-visible,
+.sf-root .sf-popup__later:focus-visible,
+.sf-root .sf-popup__code:focus-visible {
+  outline: 2px solid var(--brand-accent, #e94b7d);
+  outline-offset: 2px;
+}
+
+/* Phones: split stacks; everything fits the screen. */
+@media (max-width: 640px) {
+  .sf-root .sf-popup--split.has-image { display: block; width: 440px; }
+  .sf-root .sf-popup--split .sf-popup__media { aspect-ratio: var(--sf-popup-aspect, 1); max-height: 40dvh; }
+  .sf-root .sf-popup--split .sf-popup__body { padding: 22px 20px 22px; }
+  .sf-root .sf-popup__body { padding: 20px 20px 22px; }
+  .sf-root .sf-popup--poster .sf-popup__media { min-height: 360px; }
+}
+
+@keyframes sf-popup-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sf-popup-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sf-popup-pulse { 50% { opacity: 0.35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-popup-overlay,
+  .sf-root .sf-popup,
+  .sf-root .sf-popup__badge--drop::before { animation: none; }
+}
+
+/* Editor preview: the same card inline, no overlay. */
+.sf-root .sf-popup-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: 28px 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--brand-text, #1d1a24) 45%, var(--brand-background, #fff));
+}
+.sf-root .sf-popup-preview .sf-popup { animation: none; max-height: none; }
+
+/* Store-admin editor — form + sticky preview, one column on narrow screens. */
+.sf-root .sf-popup-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 24px;
+  align-items: start;
+}
+.sf-root .sf-popup-editor__preview { position: sticky; top: 16px; }
+.sf-root .sf-popup-editor__seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.sf-root .sf-popup-editor__opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--brand-border, rgba(0, 0, 0, 0.1));
+  border-radius: 12px;
+  background: var(--brand-surface, #fff);
+  color: var(--brand-text, #241d2e);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sf-root .sf-popup-editor__opt small { font-weight: 500; color: var(--brand-text-muted, #6b6474); font-size: 11.5px; }
+.sf-root .sf-popup-editor__opt[aria-pressed="true"] {
+  border-color: var(--brand-main, #7c5ca8);
+  background: color-mix(in srgb, var(--brand-main, #7c5ca8) 8%, var(--brand-surface, #fff));
+}
+.sf-root .sf-popup-editor__opt:focus-visible { outline: 2px solid var(--brand-accent, #e94b7d); outline-offset: 2px; }
+.sf-root .sf-popup-editor__image {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sf-root .sf-popup-editor__thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--brand-surface-2, #f4f1f7);
+  border: 1px solid var(--brand-border, rgba(0, 0, 0, 0.08));
+}
+.sf-root .sf-popup-editor__error { color: #c62845; font-size: 12.5px; margin-top: 4px; }
+.sf-root .sf-popup-editor__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+@media (max-width: 900px) {
+  .sf-root .sf-popup-editor { grid-template-columns: minmax(0, 1fr); }
+  .sf-root .sf-popup-editor__preview { position: static; order: -1; }
+}

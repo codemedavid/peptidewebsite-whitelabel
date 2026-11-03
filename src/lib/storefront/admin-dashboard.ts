@@ -22,6 +22,7 @@ import { isMadeToOrder } from "./made-to-order";
 import { formatMoney } from "./currency";
 import { isAdminViewVisible } from "@/storefront/visibility";
 import { isViewAllowed, type StaffActor } from "@/storefront/admin/staff-permissions";
+import { rankTopCustomers, type TopCustomerRow } from "./customer-profile";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export const REVENUE_WINDOW_DAYS = 14;
 const STOCK_ROW_LIMIT = 6;
 const RECENT_ORDER_LIMIT = 5;
 const CATEGORY_ROW_LIMIT = 6;
+const TOP_CUSTOMER_LIMIT = 5;
 
 /** Statuses that still need someone to act on the order. */
 const UNFULFILLED_STATUSES: readonly Order["status"][] = [
@@ -403,6 +405,28 @@ export function buildRecentOrders(input: {
       date: o.date,
       status: o.status,
     }));
+}
+
+// ── Top customers ────────────────────────────────────────────────────────────
+
+/**
+ * The store's best buyers for the dashboard panel, by total spent. Empty
+ * without the orders capability. Per-customer spend is order money — every
+ * order already shows its total under the Orders grant — so unlike the revenue
+ * tiles and chart it is NOT gated on Sales Analytics (owner decision, 2026-10-29).
+ */
+export function buildTopCustomers(input: {
+  caps: DashboardCaps;
+  orders: Order[];
+  limit?: number;
+}): TopCustomerRow[] {
+  const { caps, orders } = input;
+  if (!caps.orders) return [];
+  return rankTopCustomers(orders, {
+    by: "spent",
+    limit: input.limit ?? TOP_CUSTOMER_LIMIT,
+    totalOf: orderTotal,
+  });
 }
 
 // ── Needs attention ──────────────────────────────────────────────────────────

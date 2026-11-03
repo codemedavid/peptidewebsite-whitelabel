@@ -37,6 +37,13 @@ import { findProductByLinkKey } from "@/lib/storefront/product-link";
 import { isTextOnlyCard } from "../cardDesign";
 import { isPageVisible } from "../visibility";
 import { MY_GROUPBUY_HREF } from "@/lib/storefront/nav";
+import {
+  ALL_CATEGORY,
+  MIN_ITEMS_FOR_SEARCH,
+  filterListing,
+  listingCategories,
+} from "@/lib/storefront/listing-filter";
+import { ListingFilter, ListingFilterEmpty } from "../components/ListingFilter";
 
 export function GroupBuyPage({
   brand,
@@ -57,7 +64,11 @@ export function GroupBuyPage({
    *  ring it, instead of the catalog's quick-view (which prices off-round). */
   focusProductSlug?: string | null;
 }) {
-  const { products, cart, addToCart, setLineQty } = useStore();
+  const { products, categories, cart, addToCart, setLineQty } = useStore();
+  // Search + category filter over the round's listing — the only discovery a
+  // group-buy-only store (mnm-pepsabuy) has, since its home skips the Catalog.
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(ALL_CATEGORY);
   const focusId = focusProductSlug ? (findProductByLinkKey(products, focusProductSlug)?.id ?? null) : null;
   useEffect(() => {
     if (!focusId) return;
@@ -129,6 +140,16 @@ export function GroupBuyPage({
   }));
   const summary = groupBuyCartSummary(view.lines, entries, currency);
 
+  // The filter only narrows what's DRAWN — the cart bar above still totals the
+  // whole round. A chip whose category left the listing falls back to "All".
+  const chips = listingCategories(view.lines.map((l) => l.product), categories);
+  const activeCategory = chips.some((c) => c.id === category) ? category : ALL_CATEGORY;
+  const shownLines = filterListing(view.lines, { query, category: activeCategory }, (l) => l);
+  const resetFilter = () => {
+    setQuery("");
+    setCategory(ALL_CATEGORY);
+  };
+
   return (
     <section className="page gbpage" id="groupbuy">
       <div className="page__container gbpage__wide">
@@ -175,9 +196,24 @@ export function GroupBuyPage({
           </span>
         </div>
 
+        {view.count >= MIN_ITEMS_FOR_SEARCH && (
+          <ListingFilter
+            query={query}
+            onQueryChange={setQuery}
+            categories={chips}
+            category={activeCategory}
+            onCategoryChange={setCategory}
+            shown={shownLines.length}
+            total={view.count}
+            label="Search the group buy"
+            placeholder={listLayout ? "Search the price list…" : "Search group buy products…"}
+          />
+        )}
+
         {/* Product grid */}
         <div className={listLayout ? "gbpage__grid gbpage__grid--list" : "gbpage__grid"}>
-          {view.lines.map((line) => (
+          {shownLines.length === 0 && <ListingFilterEmpty query={query} onReset={resetFilter} />}
+          {shownLines.map((line) => (
             <GbProductCard
               key={line.product.id}
               line={line}
@@ -189,6 +225,7 @@ export function GroupBuyPage({
               storeClosed={storeClosed}
               viewOnly={view.viewOnly}
               storeName={brand.name}
+              joinLabel={content.joinLabel}
               kit={roundKitProgress(line.product, brand.groupBuyBanner)}
               isFocused={line.product.id === focusId}
             />
@@ -272,6 +309,7 @@ function GbProductCard({
   storeClosed,
   viewOnly,
   storeName,
+  joinLabel,
   kit,
   isFocused = false,
   textOnly = false,
@@ -301,6 +339,8 @@ function GbProductCard({
   viewOnly: boolean;
   /** Store name, used only as the native share sheet's title. */
   storeName?: string;
+  /** The owner's buy-button text (groupBuyContent.joinLabel, default "Join GB"). */
+  joinLabel: string;
 }) {
   const p = line.product;
   const options = line.options;
@@ -403,7 +443,7 @@ function GbProductCard({
           </button>
         ) : qty === 0 ? (
           <button type="button" className="gbpage__join" onClick={join}>
-            Join GB
+            {joinLabel}
           </button>
         ) : (
           // min 0: the stepper replaces "Join GB" only once the dose is in the

@@ -46,6 +46,8 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   DashboardResponse,
   InsightsRange,
   InsightsResponse,
+  LiveResponse,
+  PresenceBeatRequest,
   DeviceResponse,
   LoginChoiceResponse,
   LoginRequest,
@@ -126,6 +128,15 @@ export const dashboardApi = {
 
 export const insightsApi = {
   get: (range: InsightsRange) => api<InsightsResponse>(`/insights?range=${range}`),
+};
+
+/** "Live now": the admin's snapshot, and the customer app's heartbeat. */
+export const liveApi = {
+  get: () => api<LiveResponse>("/live"),
+};
+
+export const presenceApi = {
+  beat: (body: PresenceBeatRequest) => api<{ recorded: boolean }>("/presence", { method: "POST", body }),
 };
 
 export type CustomerFilterKey = "all" | "new" | "returning" | "loyal" | "lapsed";
@@ -279,6 +290,7 @@ export const qk = {
   products: (scope: string) => [scope, "products"] as const,
   insights: (scope: string, range: InsightsRange) => [scope, "insights", range] as const,
   insightsAll: (scope: string) => [scope, "insights"] as const,
+  live: (scope: string) => [scope, "live"] as const,
   customers: (scope: string, q: string, sort: CustomerSort, segment: CustomerFilterKey) =>
     [scope, "customers", q, sort, segment] as const,
   customersAll: (scope: string) => [scope, "customers"] as const,
