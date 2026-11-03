@@ -29,7 +29,7 @@ import {
   getDemoBranding,
 } from "@/lib/demo/fixtures";
 import { str, normalizeProductInput } from "@/lib/storefront/product-input";
-import { applyProductOrder, normalizeProductOrder } from "@/lib/storefront/product-order";
+import { arrangeStoreProducts } from "@/lib/storefront/product-order";
 import {
   currencySymbolToIso,
   dbProductToStorefront,
@@ -81,8 +81,7 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
-    const order = normalizeProductOrder(getDemoBranding(tenantId).config?.productOrder);
-    return { ok: true, products: applyProductOrder(demoEffectiveProducts(slug, symbol), order) };
+    return { ok: true, products: arrangeStoreProducts(demoEffectiveProducts(slug, symbol), getDemoBranding(tenantId).config) };
   }
 
   try {
@@ -95,12 +94,11 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
       ),
       getTenantContext(tenantId),
     ]);
-    const order = normalizeProductOrder((branding?.config as Record<string, unknown> | null)?.productOrder);
     return {
       ok: true,
-      products: applyProductOrder(
+      products: arrangeStoreProducts(
         rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
-        order,
+        branding?.config as Record<string, unknown> | null,
       ),
     };
   } catch (e) {
@@ -167,9 +165,9 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
         tenantId,
         (await getTenantSlug()) ?? tenantId,
         stripResellerPricing(
-          applyProductOrder(
+          arrangeStoreProducts(
             rows.map((r) => dbProductToStorefront(r as DbProductRow, symbol)),
-            normalizeProductOrder(config.productOrder),
+            config,
           ),
           ...stripArgs,
         ),

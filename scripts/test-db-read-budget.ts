@@ -211,6 +211,8 @@ const ORDER_WRITERS = [
   "src/lib/orders/apply-status.ts",
   "src/lib/mobile/orders.ts",
   "src/lib/mobile/account-delete.ts",
+  // Admin → Customers "Link earlier orders" re-points guest orders at an account.
+  "src/actions/customer-accounts.ts",
   // Bunuan + Ligwak — each server function busts after its own commit.
   "src/modules/bunuan/server/order-edit.ts",
   "src/modules/ligwak/server/allocation.ts",
@@ -283,12 +285,32 @@ check("Paid Access's cached gate policies are busted by every settings save", ()
   assert.match(code("src/modules/paid-access/server/access.ts"), /tags: \[`tenant:\$\{tenantId\}`, paidAccessTag\(tenantId\)\]/);
 });
 
+// Files that write group_buys ONLY to bump the round's order-number counter
+// (orderSeq) inside checkout's transaction. Nothing on display reads orderSeq —
+// checkout reads it live under the row lock — so a cached round can't go wrong.
+const COUNTER_ONLY_ROUND_WRITERS = ["src/lib/orders/order-number.ts"];
+for (const file of COUNTER_ONLY_ROUND_WRITERS) {
+  check(`${file} only bumps the round's order counter`, () => {
+    const writes = code(file).match(/groupBuy\.(create|update|updateMany|delete|deleteMany|upsert|createMany)\([\s\S]*?\}\);/g) ?? [];
+    assert.ok(writes.length > 0, "no round write found — drop it from COUNTER_ONLY_ROUND_WRITERS");
+    for (const w of writes) {
+      assert.match(w, /^groupBuy\.update\(/);
+      assert.match(w, /data: \{ orderSeq: \{ increment: 1 \} \}/);
+    }
+  });
+}
+check("nothing on display reads the round's order counter", () => {
+  assert.doesNotMatch(code("src/lib/storefront/group-buy-server.ts"), /orderSeq/);
+});
+
 check("no unlisted file writes group_buys", () => {
   const out = execSync(
     "grep -rlE 'groupBuy\\.(create|update|updateMany|delete|deleteMany|upsert|createMany)\\(' src || true",
     { encoding: "utf8" },
   );
-  const unlisted = out.split("\n").filter((f) => f && !ROUND_WRITERS.includes(f));
+  const unlisted = out
+    .split("\n")
+    .filter((f) => f && !ROUND_WRITERS.includes(f) && !COUNTER_ONLY_ROUND_WRITERS.includes(f));
   assert.deepEqual(unlisted, [], "new round writer — bust revalidateGroupBuys and list it here");
 });
 

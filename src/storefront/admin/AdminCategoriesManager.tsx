@@ -7,6 +7,8 @@ import { uploadStorefrontImageAction } from "@/actions/media";
 import { imageUrl } from "@/lib/media/image-url";
 import { categoryImage, withCategoryImage } from "@/lib/storefront/categories";
 import { isShowcaseLayout } from "@/lib/storefront/home-layout";
+import { groupByCategoryOrder } from "@/lib/storefront/product-order";
+import { saveProductsFollowCategoriesAction } from "@/actions/storefront-admin";
 
 /** Matches the server's cap (uploadStorefrontImageAction), checked here first so
  *  an oversized pick fails instantly instead of after a long upload. */
@@ -116,7 +118,12 @@ export function AdminCategoriesManager({
   brand: Brand;
   onBack: () => void;
 }) {
-  const { categories, setCategories, products } = useStore();
+  const { categories, setCategories, products, setProducts, setTweak, toast } = useStore();
+  // "Products follow this order" — saved the moment it is flipped, like the
+  // other store switches. When on, the shop's All Products view lists products
+  // category by category in the order below.
+  const [follow, setFollow] = useState(brand.productsFollowCategories === true);
+  const [savingFollow, setSavingFollow] = useState(false);
 
   const [cats, setCats] = useState<Category[]>(
     categories.filter((c) => c.id !== "all"),
@@ -184,9 +191,40 @@ export function AdminCategoriesManager({
   const persist = (next: Category[]) =>
     setCategories([{ id: "all", label: "All Products" }, ...next]);
 
+  // Re-group the in-memory catalog so the storefront behind the admin follows
+  // a reorder at once (the server applies the same rule on the next load).
+  const regroup = (next: Category[]) =>
+    setProducts((prev) => groupByCategoryOrder(prev, next.map((c) => c.id)));
+
   const commit = (next: Category[]) => {
     setCats(next);
     persist(next);
+    if (follow) regroup(next);
+  };
+
+  const flipFollow = async () => {
+    if (savingFollow) return;
+    const next = !follow;
+    setSavingFollow(true);
+    try {
+      const res = await saveProductsFollowCategoriesAction(next);
+      if ("error" in res) {
+        toast(res.error);
+        return;
+      }
+      setFollow(res.enabled);
+      setTweak("productsFollowCategories", res.enabled);
+      if (res.enabled) regroup(cats);
+      toast(
+        res.enabled
+          ? "Products now follow your category order"
+          : "Products are back to your Products arrangement (refresh to see it)",
+      );
+    } catch {
+      toast("Couldn't save — please sign in again and retry.");
+    } finally {
+      setSavingFollow(false);
+    }
   };
 
   const addCat = () => {
@@ -209,6 +247,16 @@ export function AdminCategoriesManager({
     if (from === -1 || to === -1 || from === to) return;
     const next = [...cats];
     const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    commit(next);
+  };
+
+  // ↑/↓ for touch screens, where native drag-and-drop does not fire.
+  const move = (index: number, delta: number) => {
+    const to = index + delta;
+    if (to < 0 || to >= cats.length) return;
+    const next = [...cats];
+    const [moved] = next.splice(index, 1);
     next.splice(to, 0, moved);
     commit(next);
   };
@@ -287,6 +335,30 @@ export function AdminCategoriesManager({
           </button>
         </div>
 
+        <section className="hero-editor__switchrow admin-cats-follow" aria-labelledby="admin-cats-follow">
+          <div>
+            <h2 id="admin-cats-follow" className="hero-editor__switchrow-title">
+              Products follow this order
+            </h2>
+            <p className="admin-cats-follow__hint">
+              {follow
+                ? "On — “All Products” lists the first category’s products first, then the next, in the order below. Drag the rows to change it. Inside a category, products keep your Products arrangement."
+                : "Off — the order below only sets the category tabs. Turn on to also list products category by category in this order."}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={follow}
+            aria-label="Products follow the category order"
+            disabled={savingFollow}
+            className={`hero-editor__switch${follow ? " is-on" : ""}`}
+            onClick={() => void flipFollow()}
+          >
+            <span className="hero-editor__switch-knob" />
+          </button>
+        </section>
+
         <div className="admin-orders__bulkbar">
           <label className="admin-check">
             <input
@@ -311,7 +383,7 @@ export function AdminCategoriesManager({
         </div>
 
         <div className="admin-cats-mgr">
-          {cats.map((c) => (
+          {cats.map((c, i) => (
             <div
               key={c.id}
               className={`admin-cat-row${dragOverId === c.id ? " is-drop-target" : ""}`}
@@ -359,6 +431,7 @@ export function AdminCategoriesManager({
                   <circle cx="15" cy="18" r="1.5" />
                 </svg>
               </span>
+              <span className="admin-order__num" aria-label={`Position ${i + 1}`}>{i + 1}</span>
               {showImages && (
                 <CategoryImagePicker
                   category={c}
@@ -380,6 +453,34 @@ export function AdminCategoriesManager({
               </div>
               <span className="admin-cat-row__count">{count(c.id)} products</span>
               <span className="admin-cat-row__id">{c.id}</span>
+              <span className="admin-cat-row__moves">
+                <button
+                  type="button"
+                  className="admin-icon-btn admin-order__btn"
+                  aria-label={`Move ${c.label || "category"} up`}
+                  title="Move up"
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                       strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="18 15 12 9 6 15"/>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="admin-icon-btn admin-order__btn"
+                  aria-label={`Move ${c.label || "category"} down`}
+                  title="Move down"
+                  disabled={i === cats.length - 1}
+                  onClick={() => move(i, 1)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                       strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+              </span>
               <button
                 className="admin-icon-btn admin-icon-btn--danger"
                 title="Delete category"

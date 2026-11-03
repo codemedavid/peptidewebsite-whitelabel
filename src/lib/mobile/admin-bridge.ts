@@ -48,6 +48,7 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   changeStorefrontAdminPasswordAction: storefrontAdmin.changeStorefrontAdminPasswordAction,
   savePaymentMethodsAction: storefrontAdmin.savePaymentMethodsAction,
   saveCategoriesAction: storefrontAdmin.saveCategoriesAction,
+  saveProductsFollowCategoriesAction: storefrontAdmin.saveProductsFollowCategoriesAction,
   saveSortCategoriesAction: storefrontAdmin.saveSortCategoriesAction,
   saveProductOrderAction: storefrontAdmin.saveProductOrderAction,
   saveStoreStatusAction: storefrontAdmin.saveStoreStatusAction,
@@ -57,6 +58,7 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   savePromoCodesAction: storefrontAdmin.savePromoCodesAction,
   saveOrderNotificationsAction: storefrontAdmin.saveOrderNotificationsAction,
   saveNoticeModalAction: storefrontAdmin.saveNoticeModalAction,
+  saveAnnouncementPopupAction: storefrontAdmin.saveAnnouncementPopupAction,
   saveTrackNoteAction: storefrontAdmin.saveTrackNoteAction,
   saveTimelineAction: storefrontAdmin.saveTimelineAction,
   saveHeroContentAction: storefrontAdmin.saveHeroContentAction,
@@ -72,6 +74,7 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   saveCoaReportsAction: storefrontAdmin.saveCoaReportsAction,
   saveReviewsAction: storefrontAdmin.saveReviewsAction,
   saveProtocolsAction: storefrontAdmin.saveProtocolsAction,
+  saveProtocolsNoteAction: storefrontAdmin.saveProtocolsNoteAction,
 
   // actions/products.ts
   listProductsAction: products.listProductsAction,

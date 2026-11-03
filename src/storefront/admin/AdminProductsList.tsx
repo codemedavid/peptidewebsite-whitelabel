@@ -5,7 +5,13 @@ import type { Brand, Product } from "../types";
 import { useStore } from "../store";
 import { deleteProductsAction, listProductsAction } from "@/actions/products";
 import { saveProductOrderAction } from "@/actions/storefront-admin";
-import { applyProductOrder, moveProduct } from "@/lib/storefront/product-order";
+import {
+  applyProductOrder,
+  categoryOrderIds,
+  groupByCategoryOrder,
+  moveProduct,
+  moveStaysInCategory,
+} from "@/lib/storefront/product-order";
 
 export function AdminProductsList({
   brand,
@@ -48,8 +54,21 @@ export function AdminProductsList({
       .catch(() => toast("Couldn't save the product order — please sign in again and retry."));
   };
 
+  // "Products follow this order" (Admin → Categories): the shop groups products
+  // by category, so a move may only reorder a product inside its category —
+  // anything else would snap straight back on the next load.
+  const followsCategories = brand.productsFollowCategories === true;
+  const blockedMove = (id: string, delta: number) => {
+    if (!followsCategories || moveStaysInCategory(products, id, delta)) return false;
+    toast("Products stay grouped by category. Change the category order in Categories.");
+    return true;
+  };
+
   const currentOrder = () => products.map((p) => p.id);
-  const move = (id: string, delta: number) => saveOrder(moveProduct(currentOrder(), id, delta));
+  const move = (id: string, delta: number) => {
+    if (blockedMove(id, delta)) return;
+    saveOrder(moveProduct(currentOrder(), id, delta));
+  };
 
   const dropOn = (targetId: string) => {
     const from = dragId;
@@ -58,12 +77,17 @@ export function AdminProductsList({
     setArmedId(null);
     if (!from || from === targetId) return;
     const order = currentOrder();
-    saveOrder(moveProduct(order, from, order.indexOf(targetId) - order.indexOf(from)));
+    const delta = order.indexOf(targetId) - order.indexOf(from);
+    if (blockedMove(from, delta)) return;
+    saveOrder(moveProduct(order, from, delta));
   };
 
   const resetOrder = () => {
     if (!confirm("Reset the product order back to A–Z?")) return;
-    setProducts((prev) => applyProductOrder([...prev].sort((a, b) => a.name.localeCompare(b.name)), []));
+    setProducts((prev) => {
+      const az = applyProductOrder([...prev].sort((a, b) => a.name.localeCompare(b.name)), []);
+      return followsCategories ? groupByCategoryOrder(az, categoryOrderIds(categories)) : az;
+    });
     saveChain.current = saveChain.current
       .then(() => saveProductOrderAction([]))
       .then((res) => {

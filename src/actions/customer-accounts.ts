@@ -45,6 +45,7 @@ import { toTrackedOrder, type TrackedOrder } from "@/lib/orders/tracked-order";
 import { computeOrderTotals } from "@/storefront/admin/order-detail";
 import { sanitizeSavedDetails } from "@/lib/storefront/saved-details";
 import type { CheckoutCustomer } from "@/storefront/checkout";
+import { revalidateOrders } from "@/lib/orders/order-cache";
 
 const UNAVAILABLE = "Customer accounts aren't available on this store.";
 const BAD_CREDENTIALS = "That email and password don't match an account on this store.";
@@ -680,6 +681,9 @@ export async function linkStoreCustomerOrdersAction(
       });
       return res.count;
     });
+    // The admin order lists are cached under the orders tag — bust it after the
+    // commit so the newly linked orders show their account straight away.
+    if (linked) revalidateOrders(tenantId);
     return linked === null ? { error: "Customer not found." } : { ok: true, linked };
   } catch (e) {
     console.error("[customer-accounts] link orders failed", e);

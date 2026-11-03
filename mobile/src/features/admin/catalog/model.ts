@@ -171,6 +171,22 @@ export function moveProduct(order: readonly string[], id: string, delta: number)
   return next;
 }
 
+/** branding.config.productsFollowCategories (Categories → "Products follow
+ *  this order") — only an explicit `true` is on, as on the website. */
+export const productsFollowCategories = (brand: AdminBrand): boolean => brand.productsFollowCategories === true;
+
+/**
+ * The website's moveStaysInCategory: while products follow the category order
+ * the shop groups them by category, so a move may only reorder a product
+ * inside its own category (anything else snaps straight back on reload).
+ */
+export function moveStaysInCategory(list: readonly { id: string; category?: string }[], id: string, delta: number): boolean {
+  const from = list.findIndex((p) => p.id === id);
+  if (from < 0) return false;
+  const to = Math.max(0, Math.min(list.length - 1, from + delta));
+  return (list[to]?.category ?? "") === (list[from]?.category ?? "");
+}
+
 // ── entitlement gates (src/storefront/visibility.ts) ─────────────────────────
 // Re-derived from the same brand flags, failing closed exactly as the website does.
 

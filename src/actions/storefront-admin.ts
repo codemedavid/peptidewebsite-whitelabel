@@ -296,6 +296,38 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
 }
 
 /**
+ * The Categories screen's "Products follow this order" switch, stored as
+ * `branding.config.productsFollowCategories` (read-modify-write). Gated on
+ * "categories" like the list it belongs to. Only an explicit `true` turns it
+ * on; the loaders read it through arrangeStoreProducts.
+ */
+export async function saveProductsFollowCategoriesAction(
+  enabled: unknown,
+): Promise<{ ok: true; enabled: boolean } | { error: string }> {
+  const ctx = await requireStaffPermission("categories");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+
+  const slug = await getTenantSlug();
+  const on = enabled === true;
+  const current = await readConfig(tenantId);
+  const config = { ...current, productsFollowCategories: on };
+
+  if (isDemoMode()) {
+    saveDemoBranding(tenantId, { config });
+  } else {
+    await prisma.branding.upsert({
+      where: { tenantId },
+      update: { config: config as Prisma.InputJsonValue },
+      create: { tenantId, config: config as Prisma.InputJsonValue },
+    });
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true, enabled: on };
+}
+
+/**
  * Persist the owner's catalog sort menu into `branding.config.sortCategories`
  * (read-modify-write, same shape as saveCategoriesAction so it never clobbers
  * the rest of the Brand config).

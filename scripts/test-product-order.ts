@@ -11,6 +11,11 @@ import {
   applyProductOrder,
   moveProduct,
   MAX_PRODUCT_ORDER,
+  arrangeStoreProducts,
+  categoryOrderIds,
+  groupByCategoryOrder,
+  moveStaysInCategory,
+  productsFollowCategories,
 } from "../src/lib/storefront/product-order";
 import {
   DEFAULT_SORT_CATEGORIES,
@@ -34,7 +39,7 @@ function ok(name: string, cond: boolean, detail?: string) {
 
 const ids = (list: { id: string }[]) => list.map((p) => p.id).join(",");
 
-type P = { id: string; name: string; price: number; featured?: boolean; sortCategory?: string; position?: number };
+type P = { id: string; name: string; price: number; featured?: boolean; sortCategory?: string; position?: number; category?: string };
 const mk = (id: string, name: string, extra: Partial<P> = {}): P => ({ id, name, price: 100, ...extra });
 
 console.log("normalizeProductOrder");
@@ -117,6 +122,59 @@ console.log("catalog default view follows the arrangement");
     ids(orderCatalogByCategories(inGroups, grouped)) === "c,a,b",
   );
   ok("a group pick floats members in arranged order", ids(sortByCategory(inGroups, "wl", grouped)) === "c,a,b");
+}
+
+console.log("\nproducts follow the category order");
+{
+  // Categories: Recovery, then Weight Loss, then Skin. Products arranged by hand
+  // across categories (the owner's Products ↑/↓).
+  const categories = [
+    { id: "all", label: "All Products" },
+    { id: "rec", label: "Recovery" },
+    { id: "wl", label: "Weight Loss" },
+    { id: "skin", label: "Skin" },
+  ];
+  const catalog = [
+    mk("s1", "Serum", { category: "skin" }),
+    mk("w1", "Tirz", { category: "wl" }),
+    mk("r1", "BPC", { category: "rec" }),
+    mk("w2", "Reta", { category: "wl" }),
+    mk("x1", "Orphan", { category: "deleted-cat" }),
+    mk("r2", "Alpha TB", { category: "rec" }),
+  ];
+  const order = ["w2", "s1", "r1", "w1"]; // r2 and x1 never arranged
+
+  ok("only an explicit true turns it on", productsFollowCategories(true) && !productsFollowCategories("true") && !productsFollowCategories(undefined));
+  ok("category ids skip the All tab and junk", categoryOrderIds([...categories, { id: "rec" }, null, { id: 5 }]).join(",") === "rec,wl,skin");
+
+  const off = arrangeStoreProducts(catalog, { productOrder: order, categories });
+  ok("off (the default): the hand arrangement is unchanged", ids(off) === "w2,s1,r1,w1,x1,r2", ids(off));
+
+  const on = arrangeStoreProducts(catalog, { productOrder: order, categories, productsFollowCategories: true });
+  ok(
+    "on: category blocks in Categories order, arrangement inside, unarranged by name, unknown category last",
+    ids(on) === "r1,r2,w2,w1,s1,x1",
+    ids(on),
+  );
+  ok("on: every product is stamped with its final slot", on.every((p, i) => p.position === i));
+  ok(
+    "on: the catalog's default view shows the same order",
+    ids(orderCatalogByCategories(on, DEFAULT_SORT_CATEGORIES)) === ids(on),
+    ids(orderCatalogByCategories(on, DEFAULT_SORT_CATEGORIES)),
+  );
+  const reordered = arrangeStoreProducts(catalog, {
+    productOrder: order,
+    categories: [categories[0], categories[3], categories[1], categories[2]],
+    productsFollowCategories: true,
+  });
+  ok("reordering the categories reorders the products", ids(reordered) === "s1,r1,r2,w2,w1,x1", ids(reordered));
+  ok("grouping is pure — input untouched", catalog.every((p) => p.position === undefined));
+  ok("regrouping an already-grouped list is stable", ids(groupByCategoryOrder(on, categoryOrderIds(categories))) === ids(on));
+
+  ok("a move inside the category is allowed", moveStaysInCategory(on, "r2", -1));
+  ok("a move across a category edge is refused", !moveStaysInCategory(on, "r2", 1));
+  ok("a drag onto another category's product is refused", !moveStaysInCategory(on, "r1", 3));
+  ok("an unknown id is refused", !moveStaysInCategory(on, "nope", 1));
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);

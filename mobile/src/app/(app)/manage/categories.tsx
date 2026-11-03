@@ -4,9 +4,16 @@ import { router, Stack } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useMutation } from "@tanstack/react-query";
 import { adminBridge, unwrap, type AdminBrand } from "@/features/admin/bridge";
-import { IconButton, successTap, useDiscardGuard } from "@/features/admin/catalog/components";
+import { IconButton, successTap, ToggleRow, useDiscardGuard } from "@/features/admin/catalog/components";
 import { useAdminBrand, useCatalogProducts, useCatalogRefresh } from "@/features/admin/catalog/hooks";
-import { ALL_CATEGORY, ALL_CATEGORY_ID, brandCategories, newRowId, type Category } from "@/features/admin/catalog/model";
+import {
+  ALL_CATEGORY,
+  ALL_CATEGORY_ID,
+  brandCategories,
+  newRowId,
+  productsFollowCategories,
+  type Category,
+} from "@/features/admin/catalog/model";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
@@ -44,7 +51,9 @@ function CategoriesEditor({ brand }: { brand: AdminBrand }) {
   const products = useCatalogProducts(brand).data;
   const [seed] = useState(() => brandCategories(brand).filter((c) => c.id !== ALL_CATEGORY_ID));
   const [cats, setCats] = useState<Category[]>(seed);
-  const dirty = JSON.stringify(cats) !== JSON.stringify(seed);
+  const [followSeed] = useState(() => productsFollowCategories(brand));
+  const [follow, setFollow] = useState(followSeed);
+  const dirty = follow !== followSeed || JSON.stringify(cats) !== JSON.stringify(seed);
   const allowLeave = useDiscardGuard(dirty, "Your category changes haven't been saved.");
 
   const counts = useMemo(() => {
@@ -57,7 +66,11 @@ function CategoriesEditor({ brand }: { brand: AdminBrand }) {
   const save = useMutation({
     mutationFn: async () => {
       const rows = cats.map((c) => (c.label.trim() ? { ...c, label: c.label.trim() } : { ...c, label: NEW_LABEL }));
-      return unwrap(await adminBridge.call<{ ok: true } | { error: string }>("saveCategoriesAction", [ALL_CATEGORY, ...rows]));
+      const saved = unwrap(await adminBridge.call<{ ok: true } | { error: string }>("saveCategoriesAction", [ALL_CATEGORY, ...rows]));
+      if (follow !== followSeed) {
+        unwrap(await adminBridge.call<{ ok: true; enabled: boolean } | { error: string }>("saveProductsFollowCategoriesAction", follow));
+      }
+      return saved;
     },
     onSuccess: () => {
       refresh();
@@ -96,6 +109,18 @@ function CategoriesEditor({ brand }: { brand: AdminBrand }) {
         <AppText variant="body" color="muted">
           The category tabs on your shop, in this order. Products are filed under them from the product form.
         </AppText>
+        <Card>
+          <ToggleRow
+            label="Products follow this order"
+            hint={
+              follow
+                ? "On — “All Products” lists the first category’s products first, then the next, in the order below. Inside a category, products keep your Products arrangement."
+                : "Off — the order below only sets the category tabs. Turn on to also list products category by category."
+            }
+            value={follow}
+            onChange={setFollow}
+          />
+        </Card>
         {cats.length === 0 ? (
           <EmptyState icon="folder-open-outline" title="No categories yet" body="Products will still show under “All Products”." />
         ) : (
