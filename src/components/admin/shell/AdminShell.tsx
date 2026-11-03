@@ -34,6 +34,7 @@ const NAV: NavItem[] = [
   { id: "payments", label: "Receiving Accounts", href: "/payments", icon: "Wallet", group: "Money" },
   { id: "features", label: "Feature Modules", href: "/features", icon: "Layers", group: "System" },
   { id: "settings", label: "Platform Settings", href: "/settings", icon: "Settings", group: "System" },
+  { id: "notify", label: "App Notifications", href: "/notify", icon: "Bell", group: "System" },
   { id: "audit", label: "Audit Logs", href: "/audit", icon: "History", group: "System" },
   { id: "diagnostics", label: "Domain Diagnostics", href: "/diagnostics/domains", icon: "Globe", group: "System" },
 ];
