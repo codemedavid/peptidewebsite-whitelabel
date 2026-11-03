@@ -72,7 +72,7 @@ import { readResellerPageCopy } from "@/lib/storefront/reseller-page-copy";
 import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
 import { getBestSellerCounts } from "@/lib/storefront/best-sellers";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
-import { arrangeStoreProducts } from "@/lib/storefront/product-order";
+import { applyProductOrder, normalizeProductOrder } from "@/lib/storefront/product-order";
 import type { Brand, Product } from "@/storefront/types";
 
 /**
@@ -582,10 +582,10 @@ export async function loadStorefrontBrand(
     }
     products = rows.map((r) => dbProductToStorefront(r as DbProductRow, brand.currency || "₱"));
   }
-  // The owner's arrangement (Admin → Products ↑/↓), grouped by the Categories
-  // order when they turned that on. Every surface that lists products in array
-  // order follows it; the catalog's default sort reads the stamped `position`.
-  products = arrangeStoreProducts(products, config);
+  // The owner's arrangement (Admin → Products ↑/↓). Every surface that lists
+  // products in array order follows it; the catalog's default sort reads the
+  // stamped `position`.
+  products = applyProductOrder(products, normalizeProductOrder(config.productOrder));
 
   // Reseller wholesale pricing is part of the SAME entitlement as the portal:
   // an unentitled tenant's catalog ships with no reseller legs at all, so the
