@@ -110,5 +110,16 @@ check("Customers admin shows the switch", () => {
   assert.match(read("src/storefront/admin/AdminCustomers.tsx"), /<AdminMemberSignIn \/>/);
 });
 
+check("the storefront page sends NOTHING to a walled-out visitor (no catalog in the gate's payload)", () => {
+  const home = read("src/app/(tenant)/(storefront)/storefront-home.tsx");
+  const guard = home.indexOf("isStorefrontBlocked(tenantId)) return null");
+  const load = home.indexOf("loadStorefrontBrand({");
+  assert.ok(guard > 0, "storefront-home checks isStorefrontBlocked");
+  assert.ok(guard < load, "the check runs before the catalog is loaded");
+  const blocked = read("src/lib/auth/storefront-blocked.ts");
+  assert.match(blocked, /evaluateVisitorGate/);
+  assert.match(blocked, /evaluateAccountGate/);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

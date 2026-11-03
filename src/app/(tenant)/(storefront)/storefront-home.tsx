@@ -4,6 +4,7 @@ import { isResellerUnlocked } from "@/lib/auth/reseller-session";
 import { isTrialPaused } from "@/lib/trial/trial-state";
 import { loadStorefrontBrand } from "@/lib/storefront/storefront-brand";
 import { storefrontGroupBuyViewer } from "@/lib/storefront/gb-access.server";
+import { isStorefrontBlocked } from "@/lib/auth/storefront-blocked";
 
 // Not a route itself: this is the storefront home, rendered by "/" (page.tsx),
 // and the /p/<slug> and /protocols/<key> share-link routes, so a shared link
@@ -31,6 +32,10 @@ export async function StorefrontHome({
   initialProtocol?: string | null;
 }) {
   const tenantId = await getTenantId();
+  // A walled-out visitor (access code / members-only) gets the layout's gate and
+  // NOTHING from here — the page renders even when the layout doesn't show it,
+  // so without this the catalog would ship in the gate page's payload.
+  if (await isStorefrontBlocked(tenantId)) return null;
   const { brand, products } = await loadStorefrontBrand({
     tenantId,
     slug: (await getTenantSlug()) ?? tenantId,
