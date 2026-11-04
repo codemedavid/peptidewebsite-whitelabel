@@ -18,6 +18,7 @@ import {
   type VariationDraft,
 } from "./variation-presets";
 import { MAX_INCLUDES_LENGTH, unpricedVariationNames } from "@/lib/storefront/variations";
+import { productSaveBlockers } from "@/lib/storefront/product-save-blockers";
 import { activeVariationSale, percentOff } from "@/lib/storefront/sale";
 import { resolveSelectableCategories } from "@/lib/storefront/categories";
 import { assignableSortCategories } from "@/lib/storefront/sort-categories";
@@ -597,14 +598,10 @@ export function AdminAddProduct({
           variationPrices.length ? "cheapest option" : "retail"
         } price, so it will never apply${variationPrices.length ? " to that option" : ""}.`
       : "";
-  const canSave = !!(
-    name.trim() &&
-    description.trim() &&
-    category &&
-    Number(price) >= 0 &&
-    unpriced.length === 0 &&
-    !wholesaleError
-  );
+  // Description is optional (an empty one is skipped on the storefront). Every
+  // remaining reason is shown beside the disabled Save, never just a grey button.
+  const saveBlockers = productSaveBlockers({ name, category, price, unpricedOptions: unpriced, wholesaleError });
+  const canSave = saveBlockers.length === 0;
 
   // Real categories the owner can assign (the synthetic "all" tab is a filter,
   // not an assignable category). Falls back to a single "Uncategorized" entry
@@ -836,6 +833,11 @@ export function AdminAddProduct({
           {saving ? "Saving…" : "Save"}
         </button>
       </header>
+      {!canSave && (
+        <p className="admin-form__blockers" role="status">
+          To save, add: {saveBlockers.join(" · ")}
+        </p>
+      )}
 
       <div className="admin-form__body">
 
@@ -853,7 +855,7 @@ export function AdminAddProduct({
 
           <div className="admin-form__row admin-form__row--single">
             <div className="admin-field">
-              <label className="admin-field__label">Description<span className="req">*</span></label>
+              <label className="admin-field__label">Description <span className="admin-field__optional">(optional)</span></label>
               <textarea className="admin-textarea" value={description}
                 placeholder="Detailed product description…"
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDesc(e.target.value)} />

@@ -3567,6 +3567,18 @@
 .sf-root .admin-form__save:active { transform: translateY(1px); }
 .sf-root .admin-form__save:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Why Save is disabled — the form names what's missing instead of a silent grey button. */
+.sf-root .admin-form__blockers {
+  max-width: 1100px;
+  margin: 12px auto 0;
+  padding: 10px var(--gutter);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand-text);
+  opacity: 0.75;
+}
+.sf-root .admin-field__optional { font-weight: 400; opacity: 0.6; }
+
 .sf-root .admin-form__body {
   max-width: 1100px;
   margin: 0 auto;

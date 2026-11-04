@@ -94,11 +94,15 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
 
   // Orders — the sheet the owner opens first: per order, the number and buyer
   // on its first line, one row per item with its vials, then a blank row
-  // before the next order. Everything else lives on Order Details.
+  // before the next order. Everything else lives on Order Details. The
+  // WhatsApp name + number sit beside the name because owners track buyers by
+  // the chat they talk to them in, not by the legal name typed at checkout.
   const simple = wb.addWorksheet("Orders");
   simple.columns = [
     { header: "Order", width: 12 },
     { header: "Customer", width: 26 },
+    { header: "WhatsApp Name", width: 20 },
+    { header: "WhatsApp Number", width: 18 },
     { header: "Product", width: 40 },
     { header: "Vials", width: 8 },
   ];
@@ -107,7 +111,11 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
   for (const l of prep.orderLines) byOrder.set(l.orderNumber, [...(byOrder.get(l.orderNumber) ?? []), l]);
   for (const [orderNumber, lines] of byOrder) {
     lines.forEach((l, i) => {
-      const row = simple.addRow(i === 0 ? [orderNumber, l.customer, l.product, l.vials] : ["", "", l.product, l.vials]);
+      const row = simple.addRow(
+        i === 0
+          ? [orderNumber, l.customer, l.whatsappName, l.whatsapp, l.product, l.vials]
+          : ["", "", "", "", l.product, l.vials],
+      );
       if (i === 0) row.getCell(1).font = { bold: true };
       // Same rule as Order Details: a cancelled order stays visible but struck out.
       if (!l.counted) row.font = { strike: true, color: { argb: "FF999999" } };

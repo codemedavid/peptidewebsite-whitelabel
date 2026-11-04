@@ -159,7 +159,7 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
       <KeyboardAwareScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" bottomOffset={SPACE.xl}>
         <FormSection title="Basic information">
           <Field label="Product name *" value={d.name} onChangeText={(name) => set({ name })} placeholder="e.g. BPC-157 5mg" />
-          <Field label="Description *" value={d.description} onChangeText={(description) => set({ description })} placeholder="Detailed product description…" multiline />
+          <Field label="Description (optional)" value={d.description} onChangeText={(description) => set({ description })} placeholder="Detailed product description…" multiline />
           <SelectField label="Category *" value={d.category} options={categoryOptions} onChange={(category) => set({ category })} />
           <SelectField
             label="Sort category"

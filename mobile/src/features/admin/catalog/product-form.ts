@@ -174,7 +174,6 @@ export function wholesaleWarning(d: ProductDraft, fmt: (n: number) => string): s
 export function saveBlockers(d: ProductDraft): string[] {
   const out: string[] = [];
   if (!d.name.trim()) out.push("Add a product name.");
-  if (!d.description.trim()) out.push("Add a description.");
   if (!d.category) out.push("Choose a category.");
   if (!(Number(d.price) >= 0)) out.push("Enter a valid base price.");
   const unpriced = unpricedVariationNames(d.variations);

@@ -206,7 +206,7 @@ const B4: Order = {
   paymentProof: null,
   groupBuyId: ROUND_B.id,
   groupBuyName: ROUND_B.name,
-  customer: { name: "Erika Santos", email: "erika@example.com", phone: "09171234567", whatsapp: "+639175550101" },
+  customer: { name: "Erika Santos", email: "erika@example.com", phone: "09171234567", whatsapp: "+639175550101", whatsappName: "Erika WA" },
   shipping: ADDRESS,
   items: [{ name: "TR30 Tirzepatide 30mg", productId: P_TR30, qty: 17, price: 1200 }],
 };
@@ -708,21 +708,32 @@ async function main() {
     );
   });
 
-  await check("Orders sheet: order no. + name, one row per item, a blank row between orders", () => {
+  await check("Orders sheet: order no. + name + WhatsApp, one row per item, a blank row between orders", () => {
     const ws = customerBook.getWorksheet("Orders");
     assert.ok(ws);
-    assert.deepEqual((ws.getRow(1).values as unknown[]).slice(1), ["Order", "Customer", "Product", "Vials"]);
+    assert.deepEqual((ws.getRow(1).values as unknown[]).slice(1), [
+      "Order",
+      "Customer",
+      "WhatsApp Name",
+      "WhatsApp Number",
+      "Product",
+      "Vials",
+    ]);
     const grid: unknown[][] = [];
     for (let i = 2; i <= ws.rowCount; i++) grid.push((ws.getRow(i).values as unknown[]).slice(1));
     const starts = grid.filter((r) => typeof r[0] === "string" && r[0] !== "");
     assert.equal(starts.length, new Set(rows.map((r) => r.orderNumber)).size, "one block per order");
-    assert.equal(grid.filter((r) => r.length && r[2]).length, rows.length, "one row per item");
+    assert.equal(grid.filter((r) => r.length && r[4]).length, rows.length, "one row per item");
     grid.forEach((r, i) => {
       if (i > 0 && typeof r[0] === "string" && r[0] !== "") assert.equal(grid[i - 1].length, 0, `blank row before ${r[0]}`);
     });
     const kg2001 = grid.findIndex((r) => r[0] === "KG-2001");
     assert.equal(grid[kg2001][1], "Erika Santos");
-    assert.equal(grid[kg2001][3], 20);
+    assert.equal(grid[kg2001][5], 20);
+    // Owners track buyers by their WhatsApp identity, not the legal name.
+    const kg2004 = grid.findIndex((r) => r[0] === "KG-2004");
+    assert.equal(grid[kg2004][2], "Erika WA");
+    assert.equal(grid[kg2004][3], "+639175550101");
   });
 
   await check("the export contains NO order from another round", () => {

@@ -625,7 +625,7 @@ export function ProductCard({
             <span className="product-card__rating-count">({rating.count})</span>
           </div>
         )}
-        <p className="product-card__desc">{product.description}</p>
+        {product.description && <p className="product-card__desc">{product.description}</p>}
         {product.purity && (
           <span className="badge badge-soft">{product.purity} Purity</span>
         )}
