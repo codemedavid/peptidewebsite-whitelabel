@@ -283,7 +283,8 @@
     "test:gb-order-edit": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-gb-order-edit.ts",
     "test:bunuan": "npm run -s test:gb-kits && npm run -s test:bunuan-core && npm run -s test:ligwak-core && npm run -s test:gb-totals && npm run -s test:gb-stage && npm run -s test:gb-reprice",
     "test:paid-access-methods": "node --import ./scripts/mobile-test/loader.mjs --import tsx scripts/test-paid-access-methods.ts",
-    "test:brand-style-ssr": "tsx scripts/test-brand-style-ssr.ts"
+    "test:brand-style-ssr": "tsx scripts/test-brand-style-ssr.ts",
+    "test:mobile-variation-includes": "tsx scripts/test-mobile-variation-includes.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

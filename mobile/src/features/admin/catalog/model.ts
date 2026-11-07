@@ -13,7 +13,18 @@ import type { AdminBrand } from "@/features/admin/bridge";
 
 export type Category = { id: string; label: string };
 
-export type Variation = { name: string; price: number; stock?: number; gbPrice?: number; salePrice?: number; image?: string; extraImages?: string[]; available?: boolean };
+export type Variation = {
+  name: string;
+  price: number;
+  stock?: number;
+  gbPrice?: number;
+  salePrice?: number;
+  image?: string;
+  extraImages?: string[];
+  available?: boolean;
+  /** What this option comes with ("Complete set includes: …"), one item per line — set on the website. */
+  includes?: string;
+};
 
 /** A product exactly as listProductsAction / saveProductAction return it. */
 export type CatalogProduct = {

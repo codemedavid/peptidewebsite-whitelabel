@@ -25,6 +25,8 @@ export type VariationDraft = {
   extraImages?: string[];
   /** false = option off sale (set on the website's Inventory screen). */
   available?: boolean;
+  /** The option's packing list, edited on the website; carried so an app save can't erase it. */
+  includes?: string;
 };
 
 export type ProductDraft = {
@@ -99,6 +101,7 @@ export function draftFromProduct(p: CatalogProduct | null, firstCategoryId: stri
       image: v.image ?? "",
       ...(v.extraImages?.length ? { extraImages: v.extraImages } : {}),
       ...(v.available === false ? { available: false } : {}),
+      ...(v.includes ? { includes: v.includes } : {}),
     })),
     stock: s(p?.stock ?? 0),
     featured: p?.featured === true,
@@ -205,8 +208,12 @@ export function toSavePayload(d: ProductDraft, initial: CatalogProduct | null, c
       // The server rebuilds each variation from the payload, so the extras
       // must ride along or they'd be erased.
       const withExtras = v.extraImages?.length ? { ...withImage, extraImages: v.extraImages } : withImage;
+      // The option's packing list ("Complete set includes: …") is edited on the
+      // website only; the server rebuilds each variation from this payload, so
+      // dropping it here wiped the storefront's list on every app save.
+      const withIncludes = v.includes ? { ...withExtras, includes: v.includes } : withExtras;
       // An option switched off on the website's Inventory screen stays off.
-      return v.available === false ? { ...withExtras, available: false } : withExtras;
+      return v.available === false ? { ...withIncludes, available: false } : withIncludes;
     })
     .filter((v) => v.name);
 
