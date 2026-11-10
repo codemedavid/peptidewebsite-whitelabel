@@ -34,3 +34,4 @@ videos/
 
 # Local scratch from agent sessions (member/order dumps, build output)
 /private/
+vrjonina-1111-backup-*.json
