@@ -21,8 +21,8 @@
  * script writes. So run --live at (or just before) midnight going into Nov 11,
  * and --end when the sale closes.
  *
- * PRICES BELOW ARE PLACEHOLDERS copied from the Halloween promo — confirm the
- * 11.11 prices with the owner and edit MARKDOWNS before running.
+ * Prices confirmed by the owner (2026-11-10): the same as the Halloween promo,
+ * Tirzepatide 20mg ₱1,080 and 30mg ₱1,260. MMG Semax Selank is not included.
  *
  *   npx tsx scripts/configure-vrjonina-1111-sale.ts          # dry run: shows every match + price change, writes nothing
  *   npx tsx scripts/configure-vrjonina-1111-sale.ts --live   # apply markdowns + banner + scheduled pop-up
@@ -46,7 +46,7 @@ const prisma = new PrismaClient({
 const SLUG = "vrjonina";
 const DAY = "2026-11-11";
 
-// ── Placeholders (Halloween prices): confirm the 11.11 prices ───────────────
+// ── 11.11 prices: same as Halloween (owner, 2026-11-10; Semax Selank left out) ─
 // `product` matches the product name. `option` matches an option (variation)
 // name, or, for a product without options, its own name. `price` in pesos;
 // null = not decided yet, skipped with a warning.
@@ -54,7 +54,6 @@ type Markdown = { label: string; product: RegExp; option: RegExp | null; price: 
 const MARKDOWNS: Markdown[] = [
   { label: "Tirzepatide 20mg", product: /tirzepatide/i, option: /\b20\s*mg\b/i, price: 1080 },
   { label: "Tirzepatide 30mg", product: /tirzepatide/i, option: /\b30\s*mg\b/i, price: 1260 },
-  { label: "MMG Semax Selank Blend", product: /semax.*selank|selank.*semax/i, option: null, price: null },
 ];
 const BANNER_TEXT = [
   "11.11 SALE · Selected products marked down today only",
