@@ -49,6 +49,7 @@
     "mobile",
     "inspiration",
     "scripts/test-mobile-admin-bridge.ts",
+    "scripts/test-mobile-variation-includes.ts",
     "scripts/test-multi-image.ts"
   ]
 }
