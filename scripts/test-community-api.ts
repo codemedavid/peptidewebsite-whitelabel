@@ -241,6 +241,24 @@ async function main() {
     assert.equal(r.status, 401);
     assert.equal(await db.communityMember.count({ where: { tenantId: C.id } }), 0);
   });
+  await test("App shopping alone lets customers sign in, with no community", async () => {
+    const fShop = await db.feature.create({ data: { key: "mobile.shop" } });
+    const shopOnly = await db.tenant.create({
+      data: {
+        slug: "shoponly",
+        name: "Shop Only",
+        status: "active",
+        planId: plan.id,
+        featureOverrides: { create: [{ featureId: fShop.id, enabled: true }] },
+      },
+    });
+    await mkCustomer(shopOnly.id, "sol@buyer.test", "Sol S", "sol-pass");
+    const r = await signIn("sol@buyer.test", "sol-pass", "shoponly");
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.data.me.mode, "customer");
+    assert.equal(r.json.data.me.community.enabled, false, "no chats without the app community");
+    assert.equal(await db.communityMember.count({ where: { tenantId: shopOnly.id } }), 0);
+  });
   await test("admin wins the tie when the same credentials are staff and customer", async () => {
     const r = await signIn("mod@alpha.test", "mod-pass");
     assert.equal(r.status, 200, JSON.stringify(r.json));

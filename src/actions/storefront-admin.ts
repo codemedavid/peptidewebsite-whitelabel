@@ -31,6 +31,12 @@ import { normalizeTimeline } from "@/lib/storefront/timeline";
 import { categoryImage } from "@/lib/storefront/categories";
 import { normalizeSortCategories } from "@/lib/storefront/sort-categories";
 import { normalizeProductOrder } from "@/lib/storefront/product-order";
+import {
+  isArrangeableCategory,
+  normalizeCategoryProductOrder,
+  realCategories,
+  withCategoryProductOrder,
+} from "@/lib/storefront/category-sections";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import { normalizeCurrency } from "@/lib/storefront/currency";
 import { resolveProtocolImages } from "@/lib/storefront/protocol-images";
@@ -393,6 +399,67 @@ export async function saveProductOrderAction(order: unknown): Promise<ActionResu
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
+}
+
+/**
+ * Save the product order INSIDE one category (Admin → Categories → Arrange
+ * products) into `branding.config.categoryProductOrder[categoryId]`.
+ *
+ * Gated three ways: the "categories" staff permission, the operator grant
+ * FEATURES.STORE_CATEGORY_SECTIONS (re-checked here, never trusted from the
+ * client), and the category must exist in THIS tenant's config. The write is a
+ * read-modify-write under a row lock that replaces only this category's key, so
+ * two admins arranging different categories at once never overwrite each other
+ * and a list can never hold a duplicate id (normalizeProductOrder dedupes).
+ */
+export async function saveCategoryProductOrderAction(
+  categoryId: unknown,
+  order: unknown,
+): Promise<{ ok: true; order: string[] } | { error: string }> {
+  const ctx = await requireStaffPermission("categories");
+  if (!ctx) return { error: NO_ACCESS };
+  const tenantId = ctx.tenantId;
+  if (!isDemoMode() && !(await hasFeature(tenantId, FEATURES.STORE_CATEGORY_SECTIONS))) {
+    return { error: "Category arranging isn't enabled for this store." };
+  }
+  if (!Array.isArray(order)) return { error: "Invalid product order." };
+  const ids = normalizeProductOrder(order);
+  const slug = await getTenantSlug();
+
+  const merge = (current: Record<string, unknown>) => {
+    const categories = Array.isArray(current.categories) ? (current.categories as Category[]) : [];
+    if (!isArrangeableCategory(categoryId, categories)) return null;
+    const next = withCategoryProductOrder(
+      normalizeCategoryProductOrder(current.categoryProductOrder),
+      categoryId,
+      ids,
+      realCategories(categories).map((c) => c.id),
+    );
+    return { ...current, categoryProductOrder: next };
+  };
+
+  if (isDemoMode()) {
+    const config = merge(await readConfig(tenantId));
+    if (!config) return { error: "That category no longer exists — refresh and try again." };
+    saveDemoBranding(tenantId, { config });
+  } else {
+    const saved = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
+      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
+      const config = merge((row?.config ?? {}) as Record<string, unknown>);
+      if (!config) return false;
+      await tx.branding.upsert({
+        where: { tenantId },
+        update: { config: config as Prisma.InputJsonValue },
+        create: { tenantId, config: config as Prisma.InputJsonValue },
+      });
+      return true;
+    });
+    if (!saved) return { error: "That category no longer exists — refresh and try again." };
+  }
+
+  revalidateTenant(tenantId, slug);
+  return { ok: true, order: ids };
 }
 
 /**

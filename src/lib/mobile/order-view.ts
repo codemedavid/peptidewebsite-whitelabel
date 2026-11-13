@@ -13,6 +13,8 @@
 //
 // Pure (npm run test:mobile-core).
 
+import { buyerChannelLink, linkCarriesText, resolveBuyerChannel } from "../orders/buyer-contact";
+import { buildBuyerUpdateMessage } from "../orders/buyer-update-message";
 import type { Order, OrderStatus } from "../../storefront/types";
 import {
   computeOrderTotals,
@@ -177,7 +179,40 @@ function optionalMoney(amount: number | undefined, currency: unknown): string | 
   return amount && amount > 0 ? formatMoney(amount, currency) : null;
 }
 
-export function toOrderDetail(order: Order, currency: unknown, updatedAt: string): OrderDetail {
+/** Store name + the same buyer's other orders (for a remembered chat). */
+export type DetailExtras = {
+  storeName: string;
+  others?: ReadonlyArray<Pick<Order, "id" | "customer" | "date">>;
+  /** FEATURES.STORE_BUYER_CONTACT granted — otherwise neither field is sent. */
+  buyerContact?: boolean;
+};
+
+function buyerViews(order: Order, extras: DetailExtras): Pick<OrderDetail, "buyerChannel" | "buyerUpdate"> {
+  const resolved = resolveBuyerChannel(order, extras.others ?? []);
+  const text = buildBuyerUpdateMessage({
+    status: order.status,
+    orderNumber: displayNumber(order),
+    buyerName: order.customer?.name ?? "",
+    storeName: extras.storeName,
+    courier: order.courier ?? "",
+    trackingNumber: order.trackingNumber ?? "",
+  });
+  return {
+    buyerChannel: resolved ? { ...resolved.channel, source: resolved.source } : null,
+    buyerUpdate: {
+      text,
+      url: resolved ? buyerChannelLink(resolved.channel, text) : null,
+      pasteFirst: resolved ? !linkCarriesText(resolved.channel) : false,
+    },
+  };
+}
+
+export function toOrderDetail(
+  order: Order,
+  currency: unknown,
+  updatedAt: string,
+  extras: DetailExtras = { storeName: "" },
+): OrderDetail {
   const totals = computeOrderTotals(order);
   const money = (n: number) => formatMoney(n, currency);
   const stockEffects: OrderDetail["stockEffects"] = {};
@@ -219,6 +254,7 @@ export function toOrderDetail(order: Order, currency: unknown, updatedAt: string
     paymentProofUrl: hasPaymentProof(order.paymentProof) ? order.paymentProof : null,
     // Set by the server from the row (lib/mobile/orders.ts): Order has no account link.
     chatKey: null,
+    ...(extras.buyerContact ? buyerViews(order, extras) : {}),
     courier: order.courier ?? "",
     trackingNumber: order.trackingNumber ?? "",
     shippingNote: order.shippingNote ?? "",

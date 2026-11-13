@@ -6,8 +6,6 @@ import { withTenant } from "@/lib/db/tenant-client";
 import { normalizeLoginEmail } from "@/lib/auth/login-email";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { claimGuestCustomer, GUEST_PASSWORD_HASH } from "@/lib/storefront/guest-customer";
-import { hasFeature } from "@/lib/features/entitlements";
-import { FEATURES } from "@/lib/features/catalog";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { normalizeHost } from "@/lib/tenant/cache-tags";
 import { parseCustomerSignUp } from "@/lib/storefront/customer-account";
@@ -17,6 +15,7 @@ import { parseSignUpDetails } from "./sign-up-details";
 import { openSession } from "./login";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * POST /auth/register — a shopper creates their customer account in the app.
@@ -26,7 +25,7 @@ import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
  * website. Unlike sign-in, sign-up always names its store: accounts are per
  * store, and a new shopper has no login yet for the server to find it from.
  *
- * Gate: the store must hold MOBILE_COMMUNITY — the feature that lets customers
+ * Gate: the store must be open to shoppers in the app (customer-app.ts), which lets customers
  * into the app at all — so an account made here can always sign in here.
  * An email already used on the store by a customer, the owner or a staff
  * member gets one answer, so sign-up never singles out a team login.
@@ -87,7 +86,7 @@ export async function mobileRegister(
   }
   const unavailable = await storeAvailability(store);
   if (unavailable) return { ok: false, ...unavailable };
-  if (!(await hasFeature(store.id, FEATURES.MOBILE_COMMUNITY))) {
+  if (!(await customerAppOpen(store.id))) {
     return failure("forbidden", "This store doesn't take sign-ups in the app yet. Create your account on its website.");
   }
   if (await isEmailTaken(store.id, email)) return failure("conflict", EMAIL_TAKEN);

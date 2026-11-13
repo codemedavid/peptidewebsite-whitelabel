@@ -32,12 +32,8 @@ import { buildProductCta } from "@/lib/storefront/product-cta";
 import { resolveSaleView } from "@/lib/storefront/sale";
 import { isStoreClosed } from "@/lib/storefront/store-status";
 import { buildProductDetail } from "@/lib/storefront/product-detail";
-import {
-  findProductByLinkKey,
-  parseProductHash,
-  productHash,
-} from "@/lib/storefront/product-link";
 import { ShareProductButton } from "./ShareProductButton";
+import { useProductDetail } from "./useProductDetail";
 import { resolveReviewDescStyle, reviewsForProduct } from "@/lib/storefront/reviews";
 import { canOpenReviewViewer } from "@/lib/storefront/review-viewer";
 import { ReviewViewer } from "./ReviewViewer";
@@ -1047,45 +1043,8 @@ export function Catalog({
   // "" = no explicit pick yet → the catalog shows the owner's configured order
   // (products blocked by sort category, featured pinned above everything).
   const [sort, setSort] = useState("");
-  // The product whose full-detail quick-view modal is open (null = closed).
-  // Seeded on the FIRST render, not in an effect: effects don't run during SSR,
-  // so resolving the shared link there would ship HTML of the bare catalog and
-  // pop the modal open only after hydration — a visible flash of the wrong thing
-  // on exactly the arrival this feature exists for. With the lazy initializer
-  // the product is in the server HTML, which also means a JS-less client (and
-  // any crawler that runs none) still sees the product it was sent.
-  const [selected, setSelected] = useState<Product | null>(() =>
-    openProductSlug ? findProductByLinkKey(products, openProductSlug) : null,
-  );
-
-  // Keeps the modal in step AFTER that first render: navigating from one product
-  // link to another inside the SPA swaps it rather than leaving the first up,
-  // and a `products` list that arrives later still resolves. An unmatched key is
-  // deliberately a no-op: a link to a since-hidden product shows the catalog.
-  useEffect(() => {
-    if (!openProductSlug) return;
-    const target = findProductByLinkKey(products, openProductSlug);
-    if (target) setSelected(target);
-  }, [openProductSlug, products]);
-
-  // Opening the modal puts the product's own link in the address bar, so the
-  // browser's share/copy affordances and the Back button both work on it.
-  // `replaceState` rather than a hash assignment: assigning would push an entry
-  // and fire `hashchange`, which the SPA router would treat as a navigation.
-  const openDetail = (p: Product) => {
-    setSelected(p);
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", productHash(p));
-    }
-  };
-  const closeDetail = () => {
-    setSelected(null);
-    if (typeof window !== "undefined" && parseProductHash(window.location.hash)) {
-      // Drop the product hash on close, keeping the path + query intact so the
-      // catalog does not jump or reload.
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  };
+  // The quick-view modal + its shareable link (see useProductDetail).
+  const { selected, openDetail, closeDetail } = useProductDetail(products, openProductSlug);
 
   // The sort menu is the owner's own list now (Admin → Product Sort Categories),
   // not a hardcoded three. A tenant who has never opened that screen is seeded

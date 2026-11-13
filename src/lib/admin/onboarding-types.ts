@@ -12,7 +12,11 @@
 import type { OnboardingBillingCycle } from "@/lib/onboarding/schema";
 
 // The operator's setup workflow (per the product spec). Shared by the UI + actions.
+// "lead" = the pay-first wizard saved step 1 (business + WhatsApp) but the
+// client has not paid yet: no tenant exists. It is not a step the operator
+// advances through (the workflow stepper skips it) — paying converts the row.
 export const ONBOARDING_STATUSES = [
+  "lead",
   "payment_received",
   "tenant_created",
   "customizing",
@@ -21,7 +25,11 @@ export const ONBOARDING_STATUSES = [
 ] as const;
 export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number];
 
+/** The paid setup pipeline the operator moves a submission through. */
+export const ONBOARDING_WORKFLOW_STATUSES = ONBOARDING_STATUSES.filter((s) => s !== "lead");
+
 export const ONBOARDING_STATUS_LABELS: Record<string, string> = {
+  lead: "Unpaid lead",
   payment_received: "Payment Received",
   tenant_created: "Tenant Created",
   customizing: "Customizing",
@@ -67,6 +75,12 @@ export type OnboardingSummary = {
   // Server-computed checkout total the client was asked to pay (centavos;
   // null for submissions predating the stamp / demo mode)
   amountDueCents: number | null;
+  // Receiving method the client said they paid with (name snapshot) and the QR
+  // PH processing fee included in amountDueCents (null on older rows / leads)
+  paidWithMethod: string | null;
+  paymentFeeCents: number | null;
+  // ISO time the optional post-payment details were sent (null = pending/skipped)
+  detailsSubmittedAt: string | null;
   setupStatus: string;
   setupStatusLabel: string;
   tenantId: string | null;

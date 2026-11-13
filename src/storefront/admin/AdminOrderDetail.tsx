@@ -6,6 +6,7 @@ import type { Brand, Order } from "../types";
 import { useStore } from "../store";
 import { updateStorefrontOrderAction } from "@/actions/orders";
 import { ProofLightbox } from "./gb-proof-lightbox";
+import { OrderBuyerContact } from "./OrderBuyerContact";
 import {
   formatOrderMoney,
   formatOrderDate,
@@ -123,7 +124,7 @@ export function AdminOrderDetail({
   order: Order;
   onBack: () => void;
 }) {
-  const { setProducts, couriers } = useStore();
+  const { setProducts, couriers, orders, setOrders } = useStore();
   // The configured courier list (Couriers admin view), active rows only — plus
   // the order's saved courier if it was since deleted/disabled, so an old
   // order's selection never silently changes.
@@ -535,6 +536,19 @@ export function AdminOrderDetail({
                 </>
               )}
             </section>
+
+            {/* Where the buyer reached the store + the update to send them. */}
+            {brand.buyerContactEnabled && (
+              <OrderBuyerContact
+                brand={brand}
+                order={o}
+                allOrders={orders}
+                onSaved={(saved) => {
+                  setO(saved);
+                  setOrders((os) => os.map((x) => (x.id === saved.id ? saved : x)));
+                }}
+              />
+            )}
 
             {/* Payment summary */}
             <section className="od-card od-card--pad-sm">

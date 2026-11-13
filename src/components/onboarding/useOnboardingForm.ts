@@ -4,8 +4,12 @@
 // option catalogs, per-step validation, the draft → submit-payload mapping, and
 // a hook that owns the draft (with localStorage persistence so a mid-flow refresh
 // survives). The wizard component drives step navigation + submission.
+//
+// Pay-first flow: STEPS (business → package → checkout) are all that stand
+// between a visitor and payment. The heavy setup questions (DETAILS_STEPS) come
+// AFTER payment and are optional — the team collects anything missing on WhatsApp.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   STARTER_FEATURE_KEYS,
   STARTER_FEATURE_LABELS,
@@ -13,6 +17,7 @@ import {
   STARTER_EXTRA_FEATURE_PRICE_CENTS,
   normalizeOnboardingCycle,
   type OnboardingBillingCycle,
+  type OnboardingDetailsInput,
   type OnboardingInput,
   type OnboardingPayload,
   type StarterFeatureKey,
@@ -69,11 +74,26 @@ export type Draft = {
   trial: boolean;
   // 6 — Starter add-on features (at least STARTER_FEATURE_LIMIT; extras billed per feature)
   selectedFeatures: StarterFeatureKey[];
-  // 7 — checkout
+  // checkout — which platform receiving method they paid with (PackagePaymentMethod.id)
+  paidWithMethodId: string;
   paymentProofUrl: string;
   termsAccepted: boolean;
   // anti-spam honeypot
   website: string;
+  // Opaque token from saveOnboardingLeadAction (step 1) — converts that lead on submit.
+  leadToken: string;
+  // Server-assigned store address label from the lead save (preview only).
+  storeSlug: string;
+  // Set once payment is submitted: drives the optional post-payment details
+  // steps and the final screen (persisted so a refresh mid-details survives).
+  submitted: SubmittedSignup | null;
+};
+
+export type SubmittedSignup = {
+  token: string; // access token for updateOnboardingDetailsAction
+  slug: string;
+  url: string;
+  reference: string;
 };
 
 export const emptyProduct = (): DraftProduct => ({
@@ -107,20 +127,31 @@ export const INITIAL_DRAFT: Draft = {
   billingCycle: "monthly",
   trial: false,
   selectedFeatures: [],
+  paidWithMethodId: "",
   paymentProofUrl: "",
   termsAccepted: false,
   website: "",
+  leadToken: "",
+  storeSlug: "",
+  submitted: null,
 };
 
+/** Before payment — the only steps counted in the progress rail. */
 export const STEPS = [
-  { key: "business", title: "Business information", subtitle: "Tell us who you are and how to reach you." },
+  { key: "business", rail: "Business", title: "Your business", subtitle: "Just the basics — we'll handle the rest." },
+  { key: "package", rail: "Package", title: "Choose your package", subtitle: "Pick the plan that fits your business." },
+  { key: "checkout", rail: "Pay", title: "Pay & submit", subtitle: "Pay, upload your proof, and submit." },
+] as const;
+
+/** After payment — optional, each skippable ("we'll ask you on WhatsApp"). */
+export const DETAILS_STEPS = [
   { key: "branding", title: "Branding & design", subtitle: "Pick a style and your brand colors." },
   { key: "products", title: "Products", subtitle: "Add what you sell — you can add more later." },
   { key: "orders", title: "Order destination", subtitle: "Where should customer orders go?" },
-  { key: "payments", title: "Payment methods", subtitle: "How will customers pay you?" },
-  { key: "package", title: "Choose your package", subtitle: "Pick the plan that fits your business." },
-  { key: "checkout", title: "Checkout & terms", subtitle: "Pay, upload your proof, and submit." },
+  { key: "payments", title: "Payment methods", subtitle: "How will your customers pay you?" },
 ] as const;
+
+export type StepKey = (typeof STEPS)[number]["key"] | (typeof DETAILS_STEPS)[number]["key"];
 
 export const THEME_STYLE_OPTIONS = [
   { id: "minimal", label: "Minimal", desc: "Clean, lots of whitespace, modern.", themeId: "clinical-white", icon: "Minus" },
@@ -154,32 +185,50 @@ export const STARTER_FEATURE_OPTIONS: {
   { id: "coa", label: STARTER_FEATURE_LABELS.coa, desc: "Publish certificates of analysis (lab results).", icon: "ShieldCheck" },
 ];
 
-/** Per-step validation. Returns a field→message map (empty = valid). */
-export function validateStep(step: number, d: Draft): Record<string, string> {
+/** Per-step validation for the pre-payment STEPS (by index). `ctx.methodIds`
+ *  = the receiving methods on offer, so a stale draft choice is caught early.
+ *  Returns a field→message map (empty = valid). */
+export function validateStep(
+  step: number,
+  d: Draft,
+  ctx: { methodIds?: readonly string[] } = {},
+): Record<string, string> {
+  const key = STEPS[step]?.key;
+  return key ? validateStepKey(key, d, ctx) : {};
+}
+
+/** Validation by step key — also used by the post-payment details steps. */
+export function validateStepKey(
+  key: StepKey,
+  d: Draft,
+  ctx: { methodIds?: readonly string[] } = {},
+): Record<string, string> {
   const e: Record<string, string> = {};
-  if (step === 0) {
+  if (key === "business") {
     if (d.businessName.trim().length < 2) e.businessName = "Please enter your business name.";
     // WhatsApp replaced email as the one contact channel, so it has to be dialable.
     const wa = validateWhatsapp(d.whatsapp);
     if ("error" in wa) e.whatsapp = wa.error;
   }
-  if (step === 2) {
+  if (key === "products") {
     d.products.forEach((p, i) => {
       if (p.name.trim() && !(Number(p.price) >= 0 && p.price !== "")) {
         e[`product-${i}`] = "Add a price for this product.";
       }
     });
   }
-  if (step === 3) {
+  if (key === "orders") {
     if (!d.orderDestinationValue.trim()) e.orderDestinationValue = "Add where orders should go.";
   }
-  if (step === 5) {
+  if (key === "package") {
     if (!d.packageKey) e.packageKey = "Please choose a package.";
     if (d.packageKey === "starter" && d.selectedFeatures.length < STARTER_FEATURE_LIMIT) {
       e.selectedFeatures = `Pick at least ${STARTER_FEATURE_LIMIT} features for the Starter package.`;
     }
   }
-  if (step === 6) {
+  if (key === "checkout") {
+    const offered = !ctx.methodIds || ctx.methodIds.includes(d.paidWithMethodId);
+    if (!d.paidWithMethodId || !offered) e.paidWithMethodId = "Please choose how you paid.";
     if (!d.paymentProofUrl) e.paymentProofUrl = "Please upload your proof of payment.";
     if (!d.termsAccepted) e.termsAccepted = "Please accept the terms to continue.";
   }
@@ -229,10 +278,37 @@ export function draftToPayload(d: Draft): OnboardingInput {
     trial: d.packageKey === "pro" && d.trial,
     // Only Starter carries feature picks; other tiers ship with all pages on.
     selectedFeatures: d.packageKey === "starter" ? d.selectedFeatures : [],
+    paidWithMethodId: d.paidWithMethodId,
     paymentProofUrl: d.paymentProofUrl,
     termsAccepted: d.termsAccepted,
     website: d.website,
   };
+}
+
+/** The optional post-payment details (branding, products, orders, payments). */
+export function draftToDetails(d: Draft): OnboardingDetailsInput {
+  const p = draftToPayload(d);
+  return {
+    themeStyle: p.themeStyle,
+    themeId: p.themeId,
+    primaryColor: p.primaryColor,
+    secondaryColor: p.secondaryColor,
+    logoUrl: p.logoUrl,
+    bannerUrls: p.bannerUrls,
+    inspirationUrls: p.inspirationUrls,
+    inspirationNotes: p.inspirationNotes,
+    products: p.products,
+    orderDestination: p.orderDestination,
+    orderDestinationValue: p.orderDestinationValue,
+    paymentMethods: p.paymentMethods,
+  };
+}
+
+/** Order destination prefilled from the step-1 WhatsApp (digits) when blank. */
+export function prefillOrderDestination(d: Draft): Partial<Draft> {
+  if (d.orderDestinationValue.trim() || d.orderDestination !== "whatsapp") return {};
+  const wa = validateWhatsapp(d.whatsapp);
+  return "digits" in wa ? { orderDestinationValue: wa.digits } : {};
 }
 
 /** Upload one image to the public onboarding endpoint; returns its hosted URL. */
@@ -252,6 +328,8 @@ const STORAGE_KEY = "jonina-onboarding-draft";
 export function useOnboardingDraft(initialPlan?: string) {
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [hydrated, setHydrated] = useState(false);
+  // Once cleared (sign-up finished), stop writing the draft back.
+  const cleared = useRef(false);
 
   useEffect(() => {
     try {
@@ -271,7 +349,7 @@ export function useOnboardingDraft(initialPlan?: string) {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || cleared.current) return;
     try {
       // Don't persist the honeypot or terms acceptance.
       const { website, termsAccepted, ...rest } = draft;
@@ -288,6 +366,7 @@ export function useOnboardingDraft(initialPlan?: string) {
   }, []);
 
   const clearDraft = useCallback(() => {
+    cleared.current = true;
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {

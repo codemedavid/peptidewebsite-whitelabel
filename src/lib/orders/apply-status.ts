@@ -38,6 +38,7 @@ import { storefrontOrigin } from "@/lib/tenant/resolve";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import { sendOrderUpdate } from "@/lib/community/order-bot.server";
 import type { Order } from "@/storefront/types";
+import { withBuyerChannel, type BuyerChannel } from "@/lib/orders/buyer-contact";
 
 export type ApplyStatusResult =
   | {
@@ -63,6 +64,12 @@ export type ApplyStatusOptions = {
    * Omitted by the web admin and the Telegram bot, whose behaviour is unchanged.
    */
   expectedUpdatedAt?: Date;
+  /**
+   * Record (or, with null, clear) the chat the buyer reached the store on —
+   * merged into the order's `customer` JSON as `reachedVia`, leaving every
+   * buyer-written field untouched. Undefined = leave it as it is.
+   */
+  buyerChannel?: BuyerChannel | null;
 };
 
 /**
@@ -96,6 +103,10 @@ export async function applyOrderStatusChange(
     }
 
     const next: Prisma.StorefrontOrderUpdateInput = { ...patch };
+    if (opts.buyerChannel !== undefined) {
+      const customer = (current.customer && typeof current.customer === "object" ? current.customer : {}) as object;
+      next.customer = withBuyerChannel(customer, opts.buyerChannel) as Prisma.InputJsonValue;
+    }
     const newStatus = patch.status as Order["status"] | undefined;
     // The same per-order decision the demo path and the bulk action use.
     const plan = newStatus

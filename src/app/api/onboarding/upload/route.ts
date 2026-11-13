@@ -11,12 +11,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadOnboardingMedia } from "@/lib/imagekit/server";
 import { isDemoMode } from "@/lib/demo/fixtures";
+import { classifyProofFile } from "@/lib/upload/image-file";
 
 export const runtime = "nodejs";
 
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // 6 MB
 
 const KINDS = new Set(["logo", "banner", "inspiration", "product", "payment-qr", "proof"]);
+
+/** A renderable image MIME for an inline data URL — the declared type when it is
+ *  an image, else one inferred from the extension (an untyped upload would
+ *  otherwise produce `data:;base64,…`, which no <img> can show). */
+function inlineImageType(file: File): string {
+  if (file.type.startsWith("image/")) return file.type;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (ext === "jpg") return "image/jpeg";
+  if (ext === "tif") return "image/tiff";
+  return ext ? `image/${ext}` : "image/jpeg";
+}
 
 /** Whether real ImageKit credentials are present (not blank / not placeholders). */
 function imageKitConfigured(): boolean {
@@ -46,15 +58,24 @@ export async function POST(req: NextRequest) {
   if (file.size > MAX_IMAGE_BYTES) {
     return NextResponse.json({ error: "Image too large (max 6 MB)." }, { status: 413 });
   }
-  if (!file.type.startsWith("image/")) {
-    return NextResponse.json({ error: `Unsupported type: ${file.type || "unknown"}.` }, { status: 415 });
+  // `file.type` is a browser hint, not a fact: the Facebook/Messenger in-app
+  // browser (where the marketing ads land) and several Android pickers report
+  // "" or application/octet-stream for a real screenshot. The shared guard
+  // falls back to the extension and refuses the rest with actionable copy.
+  const verdict = classifyProofFile(file.name || "", file.type || "");
+  if (!verdict.ok) {
+    console.warn(
+      `[onboarding-upload] refused kind=${kind} name=${file.name || "(none)"} ` +
+        `type=${file.type || "(none)"} size=${file.size}`,
+    );
+    return NextResponse.json({ error: verdict.reason }, { status: 415 });
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
   // Demo, or ImageKit not configured → inline so the wizard still works.
   if (isDemoMode() || !imageKitConfigured()) {
-    return NextResponse.json({ url: `data:${file.type};base64,${bytes.toString("base64")}` });
+    return NextResponse.json({ url: `data:${inlineImageType(file)};base64,${bytes.toString("base64")}` });
   }
 
   try {

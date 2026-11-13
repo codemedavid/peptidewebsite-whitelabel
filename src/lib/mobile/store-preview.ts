@@ -1,7 +1,5 @@
 import "server-only";
 
-import { hasFeature } from "@/lib/features/entitlements";
-import { FEATURES } from "@/lib/features/catalog";
 import { getTenantContext } from "@/lib/tenant/context";
 import { appStorefrontOrigin } from "@/lib/mobile/storefront-origin";
 import type { ApiErrorCode, StorePreview } from "./contract";
@@ -9,6 +7,7 @@ import { storeAvailability } from "./auth";
 import { buildTheme } from "./branding";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * GET /stores/:store — what a store link opens, before anyone signs in.
@@ -38,7 +37,7 @@ export async function loadStorePreview(input: unknown): Promise<Result> {
   const [unavailable, tenant, customerSignIn] = await Promise.all([
     storeAvailability(store),
     getTenantContext(store.id),
-    hasFeature(store.id, FEATURES.MOBILE_COMMUNITY),
+    customerAppOpen(store.id),
   ]);
   if (unavailable) return NOT_FOUND;
   const theme = await buildTheme({ tenant });

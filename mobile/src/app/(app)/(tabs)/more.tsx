@@ -48,9 +48,9 @@ export default function More() {
   const appLink = `${me.store.websiteUrl}/app`;
 
   function shareAppLink() {
+    // Message only: iOS appends `url` to the message, which printed the link twice.
     void Share.share({
-      message: `Shop ${me.store.name} in the app — download it and open our store here: ${appLink}`,
-      url: appLink,
+      message: `Shop ${me.store.name} on our app 📲 Download it free and open our store here:\n${appLink}`,
     }).catch(() => undefined);
   }
 

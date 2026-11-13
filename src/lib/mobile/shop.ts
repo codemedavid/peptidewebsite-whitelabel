@@ -8,6 +8,7 @@ import type { ApiErrorCode } from "./contract";
 import { authenticateCustomer, storeAvailability, type CustomerContext } from "./auth";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * Which store an in-app shop request is for, and who is asking
@@ -18,7 +19,7 @@ import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
  *     the shop is for shoppers.
  *   - A signed-out request names the store (`?store=` / body `store`) the same
  *     way a store link does. A store that isn't live, or doesn't run the
- *     customer app (MOBILE_COMMUNITY), answers exactly like an unknown one, so
+ *     customer app (customer-app.ts), answers exactly like an unknown one, so
  *     the shop can't be used to probe a store's billing state.
  *   - A store behind an active access code is PRIVATE: signed-out callers get
  *     `forbidden`; signed-in customers are known accounts and pass.
@@ -65,7 +66,7 @@ async function resolveGuestStore(storeParam: unknown): Promise<ShopResolution> {
   // Independent reads, one round trip instead of three; checked in the old order.
   const [unavailable, shopOpen, isPrivate] = await Promise.all([
     storeAvailability(store),
-    hasFeature(store.id, FEATURES.MOBILE_COMMUNITY),
+    customerAppOpen(store.id),
     isPrivateStore(store.id),
   ]);
   if (unavailable || !shopOpen) return NOT_FOUND;

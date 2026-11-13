@@ -1,0 +1,71 @@
+/* Category-sections catalog (FEATURES.STORE_CATEGORY_SECTIONS). Scoped under
+   .sf-root and built only from the tenant's --brand-* tokens, so every theme
+   restyles it with no per-tenant CSS. Tabs reuse the storefront .chip. */
+
+.sf-root .catsec-nav {
+  position: sticky;
+  top: 76px; /* replaced at runtime by the measured header height */
+  z-index: 30; /* under .site-header (40), over cards */
+  padding-block: 12px;
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--brand-surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-block: var(--brand-border-width) solid var(--brand-border);
+}
+.sf-root .catsec-nav__scroll {
+  position: relative; /* offsetParent for the active-tab centring */
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-block: 2px;
+}
+.sf-root .catsec-nav__scroll::-webkit-scrollbar { display: none; }
+.sf-root .catsec-nav__tab { scroll-snap-align: center; flex-shrink: 0; }
+.sf-root .catsec-nav__tab:focus-visible {
+  outline: 2px solid var(--brand-button);
+  outline-offset: 2px;
+}
+
+.sf-root .catsec__section {
+  /* A heading scrolled to by the browser (focus, find-in-page) clears the bar. */
+  scroll-margin-top: calc(var(--catsec-offset, 140px) + 8px);
+  padding-top: 28px;
+}
+.sf-root .catsec__section + .catsec__section {
+  margin-top: 20px;
+  border-top: var(--brand-border-width) solid var(--brand-border);
+}
+.sf-root .catsec__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 20px;
+  font-size: clamp(24px, 2.6vw, 34px);
+  letter-spacing: -0.01em;
+  color: var(--brand-main);
+  scroll-margin-top: calc(var(--catsec-offset, 140px) + 8px);
+}
+.sf-root .catsec__title:focus { outline: none; }
+.sf-root .catsec__title:focus-visible {
+  outline: 2px solid var(--brand-button);
+  outline-offset: 4px;
+}
+.sf-root .catsec__count {
+  font-family: var(--brand-body-font, inherit);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-muted);
+}
+
+@media (max-width: 560px) {
+  .sf-root .catsec-nav { top: 64px; padding-block: 10px; }
+  .sf-root .catsec-nav__scroll { gap: 8px; }
+  .sf-root .catsec-nav__tab { padding: 8px 16px; font-size: 12px; }
+  .sf-root .catsec__section { padding-top: 22px; }
+  .sf-root .catsec__title { margin-bottom: 14px; }
+}

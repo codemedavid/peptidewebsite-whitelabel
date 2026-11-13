@@ -24,6 +24,7 @@ import { BrandPageLoader } from "./components/BrandPageLoader";
 import { isTrialPaused } from "@/lib/trial/trial-state";
 import { Hero } from "./components/Hero";
 import { Categories } from "./components/Categories";
+import { CategorySectionsCatalog } from "./components/category-sections/CategorySectionsCatalog";
 import { Catalog } from "./components/Catalog";
 import { GroupBuyBanner } from "./components/GroupBuyBanner";
 import { scopedCatalog } from "@/lib/storefront/group-buy-banner";
@@ -364,6 +365,11 @@ function Shell({
   // group-buy-only store): every "shop" door would open an empty catalog, so
   // the header button and a catalog-bound hero button become Get access.
   const membersOnly = isMembersOnlyStore(brand, visibleProducts.length);
+  // Category sections (operator grant, default OFF): the classic home lists
+  // every category as its own section under a sticky scroll-following bar,
+  // instead of filter chips. A members-only shelf keeps the classic catalog,
+  // which owns the locked-round panel.
+  const categorySections = brand.categorySectionsEntitled === true && !membersOnly;
   const accessCta = getAccessLabel(brand.groupBuyTeaser ?? {});
   const heroGoesToCatalog = heroCtaTarget(1).kind === "catalog";
   const heroCtaHandler = (n: 1 | 2): (() => void) =>
@@ -701,7 +707,7 @@ function Shell({
             />
           )}
           {/* Nothing to filter on a members-only shelf. */}
-          {brand.showCategories !== false && !membersOnly && (
+          {brand.showCategories !== false && !membersOnly && !categorySections && (
             <Categories categories={categories} active={category} onChange={setCategory} />
           )}
           {brand.groupBuyBanner && (
@@ -711,7 +717,17 @@ function Shell({
               onToggle={setGbScope}
             />
           )}
-          {brand.showCatalog !== false && (
+          {brand.showCatalog !== false && categorySections && (
+            <CategorySectionsCatalog
+              products={visibleProducts}
+              categories={categories}
+              brand={brand}
+              onAddToCart={addToCart}
+              openProductSlug={productKey}
+              showNav={brand.showCategories !== false}
+            />
+          )}
+          {brand.showCatalog !== false && !categorySections && (
             <Catalog
               // Public catalog hides products the owner marked unavailable; the
               // store admin (separate route below) still sees the full set. The

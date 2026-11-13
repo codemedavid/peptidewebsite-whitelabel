@@ -32,6 +32,8 @@ export async function updateOnboardingStatusAction(
 ): Promise<AdminOnboardingResult> {
   await requirePlatformUser();
   if (!ONBOARDING_STATUSES.includes(status)) return { error: "Unknown status." };
+  // "lead" is set only by the public wizard (unpaid sign-up) — never by hand.
+  if (status === "lead") return { error: "A submission becomes a lead only from the sign-up form." };
 
   if (isDemoMode()) {
     updateDemoOnboarding(id, { setupStatus: status });

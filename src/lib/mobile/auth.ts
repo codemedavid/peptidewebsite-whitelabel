@@ -14,6 +14,7 @@ import { sanitizePermissions, type StaffActor } from "@/storefront/admin/staff-p
 import type { ApiErrorCode, CustomerActor, MobileActor } from "./contract";
 import { readAccessSession, revokeSession, type LiveSession, type MobileSubject } from "./sessions";
 import { credentialStamp, parseBearer } from "./tokens";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * The mobile API's equivalent of getStorefrontAdminActor(): turn a bearer token
@@ -116,7 +117,7 @@ export function customerStampFor(email: string, passwordHash: string, sessionVer
 
 /**
  * A live customer account: exists in this store, is active, and the store still
- * holds MOBILE_COMMUNITY (the customer app is part of that feature).
+ * is open to shoppers in the app (customer-app.ts: App shopping or App community).
  */
 export async function resolveCustomer(tenantId: string, customerId: string): Promise<ResolvedCustomer | null> {
   const [row, entitled] = await Promise.all([
@@ -124,7 +125,7 @@ export async function resolveCustomer(tenantId: string, customerId: string): Pro
       where: { id: customerId, tenantId },
       select: { id: true, email: true, name: true, phone: true, passwordHash: true, status: true, sessionVersion: true },
     }),
-    hasFeature(tenantId, FEATURES.MOBILE_COMMUNITY),
+    customerAppOpen(tenantId),
   ]);
   if (!row || row.status !== "active" || !entitled) return null;
   return {

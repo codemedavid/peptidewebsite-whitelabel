@@ -80,7 +80,7 @@ export type StorePreview = {
   websiteUrl: string;
   /** Where a new customer creates their account (the store's website). */
   signUpUrl: string;
-  /** The store's customers can sign in to the app (the store holds the app community). */
+  /** The store's customers can sign in to the app (App shopping or App community). */
   customerSignIn: boolean;
   theme: MobileBrandTheme;
 };
@@ -260,6 +260,16 @@ export type OrderDetail = OrderSummary & {
    * the order bot also posts this order's updates. Null for guest orders.
    */
   chatKey: string | null;
+  /**
+   * The chat the buyer reached the store on. `source` says where it came from:
+   * "order" = saved on this order; "customer" = remembered from this buyer's
+   * earlier order; "checkout" = the WhatsApp number they typed. Only "order"
+   * is saved — the others are pre-fills to confirm. Optional so an older
+   * server's response still type-checks in a newer app.
+   */
+  buyerChannel?: BuyerChannelView | null;
+  /** The ready-to-send buyer message for the order's CURRENT status. */
+  buyerUpdate?: BuyerUpdateView;
   courier: string;
   trackingNumber: string;
   shippingNote: string;
@@ -330,7 +340,26 @@ export type WaybillsResponse = {
   truncated: boolean;
 };
 
+export type BuyerChannelApp = "whatsapp" | "telegram";
+
+export type BuyerChannelView = {
+  app: BuyerChannelApp;
+  /** Canonical: "+639171234567" or "@username". */
+  handle: string;
+  source: "order" | "customer" | "checkout";
+};
+
+export type BuyerUpdateView = {
+  text: string;
+  /** Opens the buyer's chat (null when no channel is known). */
+  url: string | null;
+  /** True when the link can't carry the text (Telegram): copy it first. */
+  pasteFirst: boolean;
+};
+
 export type OrderUpdateRequest = {
+  /** Save (or clear with null) where the buyer reached the store. */
+  buyerChannel?: { app: BuyerChannelApp; handle: string } | null;
   status?: OrderStatus;
   courier?: string;
   trackingNumber?: string;

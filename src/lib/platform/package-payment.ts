@@ -18,6 +18,10 @@ export type PackagePaymentMethod = {
   note: string; // short instruction shown under the method name
   qrUrl: string; // hosted QR image (ImageKit URL, or data URL in demo)
   active: boolean; // inactive methods are hidden from the checkout step
+  // QR PH: paying with this method adds the 2% processing fee to the client's
+  // total. An explicit operator tag, never inferred from the name (same rule as
+  // the storefront's PaymentMethod.qrph in lib/storefront/payment-fee.ts).
+  qrph: boolean;
 };
 
 export type PackagePaymentConfig = {
@@ -37,6 +41,7 @@ export function defaultPackagePayment(): PackagePaymentConfig {
       note: m.note ?? "",
       qrUrl: m.qr ?? "",
       active: true,
+      qrph: m.qrph === true,
     })),
   };
 }
@@ -59,6 +64,7 @@ export function normalizePackagePayment(input: unknown): PackagePaymentConfig {
         note: String(r.note ?? "").slice(0, 500),
         qrUrl: typeof r.qrUrl === "string" ? r.qrUrl : "",
         active: r.active !== false,
+        qrph: r.qrph === true,
       };
     }),
   };
@@ -67,4 +73,14 @@ export function normalizePackagePayment(input: unknown): PackagePaymentConfig {
 /** What the public checkout step renders: active methods with a name. */
 export function visiblePackagePaymentMethods(config: PackagePaymentConfig): PackagePaymentMethod[] {
   return config.methods.filter((m) => m.active && m.method.trim());
+}
+
+/** The active, visible method a client says they paid with — or null when the
+ *  id is unknown, inactive, or unnamed (server-authoritative lookup). */
+export function findVisiblePackagePaymentMethod(
+  config: PackagePaymentConfig,
+  id: string | null | undefined,
+): PackagePaymentMethod | null {
+  if (!id) return null;
+  return visiblePackagePaymentMethods(config).find((m) => m.id === id) ?? null;
 }

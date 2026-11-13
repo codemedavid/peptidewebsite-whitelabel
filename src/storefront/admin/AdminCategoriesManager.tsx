@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Brand, Category, Product } from "../types";
 import { useStore } from "../store";
 import { uploadStorefrontImageAction } from "@/actions/media";
@@ -9,6 +9,14 @@ import { categoryImage, withCategoryImage } from "@/lib/storefront/categories";
 import { isShowcaseLayout } from "@/lib/storefront/home-layout";
 import { groupByCategoryOrder } from "@/lib/storefront/product-order";
 import { saveProductsFollowCategoriesAction } from "@/actions/storefront-admin";
+import {
+  countByCategory,
+  moveToIndex,
+  OTHER_SECTION_ID,
+  OTHER_SECTION_LABEL,
+} from "@/lib/storefront/category-sections";
+import { useSortableList } from "./useSortableList";
+import { AdminCategoryProductsArranger } from "./AdminCategoryProductsArranger";
 
 /** Matches the server's cap (uploadStorefrontImageAction), checked here first so
  *  an oversized pick fails instantly instead of after a long upload. */
@@ -139,6 +147,12 @@ export function AdminCategoriesManager({
   // being dragged; dragOverId is the row currently hovered (for the drop outline).
   const dragId = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Category sections (operator grant FEATURES.STORE_CATEGORY_SECTIONS): the
+  // rows get a touch-capable drag grip and an "Arrange products" button, and
+  // counts use the storefront's loose category matching. Unentitled stores see
+  // this screen exactly as before.
+  const sectionsOn = brand.categorySectionsEntitled === true;
+  const [arranging, setArranging] = useState<{ id: string; label: string } | null>(null);
 
   useEffect(() => {
     if (!focusId) return;
@@ -284,8 +298,21 @@ export function AdminCategoriesManager({
     commit(cats.filter((c) => c.id !== id));
   };
 
+  const looseCounts = useMemo(
+    () => (sectionsOn ? countByCategory(products, cats) : null),
+    [sectionsOn, products, cats],
+  );
   const count = (id: string) =>
-    products.filter((p) => p.category === id).length;
+    looseCounts ? (looseCounts.get(id) ?? 0) : products.filter((p) => p.category === id).length;
+  const otherCount = looseCounts?.get(OTHER_SECTION_ID) ?? 0;
+
+  const sortable = useSortableList({
+    ids: cats.map((c) => c.id),
+    onMove: (id, to) => {
+      const byId = new Map(cats.map((c) => [c.id, c]));
+      commit(moveToIndex(cats.map((c) => c.id), id, to).map((cid) => byId.get(cid)!));
+    },
+  });
 
   // Only the Showcase home draws category pictures, so only it gets the picker.
   const showImages = isShowcaseLayout(brand.homeLayout);
@@ -386,7 +413,10 @@ export function AdminCategoriesManager({
           {cats.map((c, i) => (
             <div
               key={c.id}
-              className={`admin-cat-row${dragOverId === c.id ? " is-drop-target" : ""}`}
+              ref={sectionsOn ? sortable.rowRef(c.id) : undefined}
+              className={`admin-cat-row${dragOverId === c.id ? " is-drop-target" : ""}${
+                sectionsOn && sortable.dragId === c.id ? " is-dragging" : ""
+              }${sectionsOn && sortable.dropMarker(c.id) ? ` is-drop-${sortable.dropMarker(c.id)}` : ""}`}
               onDragOver={(e) => {
                 if (!dragId.current) return;
                 e.preventDefault();
@@ -407,14 +437,18 @@ export function AdminCategoriesManager({
                 className="admin-cat-row__handle"
                 title="Drag to reorder"
                 aria-label="Drag to reorder"
-                draggable
-                onDragStart={() => {
-                  dragId.current = c.id;
-                }}
-                onDragEnd={() => {
-                  dragId.current = null;
-                  setDragOverId(null);
-                }}
+                {...(sectionsOn
+                  ? sortable.handleProps(c.id)
+                  : {
+                      draggable: true,
+                      onDragStart: () => {
+                        dragId.current = c.id;
+                      },
+                      onDragEnd: () => {
+                        dragId.current = null;
+                        setDragOverId(null);
+                      },
+                    })}
               >
                 <svg
                   width="16"
@@ -452,6 +486,15 @@ export function AdminCategoriesManager({
                 />
               </div>
               <span className="admin-cat-row__count">{count(c.id)} products</span>
+              {sectionsOn && (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--ghost admin-cat-row__arrange"
+                  onClick={() => setArranging({ id: c.id, label: c.label || c.id })}
+                >
+                  Arrange products
+                </button>
+              )}
               <span className="admin-cat-row__id">{c.id}</span>
               <span className="admin-cat-row__moves">
                 <button
@@ -500,6 +543,21 @@ export function AdminCategoriesManager({
               </button>
             </div>
           ))}
+          {sectionsOn && otherCount > 0 && (
+            <div className="admin-cats-other" style={{ gridColumn: "1 / -1" }}>
+              <span>
+                {otherCount} product{otherCount === 1 ? "" : "s"} match no category above and show under
+                “{OTHER_SECTION_LABEL}” at the end of your shop. Edit a product to file it.
+              </span>
+              <button
+                type="button"
+                className="admin-btn admin-btn--ghost"
+                onClick={() => setArranging({ id: OTHER_SECTION_ID, label: OTHER_SECTION_LABEL })}
+              >
+                Arrange
+              </button>
+            </div>
+          )}
           {cats.length === 0 && (
             <div
               className="admin-empty-set"
@@ -516,6 +574,14 @@ export function AdminCategoriesManager({
           )}
         </div>
       </main>
+      {arranging && (
+        <AdminCategoryProductsArranger
+          categoryId={arranging.id}
+          label={arranging.label}
+          brand={brand}
+          onClose={() => setArranging(null)}
+        />
+      )}
     </div>
   );
 }

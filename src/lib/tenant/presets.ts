@@ -108,6 +108,7 @@ const FORBIDDEN_KEYS = [
   "adminFeeEntitled",
   "trackNoteEntitled",
   "timelineEntitled",
+  "categorySectionsEntitled",
   "coaEntitled",
   "protocolsEntitled",
   "calculatorEntitled",

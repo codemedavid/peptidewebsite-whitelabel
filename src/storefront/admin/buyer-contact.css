@@ -1,0 +1,107 @@
+/* Order screen → "Buyer contact & update" card (OrderBuyerContact.tsx).
+   Brand tokens for surfaces/text; WhatsApp + Telegram keep their own colours
+   because the admin recognises the app by them. */
+.sf-root .bc-card {
+  --bc-wa: #128c4a;
+  --bc-wa-bg: color-mix(in srgb, #25d366 14%, transparent);
+  --bc-tg: #1b7fb8;
+  --bc-tg-bg: color-mix(in srgb, #229ed9 14%, transparent);
+  --bc-danger: #b42318;
+  --bc-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: box-shadow 300ms var(--bc-ease), border-color 300ms var(--bc-ease);
+}
+.sf-root .bc-card--nudge {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 22%, transparent), var(--od-shadow);
+}
+.sf-root .bc-title { margin: 0; }
+
+/* segmented WhatsApp | Telegram */
+.sf-root .bc-form { display: flex; flex-direction: column; gap: 4px; }
+.sf-root .bc-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: var(--od-field-bg);
+  border: var(--brand-border-width) solid var(--brand-border);
+}
+.sf-root .bc-seg-btn {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 8px;
+  background: transparent;
+  color: var(--brand-text-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+.sf-root .bc-seg-btn:hover { color: var(--brand-text); }
+.sf-root .bc-seg-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
+.sf-root .bc-seg-btn--whatsapp.is-on { background: var(--bc-wa-bg); color: var(--bc-wa); }
+.sf-root .bc-seg-btn--telegram.is-on { background: var(--bc-tg-bg); color: var(--bc-tg); }
+
+/* saved state */
+.sf-root .bc-saved { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; }
+.sf-root .bc-saved--whatsapp { background: var(--bc-wa-bg); }
+.sf-root .bc-saved--telegram { background: var(--bc-tg-bg); }
+.sf-root .bc-app-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.sf-root .bc-saved--whatsapp .bc-app-dot { background: var(--bc-wa); }
+.sf-root .bc-saved--telegram .bc-app-dot { background: var(--bc-tg); }
+.sf-root .bc-saved-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sf-root .bc-saved-label { font-size: 12px; color: var(--brand-text-muted); font-weight: 500; }
+.sf-root .bc-saved-handle {
+  font-size: 15px; font-weight: 700; color: var(--brand-text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+
+.sf-root .bc-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.sf-root .bc-save { width: auto; flex: 1; padding: 11px 14px; }
+.sf-root .bc-link {
+  border: 0; background: none; padding: 4px 0;
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--brand-accent); cursor: pointer; text-underline-offset: 3px;
+}
+.sf-root .bc-link:hover { text-decoration: underline; }
+.sf-root .bc-link:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 4px; }
+.sf-root .bc-link:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.sf-root .bc-link--danger { color: var(--bc-danger); }
+.sf-root .bc-hint { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--brand-text-muted); }
+.sf-root .bc-error { margin: 6px 0 0; font-size: 12.5px; color: var(--bc-danger); font-weight: 600; }
+
+/* message */
+.sf-root .bc-msg { padding-top: 16px; border-top: var(--brand-border-width) solid var(--brand-border); }
+.sf-root .bc-msg-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 4px; }
+.sf-root .bc-msg-label { margin: 0; }
+.sf-root .bc-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+  color: var(--od-warn); background: var(--od-warn-bg);
+}
+.sf-root .bc-text {
+  margin-top: 8px; resize: vertical; min-height: 140px;
+  font-size: 13.5px; line-height: 1.55; white-space: pre-wrap;
+}
+.sf-root .bc-send {
+  flex: 1; min-width: 170px; border: 0; border-radius: 11px; padding: 12px 14px;
+  font: inherit; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer;
+  transition: filter 150ms, transform 150ms var(--bc-ease);
+}
+.sf-root .bc-send--whatsapp { background: var(--bc-wa); }
+.sf-root .bc-send--telegram { background: var(--bc-tg); }
+.sf-root .bc-send--none { background: var(--od-field-bg); color: var(--brand-text-muted); }
+.sf-root .bc-send:not(:disabled):hover { filter: brightness(0.94); }
+.sf-root .bc-send:not(:disabled):active { transform: scale(0.98); }
+.sf-root .bc-send:disabled { cursor: default; }
+.sf-root .bc-send:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sf-root .bc-flash { min-height: 18px; margin: 6px 0 0; font-size: 12.5px; color: var(--od-success); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .bc-card, .sf-root .bc-send { transition: none; }
+}

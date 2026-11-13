@@ -17,6 +17,7 @@ import { isMarket } from "@/lib/storefront/markets";
 import { isOrderStatus } from "@/lib/storefront/order-status";
 import { normalizeOrderPaymentFee } from "@/lib/storefront/payment-fee";
 import { normalizeCustomerNote } from "@/lib/orders/customer-note";
+import { normalizeBuyerChannel } from "@/lib/orders/buyer-contact";
 import { promoLabel } from "@/lib/storefront/promo";
 import { ADMIN_FEE_LABEL_DEFAULT, ADMIN_FEE_LABEL_MAX } from "@/lib/storefront/admin-fee";
 import type { Order, OrderGbTotals, OrderItem, OrderRefundStatus, OrderStatusEvent } from "@/storefront/types";
@@ -169,6 +170,7 @@ export function normalizeOrderInput(input: unknown): Order {
   const c = (o.customer ?? {}) as Record<string, unknown>;
   const s = (o.shipping ?? {}) as Record<string, unknown>;
   const status = isOrderStatus(o.status) ? o.status : "new";
+  const reachedVia = normalizeBuyerChannel(c.reachedVia);
   return {
     id: str(o.id, 64),
     orderNumber: str(o.orderNumber, 64) || undefined,
@@ -187,6 +189,9 @@ export function normalizeOrderInput(input: unknown): Order {
       ...(str(c.whatsapp, 60).trim() ? { whatsapp: str(c.whatsapp, 60).trim() } : {}),
       ...(str(c.whatsappName, 120).trim() ? { whatsappName: str(c.whatsappName, 120).trim() } : {}),
       contactMethod: str(c.contactMethod, 60),
+      // Admin-recorded chat the buyer reached the store on. Kept for stored
+      // rows; placeStorefrontOrderAction strips it from checkout payloads.
+      ...(reachedVia ? { reachedVia } : {}),
     },
     shipping: {
       address: str(s.address, 400),

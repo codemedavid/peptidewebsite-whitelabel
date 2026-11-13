@@ -159,6 +159,69 @@ check("a failed proof upload surfaces the real reason, not a canned message", ()
   );
 });
 
-// ────────────────────────────── summary ──────────────────────────────
-console.log(`\n${passed} passed, ${failed} failed\n`);
-if (failed > 0) process.exit(1);
+// ─────────── the /get-started sign-up upload endpoint (same bug, 2026-11) ───────────
+// A new client pays for their package, then uploads the receipt at the LAST
+// wizard step via POST /api/onboarding/upload. That route still gated on
+// `file.type.startsWith("image/")`, so the Facebook in-app browser — where the
+// marketing ads land — refused real screenshots with "Unsupported type: unknown."
+
+async function checkAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (e) {
+    failed++;
+    console.log(`  ✗ ${name} — ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+async function onboardingUpload(name: string, type: string, kind = "proof") {
+  // Demo mode inlines the bytes as a data URL — no ImageKit, no DB.
+  process.env.DEMO_MODE = "true";
+  const { POST } = await import("../src/app/api/onboarding/upload/route");
+  const { NextRequest } = await import("next/server");
+  const fd = new FormData();
+  fd.append("file", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], name, { type }));
+  fd.append("kind", kind);
+  const res = await POST(new NextRequest("http://lvh.me/api/onboarding/upload", { method: "POST", body: fd }));
+  return { status: res.status, body: (await res.json()) as { url?: string; error?: string } };
+}
+
+async function onboardingSuite() {
+  console.log("\nthe /get-started onboarding upload endpoint");
+
+  await checkAsync("a receipt JPEG with an empty type is accepted at sign-up checkout", async () => {
+    const r = await onboardingUpload("Screenshot_20261113.jpg", "");
+    assert.equal(r.status, 200, `expected 200, got ${r.status}: ${r.body.error}`);
+    assert.ok(r.body.url, "expected a hosted/inline URL back");
+  });
+
+  await checkAsync("an octet-stream PNG logo is accepted too (every wizard upload, not just proof)", async () => {
+    const r = await onboardingUpload("logo.png", "application/octet-stream", "logo");
+    assert.equal(r.status, 200, `expected 200, got ${r.status}: ${r.body.error}`);
+  });
+
+  await checkAsync("an untyped upload still comes back as a renderable image data URL", async () => {
+    const r = await onboardingUpload("IMG_0042.jpg", "");
+    assert.match(r.body.url ?? "", /^data:image\/[a-z+]+;base64,/, `got ${String(r.body.url).slice(0, 30)}`);
+  });
+
+  await checkAsync("a PDF receipt is refused with the 'send a screenshot' message", async () => {
+    const r = await onboardingUpload("gcash-receipt.pdf", "application/pdf");
+    assert.equal(r.status, 415);
+    assert.match(r.body.error ?? "", /screenshot/i);
+  });
+
+  check("the onboarding route gates on classifyProofFile, not startsWith(\"image/\")", () => {
+    const src = read("src/app/api/onboarding/upload/route.ts");
+    assert.match(src, /classifyProofFile/);
+    assert.doesNotMatch(src, /if \(!file\.type\.startsWith\("image\/"\)\)/);
+  });
+}
+
+void onboardingSuite().then(() => {
+  // ────────────────────────────── summary ──────────────────────────────
+  console.log(`\n${passed} passed, ${failed} failed\n`);
+  if (failed > 0) process.exit(1);
+});

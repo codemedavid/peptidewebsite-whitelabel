@@ -169,6 +169,7 @@ import { getSignedInCustomer } from "@/lib/auth/customer-session";
 import { paidRoundCheckoutGate } from "@/lib/storefront/gb-access.server";
 import { currentAppShopperScope } from "@/lib/auth/app-shopper-scope";
 import { stockMoveDb, applyOrderStockMove } from "@/lib/orders/stock-move-tx";
+import { parseBuyerChannelInput, withBuyerChannel } from "@/lib/orders/buyer-contact";
 
 export type UploadProofResult = { url: string } | { error: string };
 export type PlaceOrderResult = { ok: true; order: Order } | { error: string };
@@ -1138,6 +1139,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 
   const p = normalizeOrderInput(input);
   if (!p.items.length) return { error: "Your cart is empty." };
+  // `reachedVia` is the ADMIN's record of the buyer's chat — never the buyer's
+  // to declare, so it is dropped from every checkout payload.
+  p.customer = withBuyerChannel(p.customer, null);
 
   // The fee the checkout DISPLAYED, exactly as sent — kept raw (not the
   // normalized p.adminFee, which collapses an explicit zero to undefined) so
@@ -1683,6 +1687,48 @@ export async function updateStorefrontOrderAction(
     return { ok: true, order: res.order };
   } catch (e) {
     return { error: orderActionError(e, "Couldn't update the order.") };
+  }
+}
+
+/**
+ * Record which chat the buyer reached the store on (WhatsApp number or Telegram
+ * @username / number) — or clear it with `null`. Store admin only (Orders
+ * permission). Merged into the order's customer JSON; touches nothing else, so
+ * it never moves stock, the journey, or notifies anyone.
+ */
+export async function setOrderBuyerChannelAction(
+  id: unknown,
+  channel: unknown,
+): Promise<UpdateOrderResult> {
+  const ctx = await requireStaffPermission("orders");
+  if (!ctx) return { error: "Not signed in to the store admin." };
+  const orderId = str(id, 64);
+  if (!orderId) return { error: "Missing order id." };
+  // Fail closed: the card only renders when granted, but the action is public API.
+  if (!(await hasFeature(ctx.tenantId, FEATURES.STORE_BUYER_CONTACT))) {
+    return { error: "Buyer contact isn't turned on for this store." };
+  }
+  const parsed = parseBuyerChannelInput(channel);
+  if (!parsed.ok) return { error: parsed.error };
+
+  if (isDemoMode()) {
+    const slug = (await getTenantSlug()) ?? ctx.tenantId;
+    const list = getDemoStoreOrders(slug);
+    const i = list.findIndex((x) => x.id === orderId);
+    if (i < 0 || isTrashed(list[i])) return { error: "Order not found." };
+    const next: Order = { ...list[i], customer: withBuyerChannel(list[i].customer, parsed.value) };
+    saveDemoStoreOrders(slug, list.map((x, j) => (j === i ? next : x)));
+    return { ok: true, order: next };
+  }
+
+  try {
+    const res = await applyOrderStatusChange(ctx.tenantId, orderId, {}, await getTenantSlug(), {
+      buyerChannel: parsed.value,
+    });
+    if (!res.ok) return { error: res.error };
+    return { ok: true, order: res.order };
+  } catch (e) {
+    return { error: orderActionError(e, "Couldn't save the buyer's contact.") };
   }
 }
 

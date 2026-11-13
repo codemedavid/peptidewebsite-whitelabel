@@ -35,7 +35,17 @@ export const SITE = {
     demoSlug: "ar-jonina",
   },
   contactEmail: "hello@jonina.store",
+  // The business's WhatsApp — the main way prospects and new clients reach us.
+  // Dial digits (for wa.me) + the local display form.
+  contactWhatsapp: "639058429200",
+  contactWhatsappDisplay: "0905 842 9200",
 };
+
+/** wa.me click-to-chat link to the platform's WhatsApp. */
+export function contactWhatsappUrl(text?: string): string {
+  const base = `https://wa.me/${SITE.contactWhatsapp}`;
+  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+}
 
 // ──────────────────────────── Hero stat row ────────────────────────────
 export const HERO_STATS = [
@@ -206,7 +216,16 @@ export const FINAL_CTA = {
 // ──────────────────────────── Onboarding payment instructions ────────────────────────────
 // Jonina's OWN receiving details, shown on the checkout step so the client can
 // pay for their package before uploading proof. Fill these in with your accounts.
-export type PayTo = { method: string; account: string; number: string; note?: string; qr?: string };
+// `qrph: true` tags the method as QR PH: the checkout adds the 2% processing fee
+// (lib/onboarding/pricing.qrphFeeCents) when the client pays with it.
+export type PayTo = {
+  method: string;
+  account: string;
+  number: string;
+  note?: string;
+  qr?: string;
+  qrph?: boolean;
+};
 
 export const PACKAGE_PAYMENT: { instructions: string; methods: PayTo[] } = {
   instructions:
@@ -215,5 +234,13 @@ export const PACKAGE_PAYMENT: { instructions: string; methods: PayTo[] } = {
     { method: "GCash", account: "JO*N AN***O D.", number: "0992 821 ••••", note: "Scan the QR or send to this number, then screenshot the receipt.", qr: "/payment/gcash-qr.png" },
     { method: "Maya", account: "Ma. Jonina Cassandra Donaire", number: "+63 *** *** 4519", note: "Scan the QR with your Maya app. Transfer fees may apply.", qr: "/payment/maya-qr.png" },
     { method: "Bank Transfer", account: "Pepweb", number: "BPI 0000 0000 00", note: "Use your business name as the reference." },
+    {
+      method: "QR PH",
+      account: "Jonina David",
+      number: "",
+      note: "Scan with any banking or e-wallet app (GCash, Maya, BPI…). A 2% processing fee is added.",
+      qr: "/payment/qrph-qr.jpg",
+      qrph: true,
+    },
   ],
 };

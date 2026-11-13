@@ -3,6 +3,8 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
 import { applyOrderStatusChange } from "@/lib/orders/apply-status";
+import { parseBuyerChannelInput, type BuyerChannel } from "@/lib/orders/buyer-contact";
+import { FEATURES } from "@/lib/features/catalog";
 import { customerKey } from "@/lib/community/keys";
 import { dbOrderToStorefront, type DbOrderRow } from "@/lib/orders/db-mapping";
 import { ACTIVE_ORDERS_WHERE, TRASHED_ORDERS_WHERE } from "@/lib/orders/trash";
@@ -197,9 +199,51 @@ export async function listWaybills(ctx: MobileContext, query: WaybillQuery): Pro
   };
 }
 
-function detailOf(ctx: MobileContext, order: Order, updatedAt: Date | string, customerAccountId: string | null): OrderDetail {
+function storeNameOf(ctx: MobileContext): string {
+  const config = (ctx.tenant.branding?.config ?? {}) as Record<string, unknown>;
+  return typeof config.name === "string" && config.name.trim() ? config.name.trim() : ctx.tenant.tenant.name;
+}
+
+const REMEMBER_LOOKBACK = 20;
+
+/**
+ * This buyer's other recent orders — only fetched when the order has no saved
+ * chat, so the screen can pre-fill the one the store used last time. Matched
+ * on email (else phone), the same identity customerKeyOf uses.
+ */
+async function sameBuyerOrders(ctx: MobileContext, order: Order): Promise<Order[]> {
+  if (order.customer?.reachedVia) return [];
+  const email = (order.customer?.email ?? "").trim();
+  const phone = (order.customer?.phone ?? "").trim();
+  const match = email
+    ? { customer: { path: ["email"], equals: email } }
+    : phone
+      ? { customer: { path: ["phone"], equals: phone } }
+      : null;
+  if (!match) return [];
+  const rows = await withTenant(ctx.tenantId, (db) =>
+    db.storefrontOrder.findMany({
+      where: { ...ACTIVE_ORDERS_WHERE, ...match, id: { not: order.id } },
+      orderBy: { placedAt: "desc" },
+      take: REMEMBER_LOOKBACK,
+    }),
+  );
+  return rows.map((r) => dbOrderToStorefront(r as DbOrderRow));
+}
+
+async function detailOf(
+  ctx: MobileContext,
+  order: Order,
+  updatedAt: Date | string,
+  customerAccountId: string | null,
+): Promise<OrderDetail> {
   const iso = typeof updatedAt === "string" ? updatedAt : updatedAt.toISOString();
-  return { ...toOrderDetail(order, currencyOf(ctx), iso), chatKey: customerAccountId ? customerKey(customerAccountId) : null };
+  const buyerContact = ctx.tenant.has(FEATURES.STORE_BUYER_CONTACT);
+  const others = buyerContact ? await sameBuyerOrders(ctx, order) : [];
+  return {
+    ...toOrderDetail(order, currencyOf(ctx), iso, { storeName: storeNameOf(ctx), others, buyerContact }),
+    chatKey: customerAccountId ? customerKey(customerAccountId) : null,
+  };
 }
 
 export async function getOrder(ctx: MobileContext, id: string): Promise<OrderDetail | null> {
@@ -243,17 +287,30 @@ export async function updateOrder(
   }
   const patch = mobilePatch(body as Partial<OrderUpdateRequest>);
   if (!patch) return { kind: "invalid", message: "That status isn't available." };
-  if (Object.keys(patch).length === 0) return { kind: "invalid", message: "Nothing to save." };
+  let buyerChannel: BuyerChannel | null | undefined;
+  if (body.buyerChannel !== undefined) {
+    if (!ctx.tenant.has(FEATURES.STORE_BUYER_CONTACT)) {
+      return { kind: "invalid", message: "Buyer contact isn't turned on for this store." };
+    }
+    const parsed = parseBuyerChannelInput(body.buyerChannel);
+    if (!parsed.ok) return { kind: "invalid", message: parsed.error };
+    buyerChannel = parsed.value;
+  }
+  if (Object.keys(patch).length === 0 && buyerChannel === undefined) {
+    return { kind: "invalid", message: "Nothing to save." };
+  }
 
   const res = await applyOrderStatusChange(
     ctx.tenantId,
     id,
     patch as Prisma.StorefrontOrderUpdateInput & { status?: Order["status"] },
     ctx.slug,
-    { expectedUpdatedAt: expected },
+    { expectedUpdatedAt: expected, buyerChannel },
   );
-  if (res.ok) return { kind: "ok", order: detailOf(ctx, res.order, res.updatedAt, res.customerAccountId) };
-  if (res.conflict) return { kind: "conflict", current: detailOf(ctx, res.current, res.updatedAt, res.customerAccountId) };
+  if (res.ok) return { kind: "ok", order: await detailOf(ctx, res.order, res.updatedAt, res.customerAccountId) };
+  if (res.conflict) {
+    return { kind: "conflict", current: await detailOf(ctx, res.current, res.updatedAt, res.customerAccountId) };
+  }
   return { kind: "not_found" };
 }
 

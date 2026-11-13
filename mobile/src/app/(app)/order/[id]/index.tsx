@@ -11,6 +11,7 @@ import {
   PaymentSection,
   TimelineSection,
 } from "@/features/orders/OrderSections";
+import { BuyerContactSection } from "@/features/orders/BuyerContactSection";
 import { STATUS_META, formatFull } from "@/features/orders/status";
 import { useStatusChange } from "@/features/orders/useStatusChange";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -124,6 +125,7 @@ export default function OrderScreen() {
       >
         <Summary order={order} />
         <CustomerSection order={order} />
+        {order.buyerUpdate ? <BuyerContactSection key={order.id} order={order} /> : null}
         <ItemsSection order={order} />
         <PaymentSection order={order} />
         <NotesSection order={order} onEdit={() => router.push({ pathname: "/order/[id]/tracking", params: { id: order.id } })} />

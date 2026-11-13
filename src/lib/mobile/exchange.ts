@@ -4,8 +4,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { normalizeLoginEmail } from "@/lib/auth/login-email";
-import { hasFeature } from "@/lib/features/entitlements";
-import { FEATURES } from "@/lib/features/catalog";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { normalizeHost } from "@/lib/tenant/cache-tags";
 import { ACCOUNT_BANNED_MESSAGE, type ApiErrorCode, type LoginResponse } from "./contract";
@@ -14,6 +12,7 @@ import { openSession } from "./login";
 import { isEmailTaken } from "./register";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * POST /auth/exchange — a partner app (Mamamica Glow) trades its own Supabase
@@ -185,7 +184,7 @@ export async function mobileExchange(
   if (!store || store.status === "pending_setup") return failure("not_found", "We couldn't find that store.");
   const unavailable = await storeAvailability(store);
   if (unavailable) return { ok: false, ...unavailable };
-  if (!(await hasFeature(store.id, FEATURES.MOBILE_COMMUNITY))) {
+  if (!(await customerAppOpen(store.id))) {
     return failure("forbidden", "This store isn't open in the app yet.");
   }
   const branding = await prisma.branding.findUnique({ where: { tenantId: store.id }, select: { config: true } });

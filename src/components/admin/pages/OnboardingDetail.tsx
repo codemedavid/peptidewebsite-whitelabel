@@ -10,6 +10,7 @@ import { buildWaLink, toWaDigits } from "@/lib/admin/whatsapp";
 import {
   ONBOARDING_STATUSES,
   ONBOARDING_STATUS_LABELS,
+  ONBOARDING_WORKFLOW_STATUSES,
 } from "@/lib/admin/onboarding-types";
 import {
   updateOnboardingStatusAction,
@@ -39,6 +40,7 @@ function plusOneMonth(day: string): string {
 
 /* ── status badge styling ── */
 const STATUS_BADGE_CLS: Record<string, string> = {
+  lead: "badge-neutral",
   payment_received: "badge-warn",
   tenant_created: "badge-info",
   customizing: "badge-accent",
@@ -79,6 +81,10 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
   );
 
   const statusCls = STATUS_BADGE_CLS[liveStatus] ?? "badge-neutral";
+  // Unpaid lead: the client saved step 1 (business + WhatsApp) but never paid,
+  // so there is no tenant — nothing to publish or set a password on. The only
+  // useful action is a WhatsApp follow-up.
+  const isLead = submission.setupStatus === "lead" && !submission.tenantId;
   const storeHref = `https://${submission.url}`;
 
   /* ── action helpers ── */
@@ -174,13 +180,20 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                 <span className="bdot" />
                 {ONBOARDING_STATUS_LABELS[liveStatus] ?? liveStatus}
               </span>
-              {livePublished ? (
+              {isLead ? (
+                <span className="badge badge-neutral">No store yet — not paid</span>
+              ) : livePublished ? (
                 <span className="badge badge-success">
                   <span className="bdot" />
                   Live
                 </span>
               ) : (
                 <span className="badge badge-neutral">Hidden — not published</span>
+              )}
+              {!isLead && submission.tenantId && (
+                <span className={"badge " + (submission.detailsSubmittedAt ? "badge-success" : "badge-warn")}>
+                  {submission.detailsSubmittedAt ? "Details submitted" : "Details pending"}
+                </span>
               )}
             </div>
             <div className="row" style={{ gap: 16, color: "var(--ink-500)", fontSize: 13, flexWrap: "wrap" }}>
@@ -235,15 +248,18 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
           {[
             {
               label: "Package",
-              v: liveTrial.trial
+              v: isLead
+                ? "Not paid yet"
+                : liveTrial.trial
                 ? `${submission.packageLabel} — Trial (${
                     submission.amountDueCents != null ? formatPesos(submission.amountDueCents) : "₱699"
                   })`
                 : submission.amountDueCents != null
                   ? `${submission.packageLabel} · ${formatPesos(submission.amountDueCents)}`
                   : submission.packageLabel,
-              sub:
-                liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
+              sub: isLead
+                ? "Saved step 1 only — follow up on WhatsApp"
+                : liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
                   ? `${humanDate(liveTrial.startsAt)} → ${humanDate(liveTrial.endsAt)}`
                   : // What they actually prepaid — the operator needs it to set the
                     // subscription window (a yearly sign-up is not due next month).
@@ -253,7 +269,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                     ]
                       .filter(Boolean)
                       .join(" · "),
-              onClick: isPro ? () => setTrialOpen((o) => !o) : undefined,
+              onClick: isPro && !isLead ? () => setTrialOpen((o) => !o) : undefined,
             },
             { label: "Products", v: String(submission.productCount) },
             { label: "Contact", v: submission.contactPerson || "—" },
@@ -607,6 +623,29 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
             </DetailCard>
           )}
 
+          {/* How they paid */}
+          {!isLead && (submission.paidWithMethod || submission.amountDueCents != null) && (
+            <DetailCard title="Payment" icon="Card">
+              <InfoGrid
+                items={[
+                  { k: "Paid with", v: submission.paidWithMethod || "—" },
+                  ...(submission.amountDueCents != null
+                    ? [{ k: "Amount due", v: formatPesos(submission.amountDueCents) }]
+                    : []),
+                  ...(submission.paymentFeeCents && submission.paymentFeeCents > 0
+                    ? [{ k: "QR PH fee (2%, included)", v: formatPesos(submission.paymentFeeCents) }]
+                    : []),
+                  {
+                    k: "Store details",
+                    v: submission.detailsSubmittedAt
+                      ? `Details submitted ${humanDate(submission.detailsSubmittedAt)}`
+                      : "Details pending — collect on WhatsApp",
+                  },
+                ]}
+              />
+            </DetailCard>
+          )}
+
           {/* Proof of payment */}
           {submission.paymentProofUrl && (
             <DetailCard title="Proof of Payment" icon="Image">
@@ -635,7 +674,34 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
 
         {/* RIGHT: workflow + branding */}
         <div className="col" style={{ gap: 16 }}>
+          {/* ── Unpaid lead: follow-up only ── */}
+          {isLead && (
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <h3 className="card-title">Unpaid lead</h3>
+                  <div className="card-sub">
+                    Started sign-up but hasn&apos;t paid. No store has been created.
+                  </div>
+                </div>
+              </div>
+              <div className="card-body" style={{ padding: 18 }}>
+                {submission.whatsapp ? (
+                  <a className="btn btn-accent btn-sm" href={waHref} target="_blank" rel="noreferrer">
+                    <Ic.External /> Follow up on WhatsApp
+                  </a>
+                ) : (
+                  <div style={{ fontSize: 12.5, color: "var(--ink-400)" }}>No WhatsApp number saved.</div>
+                )}
+                <div style={{ fontSize: 12.5, color: "var(--ink-400)", marginTop: 10 }}>
+                  Planned address: <span className="mono">{submission.url}</span> (not reserved until they pay)
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Workflow actions ── */}
+          {!isLead && (
           <div className="card">
             <div className="card-head">
               <div>
@@ -751,9 +817,10 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
               </div>
             </div>
           </div>
+          )}
 
           {/* ── Set store password ── */}
-          {submission.slug && (
+          {submission.slug && submission.tenantId && (
             <StorePasswordCard slug={submission.slug} url={submission.url} />
           )}
 
@@ -868,7 +935,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
 
 /* ── Workflow Stepper ── */
 function WorkflowStepper({ currentStatus }: { currentStatus: string }) {
-  const steps = ONBOARDING_STATUSES as readonly string[];
+  const steps = ONBOARDING_WORKFLOW_STATUSES as readonly string[];
   const currentIdx = steps.indexOf(currentStatus);
   return (
     <div

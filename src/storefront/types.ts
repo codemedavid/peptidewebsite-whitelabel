@@ -283,6 +283,10 @@ export type Order = {
     /** The buyer's WhatsApp display name — asked together with `whatsapp`. */
     whatsappName?: string;
     contactMethod: string;
+    /** Where the buyer actually reached the store — set by the ADMIN on the
+     *  order screen (website + app), never at checkout. Canonical handle:
+     *  "+639171234567" or "@username". See lib/orders/buyer-contact.ts. */
+    reachedVia?: { app: "whatsapp" | "telegram"; handle: string };
   };
   shipping: {
     address: string;
@@ -818,6 +822,10 @@ export type Brand = {
   // and the group-buy page's "View my order" link. The lookup action re-checks
   // the entitlement, so this is presentation only.
   myGroupBuyOrderEnabled?: boolean;
+  // Buyer contact & updates (FEATURES.STORE_BUYER_CONTACT, operator-grantable,
+  // default OFF). Server-projected: shows the order screen's "Buyer contact &
+  // update" card. The save action re-checks the entitlement.
+  buyerContactEnabled?: boolean;
   // Server-projected from FEATURES.NOTIFY_ADMIN_ORDER: shows the store-admin
   // "Order Notifications" view (owner-only). Off → the view and its dashboard
   // tile are hidden and the order-alert email is never sent (admin-notify.ts
@@ -1237,6 +1245,13 @@ export type Brand = {
   // category in the Categories order (the arrangement above applies inside each
   // category). Absent/false = off. See arrangeStoreProducts.
   productsFollowCategories?: boolean;
+  // Category sections (FEATURES.STORE_CATEGORY_SECTIONS → categorySectionsEntitled,
+  // server-projected, default OFF): the catalog lists every category as its own
+  // section under a sticky scroll-following tab bar. categoryProductOrder is the
+  // owner's product order INSIDE each category (category id → product ids),
+  // kept even while the grant is off. See lib/storefront/category-sections.ts.
+  categorySectionsEntitled?: boolean;
+  categoryProductOrder?: Record<string, string[]>;
 
   // Product card design chosen in the store admin's Card Studio. Persisted in
   // branding.config (same mechanism as paymentMethods). Absent → the catalog

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Minus,
   Gem,
@@ -37,6 +37,9 @@ import {
 } from "@/lib/onboarding/schema";
 import { SingleUpload, MultiUpload } from "../uploads";
 import { checkoutQuote } from "@/lib/onboarding/pricing";
+import { QRPH_FEE_LABEL } from "@/lib/storefront/payment-fee";
+import { baseStoreSlug, storeRootDomain } from "@/lib/onboarding/store-slug";
+import { previewStoreSlugAction } from "@/actions/public-onboarding";
 import { packageLabel, type Package } from "@/marketing/config";
 import {
   visiblePackagePaymentMethods,
@@ -133,6 +136,40 @@ function Text({
 }
 
 /* ============================================================ Step 1 */
+const SLUG_PREVIEW_DEBOUNCE_MS = 400;
+
+/** Live "your store address" line: an instant client-side guess, then the slug
+ *  the server would actually assign (taken + reserved names accounted for). */
+function StoreAddressPreview({ name }: { name: string }) {
+  const root = storeRootDomain();
+  const clean = name.trim();
+  const [server, setServer] = useState<{ name: string; slug: string } | null>(null);
+  const latest = useRef(0);
+
+  useEffect(() => {
+    if (clean.length < 2) return;
+    const req = ++latest.current;
+    const timer = setTimeout(() => {
+      previewStoreSlugAction(clean)
+        .then((res) => {
+          if (req === latest.current && "slug" in res) setServer({ name: clean, slug: res.slug });
+        })
+        .catch(() => {
+          /* the instant guess stays on screen */
+        });
+    }, SLUG_PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [clean]);
+
+  if (clean.length < 2) return null;
+  const slug = server?.name === clean ? server.slug : baseStoreSlug(clean);
+  return (
+    <p className="mk-hint" aria-live="polite" style={{ marginTop: -6, marginBottom: 14 }}>
+      Your store address: <b style={{ color: "var(--ink)" }}>{slug}.{root}</b>
+    </p>
+  );
+}
+
 export function BusinessStep({ draft, update, errors }: StepProps) {
   return (
     <div>
@@ -140,37 +177,29 @@ export function BusinessStep({ draft, update, errors }: StepProps) {
         <Text id="biz-name" value={draft.businessName} error={!!errors.businessName}
           placeholder="e.g. Glow Manila" onChange={(v) => update({ businessName: v })} />
       </Field>
-      <div className="mk-field-row">
-        <Field label="Business type" htmlFor="biz-type" hint="e.g. Skincare, Peptides, Reseller">
-          <Text id="biz-type" value={draft.businessType} placeholder="Skincare & beauty"
-            onChange={(v) => update({ businessType: v })} />
-        </Field>
-        <Field label="Contact person" htmlFor="biz-contact">
-          <Text id="biz-contact" value={draft.contactPerson} placeholder="Your name"
-            onChange={(v) => update({ contactPerson: v })} />
-        </Field>
-      </div>
-      <Field label="Business description" htmlFor="biz-desc" hint="One or two lines we can use on your homepage.">
+      <StoreAddressPreview name={draft.businessName} />
+      <Field label="WhatsApp number" htmlFor="biz-wa" required error={errors.whatsapp}
+        hint="We'll message you here about your setup, and once your website is ready.">
+        <Text id="biz-wa" value={draft.whatsapp} error={!!errors.whatsapp}
+          placeholder="0917 123 4567" onChange={(v) => update({ whatsapp: v })} />
+      </Field>
+      <Field label="Contact person" htmlFor="biz-contact" hint="Optional">
+        <Text id="biz-contact" value={draft.contactPerson} placeholder="Your name"
+          onChange={(v) => update({ contactPerson: v })} />
+      </Field>
+      <Field label="Short description" htmlFor="biz-desc" hint="Optional — one or two lines we can use on your homepage.">
         <textarea id="biz-desc" className="mk-textarea" value={draft.description}
           placeholder="What you sell and what makes you special."
           onChange={(e) => update({ description: e.target.value })} />
       </Field>
-      <div className="mk-field-row">
-        <Field label="WhatsApp number" htmlFor="biz-wa" required error={errors.whatsapp}
-          hint="International format, digits only — we'll message you here once your website is ready.">
-          <Text id="biz-wa" value={draft.whatsapp} error={!!errors.whatsapp}
-            placeholder="639171234567" onChange={(v) => update({ whatsapp: v })} />
-        </Field>
-        <Field label="Facebook / Messenger link" htmlFor="biz-fb">
-          <Text id="biz-fb" value={draft.facebook} placeholder="https://facebook.com/yourpage"
-            onChange={(v) => update({ facebook: v })} />
-        </Field>
-      </div>
+      {/* Honeypot — hidden from real users; bots fill it and get rejected. */}
+      <input type="text" tabIndex={-1} autoComplete="off" className="mk-sr" aria-hidden="true"
+        value={draft.website} onChange={(e) => update({ website: e.target.value })} />
     </div>
   );
 }
 
-/* ============================================================ Step 2 */
+/* ============================================================ Details: branding */
 export function BrandingStep({ draft, update }: StepProps) {
   return (
     <div>
@@ -230,7 +259,7 @@ export function BrandingStep({ draft, update }: StepProps) {
   );
 }
 
-/* ============================================================ Step 3 */
+/* ============================================================ Details: products */
 export function ProductsStep({ draft, update, errors }: StepProps) {
   const set = (i: number, patch: Partial<Draft["products"][number]>) =>
     update({ products: draft.products.map((p, j) => (j === i ? { ...p, ...patch } : p)) });
@@ -286,7 +315,7 @@ export function ProductsStep({ draft, update, errors }: StepProps) {
   );
 }
 
-/* ============================================================ Step 4 */
+/* ============================================================ Details: orders */
 export function OrdersStep({ draft, update, errors }: StepProps) {
   const active = ORDER_DESTINATION_OPTIONS.find((o) => o.id === draft.orderDestination)!;
   const waPreview =
@@ -326,7 +355,7 @@ export function OrdersStep({ draft, update, errors }: StepProps) {
   );
 }
 
-/* ============================================================ Step 5 */
+/* ============================================================ Details: payments */
 export function PaymentsStep({ draft, update }: StepProps) {
   const byName = new Map(draft.paymentMethods.map((m) => [m.name, m]));
   const toggle = (name: string) => {
@@ -382,7 +411,7 @@ export function PaymentsStep({ draft, update }: StepProps) {
   );
 }
 
-/* ============================================================ Step 6 */
+/* ============================================================ Package */
 export function PackageStep({ draft, update, errors, packages }: StepProps) {
   const isStarter = draft.packageKey === "starter";
   const picked = draft.selectedFeatures;
@@ -557,10 +586,10 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
   );
 }
 
-/* ============================================================ Step 7 */
+/* ============================================================ Checkout */
 export function CheckoutStep({ draft, update, errors, packagePayment, packages }: StepProps) {
-  const namedProducts = draft.products.filter((p) => p.name.trim()).length;
   const payMethods = visiblePackagePaymentMethods(packagePayment);
+  const chosen = payMethods.find((m) => m.id === draft.paidWithMethodId) ?? null;
   const pkg = packages.find((p) => p.key === draft.packageKey);
   const extraFeatureCount =
     draft.packageKey === "starter"
@@ -568,9 +597,10 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
       : 0;
   const quote = checkoutQuote(
     pkg ?? { priceCents: 0, yearlyPriceCents: 0, setupFeeCents: 0, setupFeeWaived: false },
-    { trial: false, extraFeatureCount, billingCycle: draft.billingCycle },
+    { trial: false, extraFeatureCount, billingCycle: draft.billingCycle, qrphFee: chosen?.qrph === true },
   );
   const yearly = quote.billingCycle === "yearly";
+  const root = storeRootDomain();
   return (
     <div>
       <div className="mk-paybox">
@@ -608,6 +638,12 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
               </span>
             </div>
           )}
+          {quote.paymentFeeCents > 0 && (
+            <div className="mk-payrow">
+              <span>{QRPH_FEE_LABEL}</span>
+              <span style={{ textAlign: "right" }}>{peso(quote.paymentFeeCents)}</span>
+            </div>
+          )}
         </div>
         <div className="mk-payrow" style={{ marginTop: 4 }}>
           <span>
@@ -617,29 +653,53 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
             <b style={{ fontFamily: "var(--font-head)", fontSize: 22 }}>{peso(quote.totalCents)}</b>
           </span>
         </div>
-        <div style={{ marginTop: 12 }}>
-          {payMethods.map((m) => (
-            <div className="mk-payrow" key={m.id}>
-              <span>
-                <b>{m.method}</b>
-                {m.note && <small style={{ display: "block", color: "var(--muted)" }}>{m.note}</small>}
-                {m.qrUrl && (
-                  <img
-                    src={m.qrUrl}
-                    alt={`${m.method} payment QR code`}
-                    style={{ display: "block", width: 160, height: 160, objectFit: "contain", marginTop: 10, borderRadius: 8, background: "#fff" }}
-                  />
-                )}
-              </span>
-              <span style={{ textAlign: "right" }}>
-                {m.account}
-                <br />
-                <b>{m.number}</b>
-              </span>
-            </div>
-          ))}
-        </div>
       </div>
+
+      <Field label="How are you paying?" required error={errors.paidWithMethodId}>
+        <div className="mk-choices" role="radiogroup" aria-label="Payment method">
+          {payMethods.map((m) => {
+            const selected = chosen?.id === m.id;
+            return (
+              <div key={m.id} className="mk-choice" data-selected={selected}
+                style={{ display: "block", padding: 0 }}>
+                <button type="button" role="radio" aria-checked={selected}
+                  onClick={() => update({ paidWithMethodId: m.id })}
+                  style={{
+                    all: "unset", boxSizing: "border-box", width: "100%", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+                  }}>
+                  <span style={{ flex: 1 }}>
+                    <b>{m.method}</b>
+                    {m.qrph && (
+                      <small style={{ display: "block", color: "var(--muted)" }}>+2% processing fee</small>
+                    )}
+                  </span>
+                  {selected && <Check className="mk-choice-check" size={20} />}
+                </button>
+                {selected && (
+                  <div style={{ padding: "0 16px 16px" }}>
+                    {m.note && <p className="mk-hint" style={{ marginTop: 0 }}>{m.note}</p>}
+                    {(m.account || m.number) && (
+                      <p style={{ margin: "6px 0 0" }}>
+                        {m.account}
+                        {m.number && <><br /><b>{m.number}</b></>}
+                      </p>
+                    )}
+                    {m.qrUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.qrUrl} alt={`${m.method} payment QR code`} width={220} height={220}
+                        style={{ display: "block", width: 220, height: 220, objectFit: "contain", marginTop: 10, borderRadius: 8, background: "#fff" }} />
+                    )}
+                    <p className="mk-hint" style={{ marginBottom: 0 }}>
+                      Send exactly <b>{peso(quote.totalCents)}</b>, then upload your receipt below.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Field>
 
       <Field label="Proof of payment" required error={errors.paymentProofUrl}
         hint="Upload a screenshot of your payment receipt.">
@@ -648,20 +708,22 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
       </Field>
 
       <div className="mk-card" style={{ background: "var(--paper-deep)", marginBottom: 18 }}>
-        <h3 className="mk-h3" style={{ fontSize: "1.1rem", marginBottom: 12 }}>Your store at a glance</h3>
+        <h3 className="mk-h3" style={{ fontSize: "1.1rem", marginBottom: 12 }}>Your order</h3>
         <div className="mk-review-grid">
           <div className="mk-review-item"><span>Business</span><b>{draft.businessName || "—"}</b></div>
           <div className="mk-review-item">
-            <span>Package</span>
-            <b>{packageLabel(draft.packageKey)}</b>
+            <span>Store address</span>
+            <b>
+              {draft.businessName.trim().length >= 2
+                ? `${draft.storeSlug || baseStoreSlug(draft.businessName)}.${root}`
+                : "—"}
+            </b>
           </div>
+          <div className="mk-review-item"><span>Package</span><b>{packageLabel(draft.packageKey)}</b></div>
           <div className="mk-review-item">
             <span>Billing</span>
             <b>{yearly ? "Yearly (prepaid)" : "Monthly"}</b>
           </div>
-          <div className="mk-review-item"><span>Products added</span><b>{namedProducts}</b></div>
-          <div className="mk-review-item"><span>Orders go to</span><b style={{ textTransform: "capitalize" }}>{draft.orderDestination}</b></div>
-          <div className="mk-review-item"><span>Payment methods</span><b>{draft.paymentMethods.length || "—"}</b></div>
           {draft.packageKey === "starter" && (
             <div className="mk-review-item">
               <span>Features</span>
@@ -672,17 +734,12 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
               </b>
             </div>
           )}
-          {draft.packageKey === "starter" && draft.selectedFeatures.length > STARTER_FEATURE_LIMIT && (
-            <div className="mk-review-item">
-              <span>Extra features</span>
-              <b>
-                {draft.selectedFeatures.length - STARTER_FEATURE_LIMIT} ×{" "}
-                {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)} ={" "}
-                {peso((draft.selectedFeatures.length - STARTER_FEATURE_LIMIT) * STARTER_EXTRA_FEATURE_PRICE_CENTS)}
-              </b>
-            </div>
-          )}
+          <div className="mk-review-item"><span>Paid with</span><b>{chosen?.method ?? "—"}</b></div>
         </div>
+        <p className="mk-hint" style={{ marginBottom: 0 }}>
+          After payment you can share your logo, products and preferences — or skip and we&apos;ll
+          ask you on WhatsApp.
+        </p>
       </div>
 
       <label className="mk-check" style={{ marginTop: 4 }}>

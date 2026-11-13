@@ -18,7 +18,7 @@ import type {
 let nextId = 0;
 function newMethod(): PackagePaymentMethod {
   nextId += 1;
-  return { id: `pp-new-${nextId}`, method: "", account: "", number: "", note: "", qrUrl: "", active: true };
+  return { id: `pp-new-${nextId}`, method: "", account: "", number: "", note: "", qrUrl: "", active: true, qrph: false };
 }
 
 const MAX_METHODS = 12;
@@ -262,6 +262,21 @@ function MethodCard({
         <label className="field-label">QR code (optional)</label>
         <QrUpload value={m.qrUrl} onChange={(qrUrl) => onPatch({ qrUrl })} />
       </div>
+
+      <label
+        className="row"
+        style={{ gap: 8, marginTop: 12, fontSize: 13, cursor: "pointer", alignItems: "flex-start" }}
+      >
+        <input
+          type="checkbox"
+          checked={m.qrph}
+          onChange={(e) => onPatch({ qrph: e.target.checked })}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          <b>QR PH</b> — adds a 2% processing fee to the client&apos;s total
+        </span>
+      </label>
     </div>
   );
 }

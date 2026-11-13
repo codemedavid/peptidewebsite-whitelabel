@@ -73,6 +73,7 @@ import { normalizeCatalogSortStyle } from "@/lib/storefront/catalog-sort";
 import { getBestSellerCounts } from "@/lib/storefront/best-sellers";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import { arrangeStoreProducts } from "@/lib/storefront/product-order";
+import { normalizeCategoryProductOrder } from "@/lib/storefront/category-sections";
 import type { Brand, Product } from "@/storefront/types";
 
 /**
@@ -366,6 +367,10 @@ export async function loadStorefrontBrand(
   brand.myGroupBuyOrderEnabled =
     !isDemoMode() && has(FEATURES.STORE_MY_GROUPBUY_ORDER);
 
+  // Buyer contact & updates on the admin order screen. setOrderBuyerChannelAction
+  // re-checks the same entitlement, so this only decides whether the card renders.
+  brand.buyerContactEnabled = has(FEATURES.STORE_BUYER_CONTACT);
+
   // Order-alert email (Automated package): gates the owner-only "Order
   // Notifications" store-admin view. When off the view/tile hide and no alert
   // fires — sendAdminOrderNotification re-checks this same entitlement server-side.
@@ -405,6 +410,12 @@ export async function loadStorefrontBrand(
   brand.timelineEntitled = timelineEntitled;
   const savedTimeline = normalizeTimeline(config.timeline);
   brand.timeline = timelineEntitled ? savedTimeline : { ...savedTimeline, enabled: false };
+
+  // Category sections (operator grant, default OFF): a stray config key can never
+  // fake the grant — the entitlement is assigned after the config spread. The
+  // owner's per-category product order is normalized here and kept while off.
+  brand.categorySectionsEntitled = has(FEATURES.STORE_CATEGORY_SECTIONS);
+  brand.categoryProductOrder = normalizeCategoryProductOrder(config.categoryProductOrder);
 
   // Trial system: project the JSON-safe trial window (or nothing) so the store
   // admin can render the countdown banner, lock the Business-exclusive tiles and

@@ -370,6 +370,8 @@ export type DemoOnboardingSubmission = {
   tenantId: string | null;
   setupStatus: string;
   createdAt: string;
+  accessTokenHash?: string; // sha256 of the wizard's pay-first token
+  detailsSubmittedAt?: string; // ISO — optional post-payment details sent
   data: Record<string, unknown>; // the full onboarding payload
 };
 

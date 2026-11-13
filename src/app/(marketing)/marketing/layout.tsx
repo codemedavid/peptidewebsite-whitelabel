@@ -83,6 +83,13 @@ export default async function MarketingLayout({ children }: { children: React.Re
             <a href="/#faq">FAQ</a>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
+            <a
+              href={`https://wa.me/${SITE.contactWhatsapp}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              WhatsApp {SITE.contactWhatsappDisplay}
+            </a>
             <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>
           </div>
           <div>

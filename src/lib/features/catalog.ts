@@ -72,17 +72,31 @@ export const FEATURES = {
   // default OFF (outside every plan ceiling) so no live storefront grows the
   // page or its links on deploy.
   STORE_MY_GROUPBUY_ORDER: "storefront.my_groupbuy_order",
+  // Buyer contact & updates: on each order the admin records where the buyer
+  // reached them (WhatsApp number / Telegram @username or number) and gets a
+  // ready-to-send message per status (tracking number once shipped). Website +
+  // app order screens. Operator-grantable, default OFF.
+  STORE_BUYER_CONTACT: "storefront.buyer_contact",
   // Track-page delivery note (region → estimate card). Business/Automated
   // exclusive per the trial system; operator-grantable for legacy Starter stores.
   STORE_TRACK_NOTE: "storefront.track_note",
   // Owner-written Timeline (steps + current step) on the Track page and/or the
   // hero. Operator-grantable, default OFF (outside every plan ceiling).
   STORE_TIMELINE: "storefront.timeline",
+  // Category sections: the catalog lists every category as its own section
+  // under a sticky, scroll-following tab bar, and the owner arranges products
+  // inside each category. Operator-grantable, default OFF (outside every plan
+  // ceiling) so no live storefront changes layout on deploy.
+  STORE_CATEGORY_SECTIONS: "storefront.category_sections",
   STORE_STAFF_ACCOUNTS: "storefront.staff_accounts",
   // Pepweb app community: customers sign in to the mobile app, and approved
   // members chat in channels / DMs with the store (docs/mobile-admin/COMMUNITY.md).
   // Operator-grantable, default OFF.
   MOBILE_COMMUNITY: "mobile.community",
+  // Pepweb app shopping: customers sign in to the mobile app and browse, order
+  // and track there (same checkout as the website). Operator-grantable,
+  // default OFF. Chats stay behind MOBILE_COMMUNITY.
+  MOBILE_SHOP: "mobile.shop",
   // Sales Analytics internals. Each key toggles one slice of the store-admin
   // Sales Analytics view; all of them are inert while the module itself
   // (STORE_SALES_ANALYTICS) is off. They sit in every plan ceiling (default ON)
@@ -387,9 +401,15 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // lookup of a buyer's round orders, so the operator decides which stores
   // offer it. The lookup action re-checks this entitlement server-side.
   FEATURES.STORE_MY_GROUPBUY_ORDER,
+  // Buyer contact & updates. Default OFF and granted per tenant; the save
+  // action and the app endpoint re-check it server-side.
+  FEATURES.STORE_BUYER_CONTACT,
   // Timeline. Default OFF; a grant is inert until the owner writes steps and
   // switches it on in the store admin's Timeline editor.
   FEATURES.STORE_TIMELINE,
+  // Category sections. Default OFF and granted per tenant; revoking it puts the
+  // store back on the filter-chip catalog and keeps every saved arrangement.
+  FEATURES.STORE_CATEGORY_SECTIONS,
   // Made-to-order catalog. Outside every plan ceiling (default OFF) because
   // granting it REMOVES a safety gate rather than adding a surface: a marked
   // product can be ordered in any quantity and never deducts stock. A grant is
@@ -400,6 +420,8 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Pepweb app community (customer app sign-in + chats). Default OFF; a grant
   // still needs the owner to approve each member before they see anything.
   FEATURES.MOBILE_COMMUNITY,
+  // Pepweb app shopping (customer app sign-in + ordering, no chats). Default OFF.
+  FEATURES.MOBILE_SHOP,
 ]);
 
 /** Legacy plan keys → current tier keys (kept so older fixtures keep resolving). */
@@ -472,9 +494,12 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_QRPH_FEE]: { label: "QR PH processing fee", description: "Adds a 2% processing fee at checkout when the customer pays with QR PH \u2014 QR PH charges the merchant a percentage, unlike GCash or a bank transfer. The store owner tags which of their payment methods is the QR PH one (Payment Methods \u2192 QR PH account); untagged methods are never charged. The fee is shown as its own line before the customer places the order and is re-derived server-side at placement. Operator-grantable, default OFF \u2014 granting it changes what customers pay. A grant alone charges nothing until a method is tagged.", group: "Ecommerce" },
   [FEATURES.STORE_MADE_TO_ORDER]: { label: "Made-to-order products", description: "Lets the store owner mark a product \u201cMade to order\u201d \u2014 it is manufactured after the order is placed, so it sells with no inventory at all: never \u201cSold out\u201d, no cart cap, and confirming an order does not deduct stock. Set per product in the product editor and in Inventory, so a store can mix made-to-order items with stocked ones. Products the owner has not marked keep their normal stock gate. Operator-grantable, default OFF \u2014 granting it removes an inventory safeguard; revoking it puts every marked product straight back on the stock gate.", group: "Catalog" },
   [FEATURES.STORE_CUSTOMER_ACCOUNTS]: { label: "Customer accounts", description: "Shoppers can create an account on the storefront (name, email, password), sign in, and open My Account to see their own order history, statuses and tracking. Orders placed while signed in are linked to the account; guest checkout keeps working. The store owner gets a Customers list in the store admin (with disable/enable). Operator-grantable, default OFF.", group: "Ecommerce" },
+  [FEATURES.STORE_BUYER_CONTACT]: { label: "Buyer contact & updates", description: "On every order (website + app), the admin picks where the buyer contacted them \u2014 WhatsApp (number) or Telegram (@username or number) \u2014 and it is remembered for that buyer's next orders. Each status gets a ready-to-send update message (courier + tracking number once shipped) that opens straight in that chat. Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.STORE_COURIER_BOOKING]: { label: "Courier booking link", description: "Lets the store owner put a booking / delivery form URL on a courier (Couriers \u2192 edit \u2192 Booking form link, e.g. a Lalamove form). At checkout, picking that courier shows a card linking to the form before the customer places their order; picking any other courier hides it. Not an API integration \u2014 nothing is booked or quoted automatically. Operator-grantable, default OFF; inert until a URL is saved.", group: "Ecommerce" },
   [FEATURES.STORE_TRACK_NOTE]: { label: "Delivery note", description: "The Track Order page's delivery-estimates card (region → estimate rows), edited by the store owner in the store admin. Business/Automated exclusive; off locks the editor tile and hides the card. Operator-grantable for legacy Starter stores.", group: "Ecommerce" },
   [FEATURES.STORE_TIMELINE]: { label: "Timeline", description: "An owner-written timeline (e.g. a group-buy schedule: orders open → close → arrives → ships) with the current step highlighted. The store owner edits the steps in the store admin's Timeline editor and picks where it shows: the Track Order page, the hero section, or both. Operator-grantable, default OFF.", group: "Ecommerce" },
+  [FEATURES.STORE_CATEGORY_SECTIONS]: { label: "Category sections", description: "The catalog shows every category as its own section on one scrolling page, under a sticky category bar that highlights the category the shopper is viewing (tap a category to jump to it). The store owner arranges the categories and the products inside each category in Admin \u2192 Categories (drag, or move up/down). Classic home layout. Operator-grantable, default OFF \u2014 switching it off restores the filter-chip catalog and keeps the saved arrangement.", group: "Catalog" },
+  [FEATURES.MOBILE_SHOP]: { label: "App shopping", description: "Customers sign in to the Pepweb app with their storefront account to browse, order and track their orders. Same checkout and rules as the website. Operator-grantable, default OFF. Chats need App community.", group: "Ecommerce" },
   [FEATURES.MOBILE_COMMUNITY]: { label: "App community", description: "Customers sign in to the Pepweb app with their storefront account and, once the store owner approves them, chat with the store and other members in channels, topics and DMs, and see product drops. Moderated from the app by the owner and staff with the Community module. Operator-grantable, default OFF. Revoking signs every customer out of the app.", group: "Ecommerce" },
   [FEATURES.STORE_STAFF_ACCOUNTS]: { label: "Staff Accounts", description: "Owner-managed staff sub-accounts with per-module permissions in the store admin. Included with Business and Automated plans; operator-grantable on Starter. Off hides the Staff Accounts manager and blocks staff sign-in and management.", group: "Ecommerce" },
 

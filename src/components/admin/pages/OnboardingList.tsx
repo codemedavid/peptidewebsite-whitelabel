@@ -23,6 +23,7 @@ function humanDate(iso: string): string {
 }
 
 const STATUS_BADGE: Record<string, string> = {
+  lead: "badge-neutral",
   payment_received: "badge-warn",
   tenant_created: "badge-info",
   customizing: "badge-accent",
@@ -37,6 +38,7 @@ const STATUS_FILTERS = [
   { id: "customizing", label: "Customizing" },
   { id: "revision", label: "Revision" },
   { id: "completed", label: "Completed" },
+  { id: "lead", label: "Unpaid leads" },
 ];
 
 /* ── component ── */
@@ -67,7 +69,10 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
           <p className="page-sub">
             <span className="tnum">{filtered.length}</span> of{" "}
             <span className="tnum">{submissions.length}</span> sign-ups ·{" "}
-            <span className="tnum">{submissions.filter((s) => s.setupStatus !== "completed").length}</span> pending
+            <span className="tnum">
+              {submissions.filter((s) => s.setupStatus !== "completed" && s.setupStatus !== "lead").length}
+            </span>{" "}
+            pending
           </p>
         </div>
       </div>
@@ -184,6 +189,8 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                   : s.packageKey === "pro"
                     ? "badge-info"
                     : "badge-neutral";
+              // Unpaid lead: step 1 only — no package bought, no store yet.
+              const isLead = s.setupStatus === "lead";
               return (
                 <tr key={s.id} onClick={() => router.push(`/onboarding/${s.id}`)}>
                   <td>
@@ -200,6 +207,9 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                     </div>
                   </td>
                   <td>
+                    {isLead ? (
+                      <span className="badge badge-neutral muted">Not paid</span>
+                    ) : (
                     <span
                       className={"badge " + packageCls}
                       title={
@@ -211,15 +221,23 @@ export function OnboardingList({ submissions }: { submissions: OnboardingSummary
                       {s.packageLabel}
                       {s.trial && " · Trial"}
                     </span>
+                    )}
                   </td>
                   <td>
                     <span className={"badge " + statusCls}>
                       <span className="bdot" />
                       {s.setupStatusLabel}
                     </span>
+                    {!isLead && s.tenantId && (
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+                        {s.detailsSubmittedAt ? "Details submitted" : "Details pending"}
+                      </div>
+                    )}
                   </td>
                   <td>
-                    {s.published ? (
+                    {isLead ? (
+                      <span className="badge badge-neutral muted">No store yet</span>
+                    ) : s.published ? (
                       <span className="badge badge-success">
                         <span className="bdot" />
                         Live

@@ -119,7 +119,12 @@ export const onboardingSchema = z.object({
   // tiers, which ship with all pages on). Enforced for Starter in the server action.
   selectedFeatures: z.array(z.enum(STARTER_FEATURE_KEYS)).max(STARTER_FEATURE_KEYS.length).optional().default([]),
 
-  // Step 7 — checkout
+  // Checkout — which platform receiving method (PackagePaymentMethod.id) the
+  // client paid with. Resolved server-side against the ACTIVE methods; a QR PH
+  // method adds the 2% processing fee to the stamped amount due.
+  paidWithMethodId: z.string().trim().max(64).optional().default(""),
+
+  // Checkout
   paymentProofUrl: url.optional().default(""),
   termsAccepted: z.boolean(),
 
@@ -128,6 +133,33 @@ export const onboardingSchema = z.object({
 });
 
 export type OnboardingPayload = z.infer<typeof onboardingSchema>;
+
+/** Step 1 of the pay-first flow: the lead saved before payment. */
+export const onboardingLeadSchema = onboardingSchema.pick({
+  businessName: true,
+  whatsapp: true,
+  contactPerson: true,
+  description: true,
+});
+export type OnboardingLeadInput = z.input<typeof onboardingLeadSchema>;
+
+/** The optional post-payment "help us build your store faster" details. */
+export const onboardingDetailsSchema = onboardingSchema.pick({
+  themeStyle: true,
+  themeId: true,
+  primaryColor: true,
+  secondaryColor: true,
+  logoUrl: true,
+  bannerUrls: true,
+  inspirationUrls: true,
+  inspirationNotes: true,
+  products: true,
+  orderDestination: true,
+  orderDestinationValue: true,
+  paymentMethods: true,
+});
+export type OnboardingDetailsInput = z.input<typeof onboardingDetailsSchema>;
+export type OnboardingDetailsPayload = z.infer<typeof onboardingDetailsSchema>;
 /** What the wizard SENDS (pre-defaults) — e.g. no `email` since Step 1 dropped it.
  *  The server action parses this into the fully-defaulted OnboardingPayload. */
 export type OnboardingInput = z.input<typeof onboardingSchema>;

@@ -1041,12 +1041,29 @@ model OnboardingSubmission {
   // + Starter extras + setup fee — see lib/onboarding/pricing.amountDueFromConfig.
   // Null on submissions predating the stamp.
   amountDueCents  Int?
+  // Which platform receiving method the client paid with — a NAME snapshot of
+  // the PackagePaymentMethod at submit time (survives the operator renaming or
+  // deleting it). Null on submissions predating the field.
+  paidWithMethod  String?
+  // QR PH processing fee (2%, centavos) included in amountDueCents when the
+  // client paid by QR PH; 0 for other methods, null on older rows.
+  paymentFeeCents Int?
+
+  // ── Pay-first flow ──
+  // sha256 of the opaque token the wizard holds (raw token never stored). Lets
+  // the same browser convert its lead on payment and send the optional
+  // post-payment details. lib/onboarding/access-token.ts
+  accessTokenHash    String?   @unique
+  // When the client sent the optional post-payment details (branding, products,
+  // order destination, payment methods). Null = details pending / skipped.
+  detailsSubmittedAt DateTime?
 
   // ── Automation / operator workflow ──
   slug        String // generated subdomain label
   tenantId    String? // linked tenant once provisioned
   tenant      Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  // payment_received | tenant_created | customizing | revision | completed
+  // lead (unpaid: step 1 saved, no tenant) | payment_received | tenant_created
+  // | customizing | revision | completed
   setupStatus String  @default("payment_received")
 
   createdAt DateTime @default(now())

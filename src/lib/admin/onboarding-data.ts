@@ -110,6 +110,9 @@ type DbRow = {
   trialStartsAt: Date | null;
   trialEndsAt: Date | null;
   amountDueCents: number | null;
+  paidWithMethod: string | null;
+  paymentFeeCents: number | null;
+  detailsSubmittedAt: Date | null;
   selectedFeatures: unknown;
   paymentProofUrl: string | null;
   termsAccepted: boolean;
@@ -137,6 +140,9 @@ function summaryFromDb(r: DbRow): OnboardingSummary {
     trialStartsAt: r.trialStartsAt?.toISOString() ?? null,
     trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
     amountDueCents: r.amountDueCents,
+    paidWithMethod: r.paidWithMethod,
+    paymentFeeCents: r.paymentFeeCents,
+    detailsSubmittedAt: r.detailsSubmittedAt?.toISOString() ?? null,
     setupStatus: r.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[r.setupStatus] ?? r.setupStatus,
     tenantId: r.tenantId,
@@ -191,10 +197,13 @@ function summaryFromDemo(s: DemoOnboardingSubmission): OnboardingSummary {
     trialStartsAt: null,
     trialEndsAt: null,
     amountDueCents: null,
+    paidWithMethod: str(d.paidWithMethod) || null,
+    paymentFeeCents: null,
+    detailsSubmittedAt: s.detailsSubmittedAt ?? null,
     setupStatus: s.setupStatus,
     setupStatusLabel: ONBOARDING_STATUS_LABELS[s.setupStatus] ?? s.setupStatus,
     tenantId: s.tenantId,
-    tenantStatus: "pending_setup",
+    tenantStatus: s.tenantId ? "pending_setup" : null,
     published: false,
     productCount: productViews(d.products).length,
     paymentProofUrl: str(d.paymentProofUrl) || null,
@@ -252,6 +261,9 @@ const SELECT = {
   trialStartsAt: true,
   trialEndsAt: true,
   amountDueCents: true,
+  paidWithMethod: true,
+  paymentFeeCents: true,
+  detailsSubmittedAt: true,
   selectedFeatures: true,
   paymentProofUrl: true,
   termsAccepted: true,
@@ -290,8 +302,10 @@ export async function getOnboardingSubmission(id: string): Promise<OnboardingDet
   return r ? detailFromDb(r as DbRow) : null;
 }
 
-/** Count of submissions not yet completed — for the nav badge. */
+/** Count of PAID submissions not yet completed — for the nav badge. Unpaid
+ *  leads are follow-ups, not setup work, so they don't inflate it. */
 export async function pendingOnboardingCount(): Promise<number> {
-  if (isDemoMode()) return listDemoOnboarding().filter((s) => s.setupStatus !== "completed").length;
-  return prisma.onboardingSubmission.count({ where: { setupStatus: { not: "completed" } } });
+  const idle = ["completed", "lead"];
+  if (isDemoMode()) return listDemoOnboarding().filter((s) => !idle.includes(s.setupStatus)).length;
+  return prisma.onboardingSubmission.count({ where: { setupStatus: { notIn: idle } } });
 }

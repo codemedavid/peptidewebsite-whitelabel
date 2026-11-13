@@ -16,6 +16,7 @@ import { buildMe } from "./branding";
 import { issueSession, type MobileSubject } from "./sessions";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT, type StoreRow } from "./store-lookup";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 
 /**
  * POST /auth/login — the website's store-admin login, reached from the app.
@@ -37,7 +38,7 @@ import { findStoreByHost, MOBILE_ROOT, type StoreRow } from "./store-lookup";
  *
  * Customers (docs/mobile-admin/COMMUNITY.md) use the same screen: for each
  * store, the owner/staff credentials are tried first, then that store's
- * storefront customer account — only when the store holds MOBILE_COMMUNITY and
+ * storefront customer account — only when the store is open to shoppers in the app and
  * the account is active. Admin wins a tie on the same store.
  */
 
@@ -104,17 +105,17 @@ function spendDummyHash(password: string): void {
 }
 
 /**
- * The store's customer account for this email + password, when the store runs
- * the app community. Always spends exactly ONE scrypt — feature on or off,
- * account or not — so timing reveals neither which customers exist nor which
- * stores run the community.
+ * The store's customer account for this email + password, when the store is
+ * open to shoppers in the app. Always spends exactly ONE scrypt — feature on or
+ * off, account or not — so timing reveals neither which customers exist nor
+ * which stores have the customer app.
  */
 async function attemptCustomer(
   store: Store,
   email: string,
   password: string,
 ): Promise<{ known: boolean; id: string | null }> {
-  if (!(await hasFeature(store.id, FEATURES.MOBILE_COMMUNITY))) {
+  if (!(await customerAppOpen(store.id))) {
     spendDummyHash(password);
     return { known: false, id: null };
   }
