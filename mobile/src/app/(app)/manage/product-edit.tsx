@@ -226,6 +226,14 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
             keyboardType="decimal-pad"
             editable={d.discountOn}
           />
+          {brand.saleCampaignEntitled === true ? (
+            <ToggleRow
+              label="Only during the sale campaign"
+              hint="The discount price (and any option sale prices) only applies while your Sale Campaign is live. Outside it, this product sells at its regular price."
+              value={d.saleCampaignOnly}
+              onChange={(saleCampaignOnly) => set({ saleCampaignOnly })}
+            />
+          ) : null}
         </FormSection>
 
         {showGb ? (

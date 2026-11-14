@@ -433,10 +433,43 @@ export type DeviceResponse = { newOrders: boolean };
 
 // ── Insights (sales analytics) ───────────────────────────────────────────────
 
-export type InsightsRange = "today" | "7d" | "30d" | "90d";
+/**
+ * Report period. App 1.0 only sends today/7d/30d/90d; newer builds send any
+ * preset, or "custom" with ?from=YYYY-MM-DD&to=YYYY-MM-DD (store calendar).
+ * Mirrors PeriodPreset in lib/analytics/sales-period.ts.
+ */
+export type InsightsRange =
+  | "today"
+  | "yesterday"
+  | "7d"
+  | "30d"
+  | "this_week"
+  | "this_month"
+  | "last_month"
+  | "90d"
+  | "this_year"
+  | "12m"
+  | "all"
+  | "custom";
+export type InsightsGranularity = "hour" | "day" | "week" | "month";
+export type InsightsCompare = "previous" | "year" | "none";
 
-/** One headline metric. `delta` is the % change vs the previous equal window (null = no baseline). */
-export type Kpi = { value: number; label: string; delta: number | null };
+export type InsightsQuery = {
+  range: InsightsRange;
+  from?: string;
+  to?: string;
+  granularity?: InsightsGranularity;
+  compare?: InsightsCompare;
+};
+
+/** One headline metric. `delta` is the % change vs the comparison window (null = no baseline). */
+export type Kpi = {
+  value: number;
+  label: string;
+  delta: number | null;
+  /** The comparison window's figure ("₱12,300"); null when comparison is off. */
+  prevLabel?: string | null;
+};
 
 export type InsightsPoint = {
   /** Short axis label ("9a", "Mon", "Sep 3"). */
@@ -446,6 +479,33 @@ export type InsightsPoint = {
   revenue: number;
   revenueLabel: string;
   orders: number;
+  // ── added for period comparisons (absent from older servers) ──
+  aovLabel?: string;
+  /** Same-position bucket of the comparison window. */
+  prevRevenue?: number | null;
+  prevRevenueLabel?: string | null;
+  prevLongLabel?: string | null;
+  /** % vs the bucket right before (day-over-day, week-over-week, month-over-month). */
+  change?: number | null;
+  /** % vs the comparison twin. */
+  compareChange?: number | null;
+};
+
+/** The resolved window, so the app can show exact dates and the allowed views. */
+export type InsightsPeriod = {
+  from: string;
+  to: string;
+  /** "Nov 1 – 15, 2026" */
+  label: string;
+  granularity: InsightsGranularity;
+  granularities: InsightsGranularity[];
+  compare: InsightsCompare;
+  /** "Oct 1 – 15, 2026"; null when comparison is off. */
+  compareRangeLabel: string | null;
+  /** Window still running (today / this month…): figures are so far. */
+  toDate: boolean;
+  /** Oldest buckets dropped to keep the chart readable. */
+  capped: boolean;
 };
 
 export type RankedRow = { name: string; value: number; valueLabel: string; detail: string; share: number };
@@ -468,6 +528,8 @@ export type InsightsResponse = {
   places: RankedRow[];
   statusMix: Array<{ status: OrderStatus; count: number }>;
   cancelled: number;
+  /** Absent from older servers. */
+  period?: InsightsPeriod;
 };
 
 // ── Customers ────────────────────────────────────────────────────────────────

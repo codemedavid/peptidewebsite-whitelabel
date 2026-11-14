@@ -12,7 +12,7 @@ import { onStoreLink, takePendingStoreLink } from "./pending";
  *
  * The app is shared by every store, so an install alone can't say which one.
  * The seller's link (https://<store>/app → pepwebadmin://store/<slug>) or the
- * store code typed into "Add your store" links the phone to that store:
+ * store code typed into the store code step (/find-store) links the phone to that store:
  *   - sign-in is sent with `store`, so the server checks the login against
  *     THAT store only (and a customer lands in the right shop);
  *   - the signed-out screens wear the store's branding.
@@ -28,6 +28,8 @@ type StoreLinkApi = {
   ready: boolean;
   /** Look up a link or store code and link it. Throws ApiError with a showable message. */
   link: (identifier: string) => Promise<StorePreview>;
+  /** Link a store the caller already looked up (the store code step's confirm). */
+  choose: (store: StorePreview) => Promise<void>;
   unlink: () => Promise<void>;
 };
 
@@ -57,6 +59,7 @@ export function StoreLinkProvider({ children }: { children: ReactNode }) {
     [save],
   );
 
+  const choose = useCallback((store: StorePreview) => save(store), [save]);
   const unlink = useCallback(() => save(null), [save]);
 
   /** A store link opened the app. */
@@ -132,7 +135,10 @@ export function StoreLinkProvider({ children }: { children: ReactNode }) {
     [handleIncoming],
   );
 
-  const value = useMemo<StoreLinkApi>(() => ({ linked, ready, link, unlink }), [linked, ready, link, unlink]);
+  const value = useMemo<StoreLinkApi>(
+    () => ({ linked, ready, link, choose, unlink }),
+    [linked, ready, link, choose, unlink],
+  );
   return <StoreLinkContext.Provider value={value}>{children}</StoreLinkContext.Provider>;
 }
 

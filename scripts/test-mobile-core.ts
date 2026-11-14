@@ -17,6 +17,12 @@ import { normalizeStoreIdentifier } from "../src/lib/mobile/store-identifier";
 import { MOBILE_APP_SCHEME, storeAppLink, storeDeepLink } from "../src/lib/mobile/store-link";
 import { storeFromInput, storeFromUrl } from "../mobile/src/store-link/parse";
 import {
+  findStoreNext,
+  lookupFailureMessage,
+  readStoreCode,
+  storeDoor,
+} from "../mobile/src/features/session/find-store/rules";
+import {
   mintOpaqueToken,
   hashToken,
   credentialStamp,
@@ -456,6 +462,37 @@ test("store link: what a customer types into Add your store", () => {
   assert.equal(storeFromInput("https://hpglow.pepweb.store/app"), "hpglow.pepweb.store");
   assert.equal(storeFromInput(""), null);
   assert.equal(storeFromInput("not a store!"), null);
+});
+
+section("find-store (store code step)");
+test("store code: a typed code or a pasted link becomes the lookup id", () => {
+  assert.deepEqual(readStoreCode("  VRJonina "), { ok: true, id: "vrjonina" });
+  assert.deepEqual(readStoreCode("https://vrjonina.pepweb.store/app"), { ok: true, id: "vrjonina.pepweb.store" });
+  assert.deepEqual(readStoreCode("pepwebadmin://store/vrjonina"), { ok: true, id: "vrjonina" });
+});
+test("store code: empty or junk input gets a plain-language message, never a lookup", () => {
+  const empty = readStoreCode("   ");
+  assert.equal(empty.ok, false);
+  assert.match(!empty.ok ? empty.message : "", /store code/i);
+  const junk = readStoreCode("my store!!");
+  assert.equal(junk.ok, false);
+  assert.match(!junk.ok ? junk.message : "", /letters, numbers/i);
+});
+test("store door: shoppers only get in where the store's app is open to them", () => {
+  assert.equal(storeDoor({ customerSignIn: true }), "shopper");
+  assert.equal(storeDoor({ customerSignIn: false }), "team-only");
+});
+test("lookup failure: an unknown code says so; other errors keep the server's message", () => {
+  assert.match(lookupFailureMessage("not_found", "We couldn't find a store"), /no store uses that code/i);
+  assert.equal(lookupFailureMessage("store_unavailable", "This store isn't available right now."), "This store isn't available right now.");
+  assert.match(lookupFailureMessage(undefined, undefined), /couldn't check/i);
+});
+test("next: only the two known follow-up screens are accepted from the route", () => {
+  assert.equal(findStoreNext("create-account"), "create-account");
+  assert.equal(findStoreNext("sign-in"), "sign-in");
+  assert.equal(findStoreNext(["sign-in"]), "sign-in", "expo-router can hand over an array");
+  assert.equal(findStoreNext("(app)/admin"), null);
+  assert.equal(findStoreNext(undefined), null);
 });
 
 test("queue badges from one grouped count: new vs to-fulfil, others ignored", () => {

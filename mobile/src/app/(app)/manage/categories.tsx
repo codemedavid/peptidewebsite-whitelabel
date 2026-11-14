@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { adminBridge, unwrap, type AdminBrand } from "@/features/admin/bridge";
 import { IconButton, successTap, ToggleRow, useDiscardGuard } from "@/features/admin/catalog/components";
 import { useAdminBrand, useCatalogProducts, useCatalogRefresh } from "@/features/admin/catalog/hooks";
+import { categoryArrangeEnabled } from "@/features/admin/catalog/category-arrange";
 import {
   ALL_CATEGORY,
   ALL_CATEGORY_ID,
@@ -62,6 +63,17 @@ function CategoriesEditor({ brand }: { brand: AdminBrand }) {
     return m;
   }, [products]);
   const count = (id: string) => counts.get(id) ?? 0;
+  // Category sections (operator grant): arrange the products inside a SAVED
+  // category — a new, unsaved one doesn't exist on the server yet.
+  const canArrange = categoryArrangeEnabled(brand);
+  const savedIds = useMemo(() => new Set(seed.map((c) => c.id)), [seed]);
+  const arrange = (c: Category) => {
+    if (dirty) {
+      Alert.alert("Save your changes first", "Save your category changes, then arrange the products inside a category.");
+      return;
+    }
+    router.push({ pathname: "/manage/category-arrange", params: { id: c.id } });
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -144,6 +156,9 @@ function CategoriesEditor({ brand }: { brand: AdminBrand }) {
                     </AppText>
                   ) : null}
                 </View>
+                {canArrange && savedIds.has(c.id) ? (
+                  <IconButton icon="swap-vertical" label={`Arrange the products in ${c.label || "this category"}`} onPress={() => arrange(c)} />
+                ) : null}
                 <IconButton icon="chevron-up" label={`Move ${c.label || "category"} up`} disabled={i === 0} onPress={() => move(i, -1)} />
                 <IconButton icon="chevron-down" label={`Move ${c.label || "category"} down`} disabled={i === cats.length - 1} onPress={() => move(i, 1)} />
                 <IconButton icon="trash-outline" label={`Delete ${c.label || "category"}`} tone="danger" onPress={() => remove(c)} />

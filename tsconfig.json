@@ -49,6 +49,8 @@
     "mobile",
     "inspiration",
     "scripts/test-mobile-admin-bridge.ts",
+    "scripts/test-app-promo.ts",
+    "scripts/test-app-category-sections.ts",
     "scripts/test-mobile-variation-includes.ts",
     "scripts/test-multi-image.ts"
   ]

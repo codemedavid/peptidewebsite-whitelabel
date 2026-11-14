@@ -57,6 +57,18 @@ export const FEATURES = {
   // ceiling), so no existing tenant changes behavior on deploy.
   STORE_QRPH_FEE: "storefront.qrph_fee",
   STORE_COURIER_BOOKING: "storefront.courier_booking_link",
+  // Promo engine (the 11.11 toolkit). All operator-grantable, default OFF and
+  // outside every plan ceiling — each changes what customers PAY, so no tenant
+  // gets one by upgrading. Every grant is inert until the owner sets it up.
+  //   • Voucher ladder: promo codes shown in the cart as spend targets
+  //     ("Spend ₱1,200 more for ₱300 off") and auto-applied once reached.
+  //   • Free-shipping threshold: store-wide free shipping over a minimum spend,
+  //     with the "Add ₱X more" bar in the cart.
+  //   • Sale Campaign: one start/end window (teaser + live countdown bar) that
+  //     switches campaign-only sale prices, codes and free shipping on together.
+  STORE_VOUCHER_LADDER: "storefront.voucher_ladder",
+  STORE_FREE_SHIPPING_THRESHOLD: "storefront.free_shipping_threshold",
+  STORE_SALE_CAMPAIGN: "storefront.sale_campaign",
   // Made-to-order catalog: products manufactured per order sell without an
   // inventory. Operator-grantable, default OFF (outside every plan ceiling) —
   // granting it removes a real safety gate, so no tenant gets it by upgrading.
@@ -395,6 +407,12 @@ export const OPERATOR_GRANTABLE: ReadonlySet<FeatureKey> = new Set([
   // Courier booking link. Default OFF and sold per tenant; a grant is inert
   // until the owner pastes a URL onto one of their couriers.
   FEATURES.STORE_COURIER_BOOKING,
+  // The promo engine. Default OFF and sold per tenant — each changes what
+  // customers pay; every grant is inert until the owner sets the piece up, and
+  // placeStorefrontOrderAction re-checks each entitlement before applying it.
+  FEATURES.STORE_VOUCHER_LADDER,
+  FEATURES.STORE_FREE_SHIPPING_THRESHOLD,
+  FEATURES.STORE_SALE_CAMPAIGN,
   // Customer accounts. Default OFF and granted per tenant — see the key above.
   FEATURES.STORE_CUSTOMER_ACCOUNTS,
   // My Group Buy Order. Default OFF and granted per tenant — it publishes a
@@ -498,6 +516,9 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   [FEATURES.STORE_COURIER_BOOKING]: { label: "Courier booking link", description: "Lets the store owner put a booking / delivery form URL on a courier (Couriers \u2192 edit \u2192 Booking form link, e.g. a Lalamove form). At checkout, picking that courier shows a card linking to the form before the customer places their order; picking any other courier hides it. Not an API integration \u2014 nothing is booked or quoted automatically. Operator-grantable, default OFF; inert until a URL is saved.", group: "Ecommerce" },
   [FEATURES.STORE_TRACK_NOTE]: { label: "Delivery note", description: "The Track Order page's delivery-estimates card (region → estimate rows), edited by the store owner in the store admin. Business/Automated exclusive; off locks the editor tile and hides the card. Operator-grantable for legacy Starter stores.", group: "Ecommerce" },
   [FEATURES.STORE_TIMELINE]: { label: "Timeline", description: "An owner-written timeline (e.g. a group-buy schedule: orders open → close → arrives → ships) with the current step highlighted. The store owner edits the steps in the store admin's Timeline editor and picks where it shows: the Track Order page, the hero section, or both. Operator-grantable, default OFF.", group: "Ecommerce" },
+  [FEATURES.STORE_VOUCHER_LADDER]: { label: "Voucher ladder", description: "Promo codes the owner marks \"Show in cart\" appear in the cart as spend targets (\"Spend ₱1,200 more for ₱300 off\") with a progress bar, and the best one the cart qualifies for is applied automatically. Operator-grantable, default OFF.", group: "Ecommerce" },
+  [FEATURES.STORE_FREE_SHIPPING_THRESHOLD]: { label: "Free shipping over ₱X", description: "Store-wide free shipping once the items subtotal reaches the owner's minimum, with an \"Add ₱X more for free shipping\" bar in the cart. Can be limited to the Sale Campaign. Operator-grantable, default OFF.", group: "Ecommerce" },
+  [FEATURES.STORE_SALE_CAMPAIGN]: { label: "Sale campaign (Mega Sale)", description: "One start/end window for an 11.11-style sale: a teaser + live countdown bar across the storefront, and sale prices, promo codes and free shipping marked \"Only during the sale\" switch on and off by themselves. Operator-grantable, default OFF.", group: "Ecommerce" },
   [FEATURES.STORE_CATEGORY_SECTIONS]: { label: "Category sections", description: "The catalog shows every category as its own section on one scrolling page, under a sticky category bar that highlights the category the shopper is viewing (tap a category to jump to it). The store owner arranges the categories and the products inside each category in Admin \u2192 Categories (drag, or move up/down). Classic home layout. Operator-grantable, default OFF \u2014 switching it off restores the filter-chip catalog and keeps the saved arrangement.", group: "Catalog" },
   [FEATURES.MOBILE_SHOP]: { label: "App shopping", description: "Customers sign in to the Pepweb app with their storefront account to browse, order and track their orders. Same checkout and rules as the website. Operator-grantable, default OFF. Chats need App community.", group: "Ecommerce" },
   [FEATURES.MOBILE_COMMUNITY]: { label: "App community", description: "Customers sign in to the Pepweb app with their storefront account and, once the store owner approves them, chat with the store and other members in channels, topics and DMs, and see product drops. Moderated from the app by the owner and staff with the Community module. Operator-grantable, default OFF. Revoking signs every customer out of the app.", group: "Ecommerce" },

@@ -98,6 +98,9 @@ export type ProductMetadata = {
   /** Any checkout containing this product gets the configured shipping fee
    *  waived. Persisted only as `true` (absent = normal shipping). */
   freeShipping?: true;
+  /** Sale price runs only during the Sale Campaign — see Product.saleCampaignOnly.
+   *  Persisted only as `true`. */
+  saleCampaignOnly?: true;
   /** Manufactured per order, so never stock-gated — see Product.madeToOrder.
    *  Persisted only as `true` (absent = an ordinary stocked product). */
   madeToOrder?: true;
@@ -259,6 +262,7 @@ export function dbProductToStorefront(row: DbProductRow, displaySymbol: string):
     purchasable: meta.purchasable !== false,
     priceOnRequest: meta.priceOnRequest === true,
     freeShipping: meta.freeShipping === true,
+    saleCampaignOnly: meta.saleCampaignOnly === true,
     madeToOrder: meta.madeToOrder === true,
     vialsPerKit: normalizeVialsPerKit(meta.vialsPerKit),
     // Dual-currency fields — absent on every product that predates them, which
@@ -445,6 +449,7 @@ export function productToDbWrite(
       purchasable: p.purchasable === false ? false : undefined,
       priceOnRequest: p.priceOnRequest ? true : undefined,
       freeShipping: p.freeShipping ? true : undefined,
+      saleCampaignOnly: p.saleCampaignOnly ? true : undefined,
       madeToOrder: p.madeToOrder ? true : undefined,
       vialsPerKit: normalizeVialsPerKit(p.vialsPerKit),
       market: p.market === "international" || p.market === "both" ? p.market : undefined,

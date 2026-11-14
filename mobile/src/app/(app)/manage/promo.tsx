@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/theme/ThemeProvider";
-import { SPACE } from "@/theme/tokens";
+import { RADIUS, SPACE } from "@/theme/tokens";
 import { removeRows, upsertRow, useCollection } from "@/features/admin/setup/data";
 import { currencyOf, isIsoDate, isPromoExpired, newId, str, type Row } from "@/features/admin/setup/rules";
 import { SEED_PROMO_CODES } from "@/features/admin/setup/seeds";
-import { ChoicePills, EditorSheet, ItemCard, ListPage, Loadable, confirmDelete } from "@/features/admin/setup/ui";
+import { promoEngineGrants, savedCampaignStatus, type PromoEngineGrants } from "@/features/admin/setup/promo-engine";
+import { ChoicePills, EditorSheet, ItemCard, ListPage, Loadable, ToggleRow, confirmDelete } from "@/features/admin/setup/ui";
 import { Field } from "@/ui/inputs";
 import { AppText, Button, Pill } from "@/ui/primitives";
 
@@ -30,6 +31,7 @@ export default function PromoScreen() {
       <Loadable query={list.brand}>
         {(brand) => {
           const currency = currencyOf(brand);
+          const grants = promoEngineGrants(brand);
           const q = query.trim().toLowerCase();
           const filtered = list.items.filter((c) => !q || str(c.code).toLowerCase().includes(q));
           const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
@@ -76,6 +78,7 @@ export default function PromoScreen() {
                 onRefresh={() => void list.brand.refetch()}
                 toolbar={
                   <View style={{ gap: SPACE.md }}>
+                    <PromoEngineLink grants={grants} campaignStatus={savedCampaignStatus(brand.saleCampaign)} />
                     <Field
                       label="Search"
                       value={query}
@@ -107,6 +110,7 @@ export default function PromoScreen() {
                     key={str(c.id)}
                     promo={c}
                     currency={currency}
+                    grants={grants}
                     selected={selected.has(c.id)}
                     disabled={list.saving}
                     onSelect={() => toggle(c.id)}
@@ -127,6 +131,7 @@ export default function PromoScreen() {
                   initial={editing.row}
                   isNew={editing.isNew}
                   currency={currency}
+                  grants={grants}
                   saving={list.saving}
                   onCancel={() => setEditing(null)}
                   onSave={async (row) => {
@@ -162,6 +167,7 @@ function Checkbox({ checked, label, onPress }: { checked: boolean; label: string
 function PromoCard({
   promo,
   currency,
+  grants,
   selected,
   disabled,
   onSelect,
@@ -170,6 +176,7 @@ function PromoCard({
 }: {
   promo: Row;
   currency: string;
+  grants: PromoEngineGrants;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -198,6 +205,8 @@ function PromoCard({
             icon={off ? "close-circle-outline" : "checkmark-circle-outline"}
             label={expired ? "Expired" : promo.active === true ? "Active" : "Inactive"}
           />
+          {promo.showInCart === true && grants.ladder ? <Pill tone="success" size="sm" icon="cart-outline" label="In cart · auto" /> : null}
+          {promo.campaignOnly === true && grants.campaign ? <Pill tone="warning" size="sm" icon="flash-outline" label="Sale only" /> : null}
         </>
       }
       disabled={disabled}
@@ -211,6 +220,7 @@ function PromoEditor({
   initial,
   isNew,
   currency,
+  grants,
   saving,
   onCancel,
   onSave,
@@ -218,6 +228,7 @@ function PromoEditor({
   initial: Row;
   isNew: boolean;
   currency: string;
+  grants: PromoEngineGrants;
   saving: boolean;
   onCancel: () => void;
   onSave: (row: Row) => void;
@@ -229,6 +240,8 @@ function PromoEditor({
     minP: String(initial.minPurchase ?? 0),
     limit: initial.usageLimit === null || initial.usageLimit === undefined ? "" : String(initial.usageLimit),
     expiry: str(initial.expiry),
+    showInCart: initial.showInCart === true,
+    campaignOnly: initial.campaignOnly === true,
   };
   const [code, setCode] = useState(start.code);
   const [type, setType] = useState<PromoType>(start.type);
@@ -236,12 +249,15 @@ function PromoEditor({
   const [minP, setMinP] = useState(start.minP);
   const [limit, setLimit] = useState(start.limit);
   const [expiry, setExpiry] = useState(start.expiry);
+  const [showInCart, setShowInCart] = useState(start.showInCart);
+  const [campaignOnly, setCampaignOnly] = useState(start.campaignOnly);
 
   // The web's date input can only hold a real YYYY-MM-DD; a typed one must be too.
   const expiryError = expiry.trim() && !isIsoDate(expiry.trim()) ? "Use the format YYYY-MM-DD, e.g. 2026-12-31." : null;
   const canSave = !!code.trim() && Number(value) > 0 && !expiryError;
   const dirty =
-    code !== start.code || type !== start.type || value !== start.value || minP !== start.minP || limit !== start.limit || expiry !== start.expiry;
+    code !== start.code || type !== start.type || value !== start.value || minP !== start.minP || limit !== start.limit || expiry !== start.expiry ||
+    showInCart !== start.showInCart || campaignOnly !== start.campaignOnly;
 
   return (
     <EditorSheet
@@ -261,6 +277,10 @@ function PromoEditor({
           minPurchase: Number(minP) || 0,
           usageLimit: limit.trim() !== "" ? Number(limit) : null,
           expiry: expiry.trim() || null,
+          // Kept as-is when the grant is off, so revoking a feature never
+          // silently rewrites a code on its next edit (as on the website).
+          showInCart: (grants.ladder ? showInCart : start.showInCart) || undefined,
+          campaignOnly: (grants.campaign ? campaignOnly : start.campaignOnly) || undefined,
         })
       }
     >
@@ -293,11 +313,50 @@ function PromoEditor({
         autoCorrect={false}
         error={expiryError}
       />
+      {grants.ladder ? (
+        <ToggleRow
+          label="Show in cart & apply automatically"
+          hint={`Shoppers see “Spend ${currency}X more to get this” and get it without typing.`}
+          value={showInCart}
+          onChange={setShowInCart}
+        />
+      ) : null}
+      {grants.campaign ? (
+        <ToggleRow label="Only during the sale campaign" value={campaignOnly} onChange={setCampaignOnly} />
+      ) : null}
     </EditorSheet>
+  );
+}
+
+/** Opens the Sale campaign & free-shipping settings (the website's cards above Promo Codes). */
+function PromoEngineLink({ grants, campaignStatus }: { grants: PromoEngineGrants; campaignStatus: string }) {
+  const t = useTheme();
+  if (!grants.campaign && !grants.freeShipping) return null;
+  const title = grants.campaign && grants.freeShipping ? "Sale campaign & free shipping" : grants.campaign ? "Sale campaign" : "Free shipping over a minimum";
+  const detail = grants.campaign ? `Campaign: ${campaignStatus}` : "Free shipping once a cart reaches your minimum";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${detail}`}
+      onPress={() => router.push("/manage/sale-campaign")}
+      style={({ pressed }) => [
+        styles.engine,
+        { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+        pressed ? { opacity: 0.7 } : null,
+      ]}
+    >
+      <Ionicons name="flash-outline" size={22} color={t.brand.link} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <AppText variant="bodyStrong">{title}</AppText>
+        <AppText variant="caption" color="muted">{detail}</AppText>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={t.colors.textMuted} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   bulk: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: SPACE.md, flexWrap: "wrap" },
   check: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, minHeight: 40 },
+  engine: { flexDirection: "row", alignItems: "center", gap: SPACE.md, padding: SPACE.lg, borderRadius: RADIUS.lg, borderWidth: StyleSheet.hairlineWidth },
 });

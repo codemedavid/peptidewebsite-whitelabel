@@ -14,6 +14,8 @@ import { quoteRequest } from "../lib/checkout";
 import { money } from "../lib/money";
 import { useShop } from "../ShopProvider";
 import { OrderSummary } from "./OrderSummary";
+import { PromoMeter } from "./PromoMeter";
+import { SaleCampaignBar } from "./SaleCampaignBar";
 import { Notice, ProductImage, QtyStepper } from "./ShopUI";
 import { CatalogError, ClosedBanner, goToSignIn } from "./ShopStates";
 
@@ -72,13 +74,19 @@ export function CartScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       {title}
+      <SaleCampaignBar campaign={catalog.saleCampaign} />
       <OfflineBanner />
       <FlatList
         data={rows}
         keyExtractor={(r) => r.key}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: SPACE.md }} />}
-        ListHeaderComponent={!catalog.open ? <View style={{ marginBottom: SPACE.md }}><ClosedBanner message={catalog.closedMessage} /></View> : null}
+        ListHeaderComponent={
+          <View style={{ gap: SPACE.md, marginBottom: SPACE.md }}>
+            {!catalog.open ? <ClosedBanner message={catalog.closedMessage} /> : null}
+            <PromoMeter currency={currency} vouchers={quote.data?.vouchers} freeShipping={quote.data?.freeShipping} />
+          </View>
+        }
         renderItem={({ item }) => (
           <CartLineRow
             row={item}
@@ -97,7 +105,9 @@ export function CartScreen() {
               <AppText variant="body" color="muted">Working out your total…</AppText>
             )}
             {quoteError ? <Notice tone="danger" icon="alert-circle">{quoteError}</Notice> : null}
-            <AppText variant="caption" color="faint">Shipping, fees and promo codes are added at checkout.</AppText>
+            <AppText variant="caption" color="faint">
+              {quote.data?.autoApplied ? "Shipping and fees are added at checkout." : "Shipping, fees and promo codes are added at checkout."}
+            </AppText>
           </View>
         }
       />

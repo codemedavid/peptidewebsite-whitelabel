@@ -202,7 +202,7 @@ export default function SignIn() {
               <TextLink
                 label="New here? Create an account"
                 color={accent.link}
-                onPress={() => router.push("/create-account")}
+                onPress={() => router.push(linked ? "/create-account" : "/find-store?next=create-account")}
                 style={styles.center}
               />
             ) : null}

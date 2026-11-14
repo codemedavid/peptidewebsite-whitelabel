@@ -11,6 +11,7 @@
 // amount math and never disagree on what a code is worth.
 
 import { positivePrice } from "./markets";
+import { isWindowLive, type CampaignWindow } from "./sale-campaign";
 import type { PromoCode } from "@/storefront/types";
 
 /** Coerce untrusted client/config input into clean PromoCode rows. */
@@ -38,6 +39,12 @@ export function normalizePromoCodes(input: unknown): PromoCode[] {
       used: Math.max(0, Math.round(Number(o.used) || 0)),
       expiry: typeof o.expiry === "string" && o.expiry ? o.expiry.slice(0, 40) : null,
       active: o.active !== false,
+      // Voucher ladder (FEATURES.STORE_VOUCHER_LADDER): shown in the cart as a
+      // spend target and applied automatically once the cart qualifies.
+      // Persisted only as `true`, so an untouched code stays type-to-use.
+      ...(o.showInCart === true ? { showInCart: true } : {}),
+      // Sale Campaign: valid only while the campaign window is live.
+      ...(o.campaignOnly === true ? { campaignOnly: true } : {}),
       // Dual-currency stores: the International (USD) value + minimum. Only
       // positive amounts persist; absent = a fixed code doesn't apply to USD.
       ...(positivePrice(o.usdValue) ? { usdValue: positivePrice(o.usdValue) } : {}),
@@ -82,10 +89,17 @@ export function promoCodeError(
   subtotal: number,
   currency = "",
   now = new Date(),
+  // The Sale Campaign window (lib/storefront/sale-campaign), or null when no
+  // campaign is running. A campaign-only code is invalid outside it — fail
+  // closed, so a missing window can never unlock one.
+  campaignWindow: CampaignWindow | null = null,
 ): string | null {
   if (!promo) return "That code isn't valid.";
   if (!promo.active) return "That code is no longer active.";
   if (promoExpired(promo, now)) return "That code has expired.";
+  if (promo.campaignOnly === true && !isWindowLive(campaignWindow, now.getTime())) {
+    return "That code only works during the sale.";
+  }
   if (promo.usageLimit !== null && promo.used >= promo.usageLimit) {
     return "That code has reached its usage limit.";
   }

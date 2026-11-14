@@ -88,11 +88,27 @@ export function DeliverySection({
 }
 
 /** Type a code, apply it through the quote; the quote's error explains a bad one. */
-export function PromoSection({ applied, error, onApply }: { applied: string; error: string | null; onApply: (code: string) => void }) {
+export function PromoSection({
+  applied,
+  error,
+  onApply,
+  auto = null,
+}: {
+  applied: string;
+  error: string | null;
+  onApply: (code: string) => void;
+  /** The voucher the store applied by itself (voucher ladder), when no code is typed. */
+  auto?: { code: string; saved: string } | null;
+}) {
   const [draft, setDraft] = useState(applied);
   const trimmed = draft.trim();
   return (
     <FormSection title="Promo code">
+      {auto && !applied ? (
+        <Notice tone="success" icon="pricetag">
+          {`${auto.code} applied automatically — you save ${auto.saved}. Have another code? Enter it below.`}
+        </Notice>
+      ) : null}
       <View style={styles.promo}>
         <View style={{ flex: 1 }}>
           <Field

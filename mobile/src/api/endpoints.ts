@@ -44,6 +44,7 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   CustomerListResponse,
   CustomerSort,
   DashboardResponse,
+  InsightsQuery,
   InsightsRange,
   InsightsResponse,
   LiveResponse,
@@ -126,8 +127,21 @@ export const dashboardApi = {
   get: () => api<DashboardResponse>("/dashboard"),
 };
 
+/** A preset alone, or a full query (custom dates, view-by, comparison). */
+function insightsParams(q: InsightsRange | InsightsQuery): string {
+  const query: InsightsQuery = typeof q === "string" ? { range: q } : q;
+  const params = new URLSearchParams({ range: query.range });
+  if (query.range === "custom" && query.from && query.to) {
+    params.set("from", query.from);
+    params.set("to", query.to);
+  }
+  if (query.granularity) params.set("granularity", query.granularity);
+  if (query.compare) params.set("compare", query.compare);
+  return params.toString();
+}
+
 export const insightsApi = {
-  get: (range: InsightsRange) => api<InsightsResponse>(`/insights?range=${range}`),
+  get: (q: InsightsRange | InsightsQuery) => api<InsightsResponse>(`/insights?${insightsParams(q)}`),
 };
 
 /** "Live now": the admin's snapshot, and the customer app's heartbeat. */
@@ -288,7 +302,10 @@ export const qk = {
   ordersAll: (scope: string) => [scope, "orders"] as const,
   order: (scope: string, id: string) => [scope, "order", id] as const,
   products: (scope: string) => [scope, "products"] as const,
-  insights: (scope: string, range: InsightsRange) => [scope, "insights", range] as const,
+  insights: (scope: string, q: InsightsRange | InsightsQuery) =>
+    typeof q === "string"
+      ? ([scope, "insights", q] as const)
+      : ([scope, "insights", q.range, q.from ?? "", q.to ?? "", q.granularity ?? "", q.compare ?? ""] as const),
   insightsAll: (scope: string) => [scope, "insights"] as const,
   live: (scope: string) => [scope, "live"] as const,
   customers: (scope: string, q: string, sort: CustomerSort, segment: CustomerFilterKey) =>

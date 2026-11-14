@@ -1,36 +1,54 @@
 import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import type { InsightsRange, InsightsResponse } from "@contract";
+import type { InsightsGranularity, InsightsQuery, InsightsRange, InsightsResponse } from "@contract";
 import { insightsApi, qk } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { revenuePoints } from "@/features/insights/SalesHero";
+import { breakdownTitle, PeriodBreakdown } from "@/features/insights/PeriodBreakdown";
+import { PeriodSheet, PRESET_LABELS } from "@/features/insights/PeriodSheet";
 import { LiveStrip } from "@/features/live/LiveStrip";
 import { STATUS_META } from "@/features/orders/status";
 import { useTheme } from "@/theme/ThemeProvider";
-import { SPACE } from "@/theme/tokens";
+import { RADIUS, SPACE } from "@/theme/tokens";
+import { Segmented } from "@/ui/inputs";
 import { AreaChart } from "@/ui/charts/AreaChart";
 import { BarList, SplitBar } from "@/ui/charts/Bars";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList } from "@/ui/feedback";
 import { Chips, Delta, Panel, SectionHeader, StatTile } from "@/ui/kit";
 import { AppText, Pill } from "@/ui/primitives";
 
-const RANGES: ReadonlyArray<{ key: InsightsRange; label: string }> = [
-  { key: "today", label: "Today" },
-  { key: "7d", label: "7 days" },
-  { key: "30d", label: "30 days" },
-  { key: "90d", label: "90 days" },
-];
+type QuickKey = InsightsRange | "more";
+const QUICK: ReadonlyArray<InsightsRange> = ["today", "7d", "30d", "this_month", "90d"];
+const QUICK_LABEL: Partial<Record<InsightsRange, string>> = {
+  today: "Today",
+  "7d": "7 days",
+  "30d": "30 days",
+  this_month: "This month",
+  "90d": "90 days",
+};
+const VIEW_LABEL: Record<InsightsGranularity, string> = { hour: "Hour", day: "Day", week: "Week", month: "Month" };
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-const PEAK_UNIT: Record<InsightsRange, string> = { today: "hour", "7d": "day", "30d": "day", "90d": "week" };
 
-function RevenuePanel({ data }: { data: InsightsResponse }) {
+function RevenuePanel({ data, onGranularity }: { data: InsightsResponse; onGranularity: (g: InsightsGranularity) => void }) {
+  const t = useTheme();
   const [scrub, setScrub] = useState<number | null>(null);
   const point = scrub !== null ? data.series[scrub] : null;
+  const period = data.period;
+  const unit = period ? VIEW_LABEL[period.granularity].toLowerCase() : "day";
+  const comparing = Boolean(period?.compareRangeLabel);
   return (
     <Panel style={{ gap: SPACE.md }}>
+      {period && period.granularities.length > 1 ? (
+        <Segmented
+          segments={period.granularities.map((g) => ({ key: g, label: VIEW_LABEL[g] }))}
+          value={period.granularity}
+          onChange={onGranularity}
+        />
+      ) : null}
       <View style={{ gap: 4 }}>
         <AppText variant="overline" color="link">
           {(point ? point.longLabel : `Revenue · ${data.rangeLabel}`).toUpperCase()}
@@ -39,7 +57,12 @@ function RevenuePanel({ data }: { data: InsightsResponse }) {
           {point ? point.revenueLabel : data.kpis.revenue.label}
         </AppText>
         {point ? (
-          <AppText variant="caption" color="muted">{`${point.orders} ${point.orders === 1 ? "order" : "orders"}`}</AppText>
+          <View style={styles.inline}>
+            {point.compareChange !== undefined && comparing ? <Delta value={point.compareChange ?? null} /> : null}
+            <AppText variant="caption" color="muted">
+              {`${point.orders} ${point.orders === 1 ? "order" : "orders"}${point.prevRevenueLabel ? ` · was ${point.prevRevenueLabel}` : ""}`}
+            </AppText>
+          </View>
         ) : (
           <View style={styles.inline}>
             <Delta value={data.kpis.revenue.delta} />
@@ -55,21 +78,32 @@ function RevenuePanel({ data }: { data: InsightsResponse }) {
         onScrub={setScrub}
         accessibilityLabel={`Revenue chart, ${data.rangeLabel}. Total ${data.kpis.revenue.label}. Press and drag to read each point.`}
       />
+      {comparing ? (
+        <View style={styles.inline}>
+          <View style={[styles.swatch, { backgroundColor: t.colors.chart }]} />
+          <AppText variant="caption" color="muted">This period</AppText>
+          <View style={[styles.swatchDash, { borderColor: t.colors.textFaint }]} />
+          <AppText variant="caption" color="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+            {period?.compareRangeLabel ?? "Compared"}
+          </AppText>
+        </View>
+      ) : null}
       {data.peak ? (
         <AppText variant="caption" color="muted">
-          {`Best ${PEAK_UNIT[data.range]}: ${data.peak.label} · ${data.peak.revenueLabel}`}
+          {`Best ${unit}: ${data.peak.label} · ${data.peak.revenueLabel}`}
         </AppText>
       ) : null}
     </Panel>
   );
 }
 
-function Report({ data }: { data: InsightsResponse }) {
+function Report({ data, onGranularity }: { data: InsightsResponse; onGranularity: (g: InsightsGranularity) => void }) {
   const k = data.kpis;
   const mix = data.customerMix;
+  const period = data.period;
   return (
     <>
-      <RevenuePanel data={data} />
+      <RevenuePanel data={data} onGranularity={onGranularity} />
 
       <View style={styles.grid}>
         <StatTile icon="receipt-outline" label="Orders" value={k.orders.label} delta={k.orders.delta} onPress={() => router.navigate("/orders")} />
@@ -77,6 +111,15 @@ function Report({ data }: { data: InsightsResponse }) {
         <StatTile icon="people-outline" label="Customers" value={k.customers.label} delta={k.customers.delta} onPress={() => router.push("/customers")} />
         <StatTile icon="cube-outline" label="Items sold" value={k.itemsSold.label} delta={k.itemsSold.delta} />
       </View>
+
+      {period && data.series.length > 1 ? (
+        <View>
+          <SectionHeader eyebrow="Compare" title={breakdownTitle(period.granularity)} />
+          <Panel>
+            <PeriodBreakdown series={data.series} granularity={period.granularity} comparing={Boolean(period.compareRangeLabel)} />
+          </Panel>
+        </View>
+      ) : null}
 
       <View>
         <SectionHeader eyebrow="Money" title="Collected vs waiting" />
@@ -147,10 +190,11 @@ function Report({ data }: { data: InsightsResponse }) {
 export default function Insights() {
   const t = useTheme();
   const { me, scope } = useSignedIn();
-  const [range, setRange] = useState<InsightsRange>("7d");
+  const [query, setQuery] = useState<InsightsQuery>({ range: "7d", compare: "previous" });
+  const [sheet, setSheet] = useState(false);
   const q = useQuery({
-    queryKey: qk.insights(scope, range),
-    queryFn: () => insightsApi.get(range),
+    queryKey: qk.insights(scope, query),
+    queryFn: () => insightsApi.get(query),
     enabled: me.can.analytics,
     placeholderData: (prev) => prev,
   });
@@ -179,8 +223,48 @@ export default function Insights() {
               insights
             </AppText>
           </AppText>
-          <Chips options={RANGES} value={range} onChange={setRange} label="Report period" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Report period: ${PRESET_LABELS[query.range]}${q.data?.period ? `, ${q.data.period.label}` : ""}. Change`}
+            onPress={() => setSheet(true)}
+            style={({ pressed }) => [
+              styles.dateBtn,
+              { borderColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceAlt : t.colors.surface },
+            ]}
+          >
+            <Ionicons name="calendar-outline" size={18} color={t.colors.text} />
+            <View style={{ flex: 1 }}>
+              <AppText variant="caption" color="muted">{PRESET_LABELS[query.range]}</AppText>
+              <AppText variant="bodyStrong" numberOfLines={1} style={styles.tabular}>
+                {q.data?.period?.label ?? "…"}
+              </AppText>
+            </View>
+            <AppText variant="caption" color="link">
+              {(query.compare ?? "previous") === "none" ? "No compare" : query.compare === "year" ? "vs last year" : "vs previous"}
+            </AppText>
+            <Ionicons name="chevron-down" size={16} color={t.colors.textMuted} />
+          </Pressable>
+          <Chips<QuickKey>
+            options={[
+              ...QUICK.map((key) => ({ key, label: QUICK_LABEL[key] ?? PRESET_LABELS[key] })),
+              { key: "more", label: QUICK.includes(query.range) ? "More…" : PRESET_LABELS[query.range] },
+            ]}
+            value={QUICK.includes(query.range) ? query.range : "more"}
+            onChange={(key) =>
+              key === "more" ? setSheet(true) : setQuery((cur) => ({ range: key, compare: cur.compare }))
+            }
+            label="Report period"
+          />
         </View>
+        <PeriodSheet
+          visible={sheet}
+          value={query}
+          onClose={() => setSheet(false)}
+          onApply={(next) => {
+            setSheet(false);
+            setQuery(next);
+          }}
+        />
 
         <LiveStrip />
 
@@ -190,7 +274,7 @@ export default function Insights() {
           <ErrorState message={q.error?.message ?? "Couldn't load insights."} onRetry={() => void q.refetch()} />
         ) : (
           <View style={[styles.stack, q.isPlaceholderData ? { opacity: 0.6 } : null]}>
-            <Report data={q.data} />
+            <Report data={q.data} onGranularity={(granularity) => setQuery((cur) => ({ ...cur, granularity }))} />
           </View>
         )}
       </ScrollView>
@@ -205,4 +289,15 @@ const styles = StyleSheet.create({
   inline: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.sm },
   tabular: { fontVariant: ["tabular-nums"] },
+  dateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACE.md,
+    minHeight: 52,
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  swatch: { width: 12, height: 3, borderRadius: 2 },
+  swatchDash: { width: 12, borderTopWidth: 2, borderStyle: "dashed", marginLeft: SPACE.sm },
 });

@@ -4,141 +4,71 @@
 // phone never disagrees with the website:
 //   - money = computeOrderTotals (the checkout formula), cancelled excluded
 //   - the order date is the placed date; a future (clock-skewed) date counts as now
-//   - each window is compared with the equal window right before it
-// Windows follow the store's calendar day in Asia/Manila, like the Home screen.
+//   - each window is compared with the previous period (or the same dates last year)
+// Windows, buckets and comparisons come from lib/analytics/sales-period.ts — the
+// same engine the website uses (store calendar, Asia/Manila).
 //
 // Pure (npm run test:mobile-insights).
 
 import type { Order, OrderStatus } from "../../storefront/types";
 import { computeOrderTotals, hasPaymentProof, itemCount } from "../../storefront/admin/order-detail";
 import { formatMoney } from "../storefront/currency";
-import type { InsightsPoint, InsightsRange, InsightsResponse, Kpi, RankedRow } from "./contract";
+import {
+  buildPeriodSeries,
+  clampToNow,
+  dayStart,
+  pctChange,
+  parseCompare,
+  parseGranularity,
+  parsePreset,
+  resolvePeriod,
+  type SaleEvent,
+} from "../analytics/sales-period";
+import type { InsightsPoint, InsightsQuery, InsightsRange, InsightsResponse, Kpi, RankedRow } from "./contract";
 import { customerId, customerKeyOf } from "./customers";
 
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
-const STORE_UTC_OFFSET_MS = 8 * HOUR; // Asia/Manila, no DST
 const TOP_ROWS = 5;
-const WEEKS_IN_90D = 13;
 
-const RANGES: ReadonlyArray<InsightsRange> = ["today", "7d", "30d", "90d"];
-const RANGE_DAYS: Record<Exclude<InsightsRange, "today">, number> = { "7d": 7, "30d": 30, "90d": 90 };
-const RANGE_COPY: Record<InsightsRange, { label: string; compare: string }> = {
-  today: { label: "Today", compare: "vs yesterday, same time" },
-  "7d": { label: "Last 7 days", compare: "vs prior 7 days" },
-  "30d": { label: "Last 30 days", compare: "vs prior 30 days" },
-  "90d": { label: "Last 90 days", compare: "vs prior 90 days" },
-};
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
+/** Ranges a request may name. Anything else (or nothing) → 7 days, the app's default. */
 export function parseRange(value: unknown): InsightsRange {
-  return RANGES.includes(value as InsightsRange) ? (value as InsightsRange) : "7d";
+  return parsePreset(value, "7d") as InsightsRange;
+}
+
+/** Read ?range=&from=&to=&granularity=&compare= — every field validated, unknown values dropped. */
+export function parseInsightsQuery(params: URLSearchParams): InsightsQuery {
+  const g = parseGranularity(params.get("granularity"));
+  const compare = params.get("compare");
+  return {
+    range: parseRange(params.get("range")),
+    from: params.get("from")?.slice(0, 10) || undefined,
+    to: params.get("to")?.slice(0, 10) || undefined,
+    granularity: g ?? undefined,
+    compare: compare ? parseCompare(compare) : undefined,
+  };
 }
 
 /** Midnight (store time) of the day containing `d`, as a UTC instant. */
 export function storeDayStart(d: Date): Date {
-  const local = new Date(d.getTime() + STORE_UTC_OFFSET_MS);
-  return new Date(
-    Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - STORE_UTC_OFFSET_MS,
-  );
+  return new Date(dayStart(d.getTime()));
 }
 
 export type InsightsWindow = { start: Date; end: Date; prevStart: Date; prevEnd: Date };
 
+/** The KPI window and its comparison (previous period) for a preset. */
 export function windowFor(range: InsightsRange, now: Date): InsightsWindow {
-  const today = storeDayStart(now);
-  if (range === "today") {
-    return {
-      start: today,
-      end: new Date(today.getTime() + DAY),
-      prevStart: new Date(today.getTime() - DAY),
-      // "So far" comparison: yesterday up to this same time of day.
-      prevEnd: new Date(now.getTime() - DAY),
-    };
-  }
-  const days = RANGE_DAYS[range];
-  const end = new Date(today.getTime() + DAY);
-  const start = new Date(end.getTime() - days * DAY);
-  return { start, end, prevStart: new Date(start.getTime() - days * DAY), prevEnd: start };
-}
-
-// ── buckets ──────────────────────────────────────────────────────────────────
-
-type Bucket = { start: number; end: number; label: string; longLabel: string; revenue: number; orders: number };
-
-/** Calendar parts of a UTC instant, read in store time. */
-function local(ms: number) {
-  const d = new Date(ms + STORE_UTC_OFFSET_MS);
-  return { weekday: d.getUTCDay(), day: d.getUTCDate(), month: d.getUTCMonth() };
-}
-
-function hourLabel(h: number, long: boolean): string {
-  const suffix = h < 12 ? (long ? " AM" : "a") : long ? " PM" : "p";
-  return `${h % 12 === 0 ? 12 : h % 12}${suffix}`;
-}
-
-function makeBuckets(range: InsightsRange, w: InsightsWindow): Bucket[] {
-  const start = w.start.getTime();
-  const end = w.end.getTime();
-
-  if (range === "today") {
-    return Array.from({ length: 24 }, (_, h) => ({
-      start: start + h * HOUR,
-      end: start + (h + 1) * HOUR,
-      label: hourLabel(h, false),
-      longLabel: `${hourLabel(h, true)} – ${hourLabel((h + 1) % 24, true)}`,
-      revenue: 0,
-      orders: 0,
-    }));
-  }
-
-  if (range === "90d") {
-    // Whole weeks counted back from the end; the oldest one is clipped to the window.
-    return Array.from({ length: WEEKS_IN_90D }, (_, i) => {
-      const bEnd = end - (WEEKS_IN_90D - 1 - i) * 7 * DAY;
-      const bStart = Math.max(start, bEnd - 7 * DAY);
-      const p = local(bStart);
-      return {
-        start: bStart,
-        end: bEnd,
-        label: `${MONTHS[p.month]} ${p.day}`,
-        longLabel: `Week of ${MONTHS[p.month]} ${p.day}`,
-        revenue: 0,
-        orders: 0,
-      };
-    });
-  }
-
-  const days = RANGE_DAYS[range];
-  return Array.from({ length: days }, (_, i) => {
-    const bStart = start + i * DAY;
-    const p = local(bStart);
-    return {
-      start: bStart,
-      end: bStart + DAY,
-      label: range === "7d" ? WEEKDAYS[p.weekday] : `${MONTHS[p.month]} ${p.day}`,
-      longLabel: `${WEEKDAYS[p.weekday]}, ${MONTHS[p.month]} ${p.day}`,
-      revenue: 0,
-      orders: 0,
-    };
-  });
+  const p = resolvePeriod({ preset: range }, now);
+  return {
+    start: new Date(p.start),
+    end: new Date(p.end),
+    prevStart: new Date(p.prev?.start ?? p.start),
+    prevEnd: new Date(p.prev?.end ?? p.start),
+  };
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-export function pctDelta(curr: number, prev: number): number | null {
-  if (prev <= 0) return null;
-  return Math.round(((curr - prev) / prev) * 1000) / 10;
-}
-
-/** The placed time; a future date is clamped just inside the window's end. */
-function orderTime(o: Order, clampBefore: number): number | null {
-  const t = new Date(o.date).getTime();
-  if (Number.isNaN(t)) return null;
-  return t >= clampBefore ? clampBefore - 1 : t;
-}
+/** % change vs the comparison window, one decimal; null without a baseline. */
+export const pctDelta = (curr: number, prev: number): number | null => pctChange(curr, prev);
 
 type Agg = { key: string; name: string; value: number; count: number };
 
@@ -181,18 +111,23 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export function buildInsights(
   orders: Order[],
   history: Order[],
-  opts: { range: InsightsRange; now: Date; currency: unknown },
+  opts: { range: InsightsRange; now: Date; currency: unknown; query?: Omit<InsightsQuery, "range"> },
 ): InsightsResponse {
-  const { range, now, currency } = opts;
-  const w = windowFor(range, now);
-  const start = w.start.getTime();
-  const end = w.end.getTime();
-  const prevStart = w.prevStart.getTime();
-  const prevEnd = w.prevEnd.getTime();
+  const { now, currency } = opts;
+  const nowMs = now.getTime();
+  const earliest = history.reduce<number | null>((min, o) => {
+    const t = new Date(o.date).getTime();
+    return Number.isNaN(t) || (min !== null && min <= t) ? min : t;
+  }, null);
+  const period = resolvePeriod({ preset: opts.range, ...opts.query }, nowMs, earliest);
+  const range = period.preset as InsightsRange;
+  const { start, end } = period;
+  const prevStart = period.prev?.start ?? 0;
+  const prevEnd = period.prev?.end ?? 0;
   const money = (n: number) => formatMoney(n, currency);
   const wholeMoney = (n: number) => formatMoney(Math.round(n), currency, { decimals: false });
 
-  const buckets = makeBuckets(range, w);
+  const events: SaleEvent[] = [];
   const statusCounts = new Map<OrderStatus, number>();
   const products = new Map<string, Agg>();
   const customers = new Map<string, Agg>();
@@ -210,11 +145,14 @@ export function buildInsights(
   const prevCustomers = new Set<string>();
 
   for (const o of orders) {
-    const t = orderTime(o, end);
-    if (t === null) continue;
+    const raw = new Date(o.date).getTime();
+    if (Number.isNaN(raw)) continue;
+    const t = clampToNow(raw, nowMs);
     const isCancelled = o.status === "cancelled";
     const total = computeOrderTotals(o).total;
     const who = customerKeyOf(o);
+    // Every sale feeds the chart: its buckets also cover the comparison twin and the bucket before.
+    if (!isCancelled) events.push({ t, revenue: total });
 
     if (t >= prevStart && t < prevEnd && !isCancelled) {
       prevRevenue += total;
@@ -249,12 +187,6 @@ export function buildInsights(
       (o.shipping?.region || "").trim() ||
       "Not specified";
     bump(places, place.toLowerCase(), place, total, 1);
-
-    const b = buckets.find((x) => t >= x.start && t < x.end);
-    if (b) {
-      b.revenue += total;
-      b.orders += 1;
-    }
   }
 
   // First-ever (non-cancelled) order per customer decides new vs returning.
@@ -271,27 +203,40 @@ export function buildInsights(
 
   const aov = sales ? revenue / sales : 0;
   const prevAov = prevSales ? prevRevenue / prevSales : 0;
-  const kpi = (value: number, label: string, prev: number): Kpi => ({ value, label, delta: pctDelta(value, prev) });
+  const comparing = period.prev !== null;
+  const kpi = (value: number, label: string, prev: number, prevLabel: string): Kpi => ({
+    value,
+    label,
+    delta: comparing ? pctDelta(value, prev) : null,
+    prevLabel: comparing ? prevLabel : null,
+  });
 
-  const series: InsightsPoint[] = buckets.map((b) => ({
-    label: b.label,
-    longLabel: b.longLabel,
-    revenue: b.revenue,
-    revenueLabel: wholeMoney(b.revenue),
-    orders: b.orders,
+  const built = buildPeriodSeries(period, events);
+  const series: InsightsPoint[] = built.points.map((p) => ({
+    label: p.label,
+    longLabel: p.longLabel,
+    revenue: p.revenue,
+    revenueLabel: wholeMoney(p.revenue),
+    orders: p.orders,
+    aovLabel: wholeMoney(p.orders ? p.revenue / p.orders : 0),
+    prevRevenue: p.prevRevenue,
+    prevRevenueLabel: p.prevRevenue === null ? null : wholeMoney(p.prevRevenue),
+    prevLongLabel: p.prevLongLabel,
+    change: p.change,
+    compareChange: p.compareChange,
   }));
-  const best = series.reduce<InsightsPoint | null>((m, p) => (p.revenue > (m?.revenue ?? 0) ? p : m), null);
+  const best = built.best === null ? null : series[built.best];
 
   return {
     range,
-    rangeLabel: RANGE_COPY[range].label,
-    compareLabel: RANGE_COPY[range].compare,
+    rangeLabel: period.title,
+    compareLabel: period.compareLabel,
     kpis: {
-      revenue: kpi(revenue, wholeMoney(revenue), prevRevenue),
-      orders: kpi(sales, String(sales), prevSales),
-      aov: kpi(aov, money(aov), prevAov),
-      customers: kpi(customers.size, String(customers.size), prevCustomers.size),
-      itemsSold: kpi(items, String(items), prevItems),
+      revenue: kpi(revenue, wholeMoney(revenue), prevRevenue, wholeMoney(prevRevenue)),
+      orders: kpi(sales, String(sales), prevSales, String(prevSales)),
+      aov: kpi(aov, money(aov), prevAov, money(prevAov)),
+      customers: kpi(customers.size, String(customers.size), prevCustomers.size, String(prevCustomers.size)),
+      itemsSold: kpi(items, String(items), prevItems, String(prevItems)),
     },
     collection: {
       collectedLabel: wholeMoney(collected),
@@ -312,5 +257,16 @@ export function buildInsights(
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
     cancelled,
+    period: {
+      from: period.from,
+      to: period.to,
+      label: period.label,
+      granularity: period.granularity,
+      granularities: period.granularities,
+      compare: period.compare,
+      compareRangeLabel: period.prev?.label ?? null,
+      toDate: period.toDate,
+      capped: built.capped,
+    },
   };
 }

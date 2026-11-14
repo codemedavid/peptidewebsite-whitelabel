@@ -51,6 +51,15 @@ export type ShopProduct = {
 export type ShopCategory = { id: string; label: string };
 
 /**
+ * Category sections (FEATURES.STORE_CATEGORY_SECTIONS): the catalog as one
+ * scrolling page — every category its own section, in the owner's category
+ * order, each holding its products in the owner's per-category arrangement
+ * (lib/storefront/category-sections). A leading "Featured" section repeats
+ * the featured products. Ids point into ShopCatalog.products.
+ */
+export type ShopCatalogSection = { id: string; label: string; productIds: string[] };
+
+/**
  * The live group-buy round, as the website's group-buy page shows it. Absent
  * (null) with no live round, when the owner HID the group-buy way, or when no
  * listed product is in the round. Prices still come from each ShopProduct —
@@ -150,6 +159,26 @@ export type ShopCheckoutConfig = {
   customerNoteLabel: string;
 };
 
+/**
+ * The store's Sale Campaign ("11.11 Mega Sale", lib/storefront/sale-campaign).
+ * Shipped as its WINDOW, never as a "live" flag: the app decides teaser / live
+ * / ended against the phone's clock and refetches the catalog when the phase
+ * flips. Prices in `products` are already the server's for the moment they
+ * were read; the quote and placement re-check the window on the server clock.
+ */
+export type ShopSaleCampaign = {
+  name: string;
+  /** ISO instants; endsAt is always after startsAt. */
+  startsAt: string;
+  endsAt: string;
+  /** Show the "starts in" countdown before the sale. */
+  teaser: boolean;
+  /** Days before startsAt the teaser appears (1–30). */
+  teaserDays: number;
+  /** The owner's "show the countdown bar" switch. */
+  showBar: boolean;
+};
+
 export type ShopCatalog = {
   store: { slug: string; name: string; logoUrl: string | null; currency: string };
   /** False = the owner closed the shop: browse only, every order is refused. */
@@ -167,6 +196,12 @@ export type ShopCatalog = {
    *  store's governing round. `groupBuy` is then null and the round's products
    *  and group-buy prices are absent from `products`. */
   groupBuyTeaser?: ShopGroupBuyTeaser | null;
+  /** The Sale Campaign, or null when none can run (no grant, switched off).
+   *  Older servers omit it. */
+  saleCampaign?: ShopSaleCampaign | null;
+  /** Category sections, or null when the store uses the filter-chip catalog.
+   *  Older servers omit it. */
+  sections?: ShopCatalogSection[] | null;
 };
 
 /** Paid Access (src/modules/paid-access): the customer's way into a gated round — ONE
@@ -291,6 +326,13 @@ export type ShopQuoteRequest = {
   /** A ShopPaymentMethod id (decides the QR PH fee). */
   paymentMethod?: string;
   promoCode?: string;
+  /**
+   * The app applies the voucher ladder's best code itself (and sends it at
+   * placement — ShopQuote.autoApplied). Builds that predate the ladder omit
+   * it and are never auto-discounted: they would show the saving, then place
+   * the order without the code and be charged more than they were shown.
+   */
+  autoVoucher?: boolean;
 };
 
 export type ShopOrderItem = {
@@ -318,6 +360,30 @@ export type ShopOrderItem = {
 
 export type ShopFee = { label: string; amount: number };
 
+/** One "Show in cart" promo code on the cart's voucher ladder
+ *  (lib/storefront/voucher-ladder — the website cart's own rungs). */
+export type ShopVoucherRung = {
+  code: string;
+  /** "₱300 off" / "10% off". */
+  offLabel: string;
+  minPurchase: number;
+  state: "applied" | "unlocked" | "locked";
+  /** Spend still needed; 0 unless locked. */
+  remaining: number;
+  /** What it takes off THIS cart right now (0 while locked). */
+  discount: number;
+};
+
+/** The "Add ₱X more for free shipping" bar (lib/storefront/free-shipping). */
+export type ShopFreeShippingProgress = {
+  threshold: number;
+  /** How much more to spend; 0 once reached. */
+  remaining: number;
+  reached: boolean;
+  /** 0–1 for the progress bar. */
+  fraction: number;
+};
+
 export type ShopQuote = {
   items: ShopOrderItem[];
   subtotal: number;
@@ -333,6 +399,14 @@ export type ShopQuote = {
    * round, so this joins that invoice and shippingFee is 0. Older servers omit it.
    */
   invoice?: { addOn: boolean; roundName: string } | null;
+  // ── Promo engine (absent from older servers and when not granted) ──
+  /** The voucher ladder for this subtotal, lowest minimum first. */
+  vouchers?: ShopVoucherRung[];
+  /** The free-shipping-over-₱X bar; null when the rule isn't running. */
+  freeShipping?: ShopFreeShippingProgress | null;
+  /** True = `discount` is the best ladder voucher, applied without typing.
+   *  The app must then send `discount.code` as the order's promoCode. */
+  autoApplied?: boolean;
 };
 
 /** POST /shop/orders (customer session). Retrying with the same `id` returns

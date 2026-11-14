@@ -41,6 +41,7 @@ import { promiseBarVars } from "@/lib/storefront/showcase-home";
 import { Footer } from "./components/Footer";
 import { TrustStrip } from "./components/TrustStrip";
 import { CartCheckout } from "./components/CartCheckout";
+import { SaleCampaignBar } from "./components/SaleCampaignBar";
 import { isPageVisible } from "./visibility";
 import { parseProductHash } from "@/lib/storefront/product-link";
 import { parseProtocolHash } from "@/lib/storefront/protocol-link";
@@ -512,6 +513,11 @@ function Shell({
       )}
 
       <AnnouncementBanner brand={brand} onRoute={goToRoute} />
+
+      {/* Sale Campaign countdown (teaser → live). Renders nothing unless the
+          operator granted it and the owner's campaign is in its teaser or live
+          window — the phase is decided against the browser clock. */}
+      <SaleCampaignBar brand={brand} />
 
       {/* Owner's shop switch. Sits inside the shared chrome so a shopper who
           deep-links to #groupbuy or #catalog is told the shop is shut too — not

@@ -59,6 +59,9 @@ import {
 } from "@/lib/storefront/product-mapping";
 import { effectiveStock, applyStockMoveToProducts } from "@/lib/storefront/inventory";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
+import { stampCampaignWindow, type CampaignWindow } from "@/lib/storefront/sale-campaign";
+import { qualifiesForFreeShipping } from "@/lib/storefront/free-shipping";
+import { resolvePromoEngine, type PromoEngineContext } from "@/lib/storefront/promo-engine.server";
 import { applyRoundExclusions, unavailableLineViolation } from "@/lib/storefront/variation-availability";
 import {
   activeAdminFee,
@@ -387,8 +390,22 @@ function repriceItems(
  * sent). An unknown or inactive locationId zeroes the fee and clears the courier
  * — a pick that no longer exists can't smuggle a charge through.
  */
-function stampShipping(config: Record<string, unknown>, p: Order, catalog: Product[]): void {
-  const freeShipping = orderHasFreeShippingProduct(p.items, catalog);
+function stampShipping(
+  config: Record<string, unknown>,
+  p: Order,
+  catalog: Product[],
+  promo: PromoEngineContext,
+): void {
+  // Two independent waivers, either one is enough: a tagged free-shipping
+  // product in the order, or the store-wide minimum-spend rule
+  // (lib/storefront/free-shipping) — measured on the RE-PRICED items subtotal,
+  // so this must run after repriceItems, exactly as the cart measures it.
+  const freeShipping =
+    orderHasFreeShippingProduct(p.items, catalog) ||
+    qualifiesForFreeShipping(promo.freeShipping, itemsSubtotal(p.items), {
+      entitled: promo.freeShippingEntitled,
+      campaignWindow: promo.campaignWindow,
+    });
   const locationId = p.shipping.locationId;
   const couriers = Array.isArray(config.couriers)
     ? (config.couriers as Array<Record<string, unknown>>)
@@ -706,7 +723,11 @@ function withProductTypes(items: OrderItem[], catalog: Product[]): OnHandGateIte
  * its usage limit / cart fell below the minimum) so the customer is never charged
  * a total that silently differs from the one they saw — null when it's fine.
  */
-function stampDiscount(config: Record<string, unknown>, p: Order): string | null {
+function stampDiscount(
+  config: Record<string, unknown>,
+  p: Order,
+  campaignWindow: CampaignWindow | null,
+): string | null {
   const applied = p.discount?.code;
   if (!applied) {
     p.discount = undefined;
@@ -715,7 +736,9 @@ function stampDiscount(config: Record<string, unknown>, p: Order): string | null
   const codes = normalizePromoCodes(config.promoCodes);
   const promo = findPromoCode(codes, applied);
   const subtotal = itemsSubtotal(p.items);
-  const err = promoCodeError(promo, subtotal);
+  // The campaign window gates campaign-only codes against the SERVER clock — a
+  // tab left open past the end of the sale can't place an order with one.
+  const err = promoCodeError(promo, subtotal, "", new Date(), campaignWindow);
   if (err || !promo) {
     return "The discount code is no longer valid — please review your total and try again.";
   }
@@ -983,10 +1006,17 @@ async function validateLiveOrder(
   // lives in product metadata and outlives a revoked grant, so an unentitled
   // tenant's placement catalog must not carry it. This is the boundary a stale
   // tab or a hand-rolled request has to clear — the storefront's strip is UX.
-  const catalogAll = stripMadeToOrder(
+  const catalogMade = stripMadeToOrder(
     catalogResold,
     await hasFeature(tenantId, FEATURES.STORE_MADE_TO_ORDER),
   );
+  // Promo engine: the Sale Campaign window (campaign-only sale prices + codes)
+  // and the free-shipping rule, from the SAME resolver the price refresh uses
+  // and the same decisions the storefront render makes. Campaign-only sale
+  // prices are stamped here and checked against the server clock by the sale
+  // rule, so an order placed after the sale ends pays the list price.
+  const promo = await resolvePromoEngine(tenantId, config);
+  const catalogAll = stampCampaignWindow(catalogMade, promo.campaignWindow);
   // A market order is priced from that market's catalog — for International,
   // the USD view of each product. Every line must be IN it: an unmatched line
   // would otherwise keep the price the browser sent (repriceItems only rewrites
@@ -1055,7 +1085,7 @@ async function validateLiveOrder(
   if (p.adminFee && (await adminFeeAlreadyPaid(tenantId, config, p))) p.adminFee = undefined;
   // Shipping fee + courier — re-derived from the tenant's shipping locations,
   // never trusted from the client (same authority as the admin fee).
-  stampShipping(config, p, catalog);
+  stampShipping(config, p, catalog, promo);
   // Pay-after-close group buys override that fee: one flat fee per customer
   // per round, none on an add-on, and no payment taken now (the invoice comes
   // when the round closes). Before the QR PH stamp, which keys off the method.
@@ -1064,7 +1094,7 @@ async function validateLiveOrder(
   // never trusted from the client. Rejected (not silently dropped) when the
   // code is no longer valid, so the customer never pays a higher total than
   // the one they saw.
-  const discountError = stampDiscount(config, p);
+  const discountError = stampDiscount(config, p, promo.campaignWindow);
   if (discountError) return { error: discountError };
   // QR PH processing fee — re-derived from the tenant's tagged payment method,
   // after the fees/discount above because it is charged on their sum. Same
@@ -1188,10 +1218,13 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       demoResellerCaps,
       demoResellerUnlocked,
     );
-    const demoProducts = stripResellerPricing(
-      demoProductsRaw,
-      demoWholesaleAccess.visible,
-      demoWholesaleAccess.visible,
+    const demoPromo = await resolvePromoEngine(
+      tenantId,
+      (getDemoBranding(slug).config ?? {}) as Record<string, unknown>,
+    );
+    const demoProducts = stampCampaignWindow(
+      stripResellerPricing(demoProductsRaw, demoWholesaleAccess.visible, demoWholesaleAccess.visible),
+      demoPromo.campaignWindow,
     );
     // Group-buy attribution FIRST — it decides whether this order is in a live
     // round AND returns that round's pricing scope, which drives whether GB
@@ -1279,12 +1312,12 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       : undefined;
     // Shipping fee + courier — re-derived from the tenant's shipping locations,
     // never trusted from the client (same authority as the admin fee).
-    stampShipping(config, p, demoProducts);
+    stampShipping(config, p, demoProducts, demoPromo);
     // Discount — re-derived from the tenant's promo codes by the applied code,
     // never trusted from the client. Rejected (not silently dropped) when the
     // code is no longer valid, so the customer never pays a higher total than
     // the one they saw.
-    const demoDiscountError = stampDiscount(config, p);
+    const demoDiscountError = stampDiscount(config, p, demoPromo.campaignWindow);
     if (demoDiscountError) return { error: demoDiscountError };
     // QR PH processing fee — re-derived from the tenant's tagged payment method,
     // after the fees/discount above because it is charged on their sum. Same

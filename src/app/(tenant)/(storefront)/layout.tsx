@@ -31,6 +31,7 @@ import "@/storefront/showcase.css";
 import "@/storefront/section-background.css";
 import "@/storefront/intl-local.css";
 import "@/storefront/announcement-popup.css";
+import "@/storefront/promo-engine.css";
 // Imported last so the splash rules never land in storefront.css's cascade
 // (see brand-splash.css header: that file has a recorded override hazard).
 import "@/storefront/brand-splash.css";

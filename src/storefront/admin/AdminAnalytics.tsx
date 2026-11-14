@@ -7,45 +7,23 @@ import type { Brand, Order } from "../types";
 import { listStorefrontOrdersAction } from "@/actions/orders";
 import { ADMIN_TINTS } from "./shared";
 import { formatMoney, normalizeCurrency } from "@/lib/storefront/currency";
+import { dayKey, GRANULARITY_LABELS, resolvePeriod, type PeriodQuery } from "@/lib/analytics/sales-period";
+import { buildSalesReport, earliestOrderTime, type Kpi } from "./analytics/aggregate";
+import { PeriodControls, type PeriodPatch } from "./analytics/PeriodControls";
+import { RevenueChart } from "./analytics/RevenueChart";
+import { PeriodTable } from "./analytics/PeriodTable";
+import { DeltaBadge } from "./analytics/DeltaBadge";
+import "./analytics/analytics.css";
 
 // Sales analytics over the tenant's DB-backed orders. Reads via the same
-// server action as AdminOrders (demo/DB branching lives server-side); all
-// aggregation happens client-side because a tenant's order set is small.
-// Revenue policy: cancelled orders are excluded from every sales metric;
-// an order's total = items subtotal + shipping fee + admin fee (no order-level
-// total is stored — same rule as AdminOrders/AdminOrderDetail).
+// server action as AdminOrders (demo/DB branching lives server-side); the
+// aggregation runs client-side (analytics/aggregate.ts) because a tenant's
+// order set is small. Windows, comparisons and day/week/month buckets come
+// from lib/analytics/sales-period.ts — the same engine as the app's Insights.
 
-type RangeId = "7d" | "30d" | "90d" | "12m" | "all";
+const DEFAULT_QUERY: PeriodQuery = { preset: "30d", compare: "previous" };
 
-const RANGES: { id: RangeId; label: string; prevLabel: string }[] = [
-  { id: "7d", label: "7 days", prevLabel: "prior 7 days" },
-  { id: "30d", label: "30 days", prevLabel: "prior 30 days" },
-  { id: "90d", label: "90 days", prevLabel: "prior 90 days" },
-  { id: "12m", label: "12 months", prevLabel: "prior 12 months" },
-  { id: "all", label: "All time", prevLabel: "" },
-];
-
-// Monthly "all time" charts are capped so one ancient order can't render a
-// sliver-bar chart with hundreds of columns. KPIs still cover every order.
-const MAX_MONTH_BUCKETS = 48;
-
-function totalOf(o: Order): number {
-  // Re-totalled by Ligwak → that is the order's total.
-  if (o.adjustedTotal != null) return o.adjustedTotal;
-  return Math.max(
-    0,
-    (o.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0) -
-      (o.discount?.amount || 0) +
-      (o.shipping?.fee || 0) +
-      (o.adminFee?.amount || 0) +
-      (o.paymentFee?.amount || 0),
-  );
-}
-
-// Analytics reports the STORE's revenue, so every figure prints in the store's
-// currency. These three used to hardcode the peso, which meant a shop trading in
-// riyals read its own takings in a currency it never sells in.
-
+// Analytics reports the STORE's revenue, so every figure prints in the store's currency.
 function formatPHP(n: number, currency?: unknown): string {
   return formatMoney(n, currency);
 }
@@ -54,9 +32,7 @@ function formatPHPWhole(n: number, currency?: unknown): string {
   return formatMoney(Math.round(n || 0), currency, { decimals: false });
 }
 
-/** Axis / tile shorthand: "SAR 1.2M", "₱950". The suffix forms build their own
- *  string, so the symbol and its spacing come from normalizeCurrency rather than
- *  being concatenated by hand. */
+/** Axis / tile shorthand: "SAR 1.2M", "₱950". */
 function compactPHP(n: number, currency?: unknown): string {
   const money = normalizeCurrency(currency);
   const gap = /[A-Za-z]{2,}/.test(money.symbol) ? " " : "";
@@ -66,48 +42,11 @@ function compactPHP(n: number, currency?: unknown): string {
   return formatMoney(Math.round(n), currency, { decimals: false });
 }
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function addDays(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-}
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function addMonths(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth() + n, 1);
-}
-
-// % change vs the previous window; null when there is no baseline to compare.
-function pctDelta(curr: number, prev: number): number | null {
-  if (!(prev > 0)) return null;
-  return (curr - prev) / prev;
-}
-
-function formatPct(p: number): string {
-  const abs = Math.abs(p * 100);
-  return (abs >= 10 ? abs.toFixed(0) : abs.toFixed(1)) + "%";
-}
-
 function shareLabel(part: number, whole: number): string {
   if (!(whole > 0)) return "0%";
   const p = part / whole;
   return (p * 100).toFixed(p >= 0.1 ? 0 : 1) + "%";
 }
-
-type Bucket = {
-  key: string;
-  label: string; // short x-axis label
-  full: string; // tooltip label
-  start: Date;
-  end: Date;
-  revenue: number;
-  orders: number;
-};
 
 const STATUS_META: { id: Order["status"]; label: string }[] = [
   { id: "new", label: "New" },
@@ -124,17 +63,6 @@ const BAR_TINTS = ["green", "cyan", "purple", "orange", "pink", "yellow", "mint"
 
 function barColor(i: number): string {
   return ADMIN_TINTS[BAR_TINTS[i % BAR_TINTS.length]].fg;
-}
-
-function rankBy<T>(
-  rows: Map<string, T>,
-  score: (v: T) => number,
-  limit: number,
-): { name: string; value: T }[] {
-  return [...rows.entries()]
-    .sort((a, b) => score(b[1]) - score(a[1]))
-    .slice(0, limit)
-    .map(([name, value]) => ({ name, value }));
 }
 
 function BreakdownRow({
@@ -167,17 +95,23 @@ function BreakdownRow({
   );
 }
 
-function DeltaPill({ delta, prevLabel }: { delta: number | null; prevLabel: string }) {
-  if (delta === null || !prevLabel) return null;
-  const kind = delta > 0.0005 ? "up" : delta < -0.0005 ? "down" : "flat";
-  const arrow = kind === "up" ? "▲" : kind === "down" ? "▼" : "—";
+type Tile = { label: string; value: string; kpi: Kpi; prevValue: string; sub: string };
+
+function KpiTile({ tile, compareLabel }: { tile: Tile; compareLabel: string }) {
   return (
-    <span
-      className={`admin-stat__delta admin-stat__delta--${kind}`}
-      title={`vs ${prevLabel}`}
-    >
-      {arrow} {formatPct(delta)}
-    </span>
+    <div className="admin-stat ana-kpi">
+      <div className="admin-stat__label">{tile.label}</div>
+      <div className="admin-stat__value admin-stat__value--compact" title={tile.value}>
+        {tile.value}
+      </div>
+      {tile.kpi.prev !== null ? (
+        <div className="ana-kpi__compare" title={compareLabel}>
+          <DeltaBadge value={tile.kpi.delta} />
+          <span>vs {tile.prevValue}</span>
+        </div>
+      ) : null}
+      <div className="admin-stat__sub">{tile.sub}</div>
+    </div>
   );
 }
 
@@ -205,15 +139,19 @@ export function AdminAnalytics({
   }, [allOrders, brand.currency]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadFailed, setLoadFailed] = useState<boolean>(false);
-  const [range, setRange] = useState<RangeId>("30d");
+  const [query, setQuery] = useState<PeriodQuery>(DEFAULT_QUERY);
+  // "Now" is pinned per load so the window doesn't drift between renders.
+  const [now, setNow] = useState<number>(() => Date.now());
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setLoadFailed(false);
     try {
       const res = await listStorefrontOrdersAction();
-      if ("ok" in res) setOrders(res.orders);
-      else {
+      if ("ok" in res) {
+        setOrders(res.orders);
+        setNow(Date.now());
+      } else {
         setLoadFailed(true);
         alert(res.error);
       }
@@ -231,256 +169,51 @@ export function AdminAnalytics({
     void refresh();
   }, [refresh]);
 
-  const a = useMemo(() => {
-    const today = startOfDay(new Date());
+  const earliest = useMemo(() => earliestOrderTime(orders), [orders]);
+  const period = useMemo(() => resolvePeriod(query, now, earliest), [query, now, earliest]);
+  const a = useMemo(() => buildSalesReport(orders, period, now), [orders, period, now]);
+  // A new range re-picks the best bucket size unless the owner chose one that still fits.
+  const onPeriodChange = useCallback((patch: PeriodPatch) => {
+    setQuery((q) => ({ ...q, ...patch, granularity: "granularity" in patch ? patch.granularity : q.granularity }));
+  }, []);
 
-    // ---- chart buckets (also define the current window) ----
-    const buckets: Bucket[] = [];
-    let capped = false;
-    let kpiStart: Date | null = null;
-    if (range === "7d" || range === "30d") {
-      const days = range === "7d" ? 7 : 30;
-      for (let i = days - 1; i >= 0; i--) {
-        const s = addDays(today, -i);
-        buckets.push({
-          key: s.toISOString(),
-          label: `${s.getMonth() + 1}/${s.getDate()}`,
-          full: s.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-          start: s,
-          end: addDays(s, 1),
-          revenue: 0,
-          orders: 0,
-        });
-      }
-    } else if (range === "90d") {
-      const start = addDays(today, -89);
-      for (let i = 0; i < 13; i++) {
-        const s = addDays(start, i * 7);
-        buckets.push({
-          key: s.toISOString(),
-          label: `${s.getMonth() + 1}/${s.getDate()}`,
-          full:
-            "Week of " +
-            s.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-          start: s,
-          end: addDays(s, 7),
-          revenue: 0,
-          orders: 0,
-        });
-      }
-    } else {
-      let first = startOfMonth(today);
-      if (range === "12m") {
-        first = addMonths(first, -11);
-      } else {
-        for (const o of orders) {
-          const d = new Date(o.date);
-          if (!isNaN(d.getTime()) && d < first) first = startOfMonth(d);
-        }
-      }
-      const thisMonth = startOfMonth(today);
-      for (let m = first; m <= thisMonth; m = addMonths(m, 1)) {
-        buckets.push({
-          key: m.toISOString(),
-          label: m.toLocaleDateString(undefined, { month: "short" }),
-          full: m.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
-          start: m,
-          end: addMonths(m, 1),
-          revenue: 0,
-          orders: 0,
-        });
-      }
-      if (range === "all" && buckets.length > MAX_MONTH_BUCKETS) {
-        kpiStart = buckets[0].start; // KPIs keep full history; only the chart is capped
-        buckets.splice(0, buckets.length - MAX_MONTH_BUCKETS);
-        capped = true;
-      }
-    }
+  const money = (n: number) => formatPHP(n, brand.currency);
+  const whole = (n: number) => formatPHPWhole(n, brand.currency);
+  const comparing = period.prev !== null;
+  const unit = GRANULARITY_LABELS[period.granularity].unit;
+  const revenue = a.revenue.value;
 
-    const start = kpiStart ?? buckets[0].start;
-    // 13 weekly buckets tile 91 days; clamp the 90d KPI window to exactly 90
-    // so it matches the prior window's length and never includes tomorrow.
-    const end = range === "90d" ? addDays(today, 1) : buckets[buckets.length - 1].end;
-
-    // Previous window of equal length, immediately before the current one.
-    let prevStart: Date | null = null;
-    if (range === "7d") prevStart = addDays(start, -7);
-    else if (range === "30d") prevStart = addDays(start, -30);
-    else if (range === "90d") prevStart = addDays(start, -90);
-    else if (range === "12m") prevStart = addMonths(start, -12);
-    // The 12m window only has data through today, so compare year-over-year
-    // to date — 12 complete prior months would bias every delta downward.
-    const prevEnd =
-      range === "12m"
-        ? new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1)
-        : start;
-
-    // The order date is client-supplied at checkout, so a clock-skewed or
-    // crafted future date must count as "now" rather than silently vanish
-    // from every range.
-    const clampDate = (o: Order): Date | null => {
-      const d = new Date(o.date);
-      if (isNaN(d.getTime())) return null;
-      return d >= end ? new Date(end.getTime() - 1) : d;
-    };
-
-    const inWindow: Order[] = [];
-    const prevSales: Order[] = [];
-    for (const o of orders) {
-      const d = clampDate(o);
-      if (!d) continue;
-      if (d >= start && d < end) inWindow.push(o);
-      else if (prevStart && o.status !== "cancelled" && d >= prevStart && d < prevEnd)
-        prevSales.push(o);
-    }
-    const sales = inWindow.filter((o) => o.status !== "cancelled");
-
-    // ---- KPIs ----
-    let revenue = 0;
-    let paidRevenue = 0;
-    let itemsSold = 0;
-    const productAgg = new Map<string, { qty: number; revenue: number }>();
-    const methodAgg = new Map<string, { count: number; revenue: number }>();
-    const placeAgg = new Map<string, { count: number; revenue: number }>();
-    // Group buy attribution: orders carry groupBuyId/groupBuyName when placed
-    // inside a live group-buy window (stamped server-side at checkout).
-    const groupBuyAgg = new Map<string, { name: string; orders: number; qty: number; revenue: number }>();
-    for (const o of sales) {
-      const t = totalOf(o);
-      revenue += t;
-      if (o.paymentStatus === "paid") paidRevenue += t;
-      let orderQty = 0;
-      for (const it of o.items || []) {
-        const qty = it.qty || 1;
-        orderQty += qty;
-        itemsSold += qty;
-        const name = (it.name || "").trim() || "Unnamed product";
-        const p = productAgg.get(name) || { qty: 0, revenue: 0 };
-        p.qty += qty;
-        p.revenue += (it.price || 0) * qty;
-        productAgg.set(name, p);
-      }
-
-      if (o.groupBuyId || o.groupBuyName) {
-        const key = o.groupBuyId || `name:${o.groupBuyName}`;
-        const g = groupBuyAgg.get(key) || {
-          name: (o.groupBuyName || "").trim() || "Group buy",
-          orders: 0,
-          qty: 0,
-          revenue: 0,
-        };
-        g.orders += 1;
-        g.qty += orderQty;
-        g.revenue += t;
-        groupBuyAgg.set(key, g);
-      }
-
-      const method = (o.paymentMethod || "").trim() || "Unspecified";
-      const m = methodAgg.get(method) || { count: 0, revenue: 0 };
-      m.count += 1;
-      m.revenue += t;
-      methodAgg.set(method, m);
-      const place =
-        (o.shipping?.province || "").trim() ||
-        (o.shipping?.city || "").trim() ||
-        (o.shipping?.region || "").trim() ||
-        "Unspecified";
-      const pl = placeAgg.get(place) || { count: 0, revenue: 0 };
-      pl.count += 1;
-      pl.revenue += t;
-      placeAgg.set(place, pl);
-
-      // chart fill — buckets are contiguous and sorted, so a linear scan is fine
-      const d = clampDate(o);
-      if (d) {
-        for (const b of buckets) {
-          if (d >= b.start && d < b.end) {
-            b.revenue += t;
-            b.orders += 1;
-            break;
-          }
-        }
-      }
-    }
-
-    const prevRevenue = prevSales.reduce((s, o) => s + totalOf(o), 0);
-    const prevItems = prevSales.reduce(
-      (s, o) => s + (o.items || []).reduce((q, i) => q + (i.qty || 1), 0),
-      0,
-    );
-    const aov = sales.length ? revenue / sales.length : 0;
-    const prevAov = prevSales.length ? prevRevenue / prevSales.length : 0;
-
-    const statusCounts: Record<string, number> = {};
-    for (const o of inWindow) statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
-
-    const maxBucket = Math.max(...buckets.map((b) => b.revenue), 0);
-
-    return {
-      buckets,
-      capped,
-      maxBucket,
-      // label every Nth column so 30 daily buckets don't collide
-      labelEvery: Math.max(1, Math.ceil(buckets.length / 8)),
-      sales,
-      cancelledCount: inWindow.length - sales.length,
-      revenue,
-      paidRevenue,
-      pendingRevenue: revenue - paidRevenue,
-      itemsSold,
-      distinctProducts: productAgg.size,
-      aov,
-      revenueDelta: pctDelta(revenue, prevRevenue),
-      ordersDelta: pctDelta(sales.length, prevSales.length),
-      aovDelta: pctDelta(aov, prevAov),
-      itemsDelta: pctDelta(itemsSold, prevItems),
-      topProducts: rankBy(productAgg, (v) => v.revenue, 8),
-      groupBuys: [...groupBuyAgg.values()].sort((x, y) => y.revenue - x.revenue).slice(0, 8),
-      groupBuyRevenue: [...groupBuyAgg.values()].reduce((s, g) => s + g.revenue, 0),
-      methods: rankBy(methodAgg, (v) => v.revenue, 8),
-      places: rankBy(placeAgg, (v) => v.revenue, 6),
-      statusCounts,
-      windowTotal: inWindow.length,
-    };
-  }, [orders, range]);
-
-  const rangeMeta = RANGES.find((r) => r.id === range) || RANGES[1];
-  const bucketUnit = range === "90d" ? "week" : range === "12m" || range === "all" ? "month" : "day";
-
-  const kpis = [
+  const tiles: Tile[] = [
     {
       label: "Revenue",
-      value: formatPHPWhole(a.revenue, brand.currency),
-      sub: `${formatPHPWhole(a.paidRevenue, brand.currency)} paid · ${formatPHPWhole(a.pendingRevenue, brand.currency)} pending`,
-      icon: "trend",
-      tint: "green",
-      delta: a.revenueDelta,
+      value: whole(revenue),
+      kpi: a.revenue,
+      prevValue: whole(a.revenue.prev ?? 0),
+      sub: `${whole(a.paidRevenue)} paid · ${whole(revenue - a.paidRevenue)} pending`,
     },
     {
       label: "Orders",
-      value: a.sales.length.toLocaleString(),
+      value: a.orders.value.toLocaleString(),
+      kpi: a.orders,
+      prevValue: (a.orders.prev ?? 0).toLocaleString(),
       sub: `${a.cancelledCount.toLocaleString()} cancelled excluded`,
-      icon: "cart",
-      tint: "yellow",
-      delta: a.ordersDelta,
     },
     {
       label: "Avg. Order Value",
-      value: formatPHPWhole(a.aov, brand.currency),
+      value: whole(a.aov.value),
+      kpi: a.aov,
+      prevValue: whole(a.aov.prev ?? 0),
       sub: "per non-cancelled order",
-      icon: "tag",
-      tint: "purple",
-      delta: a.aovDelta,
     },
     {
       label: "Items Sold",
-      value: a.itemsSold.toLocaleString(),
+      value: a.items.value.toLocaleString(),
+      kpi: a.items,
+      prevValue: (a.items.prev ?? 0).toLocaleString(),
       sub: `across ${a.distinctProducts.toLocaleString()} product(s)`,
-      icon: "box",
-      tint: "pink",
-      delta: a.itemsDelta,
     },
   ];
+  const best = a.series.best !== null ? a.series.points[a.series.best] : null;
 
   return (
     <div className="admin">
@@ -495,16 +228,7 @@ export function AdminAnalytics({
                 onBack();
               }}
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
               Dashboard
@@ -512,38 +236,16 @@ export function AdminAnalytics({
             <span>Sales Analytics</span>
           </h1>
           <button className="admin-btn" onClick={() => void refresh()} disabled={loading}>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="23 4 23 10 17 10" />
               <polyline points="1 20 1 14 7 14" />
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
             </svg>
-            Refresh
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
 
-        <div className="admin-analytics__controls">
-          <div className="admin-seg" role="tablist" aria-label="Date range">
-            {RANGES.map((r) => (
-              <button
-                key={r.id}
-                className={`admin-seg__btn ${range === r.id ? "is-active" : ""}`}
-                onClick={() => setRange(r.id)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <div className="admin-analytics__note">
-            Cancelled orders are excluded from sales totals.
-          </div>
-        </div>
+        <PeriodControls period={period} today={dayKey(now)} onChange={onPeriodChange} />
 
         {loading && orders.length === 0 ? (
           <div className="admin-empty-set" style={{ padding: "60px 20px" }}>
@@ -556,7 +258,7 @@ export function AdminAnalytics({
               : "No orders yet — analytics will appear once your store takes its first order."}
           </div>
         ) : (
-          <>
+          <div className={loading ? "ana-busy" : undefined}>
             {foreign.length > 0 && (
               <p className="admin-field__hint" role="note" style={{ margin: "0 0 14px" }}>
                 {foreign
@@ -566,68 +268,47 @@ export function AdminAnalytics({
               </p>
             )}
             <div className="admin__stats">
-              {kpis.map((s) => (
-                <div key={s.label} className="admin-stat">
-                  <DeltaPill delta={s.delta} prevLabel={rangeMeta.prevLabel} />
-                  <div className="admin-stat__label">{s.label}</div>
-                  <div className="admin-stat__value admin-stat__value--compact" title={s.value}>
-                    {s.value}
-                  </div>
-                  <div className="admin-stat__sub">{s.sub}</div>
-                </div>
+              {tiles.map((t) => (
+                <KpiTile key={t.label} tile={t} compareLabel={period.compareLabel} />
               ))}
             </div>
 
             <div className="admin-card admin-analytics__card">
-              <h2 className="admin-card__title">Revenue Over Time</h2>
-              <div className="admin-card__caption">
-                {formatPHP(a.revenue, brand.currency)} across {a.sales.length.toLocaleString()} order(s) · per{" "}
-                {bucketUnit}
-                {a.capped ? ` · showing the last ${MAX_MONTH_BUCKETS} months` : ""}
+              <div className="ana-card-head">
+                <div>
+                  <h2 className="admin-card__title">Revenue Over Time</h2>
+                  <div className="ana-card-head__caption">
+                    {money(revenue)} across {a.orders.value.toLocaleString()} order(s) · per {unit}
+                    {a.series.capped ? " · showing the most recent part of the range" : ""}
+                  </div>
+                </div>
+                {best && (
+                  <div className="ana-peak">
+                    <span className="ana-peak__label">Best {unit}</span>
+                    <span className="ana-peak__value">{best.longLabel}</span>
+                    <span className="ana-peak__money">{money(best.revenue)}</span>
+                  </div>
+                )}
               </div>
-              {a.maxBucket > 0 ? (
-                <>
-                  <div className="admin-chart">
-                    <div className="admin-chart__ylabels">
-                      <span>{compactPHP(a.maxBucket, brand.currency)}</span>
-                      <span>{compactPHP(a.maxBucket / 2, brand.currency)}</span>
-                      <span>{compactPHP(0, brand.currency)}</span>
-                    </div>
-                    <div className="admin-chart__plot">
-                      <div className="admin-chart__gridline" style={{ top: 0 }} />
-                      <div className="admin-chart__gridline" style={{ top: "50%" }} />
-                      <div className="admin-chart__bars">
-                        {a.buckets.map((b) => (
-                          <div
-                            key={b.key}
-                            className="admin-chart__col"
-                            title={`${b.full}: ${formatPHP(b.revenue, brand.currency)} · ${b.orders} order(s)`}
-                          >
-                            {b.revenue > 0 && (
-                              <div
-                                className="admin-chart__bar"
-                                style={{
-                                  height: `${Math.max((b.revenue / a.maxBucket) * 100, 2)}%`,
-                                }}
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="admin-chart__xrow">
-                    {a.buckets.map((b, i) => (
-                      <div key={b.key} className="admin-chart__xlabel">
-                        {i % a.labelEvery === 0 ? b.label : ""}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="admin-analytics__empty">No sales in this period.</div>
-              )}
+              <RevenueChart
+                points={a.series.points}
+                comparing={comparing}
+                unit={unit}
+                money={money}
+                compact={(n) => compactPHP(n, brand.currency)}
+              />
             </div>
+
+            {a.series.points.length > 1 && (
+              <PeriodTable
+                points={a.series.points}
+                granularity={period.granularity}
+                comparing={comparing}
+                best={a.series.best}
+                money={money}
+                fileName={`sales-${period.from}_to_${period.to}-by-${unit}.csv`}
+              />
+            )}
 
             <div className="admin__row admin-analytics__row">
               <div className="admin-card">
@@ -639,8 +320,8 @@ export function AdminAnalytics({
                       <BreakdownRow
                         key={p.name}
                         name={p.name}
-                        meta={`${p.value.qty.toLocaleString()} sold · ${shareLabel(p.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(p.value.revenue, brand.currency)}
+                        meta={`${p.value.qty.toLocaleString()} sold · ${shareLabel(p.value.revenue, revenue)} of revenue`}
+                        amount={money(p.value.revenue)}
                         pct={(p.value.revenue / (a.topProducts[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -660,8 +341,8 @@ export function AdminAnalytics({
                       <BreakdownRow
                         key={m.name}
                         name={m.name}
-                        meta={`${m.value.count.toLocaleString()} order(s) · ${shareLabel(m.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(m.value.revenue, brand.currency)}
+                        meta={`${m.value.count.toLocaleString()} order(s) · ${shareLabel(m.value.revenue, revenue)} of revenue`}
+                        amount={money(m.value.revenue)}
                         pct={(m.value.revenue / (a.methods[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -706,8 +387,8 @@ export function AdminAnalytics({
                       <BreakdownRow
                         key={p.name}
                         name={p.name}
-                        meta={`${p.value.count.toLocaleString()} order(s) · ${shareLabel(p.value.revenue, a.revenue)} of revenue`}
-                        amount={formatPHP(p.value.revenue, brand.currency)}
+                        meta={`${p.value.count.toLocaleString()} order(s) · ${shareLabel(p.value.revenue, revenue)} of revenue`}
+                        amount={money(p.value.revenue)}
                         pct={(p.value.revenue / (a.places[0].value.revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -732,7 +413,7 @@ export function AdminAnalytics({
                         key={g.name + i}
                         name={g.name}
                         meta={`${g.orders.toLocaleString()} order(s) · ${g.qty.toLocaleString()} unit(s) · ${shareLabel(g.revenue, a.groupBuyRevenue)} of group-buy revenue`}
-                        amount={formatPHP(g.revenue, brand.currency)}
+                        amount={money(g.revenue)}
                         pct={(g.revenue / (a.groupBuys[0].revenue || 1)) * 100}
                         color={barColor(i)}
                       />
@@ -745,7 +426,7 @@ export function AdminAnalytics({
                 )}
               </div>
             )}
-          </>
+          </div>
         )}
       </main>
     </div>

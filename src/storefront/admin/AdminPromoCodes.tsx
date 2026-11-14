@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Brand, PromoCode } from "../types";
 import { useStore } from "../store";
+import { AdminPromoEngine } from "./AdminPromoEngine";
 
 // Internal NumberField spinner — matches the prototype's widget.
 function NumberField({
@@ -58,6 +59,8 @@ function PromoCodeModal({
   currency,
   promo,
   dualMarket = false,
+  ladderEntitled = false,
+  campaignEntitled = false,
   onCancel,
   onSave,
 }: {
@@ -65,6 +68,9 @@ function PromoCodeModal({
   promo: EditingPromo;
   /** Dual-currency store: show the International (USD) value + minimum. */
   dualMarket?: boolean;
+  /** Operator grants: offer the "Show in cart" / "Only during the sale" switches. */
+  ladderEntitled?: boolean;
+  campaignEntitled?: boolean;
   onCancel: () => void;
   onSave: (c: EditingPromo) => void;
 }) {
@@ -76,6 +82,8 @@ function PromoCodeModal({
   const [expiry, setExpiry] = useState<string>(promo.expiry || "");
   const [usdValue, setUsdValue] = useState<number | string>(promo.usdValue ?? "");
   const [usdMin, setUsdMin] = useState<number | string>(promo.usdMinPurchase ?? "");
+  const [showInCart, setShowInCart] = useState<boolean>(promo.showInCart === true);
+  const [campaignOnly, setCampaignOnly] = useState<boolean>(promo.campaignOnly === true);
   const canSave = code.trim() && Number(value) > 0;
 
   return (
@@ -154,6 +162,30 @@ function PromoCodeModal({
             onChange={(e) => setExpiry(e.target.value)} />
         </div>
 
+        {(ladderEntitled || campaignEntitled) && (
+          <div className="admin-modal__row promo-modal__switches">
+            {ladderEntitled && (
+              <label className="admin-check">
+                <input type="checkbox" checked={showInCart}
+                  onChange={(e) => setShowInCart(e.target.checked)} />
+                <span>
+                  Show in cart &amp; apply automatically
+                  <span className="admin-field__hint">
+                    Shoppers see “Spend {currency}X more to get this” and get it without typing.
+                  </span>
+                </span>
+              </label>
+            )}
+            {campaignEntitled && (
+              <label className="admin-check">
+                <input type="checkbox" checked={campaignOnly}
+                  onChange={(e) => setCampaignOnly(e.target.checked)} />
+                <span>Only during the sale campaign</span>
+              </label>
+            )}
+          </div>
+        )}
+
         <div className="admin-modal__actions">
           <button className="admin-btn admin-btn--ghost" onClick={onCancel}>Cancel</button>
           <button className="promo-modal__create" disabled={!canSave}
@@ -166,6 +198,10 @@ function PromoCodeModal({
               // Only positive USD amounts are stored (normalizePromoCodes).
               usdValue: type === "fixed" && Number(usdValue) > 0 ? Number(usdValue) : undefined,
               usdMinPurchase: Number(usdMin) > 0 ? Number(usdMin) : undefined,
+              // Kept as-is when the grant is off, so revoking a feature never
+              // silently rewrites a code on its next edit.
+              showInCart: (ladderEntitled ? showInCart : promo.showInCart === true) || undefined,
+              campaignOnly: (campaignEntitled ? campaignOnly : promo.campaignOnly === true) || undefined,
             })}>
             {promo._new ? "Create Code" : "Save Changes"}
           </button>
@@ -263,6 +299,8 @@ export function AdminPromoCodes({
           Back to Dashboard
         </a>
 
+        <AdminPromoEngine brand={brand} />
+
         <div className="promo-toolbar">
           <h1 className="promo-toolbar__title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -349,6 +387,19 @@ export function AdminPromoCodes({
                 ? `${c.value}% OFF`
                 : `${currency}${c.value.toLocaleString()} OFF`}
             </span>
+            {(c.minPurchase > 0 || c.showInCart || c.campaignOnly) && (
+              <span className="promo-card__tags">
+                {c.minPurchase > 0 && (
+                  <span className="promo-card__tag">min {currency}{c.minPurchase.toLocaleString()}</span>
+                )}
+                {c.showInCart && brand.voucherLadderEntitled && (
+                  <span className="promo-card__tag promo-card__tag--cart">In cart · auto</span>
+                )}
+                {c.campaignOnly && brand.saleCampaignEntitled && (
+                  <span className="promo-card__tag promo-card__tag--sale">Sale only</span>
+                )}
+              </span>
+            )}
             <div className="promo-card__meta">
               <div>
                 <div className="promo-card__meta-label">Status</div>
@@ -400,6 +451,8 @@ export function AdminPromoCodes({
             currency={currency}
             promo={editing}
             dualMarket={brand.dualMarket === true}
+            ladderEntitled={brand.voucherLadderEntitled === true}
+            campaignEntitled={brand.saleCampaignEntitled === true}
             onCancel={() => setEditing(null)}
             onSave={save}
           />

@@ -51,6 +51,8 @@ export type ProductDraft = {
   madeToOrder: boolean;
   discountOn: boolean;
   discount: string;
+  /** Sale price (and option sale prices) only while the Sale Campaign is live. */
+  saleCampaignOnly: boolean;
   isGroupBuy: boolean;
   gbPrice: string;
   resellerVials: string;
@@ -112,6 +114,7 @@ export function draftFromProduct(p: CatalogProduct | null, firstCategoryId: stri
     madeToOrder: p?.madeToOrder === true,
     discountOn: p?.discountEnabled === true,
     discount: s(p?.discountPrice ?? 0),
+    saleCampaignOnly: p?.saleCampaignOnly === true,
     isGroupBuy: p?.productType === "gb",
     gbPrice: s(p?.gbPrice ?? 0),
     resellerVials: s(p?.reseller?.vialsOnly ?? 0),
@@ -251,6 +254,10 @@ export function toSavePayload(d: ProductDraft, initial: CatalogProduct | null, c
     // Carried through untouched — set in Group Buys → Pricing, never here.
     purchasable: initial?.purchasable !== false,
     priceOnRequest: initial?.priceOnRequest === true,
+    // Always sent (the payload is the WHOLE product). The switch only shows
+    // with the Sale Campaign grant; without it the draft keeps the saved value,
+    // so an app save never turns a campaign-only sale into an all-year one.
+    saleCampaignOnly: d.saleCampaignOnly,
     reseller: { vialsOnly: toNum(d.resellerVials), completeSet: toNum(d.resellerSet), minQty: toNum(d.resellerMin) },
     // Sent whole so the numbers round-trip while the toggle is off.
     wholesale: { enabled: d.wholesaleOn, moq: toNum(d.wholesaleMoq), price: toNum(d.wholesalePrice) },

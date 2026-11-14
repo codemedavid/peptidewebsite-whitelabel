@@ -85,6 +85,7 @@ export default function AppLayout() {
         <Stack.Screen name="manage/products" />
         <Stack.Screen name="manage/product-edit" />
         <Stack.Screen name="manage/categories" />
+        <Stack.Screen name="manage/category-arrange" />
         <Stack.Screen name="manage/sort-categories" />
         <Stack.Screen name="manage/currency" />
         <Stack.Screen name="manage/store-status" />
@@ -93,6 +94,7 @@ export default function AppLayout() {
         <Stack.Screen name="manage/couriers" />
         <Stack.Screen name="manage/fee" />
         <Stack.Screen name="manage/promo" />
+        <Stack.Screen name="manage/sale-campaign" />
         <Stack.Screen name="manage/order-trash" />
         <Stack.Screen name="manage/customer-accounts" />
         <Stack.Screen name="manage/banner" />

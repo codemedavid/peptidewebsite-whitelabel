@@ -25,6 +25,7 @@ import {
 } from "./variations";
 import { listedVariations } from "./variation-availability";
 import { activeVariationSale } from "./sale";
+import { campaignSaleOpen, type CampaignSaleSource } from "./sale-campaign";
 
 const DAY_MS = 86_400_000;
 
@@ -173,7 +174,11 @@ export function gbPageOptions(product: GbPageProduct, currency: string): GbPageO
       // A variation's own sale price lowers its regular price exactly as the
       // cart's clone does (makeVariationEntry), so the GB page can't advertise
       // more than unitPrice's Math.min charges.
-      price: option.variation ? (activeVariationSale(option.variation) ?? option.price) : option.price,
+      // A campaign-only sale counts only while its window is live (sale-campaign).
+      price:
+        option.variation && campaignSaleOpen(product as CampaignSaleSource)
+          ? (activeVariationSale(option.variation) ?? option.price)
+          : option.price,
       gbPrice: option.variation ? option.variation.gbPrice : product.gbPrice,
     });
     return {

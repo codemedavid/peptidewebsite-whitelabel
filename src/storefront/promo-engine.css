@@ -1,0 +1,190 @@
+/* Promo engine — the Sale Campaign countdown bar, the cart's savings meter
+   (free-shipping bar + voucher ladder) and their store-admin cards.
+   Themed entirely from the tenant's --brand-* tokens, so every store's palette
+   flows in; the only motion is a transform on the progress fill. */
+
+.sf-root {
+  /* The button pair is the one each theme already guarantees reads well
+     together (test:themes WCAG gate), so the bar inherits that contrast. */
+  --promo-sale: var(--brand-button, var(--brand-accent, #c2410c));
+  --promo-sale-ink: var(--brand-button-text, #fff);
+  --promo-good: var(--brand-success, #1a8a5c);
+  --promo-track: color-mix(in srgb, var(--brand-text, #111) 10%, transparent);
+  --promo-duration: 420ms;
+  --promo-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Sale Campaign bar ─────────────────────────────────────────────────── */
+
+.sf-root .sf-campaign-bar {
+  background: var(--promo-sale);
+  color: var(--promo-sale-ink);
+}
+.sf-root .sf-campaign-bar[data-phase="teaser"] {
+  background: var(--brand-text, #111);
+  color: var(--brand-background, #fff);
+}
+.sf-root .sf-campaign-bar__inner {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 9px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+}
+.sf-root .sf-campaign-bar__name {
+  font-family: var(--brand-heading-font, inherit);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sf-root .sf-campaign-bar__live {
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sf-root .sf-campaign-bar__label { opacity: 0.85; }
+.sf-root .sf-campaign-bar__clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* ── Cart savings meter ────────────────────────────────────────────────── */
+
+.sf-root .sf-meter {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: var(--brand-border-width, 1px) solid var(--brand-border, #e5e5e5);
+  border-radius: var(--radius-md, 10px);
+  background: var(--brand-surface, #fafafa);
+}
+.sf-root .sf-meter__row { display: grid; gap: 6px; }
+.sf-root .sf-meter__line { margin: 0; font-size: 13px; color: var(--brand-text, #111); }
+.sf-root .sf-meter__line strong { font-weight: 700; }
+.sf-root .sf-meter__row.is-reached .sf-meter__line { color: var(--promo-good); }
+
+.sf-root .sf-meter__bar {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--promo-track);
+  overflow: hidden;
+}
+.sf-root .sf-meter__fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: var(--promo-sale);
+  border-radius: inherit;
+  transition: transform var(--promo-duration) var(--promo-ease);
+}
+.sf-root .sf-meter__row.is-reached .sf-meter__fill { background: var(--promo-good); }
+
+.sf-root .sf-meter__rungs {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sf-root .sf-meter__rungs::-webkit-scrollbar { display: none; }
+.sf-root .sf-meter__rung {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 1px;
+  min-width: 104px;
+  padding: 7px 10px;
+  border: 1px dashed var(--brand-border, #ddd);
+  border-radius: var(--radius-md, 10px);
+  background: var(--brand-background, #fff);
+  font-size: 11px;
+  color: var(--brand-text-muted, #666);
+}
+.sf-root .sf-meter__rung-off {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--brand-text, #111);
+}
+.sf-root .sf-meter__rung-state { font-weight: 600; }
+.sf-root .sf-meter__rung.is-unlocked,
+.sf-root .sf-meter__rung.is-applied {
+  border-style: solid;
+  border-color: var(--promo-good);
+}
+.sf-root .sf-meter__rung.is-applied {
+  background: color-mix(in srgb, var(--promo-good) 10%, var(--brand-background, #fff));
+}
+.sf-root .sf-meter__rung.is-applied .sf-meter__rung-state,
+.sf-root .sf-meter__rung.is-unlocked .sf-meter__rung-state { color: var(--promo-good); }
+
+.sf-root .sf-cart__promo-auto {
+  margin: 0;
+  font-size: 12px;
+  color: var(--promo-good);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .sf-meter__fill { transition: none; }
+}
+
+/* ── Store admin ───────────────────────────────────────────────────────── */
+
+.sf-root .promo-engine { display: grid; gap: 16px; margin-bottom: 22px; }
+.sf-root .promo-engine__card { display: grid; gap: 12px; }
+.sf-root .promo-engine__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sf-root .promo-engine__head .admin-form__section { margin: 0; }
+.sf-root .promo-engine__phase {
+  border-radius: var(--radius-pill, 999px);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--promo-track);
+}
+.sf-root .promo-engine__phase.is-live { background: var(--promo-good); color: #fff; }
+.sf-root .promo-engine__phase.is-teaser { background: var(--brand-text, #111); color: var(--brand-background, #fff); }
+.sf-root .promo-engine__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.sf-root .promo-engine__checks { display: grid; gap: 8px; }
+.sf-root .promo-engine__days {
+  display: inline-block;
+  width: 64px;
+  margin: 0 6px;
+  padding: 4px 8px;
+}
+.sf-root .promo-engine__actions { display: flex; justify-content: flex-end; }
+
+.sf-root .promo-modal__switches { display: grid; gap: 10px; }
+.sf-root .promo-modal__switches .admin-field__hint { display: block; margin-top: 2px; }
+
+.sf-root .promo-card__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sf-root .promo-card__tag {
+  border-radius: var(--radius-pill, 999px);
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--promo-track);
+}
+.sf-root .promo-card__tag--cart { background: color-mix(in srgb, var(--promo-good) 16%, transparent); color: var(--promo-good); }
+.sf-root .promo-card__tag--sale { background: color-mix(in srgb, var(--promo-sale) 16%, transparent); color: var(--promo-sale); }

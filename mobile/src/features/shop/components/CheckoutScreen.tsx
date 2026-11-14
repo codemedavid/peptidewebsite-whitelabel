@@ -29,6 +29,7 @@ import { money } from "../lib/money";
 import { useShop } from "../ShopProvider";
 import { ContactSection, DeliverySection, NoteSection, PromoSection } from "./CheckoutSections";
 import { OrderSummary } from "./OrderSummary";
+import { PromoMeter } from "./PromoMeter";
 import { PaymentSection } from "./PaymentSection";
 import { PayLaterSection } from "./PayLaterSection";
 import { CatalogError, ClosedBanner } from "./ShopStates";
@@ -152,11 +153,17 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
             proofRequired={proofRequired(checkout)}
           />
         )}
-        <PromoSection applied={form.promoCode} error={promoError} onApply={(promoCode) => set({ promoCode })} />
+        <PromoSection
+          applied={form.promoCode}
+          error={promoError}
+          onApply={(promoCode) => set({ promoCode })}
+          auto={quote.data?.autoApplied && quote.data.discount ? { code: quote.data.discount.code, saved: money(quote.data.discount.amount, currency) } : null}
+        />
         {checkout.customerNoteEnabled ? (
           <NoteSection label={checkout.customerNoteLabel} value={form.customerNote} onChange={(customerNote) => set({ customerNote })} />
         ) : null}
         <FormSection title="Order summary">
+          <PromoMeter currency={currency} vouchers={quote.data?.vouchers} freeShipping={quote.data?.freeShipping} />
           {quote.data ? (
             <OrderSummary
               totals={quote.data}

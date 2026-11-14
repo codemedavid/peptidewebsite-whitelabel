@@ -6,13 +6,23 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { AppText } from "../primitives";
 
-export type ChartPoint = { label: string; longLabel: string; value: number; valueLabel: string; detail?: string };
+export type ChartPoint = {
+  label: string;
+  longLabel: string;
+  value: number;
+  valueLabel: string;
+  detail?: string;
+  /** Comparison-period value drawn as a dashed line (null = no twin). */
+  compareValue?: number | null;
+  /** Tooltip line for the comparison, e.g. "Oct 3 · ₱1,200". */
+  compareDetail?: string;
+};
 
 const PAD_TOP = 12;
 const PAD_BOTTOM = 4;
 const MAX_TICKS = 5;
 const GRID_LINES = 3;
-const TOOLTIP_W = 140;
+const TOOLTIP_W = 160;
 const TICK_W = 48;
 
 /**
@@ -20,6 +30,7 @@ const TICK_W = 48;
  * recessive gridlines, and a few x labels. Press-and-drag scrubs a crosshair;
  * the parent gets the scrubbed index (the hero number follows the finger) and
  * a tooltip shows the exact value — so nothing is read off the axis by eye.
+ * Points with a `compareValue` also draw the comparison period as a dashed line.
  */
 export function AreaChart({
   points,
@@ -46,7 +57,7 @@ export function AreaChart({
   const ring = onBand ? t.colors.band : t.colors.surface;
 
   const geo = useMemo(() => {
-    const max = Math.max(...points.map((p) => p.value), 0);
+    const max = Math.max(...points.map((p) => Math.max(p.value, p.compareValue ?? 0)), 0);
     const plotH = height - PAD_TOP - PAD_BOTTOM;
     const step = points.length > 1 ? width / (points.length - 1) : 0;
     const x = (i: number) => (points.length > 1 ? i * step : width / 2);
@@ -57,7 +68,18 @@ export function AreaChart({
     const area = coords.length
       ? `${line} L${coords[coords.length - 1][0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`
       : "";
-    return { coords, line, area, base, step, plotH };
+    // Dashed comparison line, broken wherever a point has no twin.
+    let compare = "";
+    let pen = false;
+    points.forEach((p, i) => {
+      if (p.compareValue === null || p.compareValue === undefined) {
+        pen = false;
+        return;
+      }
+      compare += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(p.compareValue).toFixed(1)} `;
+      pen = true;
+    });
+    return { coords, line, area, base, step, plotH, compare };
   }, [points, width, height]);
 
   const tickEvery = Math.max(1, Math.ceil(points.length / MAX_TICKS));
@@ -106,6 +128,16 @@ export function AreaChart({
               return <Line key={i} x1={0} x2={width} y1={gy} y2={gy} stroke={grid} strokeWidth={1} strokeDasharray="2 4" />;
             })}
             <Line x1={0} x2={width} y1={geo.base} y2={geo.base} stroke={grid} strokeWidth={1} />
+            {geo.compare ? (
+              <Path
+                d={geo.compare}
+                fill="none"
+                stroke={labelColor}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                strokeLinejoin="round"
+              />
+            ) : null}
             <Path d={geo.area} fill={stroke} fillOpacity={onBand ? 0.16 : 0.1} />
             <Path d={geo.line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             {a ? (
@@ -130,6 +162,11 @@ export function AreaChart({
             {a.detail ? (
               <AppText variant="caption" color="faint" numberOfLines={1}>
                 {a.detail}
+              </AppText>
+            ) : null}
+            {a.compareDetail ? (
+              <AppText variant="caption" color="muted" numberOfLines={1}>
+                {a.compareDetail}
               </AppText>
             ) : null}
           </View>

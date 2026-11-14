@@ -161,6 +161,7 @@ function Navigator() {
           <Stack.Screen name="welcome" options={{ animation: "fade" }} />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="create-account" />
+          <Stack.Screen name="find-store" />
         </Stack.Protected>
       </Stack>
     </ShopProvider>

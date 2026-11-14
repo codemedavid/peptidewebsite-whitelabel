@@ -340,7 +340,7 @@ function StoreCodeCard({ slug, deepLink }: { slug: string; deepLink: string | nu
         Opened the app on its own?
       </h2>
       <p className="mx-auto mt-2 max-w-md text-muted-foreground">
-        When it asks which store you shop at, enter our store code:
+        Tap “Enter your store code” in the app and type:
       </p>
       <p className="ga-code mt-4">{slug}</p>
       <div className="mt-5 flex flex-wrap justify-center gap-3">

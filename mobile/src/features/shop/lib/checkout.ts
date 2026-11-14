@@ -8,6 +8,7 @@ import type {
   ShopQuoteRequest,
   ShopShippingLocation,
 } from "@shop-contract";
+import { orderPromoCode } from "./promo-meter";
 
 /**
  * Checkout form rules. Pure. The server repeats every check (and the
@@ -120,7 +121,8 @@ export function checkoutError(form: CheckoutForm, checkout: ShopCheckoutConfig, 
 
 /** POST /shop/quote body. `store` only for a signed-out shopper. */
 export function quoteRequest(lines: ShopCartLine[], form: Partial<CheckoutForm> | null, store?: string): ShopQuoteRequest {
-  const req: ShopQuoteRequest = { lines };
+  // This build sends the auto-applied voucher back at placement (orderRequest).
+  const req: ShopQuoteRequest = { lines, autoVoucher: true };
   if (store) req.store = store;
   if (!form) return req;
   if (form.courierId) req.courier = form.courierId;
@@ -156,7 +158,9 @@ export function orderRequest(
     courier: courier?.id ?? "",
     paymentMethod: !payLater && checkout.paymentMethods.length > 0 ? form.paymentMethodId : "",
     ...(!payLater && form.proofUrl ? { paymentProof: form.proofUrl } : {}),
-    ...(form.promoCode.trim() ? { promoCode: form.promoCode.trim() } : {}),
+    // A typed code, else the voucher the quote applied by itself — the order
+    // is charged exactly the discount the shopper was shown.
+    ...(orderPromoCode(form.promoCode, quote) ? { promoCode: orderPromoCode(form.promoCode, quote) } : {}),
     ...(checkout.customerNoteEnabled && trimmedNote ? { customerNote: trimmedNote } : {}),
     shown: { adminFee: quote.adminFee?.amount ?? 0, paymentFee: quote.paymentFee?.amount ?? 0 },
   };

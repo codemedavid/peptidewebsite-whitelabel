@@ -13,6 +13,11 @@ export const HERO_RANGES: ReadonlyArray<{ key: InsightsRange; label: string }> =
   { key: "30d", label: "30 days" },
 ];
 
+/** "Tue, Oct 3, 2025" → "Oct 3, 2025" — tooltip room is tight. */
+function shortLabel(long: string): string {
+  return long.replace(/^[A-Z][a-z]{2}, /, "");
+}
+
 /** Chart points for a revenue series, with the order count in the tooltip. */
 export function revenuePoints(data: InsightsResponse) {
   return data.series.map((p) => ({
@@ -21,6 +26,9 @@ export function revenuePoints(data: InsightsResponse) {
     value: p.revenue,
     valueLabel: p.revenueLabel,
     detail: `${p.orders} ${p.orders === 1 ? "order" : "orders"}`,
+    compareValue: p.prevRevenue ?? null,
+    compareDetail:
+      p.prevRevenueLabel && p.prevLongLabel ? `${shortLabel(p.prevLongLabel)} · ${p.prevRevenueLabel}` : undefined,
   }));
 }
 

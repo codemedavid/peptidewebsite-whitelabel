@@ -124,6 +124,12 @@ export function normalizeProductInput(input: unknown): Product {
     // Product-level shipping promo edited in the product form. Default false so
     // old products and omitted client payloads keep normal shipping.
     freeShipping: o.freeShipping === true,
+    // Sale Campaign: the sale price only runs inside the campaign window.
+    // Round-tripped for the same reason as madeToOrder below — every admin save
+    // funnels through here, so a dropped key would put a campaign-only sale on
+    // all year. (The transient `campaignWindow` stamp is deliberately NOT named,
+    // so it can never be persisted.)
+    saleCampaignOnly: o.saleCampaignOnly === true,
     // "Made to order" — the product sells without an inventory. Round-tripped
     // here for the same reason as productClass and purchasable above: this is
     // what EVERY admin save funnels through, so dropping the key would let one

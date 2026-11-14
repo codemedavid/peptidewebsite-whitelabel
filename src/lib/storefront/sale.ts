@@ -28,6 +28,7 @@
 // one contract. Covered by npm run test:sale-price.
 
 import { buildProductOptions, type Variation } from "./variations";
+import { campaignSaleOpen, type CampaignWindow } from "./sale-campaign";
 
 /** Just the fields the sale rules read — keeps this module free of the full
  *  storefront `Product` type (and its import cycle back into components). */
@@ -36,11 +37,20 @@ export type SaleSource = {
   discountEnabled?: boolean;
   discountPrice?: number | null;
   variations?: Variation[];
+  /** Sale Campaign: the markdown (base and variations) only runs inside the
+   *  stamped window — see lib/storefront/sale-campaign. */
+  saleCampaignOnly?: boolean;
+  campaignWindow?: CampaignWindow;
 };
 
 /** The marked-down price if this product is genuinely on sale, else null. */
 function activeDiscount(p: SaleSource): number | null {
   if (p.discountEnabled !== true) return null;
+  // A campaign-only markdown is real only while its window is live, checked
+  // against the clock where this runs (browser for display, server at
+  // placement). makeVariationEntry clones carry the flag + window, so an
+  // option's own sale price is gated by this same line.
+  if (!campaignSaleOpen(p)) return null;
   const discount = Number(p.discountPrice);
   const list = Number(p.price);
   if (!Number.isFinite(discount) || !Number.isFinite(list)) return null;
@@ -161,7 +171,7 @@ export function resolveSaleView(p: SaleSource, selectedIndex: number): SaleView 
   // A real variation prices itself — with its OWN sale price when it has one;
   // only the base ("Standard") option carries the product's markdown.
   if (selected.variation) {
-    const own = activeVariationSale(selected.variation);
+    const own = campaignSaleOpen(p) ? activeVariationSale(selected.variation) : null;
     return own === null ? NO_SALE(selected.price) : onSaleView(selected.price, own);
   }
 

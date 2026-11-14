@@ -17,7 +17,14 @@ import Animated, {
 import { useSession } from "@/auth/SessionProvider";
 import { APP_NAME, PRIVACY_URL, TERMS_URL } from "@/config";
 import { withAlpha } from "@/features/community/lib/color";
-import { Banner, PrimaryCta, SecondaryCta, TextLink, useAuthAccent, type AuthAccent } from "@/features/session/sign-in/parts";
+import {
+  Banner,
+  PrimaryCta,
+  SecondaryCta,
+  TextLink,
+  useAuthAccent,
+  type AuthAccent,
+} from "@/features/session/sign-in/parts";
 import { HeroStage, SHEET_OVERLAP } from "@/features/session/welcome/HeroStage";
 import { useStoreLink } from "@/store-link/StoreLinkProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -30,7 +37,8 @@ import { AppText } from "@/ui/primitives";
  * all start after sign-in (root layout guards; GUEST_BROWSING in config).
  *
  * On a phone linked to a store it wears that store: its logo on the stage,
- * its name in the headline, its colour on the buttons.
+ * its name in the headline, its colour on the buttons. A phone with no store
+ * yet (installed straight from the App Store) starts at the store code step.
  */
 
 /**
@@ -51,7 +59,9 @@ const ENTER_BASE_MS = 160;
 const ENTER_MS = 520;
 
 const enter = (i: number) =>
-  FadeInDown.duration(ENTER_MS).delay(ENTER_BASE_MS + i * STAGGER_MS).easing(Easing.out(Easing.cubic));
+  FadeInDown.duration(ENTER_MS)
+    .delay(ENTER_BASE_MS + i * STAGGER_MS)
+    .easing(Easing.out(Easing.cubic));
 
 export default function Welcome() {
   const t = useTheme();
@@ -69,6 +79,7 @@ export default function Welcome() {
   const stageHeight = Math.round(Math.min(STAGE_MAX, Math.max(STAGE_MIN, height - sheetGuess + SHEET_OVERLAP)));
   const short = height < SHORT_SCREEN;
   const copy = welcomeCopy(linked?.name ?? null, canCreateAccount);
+  const door: Door = !linked ? "find-store" : canCreateAccount ? "shopper" : "team-only";
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.surface }}>
@@ -125,24 +136,19 @@ export default function Welcome() {
             ) : null}
 
             <Animated.View entering={enter(3)} style={styles.ctas}>
-              {canCreateAccount ? (
-                <>
-                  <PrimaryCta label="Create an account" accent={accent} onPress={() => router.push("/create-account")} />
-                  <SecondaryCta
-                    label="I already have an account"
-                    icon="log-in-outline"
-                    accessibilityHint="Opens sign in"
-                    onPress={() => router.push("/sign-in")}
-                  />
-                </>
-              ) : (
-                <PrimaryCta label="Sign in" icon="log-in-outline" accent={accent} onPress={() => router.push("/sign-in")} />
-              )}
+              <WelcomeDoors door={door} accent={accent} websiteUrl={linked?.websiteUrl ?? null} />
             </Animated.View>
 
             {linked ? (
               <Animated.View entering={enter(4)} style={styles.center}>
-                <TextLink label="Not your store? Change store" color={t.colors.textMuted} onPress={() => void unlink()} />
+                <TextLink
+                  label="Not your store? Change store"
+                  color={t.colors.textMuted}
+                  onPress={() => {
+                    void unlink();
+                    router.push("/find-store");
+                  }}
+                />
               </Animated.View>
             ) : null}
 
@@ -156,7 +162,12 @@ export default function Welcome() {
   );
 }
 
-type WelcomeCopy = { eyebrow: string; lead: string; emphasis: string; body: string };
+type WelcomeCopy = {
+  eyebrow: string;
+  lead: string;
+  emphasis: string;
+  body: string;
+};
 
 function welcomeCopy(storeName: string | null, canCreateAccount: boolean): WelcomeCopy {
   const app = APP_NAME.toUpperCase();
@@ -174,8 +185,67 @@ function welcomeCopy(storeName: string | null, canCreateAccount: boolean): Welco
     emphasis: `${storeName}.`,
     body: canCreateAccount
       ? `Create a free account to shop, join group buys and chat with the ${storeName} community.`
-      : `Sign in with your ${storeName} store team account to get started.`,
+      : `${storeName} hasn't opened its app to shoppers yet. Shop on their website for now.`,
   };
+}
+
+type Door = "find-store" | "shopper" | "team-only";
+
+/** The ways in: by store code, as a shopper of the linked store, or team-only. */
+function WelcomeDoors({ door, accent, websiteUrl }: { door: Door; accent: AuthAccent; websiteUrl: string | null }) {
+  const signIn = () => router.push("/sign-in");
+  if (door === "find-store") {
+    return (
+      <>
+        <PrimaryCta
+          label="Enter your store code"
+          icon="storefront-outline"
+          accent={accent}
+          onPress={() => router.push("/find-store?next=create-account")}
+        />
+        <SecondaryCta
+          label="I already have an account"
+          icon="log-in-outline"
+          accessibilityHint="Opens sign in"
+          onPress={signIn}
+        />
+        <AppText variant="caption" color="muted" style={styles.hint}>
+          New here? Your seller&apos;s store code is on their app page.
+        </AppText>
+      </>
+    );
+  }
+  if (door === "shopper") {
+    return (
+      <>
+        <PrimaryCta label="Create an account" accent={accent} onPress={() => router.push("/create-account")} />
+        <SecondaryCta
+          label="I already have an account"
+          icon="log-in-outline"
+          accessibilityHint="Opens sign in"
+          onPress={signIn}
+        />
+      </>
+    );
+  }
+  return (
+    <>
+      {websiteUrl ? (
+        <PrimaryCta
+          label="Shop on the website"
+          icon="open-outline"
+          accent={accent}
+          onPress={() => void WebBrowser.openBrowserAsync(websiteUrl)}
+        />
+      ) : null}
+      <SecondaryCta
+        label="Store team sign in"
+        icon="log-in-outline"
+        accessibilityHint="Opens sign in"
+        onPress={signIn}
+      />
+    </>
+  );
 }
 
 /** Fine print with real links (the legal pages on the website). */
@@ -232,17 +302,33 @@ const styles = StyleSheet.create({
     paddingTop: SPACE.xxl,
     paddingHorizontal: SPACE.xl,
   },
-  sheetInner: { width: "100%", maxWidth: SHEET_MAX_WIDTH, alignSelf: "center", gap: SPACE.xl },
-  eyebrow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm + 2, marginBottom: -SPACE.sm },
+  sheetInner: {
+    width: "100%",
+    maxWidth: SHEET_MAX_WIDTH,
+    alignSelf: "center",
+    gap: SPACE.xl,
+  },
+  eyebrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACE.sm + 2,
+    marginBottom: -SPACE.sm,
+  },
   shrink: { flexShrink: 1 },
   intro: { gap: SPACE.md },
   title: { fontSize: 40, lineHeight: 44 },
   titleShort: { fontSize: 34, lineHeight: 38 },
   ctas: { gap: SPACE.md },
+  hint: { textAlign: "center" },
   center: { alignItems: "center", marginTop: -SPACE.md },
   legal: { textAlign: "center", paddingHorizontal: SPACE.md },
   legalLink: { textDecorationLine: "underline" },
-  dotBox: { width: 10, height: 10, alignItems: "center", justifyContent: "center" },
+  dotBox: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotRing: { position: "absolute", width: 8, height: 8, borderRadius: 4 },
 });

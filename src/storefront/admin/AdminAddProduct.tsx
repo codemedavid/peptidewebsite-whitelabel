@@ -538,6 +538,9 @@ export function AdminAddProduct({
   const [usdPrice, setUsdPrice] = useState<number | string>(initial?.usdPrice ?? "");
   const [usdDiscount, setUsdDiscount] = useState<number | string>(initial?.usdDiscountPrice ?? "");
   const [discountOn, setDiscountOn] = useState<boolean>(initial?.discountEnabled || false);
+  // Sale Campaign: this product's sale prices (and its options' sale prices)
+  // run only inside the campaign window.
+  const [saleCampaignOnly, setSaleCampaignOnly] = useState<boolean>(initial?.saleCampaignOnly === true);
   // Group Buy product: lists under the storefront's Group Buy section (priced by
   // gbPrice) instead of on-hand. gbPrice is the per-unit group-buy price.
   const [isGroupBuy, setIsGroupBuy] = useState<boolean>(initial?.productType === "gb");
@@ -742,6 +745,9 @@ export function AdminAddProduct({
       vialsPerKit: Number(vialsPerKit) > 0 ? Number(vialsPerKit) : undefined,
       discountPrice: discountOn ? Number(discount) || 0 : 0,
       discountEnabled: discountOn,
+      // Always sent (the payload is the WHOLE product — a missing key reads as
+      // "cleared"), and kept as-is when the store isn't granted the campaign.
+      saleCampaignOnly: brand.saleCampaignEntitled === true ? saleCampaignOnly : initial?.saleCampaignOnly === true,
       // Sent even when the store isn't dual-currency, so switching the layout
       // off and on never loses a product's USD prices.
       market,
@@ -1085,6 +1091,15 @@ export function AdminAddProduct({
               </label>
             </div>
           </div>
+          {brand.saleCampaignEntitled === true && (
+            <label className="admin-check">
+              <input type="checkbox" checked={saleCampaignOnly}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSaleCampaignOnly(e.target.checked)} />
+              <span title="The discount price (and any option sale prices) only applies while your Sale Campaign is live. Outside it, this product sells at its regular price.">
+                ⚡ Only during the sale campaign
+              </span>
+            </label>
+          )}
         </div>
 
         {/* ---------- Group Buy ---------- */}

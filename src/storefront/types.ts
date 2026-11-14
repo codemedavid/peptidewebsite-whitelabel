@@ -21,6 +21,8 @@ import type { NoticeModalConfig } from "@/lib/storefront/notice-modal";
 import type { StoredPopup } from "@/lib/storefront/announcement-popup";
 import type { TrackNoteConfig } from "@/lib/storefront/track-note";
 import type { TimelineConfig } from "@/lib/storefront/timeline";
+import type { CampaignWindow, SaleCampaignConfig } from "@/lib/storefront/sale-campaign";
+import type { FreeShippingThreshold } from "@/lib/storefront/free-shipping";
 import type { BrandTrial } from "@/lib/trial/trial-state";
 import type { BrandSubscription } from "@/lib/subscription/subscription-state";
 import type { FeatureSpotlight } from "@/lib/features/feature-spotlight";
@@ -176,6 +178,13 @@ export type Product = {
   /** When true, any checkout containing this product waives the configured
    *  shipping-location fee. Stored in Product.metadata.freeShipping. */
   freeShipping?: boolean;
+  /** The product's sale price (discountPrice, and each variation's salePrice)
+   *  runs only while the Sale Campaign is live. Stored in
+   *  Product.metadata.saleCampaignOnly. */
+  saleCampaignOnly?: boolean;
+  /** TRANSIENT, server-stamped (stampCampaignWindow) — never persisted. The
+   *  campaign window a campaign-only sale checks against the clock. */
+  campaignWindow?: CampaignWindow;
   /** "Made to order": the item is manufactured AFTER the order is placed, so it
    *  has no inventory and is never stock-gated — no "Sold out" badge, no cart
    *  cap, no deduction on confirm. The same statement isGroupBuyPreorder makes
@@ -438,6 +447,11 @@ export type PromoCode = {
   used: number;
   expiry: string | null;
   active: boolean;
+  /** Voucher ladder: listed in the cart as a spend target and auto-applied
+   *  once the cart qualifies (FEATURES.STORE_VOUCHER_LADDER). */
+  showInCart?: boolean;
+  /** Valid only while the Sale Campaign is live (lib/storefront/sale-campaign). */
+  campaignOnly?: boolean;
 };
 
 export type PaymentMethod = {
@@ -654,6 +668,18 @@ export type Brand = {
    *  entitlement independently at placement; this flag only drives display. */
   qrphFeeEntitled?: boolean;
   courierBookingEntitled?: boolean;
+  /** Promo engine (lib/storefront/voucher-ladder, free-shipping, sale-campaign),
+   *  each an operator grant, default OFF, projected in storefront-brand.ts. The
+   *  server re-checks every one at placement; these drive display only. */
+  voucherLadderEntitled?: boolean;
+  freeShippingThresholdEntitled?: boolean;
+  saleCampaignEntitled?: boolean;
+  /** The owner's free-shipping rule (forced off when unentitled). */
+  freeShippingThreshold?: FreeShippingThreshold;
+  /** The owner's Sale Campaign (forced off when unentitled). */
+  saleCampaign?: SaleCampaignConfig;
+  /** The campaign window, or null when no campaign can run. */
+  saleCampaignWindow?: CampaignWindow | null;
   /** Operator entitlement for made-to-order products, projected server-side in
    *  page.tsx. Default OFF; undefined counts as OFF. Drives whether the store
    *  admin offers the "Made to order" control — the flag itself is already

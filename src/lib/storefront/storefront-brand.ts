@@ -56,6 +56,8 @@ import { isDualMarket } from "@/lib/storefront/intl-market";
 import { normalizeEditorialConfig } from "@/lib/storefront/editorial-home";
 import { stripResellerPricing } from "@/lib/storefront/reseller-gate";
 import { stripMadeToOrder } from "@/lib/storefront/made-to-order";
+import { campaignWindow, normalizeSaleCampaign, stampCampaignWindow } from "@/lib/storefront/sale-campaign";
+import { normalizeFreeShippingThreshold } from "@/lib/storefront/free-shipping";
 import { applyRoundExclusions } from "@/lib/storefront/variation-availability";
 import { applyGroupBuyAccess } from "@/lib/storefront/gb-access.server";
 import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
@@ -411,6 +413,28 @@ export async function loadStorefrontBrand(
   const savedTimeline = normalizeTimeline(config.timeline);
   brand.timeline = timelineEntitled ? savedTimeline : { ...savedTimeline, enabled: false };
 
+  // Promo engine — three operator grants, all default OFF (catalog.ts). Each is
+  // assigned AFTER the config spread so a stray config key can never fake a
+  // grant, and an unentitled tenant keeps its saved settings with the public
+  // effect forced off. Display only: placeStorefrontOrderAction re-checks every
+  // entitlement before discounting or waiving anything.
+  //
+  // The campaign is shipped as its WINDOW, never as a "live" flag: this render
+  // is cached, so a phase computed here would freeze at cache-fill time. The
+  // browser checks the window against its own clock (lib/storefront/sale-campaign).
+  brand.voucherLadderEntitled = has(FEATURES.STORE_VOUCHER_LADDER);
+  const freeShippingThresholdEntitled = has(FEATURES.STORE_FREE_SHIPPING_THRESHOLD);
+  brand.freeShippingThresholdEntitled = freeShippingThresholdEntitled;
+  const savedFreeShipping = normalizeFreeShippingThreshold(config.freeShippingThreshold);
+  brand.freeShippingThreshold = freeShippingThresholdEntitled
+    ? savedFreeShipping
+    : { ...savedFreeShipping, enabled: false };
+  const saleCampaignEntitled = has(FEATURES.STORE_SALE_CAMPAIGN);
+  brand.saleCampaignEntitled = saleCampaignEntitled;
+  const savedCampaign = normalizeSaleCampaign(config.saleCampaign);
+  brand.saleCampaign = saleCampaignEntitled ? savedCampaign : { ...savedCampaign, enabled: false };
+  brand.saleCampaignWindow = campaignWindow(savedCampaign, saleCampaignEntitled);
+
   // Category sections (operator grant, default OFF): a stray config key can never
   // fake the grant — the entitlement is assigned after the config spread. The
   // owner's per-category product order is normalized here and kept while off.
@@ -632,6 +656,11 @@ export async function loadStorefrontBrand(
   const madeToOrderEntitled = has(FEATURES.STORE_MADE_TO_ORDER);
   brand.madeToOrderEntitled = madeToOrderEntitled;
   products = stripMadeToOrder(products, madeToOrderEntitled);
+
+  // Sale Campaign: campaign-only sale prices carry the window so the sale rule
+  // (lib/storefront/sale) can check it against the clock — the same stamp
+  // order placement applies, so the price shown is the price charged.
+  products = stampCampaignWindow(products, brand.saleCampaignWindow ?? null);
 
   // Per-round variant exclusions: options the owner unticked for the LIVE round
   // (GroupBuy.excludedVariations) are hidden while it runs. Stamped, never

@@ -8,6 +8,8 @@
 // for store A can't touch store B's catalog. In demo mode (no DB / no ImageKit)
 // the same operations round-trip against the file-backed demo store instead.
 
+import { stampCampaignWindow } from "@/lib/storefront/sale-campaign";
+import { resolvePromoEngine } from "@/lib/storefront/promo-engine.server";
 import { Prisma } from "@prisma/client";
 import { getTenantSlug, getTenantIdOrNull } from "@/lib/tenant/headers";
 import { getTenantContext } from "@/lib/tenant/context";
@@ -145,9 +147,16 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
 
   if (isDemoMode()) {
     const slug = (await getTenantSlug()) ?? tenantId;
+    const demoPromo = await resolvePromoEngine(
+      tenantId,
+      (getDemoBranding(slug).config ?? {}) as Record<string, unknown>,
+    );
     return {
       ok: true,
-      products: await withGroupBuyAccess(tenantId, slug, stripResellerPricing(demoEffectiveProducts(slug, "₱"), ...stripArgs)),
+      products: stampCampaignWindow(
+        await withGroupBuyAccess(tenantId, slug, stripResellerPricing(demoEffectiveProducts(slug, "₱"), ...stripArgs)),
+        demoPromo.campaignWindow,
+      ),
     };
   }
 
@@ -159,9 +168,11 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
     // rows (busted by every product writer) instead of re-scanning the catalog.
     // Display only: checkout re-reads stock and price live.
     const rows = await loadCatalogRows(tenantId);
+    // Sale Campaign: the same window stamp the render and placement apply.
+    const promo = await resolvePromoEngine(tenantId, config);
     return {
       ok: true,
-      products: await withGroupBuyAccess(
+      products: stampCampaignWindow(await withGroupBuyAccess(
         tenantId,
         (await getTenantSlug()) ?? tenantId,
         stripResellerPricing(
@@ -171,7 +182,7 @@ export async function getStorefrontProductsAction(): Promise<ListProductsResult>
           ),
           ...stripArgs,
         ),
-      ),
+      ), promo.campaignWindow),
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Couldn't load products." };

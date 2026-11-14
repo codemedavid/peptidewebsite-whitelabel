@@ -22,6 +22,7 @@
 // build their view through applyMarketConfig, so the server never trusts the
 // client's idea of which fees or methods apply.
 
+import { intlFreeShippingThreshold } from "./free-shipping";
 import type { PaymentMethod, PromoCode, ShippingLocation } from "@/storefront/types";
 import { INTL_CURRENCY, positivePrice, type Market } from "./markets";
 
@@ -125,6 +126,7 @@ type CheckoutConfig = {
   intlMarket?: unknown;
   groupBuyBanner?: unknown;
   gbPayLaterShippingFee?: unknown;
+  freeShippingThreshold?: unknown;
 };
 
 /**
@@ -144,6 +146,8 @@ export function applyMarketConfig<T extends CheckoutConfig>(config: T, market: M
     paymentMethods,
     adminFee: intlAdminFee(config.adminFee),
     promoCodes: intlPromoCodes(codes),
+    // Free shipping over a minimum: the USD minimum, or off for International.
+    freeShippingThreshold: intlFreeShippingThreshold(config.freeShippingThreshold),
     groupBuyBanner: null,
     gbPayLaterShippingFee: undefined,
   };

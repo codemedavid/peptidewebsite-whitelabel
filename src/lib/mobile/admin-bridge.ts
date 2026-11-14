@@ -15,6 +15,7 @@ import * as storefrontExport from "@/actions/storefront-export";
 import * as upgrade from "@/actions/upgrade";
 import * as storefrontGate from "@/actions/storefront-gate";
 import * as customerAccounts from "@/actions/customer-accounts";
+import * as promoEngine from "@/actions/promo-engine";
 import type { MobileContext } from "./auth";
 import { isAdminSubject } from "./sessions";
 
@@ -51,11 +52,16 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   saveProductsFollowCategoriesAction: storefrontAdmin.saveProductsFollowCategoriesAction,
   saveSortCategoriesAction: storefrontAdmin.saveSortCategoriesAction,
   saveProductOrderAction: storefrontAdmin.saveProductOrderAction,
+  saveCategoryProductOrderAction: storefrontAdmin.saveCategoryProductOrderAction,
   saveStoreStatusAction: storefrontAdmin.saveStoreStatusAction,
   saveCurrencyAction: storefrontAdmin.saveCurrencyAction,
   saveCouriersAction: storefrontAdmin.saveCouriersAction,
   saveShippingLocationsAction: storefrontAdmin.saveShippingLocationsAction,
   savePromoCodesAction: storefrontAdmin.savePromoCodesAction,
+  // actions/promo-engine.ts — Sale Campaign + free shipping over ₱X (each
+  // re-checks the "promo" staff permission AND its operator grant).
+  saveSaleCampaignAction: promoEngine.saveSaleCampaignAction,
+  saveFreeShippingThresholdAction: promoEngine.saveFreeShippingThresholdAction,
   saveOrderNotificationsAction: storefrontAdmin.saveOrderNotificationsAction,
   saveNoticeModalAction: storefrontAdmin.saveNoticeModalAction,
   saveAnnouncementPopupAction: storefrontAdmin.saveAnnouncementPopupAction,

@@ -26,6 +26,13 @@ import { activeAdminFee, normalizeAdminFee } from "@/lib/storefront/admin-fee";
 import { activePaymentFee, paymentFeeBase } from "@/lib/storefront/payment-fee";
 import { resolveCourierBooking } from "@/lib/storefront/courier-booking";
 import { findPromoCode, promoCodeError, promoDiscountAmount, promoLabel } from "@/lib/storefront/promo";
+import { bestAutoVoucher, buildVoucherLadder } from "@/lib/storefront/voucher-ladder";
+import {
+  EMPTY_FREE_SHIPPING,
+  freeShippingProgress,
+  qualifiesForFreeShipping,
+} from "@/lib/storefront/free-shipping";
+import { PromoMeter } from "./PromoMeter";
 import {
   checkoutRuleViolations,
   customerNoteLabel,
@@ -339,7 +346,45 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // A COD/no-location courier needs no location pick and carries no fee.
   const codCourier = selectedCourier?.noLocation === true;
   const selectedLocation = courierLocations.find((l) => l.id === locationId);
-  const cartHasFreeShipping = useMemo(() => hasFreeShippingLine(lines), [lines]);
+  // ── Promo engine (voucher ladder, free shipping over ₱X, Sale Campaign) ──
+  // Each piece is an operator grant projected onto the brand; the campaign
+  // arrives as a WINDOW and is checked against this browser's clock on every
+  // render, so a cart left open past the end of the sale re-prices by itself.
+  // Display only — placement re-derives all of it (orders.ts).
+  const campaignWin = store.brand.saleCampaignWindow ?? null;
+  const ladderOn = brand.voucherLadderEntitled === true;
+  const freeShipRule = brand.freeShippingThreshold ?? EMPTY_FREE_SHIPPING;
+  const freeShipCtx = {
+    entitled: brand.freeShippingThresholdEntitled === true,
+    campaignWindow: campaignWin,
+  };
+  const freeShipNudge = freeShippingProgress(freeShipRule, subtotal, freeShipCtx);
+  const thresholdFreeShipping = qualifiesForFreeShipping(freeShipRule, subtotal, freeShipCtx);
+  // The best "Show in cart" code the cart reaches, applied without typing.
+  // A code the shopper typed always wins — it's their choice.
+  const autoPromo = useMemo(
+    () =>
+      ladderOn && !appliedPromo
+        ? bestAutoVoucher(promoCodes, subtotal, { currency, campaignWindow: campaignWin })
+        : null,
+    [ladderOn, appliedPromo, promoCodes, subtotal, currency, campaignWin],
+  );
+  const activePromo = appliedPromo ?? autoPromo;
+  const voucherRungs = useMemo(
+    () =>
+      ladderOn
+        ? buildVoucherLadder(promoCodes, subtotal, {
+            currency,
+            campaignWindow: campaignWin,
+            appliedCode: activePromo?.code ?? null,
+          })
+        : [],
+    [ladderOn, promoCodes, subtotal, currency, campaignWin, activePromo],
+  );
+  const cartHasFreeShipping = useMemo(
+    () => hasFreeShippingLine(lines) || thresholdFreeShipping,
+    [lines, thresholdFreeShipping],
+  );
   const shippingBaseFee = codCourier ? 0 : selectedLocation?.price ?? 0;
   // Pay-after-close charges the round's flat fee instead of the courier's (the
   // server waives it on a signed-in shopper's add-on order).
@@ -359,8 +404,8 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // transparency; the AUTHORITATIVE amount is re-derived server-side at placement
   // from the same promoCodes config, so a tampered client can't inflate it.
   const discountAmount = useMemo(
-    () => promoDiscountAmount(appliedPromo, subtotal),
-    [appliedPromo, subtotal],
+    () => promoDiscountAmount(activePromo, subtotal),
+    [activePromo, subtotal],
   );
   // QR PH processing fee. DERIVED on every render from (chosen method, current
   // base) — deliberately not state — so switching methods can never accumulate
@@ -561,7 +606,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // placement agree on whether a code is honored.
   const applyPromo = () => {
     const promo = findPromoCode(promoCodes, discountInput);
-    const err = promoCodeError(promo, subtotal, currency);
+    const err = promoCodeError(promo, subtotal, currency, new Date(), campaignWin);
     if (err || !promo) {
       setAppliedPromo(null);
       setPromoError(err ?? "That code isn't valid.");
@@ -582,11 +627,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // customer, so the displayed total can never claim a discount the store
   // wouldn't honor.
   useEffect(() => {
-    if (appliedPromo && promoCodeError(appliedPromo, subtotal, currency)) {
+    if (appliedPromo && promoCodeError(appliedPromo, subtotal, currency, new Date(), campaignWin)) {
       setAppliedPromo(null);
       setPromoError("Your discount code no longer applies to this cart.");
     }
-  }, [appliedPromo, subtotal, currency]);
+  }, [appliedPromo, subtotal, currency, campaignWin]);
 
   const missing = fields.filter((f) => f.required && !(customer[f.key] ?? "").trim());
   const detailsValid = missing.length === 0;
@@ -747,11 +792,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       // authoritative amount from config.promoCodes by `code` (like the admin
       // fee / shipping), so a tampered/stale client can't inflate it; it's
       // carried only so the server knows which code the customer applied.
-      ...(appliedPromo && discountAmount > 0
+      ...(activePromo && discountAmount > 0
         ? {
             discount: {
-              code: appliedPromo.code,
-              label: promoLabel(appliedPromo.code),
+              code: activePromo.code,
+              label: promoLabel(activePromo.code),
               amount: discountAmount,
             },
           }
@@ -927,6 +972,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 latest store prices.
               </p>
             )}
+            <PromoMeter
+              currency={currency}
+              rungs={voucherRungs}
+              freeShipping={freeShipNudge}
+            />
             <ul className="sf-cart__lines">
               {lines.map((l) => {
                 const cur = l.product.currency || currency;
@@ -1170,6 +1220,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
 
               <div className="sf-cart__promo">
                 <span className="sf-cart__promo-label">Discount code</span>
+                {!appliedPromo && autoPromo && (
+                  <p className="sf-cart__promo-auto" role="status">
+                    <strong>{autoPromo.code}</strong> applied automatically — you save{" "}
+                    {currency}
+                    {discountAmount.toLocaleString()}. Have another code? Enter it below.
+                  </p>
+                )}
                 {appliedPromo ? (
                   <div className="sf-cart__promo-applied">
                     <span className="sf-cart__promo-chip">
@@ -1403,7 +1460,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                   </div>
                   {discountAmount > 0 && (
                     <div className="sf-cart__total sf-cart__total--sub sf-cart__total--discount">
-                      <span>Discount{appliedPromo ? ` · ${appliedPromo.code}` : ""}</span>
+                      <span>Discount{activePromo ? ` · ${activePromo.code}` : ""}</span>
                       <span>
                         −{currency}
                         {discountAmount.toLocaleString()}

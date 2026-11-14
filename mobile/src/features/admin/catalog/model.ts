@@ -60,6 +60,9 @@ export type CatalogProduct = {
   purchasable?: boolean;
   priceOnRequest?: boolean;
   freeShipping?: boolean;
+  /** Sale price runs only during the website's Sale Campaign. Not editable in
+   *  the app — carried through so an app save can't turn it off. */
+  saleCampaignOnly?: boolean;
   madeToOrder?: boolean;
   productClass?: ProductClass;
 };

@@ -21,6 +21,8 @@ import { getTenantContext } from "@/lib/tenant/context";
 import type { ShopStore } from "./shop";
 import type { GroupBuyViewer } from "@/lib/storefront/gb-access";
 import { gbPaymentModeFor } from "@/lib/storefront/gb-payment-mode";
+import { toShopSaleCampaign } from "./shop-promo";
+import { toShopSections } from "./shop-sections";
 
 /**
  * GET /shop/catalog — the store as a SIGNED-OUT website visitor sees it,
@@ -104,9 +106,14 @@ export function toShopProduct(p: Product, ctx: MapContext): ShopProduct {
 
 /** The owner's categories (the website's seed list when none are saved),
  *  keeping only those that label at least one listed product. */
-function categoriesFor(brand: Brand, products: ShopProduct[]): ShopCategory[] {
+/** The owner's saved categories, or the website's seed list when none are saved. */
+function storeCategories(brand: Brand): Category[] {
   const saved = (brand as { categories?: Category[] }).categories;
-  const all = Array.isArray(saved) ? saved : SEED_CATEGORIES;
+  return Array.isArray(saved) ? saved : SEED_CATEGORIES;
+}
+
+function categoriesFor(brand: Brand, products: ShopProduct[]): ShopCategory[] {
+  const all = storeCategories(brand);
   const used = new Set(products.map((p) => p.category));
   return all
     .filter((c) => c && typeof c.id === "string" && used.has(c.id))
@@ -172,5 +179,18 @@ export async function loadShopCatalog(
       products: listed,
     }),
     groupBuyTeaser: brand.groupBuyTeaser ?? null,
+    // The countdown bar's window (never a "live" flag — the phone's clock decides).
+    // Product prices above already reflect the campaign as of this read.
+    saleCampaign: toShopSaleCampaign(brand.saleCampaign, brand.saleCampaignEntitled === true),
+    // The website's category-sections catalog, built by its own section rules
+    // from the same arranged products the storefront grid renders.
+    sections:
+      brand.categorySectionsEntitled === true
+        ? toShopSections(
+            products.filter((p) => p.available !== false),
+            storeCategories(brand),
+            brand.categoryProductOrder,
+          )
+        : null,
   };
 }

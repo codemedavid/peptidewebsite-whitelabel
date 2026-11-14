@@ -86,11 +86,13 @@ function order(p: {
 
 // ── range parsing & windows ──────────────────────────────────────────────────
 section("windows");
-test("parseRange accepts the four ranges and defaults to 7d", () => {
+test("parseRange accepts every period preset and defaults to 7d", () => {
   assert.equal(parseRange("today"), "today");
   assert.equal(parseRange("30d"), "30d");
   assert.equal(parseRange("90d"), "90d");
-  assert.equal(parseRange("12m"), "7d");
+  assert.equal(parseRange("12m"), "12m");
+  assert.equal(parseRange("last_month"), "last_month");
+  assert.equal(parseRange("1y"), "7d");
   assert.equal(parseRange(null), "7d");
 });
 test("7d window = six full Manila days + today, ending tomorrow 00:00 Manila", () => {
@@ -142,9 +144,10 @@ test("7d → 7 daily points, oldest first, Manila calendar days", () => {
   assert.equal(r.kpis.orders.value, 1);
   assert.equal(r.kpis.orders.delta, 0); // 1 vs 1
 });
-test("90d → weekly buckets covering the window", () => {
+test("90d → Monday-aligned weekly buckets covering the window", () => {
   const r = buildInsights([], [], { range: "90d", now: NOW, currency: "₱" });
-  assert.equal(r.series.length, 13);
+  assert.ok(r.series.length === 13 || r.series.length === 14);
+  assert.equal(r.period?.granularity, "week");
   assert.equal(r.peak, null);
 });
 test("delta is a percentage vs the previous window, null without a baseline", () => {

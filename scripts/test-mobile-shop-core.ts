@@ -334,9 +334,11 @@ test("COD courier needs no location; a store with no methods needs no proof", ()
 });
 test("quote request carries only what's chosen (+ store when signed out)", () => {
   const lines = [{ productId: "p1", qty: 1 }];
-  assert.deepEqual(quoteRequest(lines, null, "hpglow"), { lines, store: "hpglow" });
+  // autoVoucher: this build sends the ladder's auto-applied code back at placement.
+  assert.deepEqual(quoteRequest(lines, null, "hpglow"), { lines, autoVoucher: true, store: "hpglow" });
   assert.deepEqual(quoteRequest(lines, { courierId: "jnt", locationId: "luzon", paymentMethodId: "gcash", promoCode: " SAVE " }), {
     lines,
+    autoVoucher: true,
     courier: "jnt",
     shipping: { locationId: "luzon" },
     paymentMethod: "gcash",

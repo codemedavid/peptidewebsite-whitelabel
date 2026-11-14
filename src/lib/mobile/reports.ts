@@ -5,7 +5,7 @@ import type { Order } from "@/storefront/types";
 import type {
   CustomerDetailResponse,
   CustomerListResponse,
-  InsightsRange,
+  InsightsQuery,
   InsightsResponse,
 } from "./contract";
 import type { MobileContext } from "./auth";
@@ -48,9 +48,10 @@ async function loadOrders(ctx: MobileContext): Promise<Order[]> {
     .slice(0, MAX_ORDERS);
 }
 
-export async function getInsights(ctx: MobileContext, range: InsightsRange): Promise<InsightsResponse> {
+export async function getInsights(ctx: MobileContext, query: InsightsQuery): Promise<InsightsResponse> {
   const orders = await loadOrders(ctx);
-  return buildInsights(orders, orders, { range, now: new Date(), currency: currencyOf(ctx) });
+  const { range, ...rest } = query;
+  return buildInsights(orders, orders, { range, query: rest, now: new Date(), currency: currencyOf(ctx) });
 }
 
 export async function listCustomers(ctx: MobileContext, params: URLSearchParams): Promise<CustomerListResponse> {

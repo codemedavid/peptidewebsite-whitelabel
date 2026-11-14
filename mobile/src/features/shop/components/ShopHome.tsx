@@ -18,6 +18,9 @@ import { CartButton, ProductImage } from "./ShopUI";
 import { CatalogError, ClosedBanner, goToSignIn } from "./ShopStates";
 import { GroupBuyBanner } from "./group-buy/GroupBuyBanner";
 import { GroupBuyJoinBanner } from "./group-buy/JoinBanner";
+import { SaleCampaignBar } from "./SaleCampaignBar";
+import { SectionedCatalog } from "./SectionedCatalog";
+import { hasSections } from "../lib/sections";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -77,9 +80,53 @@ export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; head
     );
   }
 
+  const sectioned = hasSections(catalog);
+  const refresh = <RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={t.brand.link} />;
+  const controls = (
+    <Controls
+      catalog={catalog}
+      search={search}
+      onSearch={setSearch}
+      category={category}
+      onCategory={setCategory}
+      showChips={!sectioned}
+    />
+  );
+
+  if (sectioned) {
+    // Category sections (website grant): every category on one scrolling
+    // page under a sticky tab bar, instead of the filter-chip grid.
+    return (
+      <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
+        {header}
+        <SaleCampaignBar campaign={catalog.saleCampaign} />
+        <OfflineBanner />
+        <SectionedCatalog
+          catalog={catalog}
+          search={search}
+          tile={tile}
+          gap={GAP}
+          gutter={GUTTER}
+          bottomInset={insets.bottom}
+          onOpen={open}
+          header={controls}
+          empty={
+            search ? (
+              <EmptyState icon="search" title="Nothing matches" body={`No products match “${search}”.`} action={{ label: "Clear search", onPress: () => setSearch("") }} />
+            ) : (
+              <EmptyState icon="pricetags-outline" title="No products yet" body="This store hasn't listed anything in the app yet. Check back soon." />
+            )
+          }
+          refreshControl={refresh}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       {header}
+      <SaleCampaignBar campaign={catalog.saleCampaign} />
       <OfflineBanner />
       <FlatList
         data={products}
@@ -93,15 +140,7 @@ export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; head
         renderItem={({ item }: { item: ShopProduct }) => (
           <ProductCard product={item} currency={catalog.store.currency} width={tile} onPress={open} />
         )}
-        ListHeaderComponent={
-          <Controls
-            catalog={catalog}
-            search={search}
-            onSearch={setSearch}
-            category={category}
-            onCategory={setCategory}
-          />
-        }
+        ListHeaderComponent={controls}
         ListEmptyComponent={
           search || category !== "all" ? (
             <EmptyState
@@ -114,7 +153,7 @@ export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; head
             <EmptyState icon="pricetags-outline" title="No products yet" body="This store hasn't listed anything in the app yet. Check back soon." />
           )
         }
-        refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={t.brand.link} />}
+        refreshControl={refresh}
       />
     </View>
   );
@@ -172,12 +211,15 @@ function Controls({
   onSearch,
   category,
   onCategory,
+  showChips = true,
 }: {
   catalog: ShopCatalog;
   search: string;
   onSearch: (s: string) => void;
   category: string;
   onCategory: (c: string) => void;
+  /** False in the category-sections catalog, which has its own sticky tabs. */
+  showChips?: boolean;
 }) {
   const t = useTheme();
   const { paths } = useShop();
@@ -204,7 +246,7 @@ function Controls({
           style={[t.type.body, styles.searchInput, { color: t.colors.text }]}
         />
       </View>
-      {chips.length > 2 ? (
+      {showChips && chips.length > 2 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
