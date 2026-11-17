@@ -1146,6 +1146,9 @@ export type Brand = {
   contactChannels?: ContactChannel[];
   checkoutTitle?: string;
   checkoutNote?: string;
+  /** Owner wording for the checkout buttons (lib/storefront/checkout-buttons).
+   *  Blank/absent fields keep the built-in labels. Not gated. */
+  checkoutButtons?: Record<string, string>;
   /** Drop the Email field from checkout (see lib/storefront/checkout-fields).
    *  Absent/false = Email shown and required, as before. */
   checkoutHideEmail?: boolean;

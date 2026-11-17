@@ -25,6 +25,8 @@ import {
 } from "@/actions/branding";
 import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
 import { CONTACT_CHANNEL_META, META_DESCRIPTION_MAX } from "@/lib/storefront/contact-channels";
+import type { CheckoutButtons } from "@/lib/storefront/checkout-buttons";
+import { CheckoutButtonsRows } from "@/components/admin/CheckoutButtonsRows";
 import {
   ADMIN_FEE_AMOUNT_MAX,
   ADMIN_FEE_LABEL_DEFAULT,
@@ -95,6 +97,8 @@ type Props = {
   initialCheckoutNote: string;
   /** Link-preview / SEO description; blank falls back to a generic vertical line. */
   initialMetaDescription: string;
+  /** Owner wording for the checkout buttons; blank fields = built-in labels. */
+  initialCheckoutButtons: CheckoutButtons;
   /** Whether checkout requires a proof-of-payment upload. */
   initialRequireProofOfPayment: boolean;
   initialCheckoutHideEmail: boolean;
@@ -145,6 +149,7 @@ export function TenantSettingsView({
   initialCheckoutTitle,
   initialCheckoutNote,
   initialMetaDescription,
+  initialCheckoutButtons,
   initialRequireProofOfPayment,
   initialCheckoutHideEmail,
   initialCheckoutWhatsapp,
@@ -179,6 +184,7 @@ export function TenantSettingsView({
   const [title, setTitle] = useState(initialCheckoutTitle);
   const [note, setNote] = useState(initialCheckoutNote);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
+  const [buttons, setButtons] = useState<CheckoutButtons>(initialCheckoutButtons);
 
   /* ---------- admin fee ---------- */
   // Master on/off for the whole admin-fee capability (the STORE_ADMIN_FEE
@@ -217,6 +223,7 @@ export function TenantSettingsView({
     title: initialCheckoutTitle,
     note: initialCheckoutNote,
     metaDescription: initialMetaDescription,
+    buttons: JSON.stringify(initialCheckoutButtons),
     feeEnabled: initialAdminFee.enabled,
     feeLabel: initialAdminFee.label,
     feeAmount: initialAdminFee.amount > 0 ? String(initialAdminFee.amount) : "",
@@ -249,7 +256,8 @@ export function TenantSettingsView({
   const copyDirty =
     title !== baseline.current.title ||
     note !== baseline.current.note ||
-    metaDescription !== baseline.current.metaDescription;
+    metaDescription !== baseline.current.metaDescription ||
+    JSON.stringify(buttons) !== baseline.current.buttons;
   const feeDirty =
     feeEnabled !== baseline.current.feeEnabled ||
     feeLabel !== baseline.current.feeLabel ||
@@ -316,10 +324,18 @@ export function TenantSettingsView({
       checkoutTitle: title,
       checkoutNote: note,
       metaDescription,
+      checkoutButtons: buttons,
     });
     setSaving(null);
     if ("ok" in res) {
-      baseline.current = { ...baseline.current, channels: JSON.stringify(channels), title, note, metaDescription };
+      baseline.current = {
+        ...baseline.current,
+        channels: JSON.stringify(channels),
+        title,
+        note,
+        metaDescription,
+        buttons: JSON.stringify(buttons),
+      };
       setSaved((s) => ({ ...s, channels: true, copy: true }));
       return true;
     }
@@ -464,6 +480,7 @@ export function TenantSettingsView({
     setTitle(b.title);
     setNote(b.note);
     setMetaDescription(b.metaDescription);
+    setButtons(JSON.parse(b.buttons));
     setFeeEnabled(b.feeEnabled);
     setFeeLabel(b.feeLabel);
     setFeeAmount(b.feeAmount);
@@ -1295,7 +1312,8 @@ export function TenantSettingsView({
                 <span className="set-eyebrow">Checkout</span>
                 <h2>Storefront copy</h2>
                 <p className="set-desc">
-                  The words customers see on the checkout screen, right above the channel buttons.
+                  The words customers see at checkout, including the text on every checkout
+                  button. Leave a field blank to keep the built-in wording.
                 </p>
               </div>
             </div>
@@ -1368,6 +1386,13 @@ export function TenantSettingsView({
                   </div>
                 </div>
               </div>
+              <CheckoutButtonsRows
+                value={buttons}
+                onChange={(next) => {
+                  setButtons(next);
+                  setSaved((s) => ({ ...s, copy: false }));
+                }}
+              />
             </div>
             <div className="set-foot">
               <span className="hint">
@@ -1387,6 +1412,7 @@ export function TenantSettingsView({
                     setTitle(baseline.current.title);
                     setNote(baseline.current.note);
                     setMetaDescription(baseline.current.metaDescription);
+                    setButtons(JSON.parse(baseline.current.buttons));
                     setErrors((e) => ({ ...e, copy: undefined }));
                   }}
                 >

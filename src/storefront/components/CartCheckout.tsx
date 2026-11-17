@@ -38,6 +38,11 @@ import {
   customerNoteLabel,
   normalizeCheckoutRules,
 } from "@/lib/storefront/checkout-rules";
+import {
+  channelButtonLabel,
+  checkoutButtonLabel,
+  normalizeCheckoutButtons,
+} from "@/lib/storefront/checkout-buttons";
 import { CUSTOMER_NOTE_MAX } from "@/lib/orders/customer-note";
 import { cartLineRoom, cartStockViolations } from "@/lib/storefront/inventory";
 import { groupBuyMoqViolation } from "@/lib/storefront/gb-moq-kits";
@@ -457,6 +462,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
   // custom copy. Blocking violations stop the checkout here AND are re-checked
   // server-side at placement, so the gate can't be bypassed.
   const rules = useMemo(() => normalizeCheckoutRules(brand.checkoutRules), [brand.checkoutRules]);
+  // The owner's own button wording (branding.config.checkoutButtons, ungated
+  // copy). Blank fields fall back to the built-in labels.
+  const buttons = useMemo(() => normalizeCheckoutButtons(brand.checkoutButtons), [brand.checkoutButtons]);
   const checkoutViolations = useMemo(
     () => checkoutRuleViolations(lines, catalog, brand.checkoutRules),
     [lines, catalog, brand.checkoutRules],
@@ -1556,12 +1564,13 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     ))}
                   </div>
                 )}
+                <CheckoutNudge text={buttons.cartNudge} />
                 <button
                   className="btn btn-primary sf-cart__cta"
                   disabled={blocked}
                   onClick={() => setStep("details")}
                 >
-                  Checkout
+                  {checkoutButtonLabel(buttons, "cart")}
                 </button>
               </>
             ) : step === "details" && requiresPayment ? (
@@ -1572,6 +1581,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 {touched && detailsValid && !shippingValid && (
                   <p className="sf-cart__error">{shippingError}</p>
                 )}
+                <CheckoutNudge text={buttons.detailsNudge} />
                 <button
                   className="btn btn-primary sf-cart__cta"
                   onClick={() => {
@@ -1579,7 +1589,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     if (detailsValid && shippingValid) setStep("payment");
                   }}
                 >
-                  Continue to payment
+                  {checkoutButtonLabel(buttons, "payment")}
                 </button>
                 <button className="sf-cart__back" onClick={() => setStep("cart")}>
                   ← Back to cart
@@ -1605,6 +1615,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     {placeError}
                   </p>
                 )}
+                <CheckoutNudge text={step === "payment" ? buttons.paymentNudge : buttons.detailsNudge} />
                 {directHandoff ? (
                   // No chat channel to send it to, so the site itself takes the
                   // order. Same validation gates as the channel buttons below —
@@ -1619,11 +1630,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                       if (detailsValid && shippingValid && paymentValid) void placeOrder(null);
                     }}
                   >
-                    {placing ? "Placing order…" : feeChecking ? "Checking your total…" : "Place order"}
+                    {placing ? "Placing order…" : feeChecking ? "Checking your total…" : checkoutButtonLabel(buttons, "place")}
                   </button>
                 ) : (
                   <>
-                    <p className="sf-cart__channels-label">Send your order via</p>
+                    <p className="sf-cart__channels-label">{checkoutButtonLabel(buttons, "channelsHeading")}</p>
                     <div className="sf-cart__channels">
                       {channels.map((c) => (
                         <button
@@ -1637,7 +1648,9 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                             if (detailsValid && shippingValid && paymentValid) void placeOrder(c);
                           }}
                         >
-                          {placing ? "Placing order…" : CHANNEL_LABELS[c.type]}
+                          {placing
+                            ? "Placing order…"
+                            : channelButtonLabel(buttons, CHANNEL_LABELS[c.type], channels.length)}
                         </button>
                       ))}
                     </div>
@@ -1656,4 +1669,11 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
       </aside>
     </div>
   );
+}
+
+/** The owner's optional persuasion line above a checkout step's button
+ *  (branding.config.checkoutButtons.*Nudge). Renders nothing when blank. */
+function CheckoutNudge({ text }: { text: string }) {
+  if (!text) return null;
+  return <p className="sf-cart__nudge">{text}</p>;
 }

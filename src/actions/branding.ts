@@ -22,6 +22,7 @@ import {
 } from "@/lib/upload/branding-assets";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { validateStoreAdminCredentialInput } from "@/lib/auth/store-admin-credential";
+import { normalizeCheckoutButtons } from "@/lib/storefront/checkout-buttons";
 
 export type { BrandingAssetKind };
 export type UploadAssetResult = { url: string | null } | { error: string };
@@ -248,6 +249,8 @@ export type ContactChannelsInput = {
   checkoutTitle: string;
   checkoutNote: string;
   metaDescription: string;
+  /** Checkout button wording. Omitted → the stored wording is left untouched. */
+  checkoutButtons?: unknown;
 };
 
 export type SaveResult = { ok: true } | { error: string };
@@ -274,7 +277,17 @@ export async function saveContactChannelsAction(
   const broken = contactChannels.find((c) => c.enabled && !c.destination);
   if (broken) return { error: `Add a destination for ${broken.type}, or turn it off.` };
 
-  const contactFields = { contactChannels, checkoutTitle, checkoutNote, metaDescription };
+  const contactFields = {
+    contactChannels,
+    checkoutTitle,
+    checkoutNote,
+    metaDescription,
+    // Only written when the caller sent it, so a caller that predates the
+    // field can never wipe the owner's button wording.
+    ...(input.checkoutButtons !== undefined
+      ? { checkoutButtons: normalizeCheckoutButtons(input.checkoutButtons) }
+      : {}),
+  };
 
   if (isDemoMode()) {
     await patchBrandingConfig(slug, contactFields, { demoKey: slug });

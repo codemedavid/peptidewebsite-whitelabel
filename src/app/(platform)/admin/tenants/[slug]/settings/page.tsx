@@ -49,6 +49,7 @@ export default async function TenantSettingsPage({
       initialCheckoutTitle={contact.checkoutTitle}
       initialCheckoutNote={contact.checkoutNote}
       initialMetaDescription={contact.metaDescription}
+      initialCheckoutButtons={contact.checkoutButtons}
       initialRequireProofOfPayment={contact.requireProofOfPayment}
       initialCheckoutHideEmail={contact.checkoutHideEmail}
       initialCheckoutWhatsapp={contact.checkoutWhatsapp}

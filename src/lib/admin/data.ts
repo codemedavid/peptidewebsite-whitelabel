@@ -34,6 +34,7 @@ import { effectivePlanFeeCents } from "@/lib/subscription/plan-fee";
 import { normalizeOrderNumberFormat, type OrderNumberFormat } from "@/lib/orders/order-number-format";
 import { normalizeContactChannels } from "@/lib/storefront/contact-channels";
 import { normalizeAdminFee, type AdminFeeConfig } from "@/lib/storefront/admin-fee";
+import { normalizeCheckoutButtons, type CheckoutButtons } from "@/lib/storefront/checkout-buttons";
 import { BRAND } from "@/storefront/data";
 import type { ContactChannel } from "@/storefront/types";
 
@@ -418,6 +419,8 @@ export type TenantContactChannels = {
   checkoutTitle: string;
   checkoutNote: string;
   metaDescription: string;
+  /** Owner wording for the checkout buttons; blank fields = built-in labels. */
+  checkoutButtons: CheckoutButtons;
   /** Whether checkout requires a proof-of-payment upload (default true). */
   requireProofOfPayment: boolean;
   /** Whether checkout hides the Email field (default false). */
@@ -445,6 +448,7 @@ export async function getTenantContactChannels(
       typeof config.checkoutNote === "string" ? config.checkoutNote : BRAND.checkoutNote ?? "",
     metaDescription:
       typeof config.metaDescription === "string" ? config.metaDescription : "",
+    checkoutButtons: normalizeCheckoutButtons(config.checkoutButtons),
     // Absent → required (historical default); only an explicit false opts out.
     requireProofOfPayment: config.requireProofOfPayment !== false,
     checkoutHideEmail: config.checkoutHideEmail === true,

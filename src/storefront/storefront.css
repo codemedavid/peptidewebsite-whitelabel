@@ -524,6 +524,23 @@
 .sf-root .sf-cart__channels-label { font-size: 13px; color: var(--brand-text-muted); margin: 0; text-align: center; }
 .sf-root .sf-cart__channels { display: flex; flex-wrap: wrap; gap: 8px; }
 .sf-root .sf-cart__channel { flex: 1 1 30%; }
+/* Checkout button text is owner-editable (lib/storefront/checkout-buttons, up
+   to 40 chars), so a long label must wrap inside its button rather than push
+   it past the cart panel on a phone. */
+.sf-root .sf-cart__channel,
+.sf-root .sf-cart__cta { min-width: 0; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+/* Owner-written nudge above a checkout step's button: a reason plus a feeling.
+   Brand accent so it reads as encouragement, not as a validation error. */
+.sf-root .sf-cart__nudge {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+  color: var(--brand-text);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
 .sf-root .sf-cart__back { background: none; border: 0; color: var(--brand-text-muted); cursor: pointer; font-size: 13px; }
 .sf-root .sf-cart__error { color: #d23; font-size: 13px; margin: 0; text-align: center; }
 /* The channel-less place-order button. It reuses .sf-cart__cta's shape (it is
