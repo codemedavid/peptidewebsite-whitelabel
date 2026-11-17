@@ -150,11 +150,11 @@ function saleHint(it: Variation): string | null {
   const sale = activeVariationSale({ price, salePrice: Number(raw) });
   if (sale === null) {
     return Number(raw) > 0
-      ? "Sale price must be lower than the price to take effect — it is ignored for now."
+      ? "Sale price must be lower than the price to take effect. It is ignored for now."
       : null;
   }
   const off = percentOff(price, sale);
-  return `On sale — ${off >= 1 ? `${off}% off` : "a small markdown"}. Shoppers see the price struck through.`;
+  return `On sale: ${off >= 1 ? `${off}% off` : "a small markdown"}. Shoppers see the price struck through.`;
 }
 
 function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: VariationsEditorProps) {
@@ -286,7 +286,7 @@ function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: 
             type="number"
             min="0"
             placeholder="Sale price"
-            title="Optional. A discounted price for this option — the store shows it with the regular price struck through. Leave blank for no sale."
+            title="Optional. A discounted price for this option. The store shows it with the regular price struck through. Leave blank for no sale."
             aria-label={`Sale price for ${it.name || "this option"}`}
             value={it.salePrice ?? ""}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => upd(i, { salePrice: e.target.value })}
@@ -347,8 +347,8 @@ function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: 
           <div className="admin-photo-strip__row">
             <div className="admin-field__hint">
               {it.image
-                ? `Extra photos of ${it.name || "this option"} — shown after its main photo.`
-                : "Add photos — the first becomes this option's main photo."}
+                ? `Extra photos of ${it.name || "this option"}, shown after its main photo.`
+                : "Add photos. The first becomes this option's main photo."}
             </div>
             <PhotoStrip
               photos={it.extraImages ?? []}
@@ -382,8 +382,8 @@ function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: 
         ) : (
           <div className="admin-includes">
             <label className="admin-field__hint" htmlFor={`variation-includes-${i}`}>
-              {it.name.trim() ? `${it.name.trim()} includes` : "This option includes"} — one
-              item per line. Customers see it only when they pick this option.
+              {it.name.trim() ? `${it.name.trim()} includes` : "This option includes"} (one
+              item per line). Customers see it only when they pick this option.
             </label>
             <textarea
               id={`variation-includes-${i}`}
@@ -445,7 +445,7 @@ function VariationsEditor({ items, currency, onChange, onUpload, usd = false }: 
           <button
             className="admin-image-btn admin-image-btn--secondary"
             disabled={bulkBusy !== null || busyRow !== null}
-            title="Upload many photos at once — each file is matched to the option whose name it shares (silk-barbie.jpg → Silk Barbie)."
+            title="Upload many photos at once. Each file is matched to the option whose name it shares (silk-barbie.jpg → Silk Barbie)."
             onClick={() => bulkFileRef.current?.click()}
           >
             {bulkBusy
@@ -646,10 +646,10 @@ export function AdminAddProduct({
       const res = await uploadProductImageAction(fd);
       if ("url" in res && res.url) return { url: res.url };
       return {
-        error: ("error" in res && res.error) || "Upload failed — please try again.",
+        error: ("error" in res && res.error) || "Upload failed. Please try again.",
       };
     } catch {
-      return { error: "Upload failed — please try again." };
+      return { error: "Upload failed. Please try again." };
     }
   };
 
@@ -671,7 +671,7 @@ export function AdminAddProduct({
         setUploadErr(res.error);
       }
     } catch {
-      setUploadErr("Upload failed — please try again.");
+      setUploadErr("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -798,7 +798,7 @@ export function AdminAddProduct({
       });
       onSaved(saved);
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -885,7 +885,7 @@ export function AdminAddProduct({
               <label className="admin-field__label">Sort Category</label>
               <select className="admin-select" value={sortCategory}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortCategory(e.target.value)}>
-                <option value="">— None —</option>
+                <option value="">None</option>
                 {/* A product whose sort group was deleted keeps pointing at it
                     until the owner chooses again, so the dropdown never silently
                     reassigns it (same rule as Category above). */}
@@ -897,7 +897,7 @@ export function AdminAddProduct({
                 ))}
               </select>
               <p className="admin-field__hint">
-                Groups this product in your shop&rsquo;s Sort menu. Optional — unassigned
+                Groups this product in your shop&rsquo;s Sort menu. Optional. Unassigned
                 products still show, just after the grouped ones.
               </p>
             </div>
@@ -928,8 +928,8 @@ export function AdminAddProduct({
             <h2 className="admin-form__section">🌏 Markets</h2>
             <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
               Your store sells in two shops: Local ({currency}) and International (USD). Choose
-              where this product sells. International shoppers pay the USD price you set here —
-              prices are never converted automatically.
+              where this product sells. International shoppers pay the USD price you set here.
+              Prices are never converted automatically.
             </div>
             <div className="admin-form__row">
               <div className="admin-field">
@@ -963,7 +963,7 @@ export function AdminAddProduct({
                   </div>
                 )}
                 {variations.length > 0 && (
-                  <p className="admin-field__hint">Set each option&rsquo;s USD price in the Variations list below — an option without one isn&rsquo;t sold internationally.</p>
+                  <p className="admin-field__hint">Set each option&rsquo;s USD price in the Variations list below. An option without one isn&rsquo;t sold internationally.</p>
                 )}
                 {isGroupBuy && (
                   <p className="admin-field__hint" role="note" style={{ color: "var(--danger, #b42318)" }}>
@@ -972,7 +972,7 @@ export function AdminAddProduct({
                 )}
                 {!isGroupBuy && !(Number(usdPrice) > 0) && !variations.some((v) => Number(v.usdPrice) > 0) && (
                   <p className="admin-field__hint" role="note" style={{ color: "var(--danger, #b42318)" }}>
-                    Add a USD price — without one this product won&rsquo;t appear in the International shop.
+                    Add a USD price. Without one, this product won&rsquo;t appear in the International shop.
                   </p>
                 )}
               </>
@@ -984,9 +984,9 @@ export function AdminAddProduct({
         <div className="admin-form__card">
           <h2 className="admin-form__section">🧬 Variations</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Offer the same product in multiple options — e.g. dosages or sizes like
+            Offer the same product in multiple options (e.g. dosages or sizes like
             5mg / 10mg, or the shortcuts below for selling vials on their own
-            versus the complete set — each with its own price ({currency}).
+            versus the complete set), each with its own price ({currency}).
             Customers pick the option on the storefront. Leave empty to sell the
             product as a single option at the base price above. To put one option
             on sale, type its discounted price in &ldquo;Sale price&rdquo; &mdash; leave it
@@ -1005,7 +1005,7 @@ export function AdminAddProduct({
               role="alert"
               style={{ marginTop: 12, color: "var(--danger, #b42318)" }}
             >
-              Set a price for {unpriced.join(", ")} before saving — an option
+              Set a price for {unpriced.join(", ")} before saving. An option
               without a price would be sold for free.
             </div>
           )}
@@ -1048,7 +1048,7 @@ export function AdminAddProduct({
                 <input type="checkbox" checked={featured}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFeatured(e.target.checked)} />
                 <span title="Pins this product to the very top of your catalog">
-                  ⭐ Featured — pin to top
+                  ⭐ Featured: pin to top
                 </span>
               </label>
               <label className="admin-check">
@@ -1065,8 +1065,8 @@ export function AdminAddProduct({
                 <label className="admin-check">
                   <input type="checkbox" checked={madeToOrder}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMadeToOrder(e.target.checked)} />
-                  <span title="Made after the order is placed — this product sells with no stock: never 'Sold out', no quantity cap, and confirming an order does not deduct inventory.">
-                    🧵 Made to order — no stock needed
+                  <span title="Made after the order is placed. This product sells with no stock: never 'Sold out', no quantity cap, and confirming an order does not deduct inventory.">
+                    🧵 Made to order (no stock needed)
                   </span>
                 </label>
               )}
@@ -1118,7 +1118,7 @@ export function AdminAddProduct({
               <div className="admin-field__hint">
                 {isGroupBuy
                   ? "Shown in the storefront's Group Buy section with the on-hand price and the saving."
-                  : "Off — this product lists as on-hand (ships now)."}
+                  : "Off. This product lists as on-hand (ships now)."}
               </div>
             </div>
             <div className="admin-form__inline-row" style={{ alignSelf: "start", paddingTop: 24 }}>
@@ -1157,7 +1157,7 @@ export function AdminAddProduct({
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
             Sell this product at a lower unit price once the customer orders enough of
             it. The normal price is the Price field above (and each option&rsquo;s own
-            price) — this replaces it only once the minimum is reached.
+            price). This replaces it only once the minimum is reached.
           </div>
 
           <label className="admin-check" style={{ marginBottom: 14 }}>
@@ -1190,7 +1190,7 @@ export function AdminAddProduct({
           {variations.length > 0 && (
             <div className="admin-field__hint" style={{ marginTop: 12 }}>
               All {variations.length} options of this product count toward the same
-              minimum — {variations.slice(0, 4).map((v) => v.name.trim() || "?").join(" + ")}
+              minimum: {variations.slice(0, 4).map((v) => v.name.trim() || "?").join(" + ")}
               {variations.length > 4 ? " …" : ""} add up together.
             </div>
           )}
@@ -1259,7 +1259,7 @@ export function AdminAddProduct({
         <div className="admin-form__card">
           <h2 className="admin-form__section">🖼️ Product Photos</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Upload the main product photo (optional) — the one the card leads with. Add more photos below.
+            Upload the main product photo (optional), the one the card leads with. Add more photos below.
           </div>
 
           <div
@@ -1299,7 +1299,7 @@ export function AdminAddProduct({
                 <div className="admin-image-drop__title">Click to upload product image</div>
                 <div className="admin-image-drop__sub">or drag and drop</div>
                 <div className="admin-image-drop__formats">
-                  All image formats (JPG, PNG, WebP, GIF, BMP, TIFF, SVG, HEIC) — max 10MB
+                  All image formats (JPG, PNG, WebP, GIF, BMP, TIFF, SVG, HEIC), max 10MB
                 </div>
               </>
             )}
@@ -1356,7 +1356,7 @@ export function AdminAddProduct({
           <div className="admin-field" style={{ marginTop: 16 }}>
             <label className="admin-field__label">More photos</label>
             <div className="admin-field__hint" style={{ marginBottom: 10 }}>
-              Extra angles, the label, the box — customers swipe through them on the
+              Extra angles, the label, the box. Customers swipe through them on the
               product card. ★ makes one the main photo.
             </div>
             <PhotoStrip

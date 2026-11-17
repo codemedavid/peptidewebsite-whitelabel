@@ -20,12 +20,16 @@ export type GroupBuy = {
   endsAt: string | null;
   deliveryEta: string;
   productIds: string[];
+  /** productId → option (variation) names left OUT of this round. Absent / {} = every option. */
+  excludedVariations?: Record<string, string[]>;
   slotGoal: number;
   batchNumber: string;
   /** Owner-typed order ID ("MNMGB123") → orders MNMGB123-0001… Empty = store numbers. */
   orderPrefix?: string;
   minVials: number | null;
   maxVials: number | null;
+  /** Group-buy-only stores: the fewest vials one customer may order this round. */
+  moqVials?: number | null;
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -105,6 +109,9 @@ export type RoundOrderRow = {
   orderNumber: string;
   customer: string;
   contact: string;
+  /** The buyer's WhatsApp number / display name — "" when not asked (absent on older servers). */
+  whatsapp?: string;
+  whatsappName?: string;
   address: string;
   product: string;
   productId: string | null;
@@ -136,12 +143,18 @@ export type ProductToOrder = {
   variation: string | null;
   vials: number;
   orders: number;
+  /** Kit columns (gb-moq-kits KitColumns): null when the product has no vials per kit. Absent on older servers. */
+  vialsPerKit?: number | null;
+  kits?: number | null;
+  shortBy?: number | null;
 };
 
 export type ReportCustomerLine = {
   name: string;
   email: string;
   contact: string;
+  whatsapp?: string;
+  whatsappName?: string;
   address: string;
   orders: number;
   qty: number;
@@ -164,7 +177,45 @@ export type ReportPrep = {
   }[];
   orderLines: RoundOrderRow[];
   customerLines: ReportCustomerLine[];
+  /** One consolidated order per member (gb-member-orders.ts). Absent on older servers. */
+  memberOrders?: MemberOrder[];
 };
+
+// ── orders per customer (src/lib/storefront/gb-member-orders.ts) ─────────────
+
+export type MemberCheckout = { orderNumber: string; date: string; total: number; adminFee: number; paid: boolean };
+export type MemberProductLine = { product: string; variation: string | null; qty: number; amount: number };
+
+export type MemberOrder = {
+  /** Stable for the round: the member's first order number. */
+  id: string;
+  name: string;
+  email: string;
+  contact: string;
+  whatsapp: string;
+  whatsappName: string;
+  address: string;
+  checkouts: MemberCheckout[];
+  products: MemberProductLine[];
+  /** Sum of the checkouts' totals (items − discount + shipping + fees). */
+  total: number;
+  paid: number;
+  /** total − paid, never below zero. */
+  balance: number;
+  adminFee: number;
+};
+
+/** COPIED from src/lib/storefront/gb-member-orders.ts memberOrderTotals. */
+export function memberOrderTotals(members: readonly MemberOrder[]): { total: number; paid: number; balance: number } {
+  return members.reduce(
+    (s, m) => ({ total: s.total + m.total, paid: s.paid + m.paid, balance: s.balance + m.balance }),
+    { total: 0, paid: 0, balance: 0 },
+  );
+}
+
+/** "BPC-157 — 10mg", unless the product name already carries the size (GbMemberOrders / supplier-workbook). */
+export const memberProductLabel = (p: Pick<MemberProductLine, "product" | "variation">): string =>
+  p.variation && !p.product.includes(p.variation) ? `${p.product} · ${p.variation}` : p.product;
 
 export type RoundAnalytics = {
   overview: {
@@ -210,7 +261,8 @@ export type AssignmentDrift = {
   hasDrift: boolean;
 };
 
-export type GroupBuyContent = { howTitle: string; steps: string[]; terms: string };
+/** `joinLabel` = the group-buy card's buy button ("Join GB", or e.g. "Add to cart"). */
+export type GroupBuyContent = { howTitle: string; steps: string[]; terms: string; joinLabel: string };
 
 export type WayState = "open" | "closed" | "hidden";
 export type TwoWaysMode = { onHand: WayState; groupBuy: WayState };
@@ -326,7 +378,7 @@ export const setWayAcceptOrders = (s: WayState, accept: boolean): WayState =>
 
 // ── storefront copy (src/lib/storefront/gb-content.ts) ───────────────────────
 
-export const GB_CONTENT_LIMITS = { maxSteps: 6, maxTitleLen: 80, maxTextLen: 300 } as const;
+export const GB_CONTENT_LIMITS = { maxSteps: 6, maxTitleLen: 80, maxTextLen: 300, maxLabelLen: 24 } as const;
 
 const GB_CONTENT_DEFAULTS: GroupBuyContent = {
   howTitle: "How group buys work",
@@ -337,6 +389,7 @@ const GB_CONTENT_DEFAULTS: GroupBuyContent = {
     "Your order ships {eta}, COA posted before shipping.",
   ],
   terms: "Pay now to lock your slot. Ships {eta}. COA posted before shipping.",
+  joinLabel: "Join GB",
 };
 
 export function normalizeGroupBuyContent(input: unknown): GroupBuyContent {
@@ -348,10 +401,12 @@ export function normalizeGroupBuyContent(input: unknown): GroupBuyContent {
     .filter((s) => s.length > 0)
     .slice(0, GB_CONTENT_LIMITS.maxSteps);
   const terms = typeof raw.terms === "string" ? raw.terms.trim().slice(0, GB_CONTENT_LIMITS.maxTextLen) : "";
+  const joinLabel = typeof raw.joinLabel === "string" ? raw.joinLabel.trim().slice(0, GB_CONTENT_LIMITS.maxLabelLen) : "";
   return {
     howTitle: title || GB_CONTENT_DEFAULTS.howTitle,
     steps: steps.length > 0 ? steps : [...GB_CONTENT_DEFAULTS.steps],
     terms: terms || GB_CONTENT_DEFAULTS.terms,
+    joinLabel: joinLabel || GB_CONTENT_DEFAULTS.joinLabel,
   };
 }
 

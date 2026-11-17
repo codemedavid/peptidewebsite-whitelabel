@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { OrderDetail, OrderFilterKey, OrderUpdateRequest } from "@contract";
 import { ApiError } from "@/api/client";
-import { ordersApi, qk } from "@/api/endpoints";
+import { ordersApi, qk, type OrderListView } from "@/api/endpoints";
 import { useSignedIn } from "@/auth/SessionProvider";
 
 /**
@@ -13,11 +13,11 @@ import { useSignedIn } from "@/auth/SessionProvider";
  * a clear pending state instead of pretending it already happened.
  */
 
-export function useOrderList(filter: OrderFilterKey, q: string) {
+export function useOrderList(filter: OrderFilterKey, q: string, view: OrderListView = {}) {
   const { scope } = useSignedIn();
   return useInfiniteQuery({
-    queryKey: qk.orders(scope, filter, q),
-    queryFn: ({ pageParam }) => ordersApi.list(filter, q, pageParam),
+    queryKey: qk.orders(scope, filter, q, view),
+    queryFn: ({ pageParam }) => ordersApi.list(filter, q, pageParam, view),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });

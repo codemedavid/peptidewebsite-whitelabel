@@ -8,6 +8,7 @@ import { Field } from "@/ui/inputs";
 import { AppText, Button } from "@/ui/primitives";
 import { shareSupplierWorkbook } from "./export";
 import { useRoundAction } from "./hooks";
+import { MemberOrders } from "./MemberOrders";
 import { KV, OrderLineCard, Panel, ProductsToOrder, TileGrid, useProofViewer } from "./parts";
 import { UnlinkedNote } from "./ReportSheet";
 import {
@@ -25,7 +26,8 @@ import {
 /**
  * One round's dashboard (AdminGroupBuyDetail ← getGroupBuyDashboardAction):
  * summary cards, assignment drift + the one-tap fix, the Overview / Financial /
- * Vials panels, products to order, and this round's own filterable orders.
+ * Vials panels, products to order, orders per customer (paid / balance), and
+ * this round's own filterable orders.
  * Every number is the server's, computed from THIS round's orders only.
  */
 export function RoundDashboard({
@@ -116,7 +118,7 @@ export function RoundDashboard({
           />
           <KV
             label="Minimum requirement"
-            value={overview.minVials === null ? "Not set" : `${overview.minVials} vials — ${overview.minimumMet ? "met" : "not met"}`}
+            value={overview.minVials === null ? "Not set" : `${overview.minVials} vials (${overview.minimumMet ? "met" : "not met"})`}
           />
           <KV label="Participants" value={overview.participants} />
           <KV label="Total orders" value={overview.totalOrders} />
@@ -149,6 +151,9 @@ export function RoundDashboard({
             <ProductsToOrder lines={product.productsToOrder} totalVials={product.totalVials} />
           </>
         ) : null}
+
+        {/* Absent on a server that predates the per-customer rollup. */}
+        {data.prep.memberOrders ? <MemberOrders members={data.prep.memberOrders} money={money} /> : null}
 
         <AppText variant="overline" color="link" accessibilityRole="header">
           {`ORDERS (${rows.length}${filtersActive ? ` of ${data.orderRows.length}` : ""})`}
@@ -256,7 +261,7 @@ function DriftAlert({ drift, roundId, canFix, onFixed }: { drift: AssignmentDrif
       ) : null}
       {d > 0 ? (
         <AppText variant="body" color={warn.fg}>
-          {`${d} assigned product${d === 1 ? "" : "s"} no longer exist${d === 1 ? "s" : ""} in your catalog — most likely deleted or replaced by a duplicate with the same name.`}
+          {`${d} assigned product${d === 1 ? "" : "s"} no longer exist${d === 1 ? "s" : ""} in your catalog, most likely deleted or replaced by a duplicate with the same name.`}
         </AppText>
       ) : null}
       {u > 0 ? (

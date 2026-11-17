@@ -82,7 +82,7 @@ export async function savePlanFeaturesConfigAction(
     revalidateTag(ENTITLEMENTS_TAG);
     revalidateTag(platformSettingTag(PLAN_FEATURES_CONFIG_KEY));
   } catch {
-    return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
+    return { error: "Could not save. Has the platform_settings table been pushed? (npm run db:push)" };
   }
 
   bust();

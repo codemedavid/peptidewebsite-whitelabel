@@ -14,9 +14,9 @@ import {
 import { saveGroupBuySettingsAction } from "@/actions/group-buys";
 
 const STATUS_OPTIONS: Array<{ value: GroupBuySettings["defaultStatus"]; label: string }> = [
-  { value: "draft", label: "Draft — owner launches manually" },
-  { value: "scheduled", label: "Scheduled — goes live at the start date" },
-  { value: "active", label: "Active — live immediately" },
+  { value: "draft", label: "Draft: owner launches manually" },
+  { value: "scheduled", label: "Scheduled: goes live at the start date" },
+  { value: "active", label: "Active: live immediately" },
 ];
 
 type SaveStatus = "saved" | "dirty" | "saving" | "error";
@@ -67,7 +67,7 @@ export function GroupBuySettingsCard({
         )}
         {save === "error" && (
           <button type="button" className="ftr-save-pill error" role="alert" onClick={persist}>
-            Save failed — retry
+            Save failed. Retry
           </button>
         )}
       </header>

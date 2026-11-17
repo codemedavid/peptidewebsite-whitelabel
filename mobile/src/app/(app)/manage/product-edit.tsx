@@ -12,6 +12,8 @@ import {
   brandCategories,
   brandSortCategories,
   brandSymbol,
+  dualMarketVisible,
+  groupBuyOnlyStore as isGroupBuyOnlyStore,
   groupBuyVisible,
   madeToOrderVisible,
   RESELLER_MIN_QTY,
@@ -19,6 +21,7 @@ import {
   selectableCategories,
   wholesaleVisible,
   type CatalogProduct,
+  type ProductMarket,
 } from "@/features/admin/catalog/model";
 import {
   draftFromProduct,
@@ -134,12 +137,14 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
     ...categories.map((c) => ({ value: c.id, label: c.label })),
   ];
   const sortOptions = [
-    { value: "", label: "— None —" },
+    { value: "", label: "None" },
     ...(d.sortCategory && !sortGroups.some((c) => c.id === d.sortCategory) ? [{ value: d.sortCategory, label: `(removed) ${d.sortCategory}` }] : []),
     ...sortGroups.map((c) => ({ value: c.id, label: c.label })),
   ];
 
   const showGb = groupBuyVisible(brand);
+  const dualMarket = dualMarketVisible(brand);
+  const groupBuyOnlyStore = isGroupBuyOnlyStore(brand);
 
   return (
     <View style={{ flex: 1 }}>
@@ -166,7 +171,7 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
             value={d.sortCategory}
             options={sortOptions}
             onChange={(sortCategory) => set({ sortCategory })}
-            hint="Groups this product in your shop's Sort menu. Optional — unassigned products still show, just after the grouped ones."
+            hint="Groups this product in your shop's Sort menu. Optional. Unassigned products still show, just after the grouped ones."
           />
           <SelectField
             label="Order ratio class"
@@ -180,13 +185,14 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
 
         <FormSection
           title="Variations"
-          hint={`Offer the same product in several options — e.g. 5mg / 10mg, or vials only versus the complete set — each with its own price (${currency}). Leave empty to sell it as one option at the base price.`}
+          hint={`Offer the same product in several options (e.g. 5mg / 10mg, or vials only versus the complete set), each with its own price (${currency}). Leave empty to sell it as one option at the base price.`}
         >
           <VariationsEditor
             items={d.variations}
             update={(fn) => setD((prev) => ({ ...prev, variations: fn(prev.variations) }))}
             currency={currency}
             showGbPrice={showGb && d.isGroupBuy}
+            showUsdPrice={dualMarket && d.market !== "local"}
             onBusy={onBusy}
           />
         </FormSection>
@@ -204,12 +210,12 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
 
         <FormSection title="Inventory & availability">
           <Field label="Stock quantity" value={d.stock} onChangeText={(v) => set({ stock: numeric(v, false) })} keyboardType="number-pad" />
-          <ToggleRow label="Featured — pin to top" hint="Pins this product to the very top of your catalog." value={d.featured} onChange={(featured) => set({ featured })} />
+          <ToggleRow label="Featured (pin to top)" hint="Pins this product to the very top of your catalog." value={d.featured} onChange={(featured) => set({ featured })} />
           <ToggleRow label="Available" value={d.available} onChange={(available) => set({ available })} />
           <ToggleRow label="Free shipping" value={d.freeShipping} onChange={(freeShipping) => set({ freeShipping })} />
           {madeToOrderVisible(brand) ? (
             <ToggleRow
-              label="Made to order — no stock needed"
+              label="Made to order (no stock needed)"
               hint="Made after the order is placed: never sold out, no quantity cap, and confirming an order doesn't deduct inventory."
               value={d.madeToOrder}
               onChange={(madeToOrder) => set({ madeToOrder })}
@@ -236,6 +242,47 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
           ) : null}
         </FormSection>
 
+        {dualMarket ? (
+          <FormSection
+            title="Markets"
+            hint={`Your store sells in two shops: Local (${currency}) and International (USD). International shoppers pay the USD price you set here. Prices are never converted automatically.`}
+          >
+            <SelectField
+              label="Sell in"
+              value={d.market}
+              options={[
+                { value: "local", label: `Local shop only (${currency})` },
+                { value: "international", label: "International shop only (USD)" },
+                { value: "both", label: "Both shops" },
+              ]}
+              onChange={(v) => set({ market: v as ProductMarket })}
+            />
+            {d.market !== "local" ? (
+              <>
+                <Field label="International price (USD)" value={d.usdPrice} onChangeText={(v) => set({ usdPrice: numeric(v) })} keyboardType="decimal-pad" />
+                {d.discountOn ? (
+                  <Field
+                    label="International sale price (USD)"
+                    value={d.usdDiscountPrice}
+                    onChangeText={(v) => set({ usdDiscountPrice: numeric(v) })}
+                    keyboardType="decimal-pad"
+                    hint="Leave blank to sell at the full USD price during your sale."
+                  />
+                ) : null}
+                {d.variations.length ? (
+                  <AppText variant="caption" color="muted">
+                    {"Set each option's USD price in Variations above. An option without one isn't sold internationally."}
+                  </AppText>
+                ) : null}
+                {d.isGroupBuy ? <Notice tone="danger">Group-buy products sell in the Local shop only.</Notice> : null}
+                {!d.isGroupBuy && !(toNum(d.usdPrice) > 0) && !d.variations.some((v) => toNum(v.usdPrice) > 0) ? (
+                  <Notice tone="danger">{"Add a USD price. Without one this product won't appear in the International shop."}</Notice>
+                ) : null}
+              </>
+            ) : null}
+          </FormSection>
+        ) : null}
+
         {showGb ? (
           <FormSection title="Group buy">
             <ToggleRow label="Group Buy product" value={d.isGroupBuy} onChange={(isGroupBuy) => set({ isGroupBuy })} />
@@ -248,9 +295,18 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
               hint={
                 d.isGroupBuy
                   ? "Shown in the storefront's Group Buy section with the on-hand price and the saving."
-                  : "Off — this product lists as on-hand (ships now)."
+                  : "Off: this product lists as on-hand (ships now)."
               }
             />
+            {groupBuyOnlyStore ? (
+              <Field
+                label="Vials per kit"
+                value={d.vialsPerKit}
+                onChangeText={(v) => set({ vialsPerKit: numeric(v, false) })}
+                keyboardType="number-pad"
+                hint="How many vials the supplier packs in one kit of this product. Shoppers see how full the current kit is, and the supplier report counts whole kits. Leave blank if you don't order by the kit."
+              />
+            ) : null}
           </FormSection>
         ) : null}
 
@@ -276,7 +332,7 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
             />
             {d.variations.length ? (
               <AppText variant="caption" color="muted">
-                {`All ${d.variations.length} options count toward the same minimum — ${d.variations
+                {`All ${d.variations.length} options count toward the same minimum: ${d.variations
                   .slice(0, 4)
                   .map((v) => v.name.trim() || "?")
                   .join(" + ")}${d.variations.length > 4 ? " …" : ""} add up together.`}
@@ -309,7 +365,7 @@ function ProductEditor({ brand, initial, title }: { brand: AdminBrand; initial: 
 
         <FormSection
           title="More photos"
-          hint="Front, back, label or angle shots — customers swipe through them on the product. Tap a photo to move it, make it the main photo, or remove it."
+          hint="Front, back, label or angle shots. Customers swipe through them on the product. Tap a photo to move it, make it the main photo, or remove it."
         >
           <PhotoStrip
             photos={d.extraImages}

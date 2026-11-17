@@ -6,6 +6,8 @@ import { SEED_COURIERS, SEED_SHIPPING_LOCATIONS } from "@/features/admin/setup/s
 import { EditorSheet, Hint, ItemCard, ListPage, Loadable, ToggleRow, confirmDelete } from "@/features/admin/setup/ui";
 import { Field } from "@/ui/inputs";
 import { Pill } from "@/ui/primitives";
+/** src/lib/storefront/courier-note.ts MAX_COURIER_NOTE_LENGTH (the server caps it too). */
+const MAX_COURIER_NOTE_LENGTH = 300;
 
 /**
  * The website's Couriers (AdminCouriers → saveCouriersAction). Every change
@@ -50,10 +52,10 @@ export default function CouriersScreen() {
                         c.noLocation === true || noLocationWarning ? (
                           <>
                             {c.noLocation === true ? (
-                              <Pill tone="info" size="sm" icon="cash-outline" label="Cash on delivery — no shipping location or fee" />
+                              <Pill tone="info" size="sm" icon="cash-outline" label="Cash on delivery (no shipping location or fee)" />
                             ) : null}
                             {noLocationWarning ? (
-                              <Pill tone="warning" size="sm" icon="warning-outline" label="No shipping location — won't show at checkout" />
+                              <Pill tone="warning" size="sm" icon="warning-outline" label="No shipping location, so it won't show at checkout" />
                             ) : null}
                           </>
                         ) : null
@@ -108,13 +110,15 @@ function CourierEditor({
   const [bookingUrl, setBookingUrl] = useState(str(initial.bookingUrl));
   const [active, setActive] = useState(initial.active !== false);
   const [noLocation, setNoLocation] = useState(initial.noLocation === true);
+  const [note, setNote] = useState(str(initial.note));
 
   const dirty =
     name !== str(initial.name) ||
     trackingUrl !== str(initial.trackingUrl) ||
     bookingUrl !== str(initial.bookingUrl) ||
     active !== (initial.active !== false) ||
-    noLocation !== (initial.noLocation === true);
+    noLocation !== (initial.noLocation === true) ||
+    note !== str(initial.note);
 
   return (
     <EditorSheet
@@ -133,6 +137,7 @@ function CourierEditor({
           bookingUrl: safeExternalUrl(bookingUrl),
           active,
           noLocation,
+          note: note.trim(),
         })
       }
     >
@@ -147,6 +152,15 @@ function CourierEditor({
         autoCorrect={false}
         keyboardType="url"
       />
+      <Field
+        label="Note shown at checkout (Optional)"
+        value={note}
+        onChangeText={setNote}
+        multiline
+        maxLength={MAX_COURIER_NOTE_LENGTH}
+        placeholder="e.g., For NCR and nearby areas only. Pick-up is in Malate, Manila."
+        hint="Shown under the courier choice when a customer picks this courier: coverage area, pick-up point, cut-off time."
+      />
       {bookingEntitled ? (
         <>
           <Field
@@ -160,12 +174,12 @@ function CourierEditor({
             keyboardType="url"
           />
           {bookingUrl.trim() && !safeExternalUrl(bookingUrl) ? (
-            <Hint tone="warning">{"That isn't a web link — it won't be saved. Start it with https://"}</Hint>
+            <Hint tone="warning">{"That isn't a web link, so it won't be saved. Start it with https://"}</Hint>
           ) : null}
         </>
       ) : null}
       <ToggleRow
-        label="No shipping location / fee — cash on delivery only"
+        label="No shipping location / fee (cash on delivery only)"
         hint="For couriers like Lalamove or Maxim where the customer just pays COD. Offered at checkout without a location selector and adds no shipping fee."
         value={noLocation}
         onChange={setNoLocation}

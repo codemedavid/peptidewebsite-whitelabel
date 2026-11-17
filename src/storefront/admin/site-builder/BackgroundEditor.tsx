@@ -93,7 +93,7 @@ export function BackgroundEditor({
               label="Image opacity"
               value={value.imageOpacity}
               onChange={(imageOpacity) => set({ imageOpacity })}
-              hint="Only the image fades — text and buttons stay solid. 10–20% is a subtle texture."
+              hint="Only the image fades. Text and buttons stay solid. 10–20% is a subtle texture."
             />
             <div className="admin-form__row">
               <SelectInput

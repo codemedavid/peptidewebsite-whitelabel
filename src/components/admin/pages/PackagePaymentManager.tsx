@@ -81,7 +81,7 @@ export function PackagePaymentManager({ initial }: { initial: PackagePaymentConf
           <h1 className="page-title">Receiving Accounts</h1>
           <p className="page-sub">
             Your receiving accounts shown on the public <span className="mono">/get-started</span>{" "}
-            checkout — where new clients pay for their package.
+            checkout, where new clients pay for their package.
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -144,7 +144,7 @@ export function PackagePaymentManager({ initial }: { initial: PackagePaymentConf
         <div className="card-body" style={{ padding: 16 }}>
           {methods.length === 0 ? (
             <div style={{ padding: "28px 0", textAlign: "center", color: "var(--ink-400)", fontSize: 13 }}>
-              No payment methods yet — add one so clients can pay for their package.
+              No payment methods yet. Add one so clients can pay for their package.
             </div>
           ) : (
             <div className="col" style={{ gap: 14 }}>
@@ -199,7 +199,7 @@ function MethodCard({
           style={{ flex: 1, minWidth: 160, fontWeight: 600 }}
           value={m.method}
           maxLength={120}
-          placeholder="Method name — e.g. GCash"
+          placeholder="Method name, e.g. GCash"
           onChange={(e) => onPatch({ method: e.target.value })}
         />
         <button
@@ -274,7 +274,7 @@ function MethodCard({
           style={{ marginTop: 2 }}
         />
         <span>
-          <b>QR PH</b> — adds a 2% processing fee to the client&apos;s total
+          <b>QR PH</b>: adds a 2% processing fee to the client&apos;s total
         </span>
       </label>
     </div>

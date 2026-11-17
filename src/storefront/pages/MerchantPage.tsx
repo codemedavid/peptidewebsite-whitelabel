@@ -352,7 +352,7 @@ export function MerchantPage({
 
         <div className="merchant-note">
           <strong>Wholesale terms:</strong> the minimum order to unlock the wholesale price is set per
-          product (default {RESELLER_MIN_QTY} units) — shown as the “Min” badge on each card. The quantity
+          product (default {RESELLER_MIN_QTY} units), shown as the “Min” badge on each card. The quantity
           starts at that minimum, so the wholesale price applies automatically in your cart. The
           complete-set tier is what we ship online at the minimum; the vials-only tier is arranged by
           request.
@@ -376,7 +376,7 @@ export function MerchantPage({
               No wholesale items yet.
             </p>
             <p style={{ color: "var(--brand-text-muted)" }}>
-              Reseller prices haven&apos;t been set on any products yet — check back soon.
+              Reseller prices haven&apos;t been set on any products yet. Check back soon.
             </p>
           </div>
         )}

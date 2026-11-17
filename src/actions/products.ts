@@ -12,6 +12,7 @@ import { stampCampaignWindow } from "@/lib/storefront/sale-campaign";
 import { resolvePromoEngine } from "@/lib/storefront/promo-engine.server";
 import { Prisma } from "@prisma/client";
 import { getTenantSlug, getTenantIdOrNull } from "@/lib/tenant/headers";
+import { isStorefrontActionBlocked, STOREFRONT_BLOCKED_MESSAGE } from "@/lib/auth/storefront-blocked";
 import { getTenantContext } from "@/lib/tenant/context";
 import { loadCatalogRows } from "@/lib/storefront/storefront-brand";
 import { requireStaffPermission, requireAnyStaffPermission } from "@/lib/auth/staff-guard";
@@ -119,6 +120,7 @@ export async function listProductsAction(displaySymbol = "₱"): Promise<ListPro
 export async function getStorefrontProductsAction(): Promise<ListProductsResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
 
   // Reseller wholesale pricing is entitlement-gated — the SAME strip the
   // storefront render (page.tsx) and order placement (orders.ts) apply. Without
@@ -262,7 +264,7 @@ export async function saveProductAction(input: unknown): Promise<SaveProductResu
       );
       if (!canAddProductAfterDowngrade(count, true)) {
         return {
-          error: `Starter is limited to ${STARTER_DOWNGRADE_PRODUCT_CAP} products — upgrade to Business for an unlimited catalog.`,
+          error: `Starter is limited to ${STARTER_DOWNGRADE_PRODUCT_CAP} products. Upgrade to Business for an unlimited catalog.`,
         };
       }
     }
@@ -379,7 +381,7 @@ export async function deleteProductsAction(
   } catch {
     // Most likely an order/cart still references the product (FK restrict).
     return {
-      error: "Couldn't delete — a product may be linked to existing orders. Mark it unavailable instead.",
+      error: "Couldn't delete. A product may be linked to existing orders. Mark it unavailable instead.",
     };
   }
 }

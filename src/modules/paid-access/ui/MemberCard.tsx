@@ -55,11 +55,11 @@ const PRIMARY_LABEL: Record<MemberMove, string> = {
 };
 
 const DONE: Record<string, string> = {
-  approve: "Approved — they've been told.",
+  approve: "Approved. They've been told.",
   confirm_payment: "Payment confirmed.",
-  confirm_and_approve: "Payment confirmed — they're in.",
-  reject: "Rejected — they've been told.",
-  reject_payment: "Proof sent back — they can pay again.",
+  confirm_and_approve: "Payment confirmed. They're in.",
+  reject: "Rejected. They've been told.",
+  reject_payment: "Proof sent back. They can pay again.",
   revoke: "Access removed.",
   refund: "Marked refunded.",
 };
@@ -89,7 +89,7 @@ export function MemberCard({ row, now, onChanged }: Props) {
       setText("");
       onChanged();
     } catch {
-      toast("Something went wrong — please try again.");
+      toast("Something went wrong. Please try again.");
     } finally {
       setIsBusy(false);
     }
@@ -155,7 +155,7 @@ export function MemberCard({ row, now, onChanged }: Props) {
                 <dt>Reference</dt>
                 <dd>
                   <span className="pam-mono">{p.reference}</span>
-                  {p.duplicateReference && <span className="pam-dupe" role="note">Used on another payment too — check it</span>}
+                  {p.duplicateReference && <span className="pam-dupe" role="note">Used on another payment too. Check it</span>}
                 </dd>
               </div>
             )}
@@ -237,7 +237,7 @@ export function MemberCard({ row, now, onChanged }: Props) {
               <li key={`${e.createdAt}-${i}`}>
                 <strong>{e.toStatus ? STATUS_LABEL[e.toStatus] ?? REFUND_LABEL[e.toStatus] ?? e.toStatus : e.kind}</strong>
                 <span> · {e.actorKind === "customer" ? "member" : e.actorKind}{e.actorId && e.actorKind !== "customer" ? ` (${e.actorId})` : ""} · {when(e.createdAt)}</span>
-                {e.reason ? <span> — {e.reason}</span> : null}
+                {e.reason ? <span> · {e.reason}</span> : null}
               </li>
             ))}
           </ol>

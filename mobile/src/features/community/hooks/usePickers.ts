@@ -67,16 +67,18 @@ async function pickRawImage(source: ImageSource, quality: number): Promise<Picke
  * Several photos from the library at once, as many as the system allows
  * (saved replies). Photos too big to send are left out and counted.
  */
-export async function pickImages(): Promise<{ drafts: ImageDraft[]; skipped: number }> {
+export async function pickImages(opts: { lighten?: boolean; limit?: number } = {}): Promise<{ drafts: ImageDraft[]; skipped: number }> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) throw new PickError("Allow photo access in Settings to add photos from your library.");
-  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: QUALITY, exif: false, allowsMultipleSelection: true, selectionLimit: 0, orderedSelection: true });
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: opts.lighten === false ? STORE_IMAGE_QUALITY : QUALITY, exif: false, allowsMultipleSelection: true, selectionLimit: opts.limit ?? 0, orderedSelection: true });
   if (result.canceled) return { drafts: [], skipped: 0 };
   const drafts: ImageDraft[] = [];
   let skipped = 0;
   for (const asset of result.assets) {
     try {
-      drafts.push(await lightenPhoto(toPicked(asset.uri, imageMimeFor(asset.mimeType, asset.fileName), asset.fileName, asset.fileSize, asset.width, asset.height)));
+      const picked = toPicked(asset.uri, imageMimeFor(asset.mimeType, asset.fileName), asset.fileName, asset.fileSize, asset.width, asset.height);
+      // Store images (protocol flyers, certificates) keep their full detail.
+      drafts.push(opts.lighten === false ? await withinLimit(picked) : await lightenPhoto(picked));
     } catch {
       skipped++;
     }

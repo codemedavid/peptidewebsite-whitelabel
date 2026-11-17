@@ -306,9 +306,20 @@ test("push: routes orders, DMs and drops; rejects junk", () => {
   assert.deepEqual(pushTarget({ type: "order", orderId: "o_1" }), { screen: "order", id: "o_1" });
   assert.deepEqual(pushTarget({ type: "dm", threadId: "d1" }), { screen: "dm", id: "d1" });
   assert.deepEqual(pushTarget({ type: "drop", threadId: "t1" }), { screen: "topic", id: "t1" });
+  assert.deepEqual(pushTarget({ type: "topic", threadId: "t2" }), { screen: "topic", id: "t2" }, "a group-chat message opens its chat");
   assert.equal(pushTarget({ type: "dm", threadId: "../x" }), null);
   assert.equal(pushTarget({ type: "other", threadId: "t1" }), null);
   assert.equal(pushTarget(null), null);
+});
+test("push: a group-chat message opens the chat for members and the store team alike", () => {
+  const team: PushAccess = { mode: "admin", canOrders: true, inCommunity: true };
+  const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };
+  const outsider: PushAccess = { mode: "customer", canOrders: false, inCommunity: false };
+  const target = pushTarget({ type: "topic", threadId: "t2" });
+  const chat = { pathname: "/community/topic/[id]", params: { id: "t2" }, method: "navigate" };
+  assert.deepEqual(resolvePushRoute(target, team), chat);
+  assert.deepEqual(resolvePushRoute(target, member), chat);
+  assert.deepEqual(resolvePushRoute(target, outsider), { pathname: "/me", method: "navigate" });
 });
 test("push: a safety-bot alert opens the review queue for moderators only", () => {
   assert.deepEqual(pushTarget({ type: "safety" }), { screen: "safety" });
@@ -316,6 +327,15 @@ test("push: a safety-bot alert opens the review queue for moderators only", () =
   const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };
   assert.deepEqual(resolvePushRoute({ screen: "safety" }, mod), { pathname: "/community/safety", method: "navigate" });
   assert.deepEqual(resolvePushRoute({ screen: "safety" }, member), { pathname: "/community", method: "navigate" });
+});
+test("push: \"you're in\" opens Chats once the shopper is a member", () => {
+  assert.deepEqual(pushTarget({ type: "member_approved" }), { screen: "member_approved" });
+  const member: PushAccess = { mode: "customer", canOrders: false, inCommunity: true };
+  const stale: PushAccess = { mode: "customer", canOrders: false, inCommunity: false };
+  const team: PushAccess = { mode: "admin", canOrders: true, inCommunity: true };
+  assert.deepEqual(resolvePushRoute({ screen: "member_approved" }, member), { pathname: "/community", method: "navigate" });
+  assert.deepEqual(resolvePushRoute({ screen: "member_approved" }, stale), { pathname: "/me", method: "navigate" });
+  assert.deepEqual(resolvePushRoute({ screen: "member_approved" }, team), { pathname: "/", method: "navigate" });
 });
 
 test("reducer: the server's clientId wins over the local one", () => {

@@ -1,6 +1,14 @@
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { fmtDate, type ReportCustomerLine, type ReportPrep, type RoundOrderRow, type RoundSummary, type ProductToOrder } from "./model";
+import {
+  fmtDate,
+  memberProductLabel,
+  type ProductToOrder,
+  type ReportCustomerLine,
+  type ReportPrep,
+  type RoundOrderRow,
+  type RoundSummary,
+} from "./model";
 import { buildXlsx, utf8, type Sheet } from "./xlsx";
 
 /**
@@ -15,13 +23,24 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 /** The supplier's copy: vials to order and nothing else — safe to forward as-is. */
 export function supplierSheets(prep: ReportPrep): Sheet[] {
+  // Kit columns only when some product carries a vials-per-kit (gb-moq-kits); a
+  // store that doesn't order by the kit keeps the three-column sheet. `!= null`
+  // also covers an older server that never sends the kit fields.
+  const byKit = prep.productsToOrder.some((p) => p.vialsPerKit != null);
+  const kitCells = (p: ProductToOrder) =>
+    byKit
+      ? [p.vialsPerKit ?? "—", p.kits ?? "—", p.shortBy == null ? "—" : p.shortBy === 0 ? "Full" : `${p.shortBy} vials short`]
+      : [];
   return [
     {
       name: "Products to Order",
-      widths: [42, 20, 10],
+      widths: [42, 20, 10, ...(byKit ? [14, 14, 18] : [])],
       rows: [
-        { cells: ["Product", "Total Vials to Order", "Orders"], style: "bold" },
-        ...prep.productsToOrder.map((p) => ({ cells: [p.product, p.vials, p.orders] })),
+        {
+          cells: ["Product", "Total Vials to Order", "Orders", ...(byKit ? ["Vials per Kit", "Kits to Order", "Short of a Full Kit"] : [])],
+          style: "bold",
+        },
+        ...prep.productsToOrder.map((p) => ({ cells: [p.product, p.vials, p.orders, ...kitCells(p)] })),
         { cells: [] },
         { cells: ["TOTAL VIALS TO ORDER", prep.counts.totalVials, prep.counts.activeOrders], style: "bold" },
         { cells: [] },
@@ -39,16 +58,20 @@ export function supplierSheets(prep: ReportPrep): Sheet[] {
   ];
 }
 
-/** The simple Orders sheet: order no. + buyer on each order's first line, one
- *  row per item with its vials, a blank row before the next order. */
+/** The simple Orders sheet: order no. + buyer (and their WhatsApp) on each
+ *  order's first line, one row per item with its vials, a blank row before the
+ *  next order. */
 function orderBlocks(lines: ReportPrep["orderLines"]): Sheet["rows"] {
   const byOrder = new Map<string, ReportPrep["orderLines"]>();
   for (const l of lines) byOrder.set(l.orderNumber, [...(byOrder.get(l.orderNumber) ?? []), l]);
   return [
-    { cells: ["Order", "Customer", "Product", "Vials"], style: "bold" },
+    { cells: ["Order", "Customer", "WhatsApp Name", "WhatsApp Number", "Product", "Vials"], style: "bold" },
     ...[...byOrder].flatMap(([orderNumber, items]) => [
       ...items.map((l, i) => ({
-        cells: i === 0 ? [orderNumber, l.customer, l.product, l.vials] : ["", "", l.product, l.vials],
+        cells:
+          i === 0
+            ? [orderNumber, l.customer, l.whatsappName ?? "", l.whatsapp ?? "", l.product, l.vials]
+            : ["", "", "", "", l.product, l.vials],
         style: l.counted ? undefined : ("strike" as const),
       })),
       { cells: [] },
@@ -59,21 +82,31 @@ function orderBlocks(lines: ReportPrep["orderLines"]): Sheet["rows"] {
 /** The owner's copy: totals, every buyer and every order line. Never for the supplier. */
 export function customerSheets(prep: ReportPrep): Sheet[] {
   return [
-    { name: "Orders", widths: [12, 26, 40, 8], rows: orderBlocks(prep.orderLines) },
+    { name: "Orders", widths: [12, 26, 20, 18, 40, 8], rows: orderBlocks(prep.orderLines) },
     { name: "Summary", widths: [22, 70], rows: prep.totals.map((t) => ({ cells: [t.label, t.value] })) },
     {
       name: "Customers",
-      widths: [26, 28, 16, 9, 8, 12, 46],
+      widths: [26, 28, 16, 16, 20, 9, 8, 12, 46],
       rows: [
-        { cells: ["Customer", "Email", "Contact Number", "Orders", "Vials", "Total", "Shipping Address"], style: "bold" },
-        ...prep.customerLines.map((c) => ({ cells: [c.name, c.email, c.contact, c.orders, c.qty, c.total, c.address] })),
+        {
+          cells: ["Customer", "Email", "Contact Number", "WhatsApp", "WhatsApp Name", "Orders", "Vials", "Total", "Shipping Address"],
+          style: "bold",
+        },
+        ...prep.customerLines.map((c) => ({
+          cells: [c.name, c.email, c.contact, c.whatsapp ?? "", c.whatsappName ?? "", c.orders, c.qty, c.total, c.address],
+        })),
         { cells: [] },
-        { cells: ["TOTAL", "", "", prep.counts.activeOrders, prep.counts.totalVials, prep.counts.totalSales], style: "bold" },
+        { cells: ["TOTAL", "", "", "", "", prep.counts.activeOrders, prep.counts.totalVials, prep.counts.totalSales], style: "bold" },
       ],
     },
     {
+      name: "Orders per Customer",
+      widths: [24, 16, 16, 20, 26, 38, 7, 12, 22, 11, 12, 12, 12, 46],
+      rows: memberOrderRows(prep.memberOrders ?? []),
+    },
+    {
       name: "Order Details",
-      widths: [12, 12, 24, 16, 46, 18, 36, 8, 10, 16, 15, 13, 9, 46, 46],
+      widths: [12, 12, 24, 16, 16, 20, 46, 18, 36, 8, 10, 16, 15, 13, 9, 46, 46],
       rows: [
         {
           cells: [
@@ -81,6 +114,8 @@ export function customerSheets(prep: ReportPrep): Sheet[] {
             "Order Date",
             "Customer",
             "Contact Number",
+            "WhatsApp",
+            "WhatsApp Name",
             "Shipping Address",
             "Batch",
             "Product",
@@ -101,6 +136,8 @@ export function customerSheets(prep: ReportPrep): Sheet[] {
             isoDay(l.orderDate),
             l.customer,
             l.contact,
+            l.whatsapp ?? "",
+            l.whatsappName ?? "",
             l.address,
             l.batch,
             l.product,
@@ -118,6 +155,64 @@ export function customerSheets(prep: ReportPrep): Sheet[] {
         })),
       ],
     },
+  ];
+}
+
+/** "Orders per Customer": each member's products (one row each), then a bold
+ *  total row with what they paid and still owe, then a blank row; a grand
+ *  total closes the sheet. Same rows as the dashboard panel. */
+function memberOrderRows(members: NonNullable<ReportPrep["memberOrders"]>): Sheet["rows"] {
+  const header = [
+    "Customer",
+    "Contact Number",
+    "WhatsApp",
+    "WhatsApp Name",
+    "Email",
+    "Product",
+    "Qty",
+    "Amount",
+    "Checkouts",
+    "Admin Fee",
+    "Order Total",
+    "Paid",
+    "Balance",
+    "Shipping Address",
+  ];
+  const grand = members.reduce(
+    (t, m) => ({ total: t.total + m.total, paid: t.paid + m.paid, balance: t.balance + m.balance, fee: t.fee + m.adminFee }),
+    { total: 0, paid: 0, balance: 0, fee: 0 },
+  );
+  return [
+    { cells: header, style: "bold" },
+    ...members.flatMap((m): Sheet["rows"] => [
+      ...m.products.map((p, i) => ({
+        cells:
+          i === 0
+            ? [m.name, m.contact, m.whatsapp, m.whatsappName, m.email, memberProductLabel(p), p.qty, p.amount]
+            : ["", "", "", "", "", memberProductLabel(p), p.qty, p.amount],
+      })),
+      {
+        cells: [
+          `${m.name} (total)`,
+          "",
+          "",
+          "",
+          "",
+          "",
+          m.products.reduce((s, p) => s + p.qty, 0),
+          "",
+          m.checkouts.map((c) => `${c.orderNumber}${c.paid ? " (paid)" : ""}`).join(", "),
+          m.adminFee,
+          m.total,
+          m.paid,
+          m.balance,
+          m.address,
+        ],
+        style: "bold",
+      },
+      { cells: [] },
+    ]),
+    { cells: ["ALL CUSTOMERS", "", "", "", "", "", "", "", "", grand.fee, grand.total, grand.paid, grand.balance], style: "bold" },
   ];
 }
 
@@ -153,6 +248,8 @@ export function reportCsv(args: {
       "Order Date",
       "Customer",
       "Contact Number",
+      "WhatsApp Name",
+      "WhatsApp Number",
       "Shipping Address",
       "Batch",
       "Product",
@@ -169,6 +266,8 @@ export function reportCsv(args: {
       fmtDate(l.orderDate),
       l.customer,
       l.contact,
+      l.whatsappName ?? "",
+      l.whatsapp ?? "",
       l.address,
       l.batch,
       l.product,
@@ -189,7 +288,7 @@ export function reportCsv(args: {
 }
 
 /** Write `bytes` to the cache and open the share sheet. Throws a readable Error. */
-async function shareFile(filename: string, bytes: Uint8Array, mimeType: string, uti: string): Promise<void> {
+export async function shareFile(filename: string, bytes: Uint8Array, mimeType: string, uti: string): Promise<void> {
   if (!(await Sharing.isAvailableAsync())) throw new Error("Sharing isn't available on this device.");
   const safe = filename.replace(/[^\w.-]+/g, "-") || "report";
   const file = new File(Paths.cache, safe);
@@ -204,6 +303,10 @@ export const shareSupplierWorkbook = (prep: ReportPrep) =>
 
 export const shareCustomerWorkbook = (prep: ReportPrep) =>
   shareFile(prep.customerFilename, buildXlsx(customerSheets(prep)), XLSX_MIME, "org.openxmlformats.spreadsheetml.sheet");
+
+/** The member tracker's CSV (GbMemberTracker downloadCsv). */
+export const shareTrackerCsv = (filename: string, csv: string) =>
+  shareFile(filename, utf8(csv), "text/csv", "public.comma-separated-values-text");
 
 export const shareCsv = (roundName: string, csv: string) =>
   shareFile(

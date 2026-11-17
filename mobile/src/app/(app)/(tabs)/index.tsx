@@ -13,6 +13,9 @@ import { CommunitySwitchCard } from "@/features/community/CommunitySwitchCard";
 import { useCommunityAccess } from "@/features/community/hooks/useInbox";
 import { LiveStrip } from "@/features/live/LiveStrip";
 import { StoreSwitchCard } from "@/features/store/StoreSwitchCard";
+import { GroupBuyCard } from "@/features/home/GroupBuyCard";
+import { AttentionPanel, CatalogTiles, StockLevelsPanel, TopCategoriesPanel } from "@/features/home/HomePanels";
+import { PlanBanner } from "@/features/home/PlanBanner";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE } from "@/theme/tokens";
 import { BarList } from "@/ui/charts/Bars";
@@ -22,6 +25,8 @@ import { AppText, Pill, type IconName } from "@/ui/primitives";
 
 const LATEST = 3;
 const TRENDING = 3;
+/** The Group Buy card loads every round + order server-side — refreshed on pull, not on every Home poll. */
+const GB_STALE_MS = 60_000;
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -78,7 +83,7 @@ function TodoList({ data, canOrders, canCatalog }: { data: DashboardResponse; ca
       </View>
       {allClear ? (
         <View style={{ marginTop: SPACE.md }}>
-          <Pill tone="success" icon="checkmark-circle" label="All caught up — nothing waiting on you" />
+          <Pill tone="success" icon="checkmark-circle" label="All caught up. Nothing waiting on you" />
         </View>
       ) : null}
     </View>
@@ -105,9 +110,15 @@ export default function Home() {
     enabled: me.can.analytics,
   });
 
+  const gb = useQuery({ queryKey: qk.dashboardGroupBuy(scope), queryFn: dashboardApi.groupBuy, staleTime: GB_STALE_MS });
+  // A group-buy store leads with the round; its stock list is all pre-order "Out of stock" noise.
+  const showsGroupBuy = gb.data !== undefined && gb.data.status !== "off";
+  const gbReady = gb.data?.status === "ready" ? gb.data : null;
+
   const refreshing = dash.isRefetching || sales.isRefetching;
   const refresh = () => {
     void dash.refetch();
+    void gb.refetch();
     if (me.can.analytics) {
       void sales.refetch();
       void week.refetch();
@@ -135,6 +146,8 @@ export default function Home() {
           </AppText>
         </View>
 
+        <PlanBanner />
+
         {me.can.analytics ? <LiveStrip /> : null}
 
         {me.can.analytics ? (
@@ -143,6 +156,14 @@ export default function Home() {
           ) : (
             <SalesHero data={sales.data} range={range} onRange={setRange} loading={sales.isFetching && !sales.isRefetching} />
           )
+        ) : null}
+
+        {(data?.today?.international ?? 0) > 0 ? (
+          <Pill
+            tone="info"
+            icon="globe-outline"
+            label={`+ ${data?.today?.international} International order${data?.today?.international === 1 ? "" : "s"} today · reported separately`}
+          />
         ) : null}
 
         {dash.isPending ? (
@@ -168,6 +189,21 @@ export default function Home() {
 
             {me.can.storeStatus ? <StoreSwitchCard open={data.store.open} /> : null}
 
+            <GroupBuyCard
+              card={gb.data}
+              error={gb.isError && !gb.data ? (gb.error?.message ?? "Couldn't load the group buy.") : null}
+              onRetry={() => void gb.refetch()}
+            />
+
+            <AttentionPanel
+              alerts={[...(gbReady?.alerts ?? []), ...(data.attention ?? [])]}
+              round={gbReady?.round ?? null}
+            />
+
+            {catalog && data.catalog ? <CatalogTiles catalog={data.catalog} /> : null}
+
+            {catalog && !showsGroupBuy ? <StockLevelsPanel rows={data.stockLevels ?? []} canManage={me.can.inventory} /> : null}
+
             {community.adminChatsTab ? <CommunitySwitchCard /> : null}
 
             {me.can.analytics && week.data && week.data.topProducts.length > 0 ? (
@@ -184,6 +220,8 @@ export default function Home() {
             ) : null}
 
             <TopCustomers />
+
+            <TopCategoriesPanel rows={data.topCategories ?? []} canManage={catalog} />
 
             {data.recent.length > 0 ? (
               <View>

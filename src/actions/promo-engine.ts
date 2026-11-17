@@ -7,11 +7,10 @@
 // edited) AND on their operator grant — the storefront forces each off
 // without its grant, so a write without it would be dead config.
 
-import { Prisma } from "@prisma/client";
 import { getTenantSlug } from "@/lib/tenant/headers";
-import { isDemoMode, getDemoBranding, saveDemoBranding } from "@/lib/demo/fixtures";
-import { prisma } from "@/lib/db/prisma";
+import { isDemoMode } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES, type FeatureKey } from "@/lib/features/catalog";
@@ -22,12 +21,6 @@ export type PromoEngineActionResult = { ok: true } | { error: string };
 
 const NO_ACCESS = "You don't have permission to do that.";
 const NOT_ENABLED = "This isn't enabled for your store yet. Ask your platform admin to turn it on.";
-
-async function readConfig(tenantId: string): Promise<Record<string, unknown>> {
-  if (isDemoMode()) return (getDemoBranding(tenantId).config ?? {}) as Record<string, unknown>;
-  const branding = await prisma.branding.findUnique({ where: { tenantId }, select: { config: true } });
-  return (branding?.config ?? {}) as Record<string, unknown>;
-}
 
 /** Read-modify-write one key of branding.config, behind permission + grant. */
 async function saveConfigKey(
@@ -41,16 +34,7 @@ async function saveConfigKey(
   if (!isDemoMode() && !(await hasFeature(tenantId, feature))) return { error: NOT_ENABLED };
 
   const slug = await getTenantSlug();
-  const config = { ...(await readConfig(tenantId)), [key]: value };
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { [key]: value });
   revalidateTenant(tenantId, slug);
   return { ok: true };
 }

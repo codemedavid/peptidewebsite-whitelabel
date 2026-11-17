@@ -261,7 +261,7 @@ export function ReconstitutionPage({ brand, onBack }: { brand: Brand; onBack: ()
 
         <p className="recon__disclaimer">
           {brand.calculatorDisclaimer ||
-            "For research and educational purposes only. This calculator does not constitute medical advice — always verify dosing with a qualified professional."}
+            "For research and educational purposes only. This calculator does not constitute medical advice. Always verify dosing with a qualified professional."}
         </p>
       </div>
     </section>

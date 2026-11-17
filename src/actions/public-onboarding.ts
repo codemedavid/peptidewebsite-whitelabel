@@ -87,7 +87,7 @@ async function apexGuard(): Promise<string | null> {
 /** Per-IP throttle for the public actions. Returns an error message or null. */
 async function throttle(action: string, limit: number, windowMs: number): Promise<string | null> {
   const verdict = rateLimit(`onboarding:${action}:${await clientIp()}`, limit, windowMs);
-  return verdict.ok ? null : "Too many attempts — please wait a moment and try again.";
+  return verdict.ok ? null : "Too many attempts. Please wait a moment and try again.";
 }
 
 /** Slugs already in use that could collide with this name's base slug. */
@@ -470,11 +470,11 @@ export async function submitOnboardingAction(
       console.error("[onboarding] submit failed:", e);
       return {
         error:
-          "We couldn't finish your sign-up just now. Your payment proof is safe — please try again, or message us on WhatsApp.",
+          "We couldn't finish your sign-up just now. Your payment proof is safe. Please try again, or message us on WhatsApp.",
       };
     }
   }
-  return { error: "That business name is taken — please tweak it and try again." };
+  return { error: "That business name is taken. Please tweak it and try again." };
 }
 
 // ──────────────────────────── 3. optional details ────────────────────────────
@@ -580,9 +580,12 @@ export async function updateOnboardingDetailsAction(
       });
 
       // Merge over what's there so anything the operator already set survives
-      // unless the client just answered it.
-      const branding = await tx.branding.findUnique({ where: { tenantId: tenant.id }, select: { config: true } });
-      const prior = (branding?.config ?? {}) as Record<string, unknown>;
+      // unless the client just answered it. Read under the row lock (same as
+      // updateBrandingConfig, inlined because this write must commit with the
+      // submission + product writes in this transaction).
+      const rows = await tx.$queryRaw<Array<{ config: unknown }>>`
+        SELECT "config" FROM "branding" WHERE "tenantId" = ${tenant.id} FOR UPDATE`;
+      const prior = (rows[0]?.config ?? {}) as Record<string, unknown>;
       const config = { ...prior, ...brandConfig } as unknown as Prisma.InputJsonValue;
       await tx.branding.upsert({
         where: { tenantId: tenant.id },
@@ -609,7 +612,7 @@ export async function updateOnboardingDetailsAction(
       return { error: detailsUpdateDecisionError({ tenantId: "x", tenantStatus: "active" }) };
     }
     console.error("[onboarding] details update failed", e);
-    return { error: "Could not save your details right now — please message us on WhatsApp." };
+    return { error: "Could not save your details right now. Please message us on WhatsApp." };
   }
 }
 

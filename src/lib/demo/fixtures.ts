@@ -516,7 +516,7 @@ export function createDemoTenant(input: CreateDemoTenantInput): { ok: true } | {
     compliance: "For laboratory research use only. Not for human or animal consumption.",
     hero: {
       eyebrow: "Research-grade",
-      title: `${input.name.trim()} — research peptides`,
+      title: `${input.name.trim()}: research peptides`,
       subtitle: "High-purity peptides with third-party COAs. Built for research teams.",
     },
     products: [

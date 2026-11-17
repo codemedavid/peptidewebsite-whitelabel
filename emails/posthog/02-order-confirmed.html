@@ -32,7 +32,7 @@
                       <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.14em;color:#B8B4A8;text-transform:uppercase;vertical-align:middle;">&nbsp;&nbsp;Order update</span>
                     </div>
                     <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#FFFFFF;">
-                      Confirmed — <span style="font-style:italic;">we're preparing your order.</span>
+                      Confirmed: <span style="font-style:italic;">we're preparing your order.</span>
                     </div>
                     <div style="padding-top:16px;">
                       <span style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:12px;letter-spacing:0.03em;color:#F1F0EC;background-color:#33312B;border:1px solid #4A473F;border-radius:6px;padding:6px 10px;">
@@ -71,7 +71,7 @@
                 <!-- Body -->
                 <tr>
                   <td style="padding:26px 18px 6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#3B3830;">
-                    Hi {{ person.properties.name | default: "there" }} — your payment checked out and order
+                    Hi {{ person.properties.name | default: "there" }}, your payment checked out and order
                     <strong>{{ event.properties.orderNumber }}</strong> is now confirmed. We're packing it up,
                     and you'll get another email with tracking details the moment it ships.
                   </td>
@@ -95,7 +95,7 @@
                 <!-- Signature -->
                 <tr>
                   <td style="padding:18px 18px 28px;font-family:Georgia,'Times New Roman',serif;font-size:14px;font-style:italic;color:#8A8578;">
-                    — the {{ event.properties.brandName | default: "store" }} team
+                    The {{ event.properties.brandName | default: "store" }} team
                   </td>
                 </tr>
 

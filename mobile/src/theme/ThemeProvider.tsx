@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { MobileBrandTheme, Tone } from "@contract";
+import type { MobileBrandTheme, MobileSplash, Tone } from "@contract";
 import { useBrandFonts } from "./brandFonts";
 import {
   makeType,
@@ -44,6 +44,8 @@ export type Theme = {
     headerText: string;
   };
   isTenantBranded: boolean;
+  /** The store's loading screen (the website's brand splash), always resolved. */
+  splash: MobileSplash;
   /** Status-bar content that reads on the header bar ("light" = white icons). */
   statusBar: "light" | "dark";
 };
@@ -68,6 +70,30 @@ function storeColors(brand: MobileBrandTheme | null): { scheme: Scheme; colors: 
   if (!p) return null;
   const { scheme, ...colors } = p;
   return { scheme, colors: { ...colors, overlay: OVERLAY[scheme] } };
+}
+
+/** Same defaults as the website's BRAND_SPLASH_DEFAULT (lib/storefront/brand-splash.ts). */
+const DEFAULT_SPLASH_MIN_MS = 250;
+const DEFAULT_SPLASH_MAX_MS = 900;
+
+/**
+ * The server's splash when it sent one; otherwise (older server, or Pepweb
+ * signed out) the website's default — a spinner in the brand colour on the
+ * theme surface.
+ */
+function resolveSplash(brand: MobileBrandTheme | null, logoUrl: string | null, colors: Neutrals, primary: string): MobileSplash {
+  if (brand?.splash) return brand.splash;
+  return {
+    enabled: true,
+    design: "ring",
+    logoUrl,
+    background: colors.surface,
+    accent: primary,
+    text: colors.text,
+    tagline: "",
+    minDurationMs: DEFAULT_SPLASH_MIN_MS,
+    maxDurationMs: DEFAULT_SPLASH_MAX_MS,
+  };
 }
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -105,6 +131,7 @@ export function ThemeProvider({
         headerText: b?.headerText ?? NEUTRALS.light.text,
       },
       isTenantBranded: !!b,
+      splash: resolveSplash(b, brand?.logoUrl ?? null, store?.colors ?? NEUTRALS.light, b?.primary ?? PEPWEB_BRAND.primary),
       statusBar: isDarkHex(headerBackground) ? "light" : "dark",
     };
   }, [brand, font]);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
+import { PreviewPublicPage, ViewGate } from "@/features/admin/content/page-guard";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
@@ -35,7 +36,13 @@ export default function FaqScreen() {
   return (
     <>
       <Stack.Screen options={{ title: "FAQ" }} />
-      <Loadable query={brand}>{(b) => <Editor brand={b} />}</Loadable>
+      <Loadable query={brand}>
+        {(b) => (
+          <ViewGate brand={b} view="faq" label="FAQ">
+            <Editor brand={b} />
+          </ViewGate>
+        )}
+      </Loadable>
     </>
   );
 }
@@ -76,6 +83,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
       <AppText variant="body" color="muted">
         Questions shown on your public FAQ page, grouped by topic.
       </AppText>
+      <PreviewPublicPage hash="faq" />
       <Button label="Add Group" icon="add" disabled={atGroupCap} onPress={addGroup} />
       {atGroupCap ? <Hint tone="warning">{`Up to ${MAX_FAQ_GROUPS} groups.`}</Hint> : null}
 

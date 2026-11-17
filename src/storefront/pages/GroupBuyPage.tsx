@@ -117,7 +117,7 @@ export function GroupBuyPage({
             <Title className="page__title font-display">No group buy right now</Title>
             <p style={{ color: "var(--brand-text-muted)" }}>
               There isn’t an open group-buy round at the moment.{" "}
-              {onHandHidden ? "Check back soon." : "Check back soon — or browse what’s on hand in the store."}
+              {onHandHidden ? "Check back soon." : "Check back soon, or browse what’s on hand in the store."}
             </p>
           </div>
           {myOrderLink}
@@ -260,7 +260,7 @@ export function GroupBuyPage({
               <span className="gbpage__cartbar-total font-display">{summary.totalLabel}</span>
             </div>
             <button type="button" className="gbpage__checkout" onClick={onCheckout}>
-              Checkout — lock my slot →
+              Checkout and lock my slot →
             </button>
           </div>
         </div>
@@ -368,7 +368,7 @@ function GbProductCard({
   // chosen dose rather than every dose of the product at once.
   const entryId = chosen.variation ? variationEntryId(p.id, chosen.variation.name) : p.id;
   const qty = cart.filter((c) => c.id === entryId).length;
-  const shownName = chosen.variation ? `${p.name} — ${chosen.variation.name}` : line.displayName;
+  const shownName = chosen.variation ? `${p.name} · ${chosen.variation.name}` : line.displayName;
   const join = () => addToCart(p, 1, chosen.variation);
 
   return (

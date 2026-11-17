@@ -61,7 +61,7 @@ test("goal reached caps at 100% and says so", () => {
   assert.equal(m.pct, 100);
   assert.equal(m.left, 0);
   assert.equal(m.reached, true);
-  assert.equal(m.hint, "Goal reached — still open");
+  assert.equal(m.hint, "Goal reached, still open");
 });
 test("junk input never yields NaN", () => {
   const m = slotMeter(Number.NaN, -3);

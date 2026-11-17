@@ -172,7 +172,7 @@ export function IncomeView({ data }: { data: IncomeAnalytics }) {
       <div className="page-head">
         <div>
           <h1 className="page-title">My Income</h1>
-          <p className="page-sub">Your subscription earnings from tenant billing — past performance and projected income</p>
+          <p className="page-sub">Your subscription earnings from tenant billing: past performance and projected income</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div className="seg" role="tablist" aria-label="Chart granularity">
@@ -397,7 +397,7 @@ export function IncomeView({ data }: { data: IncomeAnalytics }) {
             </div>
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {data.atRisk.length === 0 && (
-                <div style={{ color: "var(--ink-500)", fontSize: 13.5 }}>Nothing overdue — all renewals are on track.</div>
+                <div style={{ color: "var(--ink-500)", fontSize: 13.5 }}>Nothing overdue. All renewals are on track.</div>
               )}
               {data.atRisk.map((r) => (
                 <div

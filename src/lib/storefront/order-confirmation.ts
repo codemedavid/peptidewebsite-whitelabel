@@ -217,7 +217,7 @@ export function formatOrderMessage(
   const present = (v: string) => (v && v !== DASH ? v : "");
 
   const brandName = opts.brandName?.trim();
-  const header = `Order #${view.reference}${brandName ? ` — ${brandName}` : ""}`;
+  const header = `Order #${view.reference}${brandName ? ` · ${brandName}` : ""}`;
 
   const items = view.items.map((item) => {
     const option = item.variation.trim();
@@ -225,7 +225,7 @@ export function formatOrderMessage(
     // ("Semaglutide — 5mg"), so appending it again would print the size twice.
     // Only spell it out when the name doesn't already carry it.
     const label = option && !item.name.includes(option) ? `${item.name} (${option})` : item.name;
-    return `• ${label} ×${item.qty} — ${amount(item.lineTotal)}`;
+    return `• ${label} ×${item.qty} · ${amount(item.lineTotal)}`;
   });
 
   const { subtotal, discount, discountCode, shipping, fee, feeLabel, paymentFee, paymentFeeLabel, total } =

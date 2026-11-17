@@ -216,7 +216,7 @@ export const CARD_PRESETS: CardPreset[] = [
     buttonStyle: "soft", badgeStyle: "mono",
     imageRatio: "landscape", mediaInset: true, spacing: "roomy",
   }),
-  preset("text-only", "Text Only", "No photo — name and price lead", {
+  preset("text-only", "Text Only", "No photo, name and price lead", {
     layout: "text", borderColor: "#E5E7EB", radius: 14, shadow: "none",
     hover: "frame", titleWeight: 700, titleSize: "lg",
     buttonStyle: "solid", buttonShape: "rounded", badgeStyle: "soft",

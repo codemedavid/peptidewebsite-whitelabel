@@ -43,7 +43,11 @@ DECLARE
     -- tenant (webhooks arrive before one is known) and stays out on purpose.
     'paid_access_flows', 'paid_access_memberships', 'paid_access_payments', 'paid_access_events',
     -- Bunuan + Ligwak (src/modules/bunuan, src/modules/ligwak)
-    'gb_allocations', 'gb_allocation_entries', 'gb_audit_events'
+    'gb_allocations', 'gb_allocation_entries', 'gb_audit_events',
+    -- Peptide Tracker sync (docs/mobile-admin/TRACKER.md §5, src/lib/tracker/sync.server.ts)
+    'tracker_records',
+    -- App promo & event notification send log (src/lib/mobile/promo-push.server.ts)
+    'store_promo_pushes'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

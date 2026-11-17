@@ -24,10 +24,10 @@ export function validateWhatsapp(raw: string): WhatsappValidation {
   const digits = toWaDigits(raw);
   if (!digits) return { error: "Enter a WhatsApp number." };
   if (digits.length < MIN_DIAL_DIGITS) {
-    return { error: "That number looks too short — use the full international format (e.g. 639171234567)." };
+    return { error: "That number looks too short. Use the full international format (e.g. 639171234567)." };
   }
   if (digits.length > MAX_DIAL_DIGITS) {
-    return { error: "That number looks too long — use the international format, digits only." };
+    return { error: "That number looks too long. Use the international format, digits only." };
   }
   return { digits };
 }

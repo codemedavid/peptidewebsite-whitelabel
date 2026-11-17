@@ -47,7 +47,7 @@ export function AdminAccountSettings({ onBack }: { onBack: () => void }) {
       setConfirm("");
       toast("Password updated");
     } catch {
-      toast("Couldn't update — please sign in again and retry.");
+      toast("Couldn't update. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }

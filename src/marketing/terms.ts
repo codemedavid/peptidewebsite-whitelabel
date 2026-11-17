@@ -24,7 +24,7 @@ export const TERMS_INTRO =
   "These Terms & Conditions (the “Terms”) explain how Pepweb " +
   "(“we,” “us,” “our,” or the “Developer”) works with you (“you,” “your,” " +
   "or the “Client”) when you visit our website, request a quote, or purchase any of " +
-  "our website packages and services. We’ve kept them clear and friendly — our goal " +
+  "our website packages and services. We’ve kept them clear and friendly. Our goal " +
   "is a great relationship built on trust.";
 
 export const TERMS_SECTIONS: TermsSection[] = [
@@ -41,10 +41,10 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: "A Few Key Terms",
     blocks: [
       { type: "ul", items: [
-        "Developer — Pepweb, operated by Ma. Jonina Donaire.",
-        "Client — the individual or business that purchases or uses our services.",
-        "Services — website design, development, delivery, hosting setup, optional care plans, and related work we provide.",
-        "Deliverables — the completed website and related items we hand over to you.",
+        "Developer: Pepweb, operated by Ma. Jonina Donaire.",
+        "Client: the individual or business that purchases or uses our services.",
+        "Services: website design, development, delivery, hosting setup, optional care plans, and related work we provide.",
+        "Deliverables: the completed website and related items we hand over to you.",
       ] },
     ],
   },
@@ -84,7 +84,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     n: 6,
     title: "Optional Growth & Care Plan",
     blocks: [
-      { type: "p", text: "We offer an optional monthly Growth & Care Plan that adds extra protection and room for your store, such as automatic backups, additional storage, and a lower-to-zero downtime experience. It is entirely optional, billed monthly, and you can stop it at any time. If you choose not to use it, your website continues to run — you simply won’t have the plan’s added safeguards." },
+      { type: "p", text: "We offer an optional monthly Growth & Care Plan that adds extra protection and room for your store, such as automatic backups, additional storage, and a lower-to-zero downtime experience. It is entirely optional, billed monthly, and you can stop it at any time. If you choose not to use it, your website continues to run. You simply won’t have the plan’s added safeguards." },
     ],
   },
   {
@@ -104,10 +104,10 @@ export const TERMS_SECTIONS: TermsSection[] = [
     blocks: [
       { type: "p", text: "So we can deliver and support your store well, you agree to:" },
       { type: "ul", items: [
-        "Provide accurate content in good time — product information, images, Certificates of Analysis (COAs), protocol content (if selected), and business details.",
+        "Provide accurate content in good time: product information, images, Certificates of Analysis (COAs), protocol content (if selected), and business details.",
         "Maintain your own accounts and credentials, including WhatsApp, payment, email, and any third-party accounts your business uses.",
         "Review the website on delivery and let us know promptly of anything that doesn’t match your agreed scope.",
-        "Keep your store active — for sites on a free-tier database, we recommend visiting your website at least once a week.",
+        "Keep your store active. For sites on a free-tier database, we recommend visiting your website at least once a week.",
         "Delays in providing content or approvals may affect your delivery timeline.",
       ] },
     ],
@@ -182,7 +182,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     blocks: [
       { type: "ul", items: [
         "We take great care with your store, but we are not responsible for data deleted by you or your staff, or for losses caused by changes in third-party platforms or technologies outside our control.",
-        "The optional Growth & Care Plan adds automatic backups and extra safeguards — the easiest way to stay protected as you grow.",
+        "The optional Growth & Care Plan adds automatic backups and extra safeguards, the easiest way to stay protected as you grow.",
         "If a free-tier database pauses from inactivity, we can reactivate it promptly at your request.",
       ] },
     ],
@@ -205,7 +205,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     n: 19,
     title: "Indemnity",
     blocks: [
-      { type: "p", text: "You agree to cover and hold us harmless from claims, losses, or costs arising out of your products, your claims or marketing, your content, your use of the website, or your breach of these Terms — since these are matters within your control, not ours." },
+      { type: "p", text: "You agree to cover and hold us harmless from claims, losses, or costs arising out of your products, your claims or marketing, your content, your use of the website, or your breach of these Terms, since these are matters within your control, not ours." },
     ],
   },
   {
@@ -223,7 +223,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     n: 21,
     title: "Changes to These Terms",
     blocks: [
-      { type: "p", text: "We may update these Terms from time to time — for example, to reflect new features or legal requirements. The latest version will carry an updated “Last Updated” date, and continued use of our Services after a change means you accept the updated Terms." },
+      { type: "p", text: "We may update these Terms from time to time, for example to reflect new features or legal requirements. The latest version will carry an updated “Last Updated” date, and continued use of our Services after a change means you accept the updated Terms." },
     ],
   },
   {

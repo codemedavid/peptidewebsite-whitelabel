@@ -9,6 +9,8 @@ import { authenticateCustomer, storeAvailability, type CustomerContext } from ".
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
 import { customerAppOpen } from "@/lib/mobile/customer-app";
+import { GUEST_NEEDS_ACCOUNT } from "./app-guest";
+import { guestShoppingOpen } from "./guest-session";
 
 /**
  * Which store an in-app shop request is for, and who is asking
@@ -50,7 +52,7 @@ export const PRIVATE_STORE: ShopResolution = {
 };
 
 /** The same "is the visitor gate in force" test evaluateVisitorGate makes. */
-async function isPrivateStore(tenantId: string): Promise<boolean> {
+export async function isPrivateStore(tenantId: string): Promise<boolean> {
   const [gated, gate] = await Promise.all([
     hasFeature(tenantId, FEATURES.STORE_ACCESS_CODE),
     getTenantGateState(tenantId),
@@ -84,6 +86,11 @@ export async function resolveShopStore(req: Request, storeParam: unknown): Promi
   const auth = await authenticateCustomer(req);
   if (!auth.ok) return { ok: false, ...auth.failure };
   const { tenantId, slug } = auth.ctx;
+  // A guest is not a known account: a store walled since they started must
+  // not let them through (app-guest.ts).
+  if (auth.ctx.customer.guest && !(await guestShoppingOpen(tenantId))) {
+    return { ok: false, code: "forbidden", message: GUEST_NEEDS_ACCOUNT };
+  }
   return { ok: true, store: { tenantId, slug, customer: auth.ctx } };
 }
 

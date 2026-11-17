@@ -23,7 +23,7 @@ const DURATIONS: { label: string; minutes: number | null }[] = [
   { label: "24 hours", minutes: 1440 },
   { label: "3 days", minutes: 4320 },
 ];
-const SUGGESTIONS = ["Last slots for this batch", "Restocked — grab it", "Closing tonight"];
+const SUGGESTIONS = ["Last slots for this batch", "Restocked, grab it", "Closing tonight"];
 const HEADLINE_MAX = 80;
 const NOTE_MAX = 280;
 
@@ -137,7 +137,7 @@ export function DropForm({ initialChannel }: { initialChannel?: string }) {
               <Chip key={c.id} label={`${c.emoji} ${c.name}`} active={channel === c.id} onPress={() => setChannelId(c.id)} />
             ))}
           </View>
-          {!channels.length ? <ChatText variant="footnote">Create a channel first — drops are announced in one.</ChatText> : null}
+          {!channels.length ? <ChatText variant="footnote">Create a channel first. Drops are announced in one.</ChatText> : null}
         </FormCard>
 
         {preview ? (

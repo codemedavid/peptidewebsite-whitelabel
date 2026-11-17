@@ -48,6 +48,7 @@ import {
 } from "./moderation";
 import { loadParticipants, type MemberCard } from "./participants.server";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { previewText } from "./text";
 
 /**
@@ -292,12 +293,17 @@ export async function getModeration(actor: CommunityActor, statusParam: string |
 }
 
 export async function setModeration(actor: CommunityActor, body: unknown): Promise<Outcome<ModerationSettingsView>> {
-  const row = await prisma.branding.findUnique({ where: { tenantId: actor.tenantId }, select: { config: true } });
-  const current = (row?.config ?? {}) as Record<string, unknown>;
-  const input = parseModerationInput(body, moderationSettings(current));
+  // Parsed against the LOCKED stored settings: fields the body leaves out keep
+  // their saved value, so two moderators saving different fields both survive.
+  const out: { input?: ReturnType<typeof parseModerationInput> } = {};
+  await updateBrandingConfig(actor.tenantId, (current) => {
+    const input = parseModerationInput(body, moderationSettings(current));
+    out.input = input;
+    return input.ok ? { ...current, communityModeration: input.value } : null;
+  });
+  const input = out.input;
+  if (!input) return { kind: "invalid", message: "Invalid moderation settings." };
   if (!input.ok) return { kind: "invalid", message: input.error };
-  const config = { ...current, communityModeration: input.value };
-  await prisma.branding.upsert({ where: { tenantId: actor.tenantId }, update: { config }, create: { tenantId: actor.tenantId, config } });
   // The scan reads the cached tenant context — without this a switch-off waits out the cache.
   revalidateTenant(actor.tenantId, actor.slug);
   return { kind: "ok", value: await settingsView(input.value) };

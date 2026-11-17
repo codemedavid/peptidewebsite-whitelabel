@@ -359,7 +359,7 @@ export function AdminOrders({
         {showingTrash && (
           <div className="admin-note" style={{ marginBottom: 14 }}>
             Deleted orders wait here until you empty the trash. They count for
-            nothing while they wait — no revenue, no reports, no stock — and
+            nothing while they wait (no revenue, no reports, no stock), and
             restoring one puts it back exactly as it was.
           </div>
         )}
@@ -679,9 +679,9 @@ export function AdminOrders({
             {loading
               ? "Loading orders…"
               : showingTrash
-                ? "The trash is empty — nothing has been deleted."
+                ? "The trash is empty. Nothing has been deleted."
                 : payment === "unpaid" && !query.trim()
-                  ? "All caught up — no payments waiting to be confirmed here."
+                  ? "All caught up. No payments waiting to be confirmed here."
                   : "No orders match the current filter."}
             {!loading && !showingTrash && isFiltered(activeFilter) && (
               <div style={{ marginTop: 14 }}>

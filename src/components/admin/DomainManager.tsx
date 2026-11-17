@@ -87,7 +87,7 @@ export function DomainManager({ slug, initialDomains }: Props) {
           <p className="set-desc">
             Map a domain the customer owns (e.g. <code>shop.acme.com</code>) to this store. Before
             adding it here, attach the domain in your Vercel project and have the customer point its
-            DNS at the platform — then save the hostname below and it will route immediately.
+            DNS at the platform. Then save the hostname below and it will route immediately.
           </p>
         </div>
         <span className={"badge " + (domains.length > 0 ? "badge-success" : "badge-neutral")}>

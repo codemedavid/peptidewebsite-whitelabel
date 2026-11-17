@@ -58,6 +58,7 @@ export async function POST(req: Request, { params }: Params) {
           topic: access.topic,
           channel: access.channel,
           senderKey: actor.key,
+          senderAuthorKey: actor.authorKey,
           senderName: message.sender?.name ?? "",
           storeName: actor.storeName,
         }),

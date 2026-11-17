@@ -9,6 +9,7 @@ import { RADIUS, SPACE } from "@/theme/tokens";
 import { Field, Segmented } from "@/ui/inputs";
 import { AppText, Button, Card, SectionLabel } from "@/ui/primitives";
 import { useOnline } from "@/ui/feedback";
+import { buyerChannelLink, linkCarriesText } from "./buyer-link";
 import { OrderConflict, useUpdateOrder } from "./hooks";
 import { STATUS_META } from "./status";
 
@@ -17,6 +18,8 @@ import { STATUS_META } from "./status";
  * number) and the ready-to-send update for the order's current status. The
  * server validates the contact and writes the message (lib/orders/
  * buyer-update-message.ts), so the app and the website say the same thing.
+ * Like the website, the owner can edit the message before sending (Reset
+ * brings the server's text back); the chat link is rebuilt from the edit.
  */
 
 const APP_LABEL: Record<BuyerChannelApp, string> = { whatsapp: "WhatsApp", telegram: "Telegram" };
@@ -72,28 +75,42 @@ export function BuyerContactSection({ order }: Props) {
   }
 
   const msg = order.buyerUpdate;
+  const generated = msg?.text ?? "";
+  // The draft follows the server's text; a status/tracking change replaces any
+  // edits (they were written for the old status) — the website's rule.
+  const [draft, setDraft] = useState(generated);
+  const [basis, setBasis] = useState(generated);
+  if (basis !== generated) {
+    setBasis(generated);
+    setDraft(generated);
+  }
+  const text = draft.trim();
+  // Rebuilt from the edit; without a known channel there's nowhere to send.
+  const url = channel ? buyerChannelLink(channel, text) : msg?.url ?? null;
+  const pasteFirst = channel ? !linkCarriesText(channel.app) : !!msg?.pasteFirst;
+
   async function send() {
-    if (!msg?.url) return;
-    if (msg.pasteFirst) {
-      await Clipboard.setStringAsync(msg.text);
+    if (!url || !text) return;
+    if (pasteFirst) {
+      await Clipboard.setStringAsync(text);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     }
     setIsNudged(false);
     try {
-      await Linking.openURL(msg.url);
+      await Linking.openURL(url);
     } catch {
-      Alert.alert(`Couldn't open ${APP_LABEL[channel?.app ?? "whatsapp"]}`, "Is the app installed? The message was copied — paste it in the chat.");
-      await Clipboard.setStringAsync(msg.text);
+      Alert.alert(`Couldn't open ${APP_LABEL[channel?.app ?? "whatsapp"]}`, "Is the app installed? The message was copied. Paste it in the chat.");
+      await Clipboard.setStringAsync(text);
     }
   }
   async function copy() {
-    if (!msg) return;
-    await Clipboard.setStringAsync(msg.text);
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   }
 
   const brandTone = channel?.app === "telegram" ? "info" : "success";
-  const sendLabel = !msg?.url ? "Add a contact to send" : msg.pasteFirst ? "Copy & open Telegram" : "Send on WhatsApp";
+  const sendLabel = !url ? "Add a contact to send" : pasteFirst ? "Copy & open Telegram" : "Send on WhatsApp";
   const needsTracking = order.status === "shipped" && !order.trackingNumber.trim();
 
   return (
@@ -145,21 +162,31 @@ export function BuyerContactSection({ order }: Props) {
           <View style={[styles.msg, { borderTopColor: t.colors.border }]}>
             <View style={styles.inline}>
               <AppText variant="label" color="muted" style={{ flex: 1 }}>{`Update message · ${STATUS_META[order.status].label}`}</AppText>
-              {isNudged ? <AppText variant="caption" color={t.tone("warning").fg}>Status changed — tell the buyer</AppText> : null}
+              {isNudged ? <AppText variant="caption" color={t.tone("warning").fg}>Status changed. Tell the buyer</AppText> : null}
             </View>
             {needsTracking ? (
               <AppText variant="caption" color="muted">Add the tracking number and it will be included in this message.</AppText>
             ) : null}
-            <View style={[styles.bubble, { backgroundColor: t.colors.surfaceAlt }]}>
-              <AppText variant="body" selectable>{msg.text}</AppText>
-            </View>
+            <Field
+              label="Message to the buyer"
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              maxLength={2000}
+              hint={draft !== generated ? "Edited. Reset brings back the suggested message." : undefined}
+            />
             <Button
               label={sendLabel}
-              icon={msg.pasteFirst ? "paper-plane" : "logo-whatsapp"}
-              disabled={!msg.url}
+              icon={pasteFirst ? "paper-plane" : "logo-whatsapp"}
+              disabled={!url || !text}
               onPress={() => void send()}
             />
-            <Button label="Copy message" variant="ghost" icon="copy-outline" onPress={() => void copy()} />
+            <View style={styles.inline}>
+              <Button label="Copy message" variant="ghost" icon="copy-outline" disabled={!text} onPress={() => void copy()} style={{ flex: 1 }} />
+              {draft !== generated ? (
+                <Button label="Reset" variant="ghost" icon="refresh" onPress={() => setDraft(generated)} style={{ flex: 1 }} />
+              ) : null}
+            </View>
           </View>
         ) : null}
       </Card>
@@ -171,5 +198,4 @@ const styles = StyleSheet.create({
   saved: { flexDirection: "row", alignItems: "center", gap: SPACE.md, padding: SPACE.md, borderRadius: RADIUS.md },
   inline: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
   msg: { gap: SPACE.sm, paddingTop: SPACE.md, borderTopWidth: StyleSheet.hairlineWidth },
-  bubble: { padding: SPACE.md, borderRadius: RADIUS.md },
 });

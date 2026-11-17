@@ -5,12 +5,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useSession, useSignedIn } from "@/auth/SessionProvider";
+import { enablePush } from "@/notifications/push";
 import { useReapply } from "../hooks/useCommunityData";
 import type { MembershipCard } from "../lib/access";
 import { CHAT, GUTTER, INTER, RADII, SHADOWS, useChatBrand } from "../theme";
+import { Avatar } from "./Avatar";
 import { ChatText } from "./ChatText";
 import { ChatButton, type IconName } from "./ChatKit";
 import { Field, FormError } from "./Form";
+import { EditProfileSheet, ListRow, Section } from "./ProfileParts";
 
 const NAME_MAX = 40;
 
@@ -27,18 +30,32 @@ function StatusPill({ icon, label, fg, bg }: { icon: IconName; label: string; fg
   );
 }
 
-function SignOutButton() {
+/** Shopping works whatever the membership says — the way out of every card. */
+function ShopButton() {
+  return <ChatButton label="Start shopping" icon="storefront-outline" size="lg" onPress={() => router.navigate("/shop")} />;
+}
+
+/** Profile, notifications and the account itself — for every shopper, member or not. */
+function AccountSection({ onEdit }: { onEdit: () => void }) {
+  const { me } = useSignedIn();
   const { signOut } = useSession();
-  const confirm = () =>
-    Alert.alert("Sign out?", "You can sign back in any time to check your status.", [
+  const store = me.store.name;
+  const turnOnAlerts = async () => {
+    const res = await enablePush({ newOrders: false, storeName: store });
+    Alert.alert(res.ok ? "Notifications on" : "Notifications are off", res.ok ? `You'll hear from ${store} about your orders.` : res.message);
+  };
+  const confirmSignOut = () =>
+    Alert.alert("Sign out?", "You can sign back in any time.", [
       { text: "Cancel", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: () => void signOut() },
     ]);
   return (
-    <>
-      <ChatButton label="Sign out" tone="ghost" onPress={confirm} />
-      <ChatButton label="Delete account" tone="danger" icon="trash-outline" onPress={() => router.push("/delete-account")} />
-    </>
+    <Section title="Account">
+      <ListRow icon="person" tint={CHAT.inkMuted} label="Edit profile" detail="Photo, name and nickname" onPress={onEdit} />
+      <ListRow icon="notifications" tint={CHAT.heat} label="Notifications" detail={`Order updates from ${store}`} onPress={() => void turnOnAlerts()} />
+      <ListRow icon="log-out-outline" tint={CHAT.danger} label="Sign out" destructive onPress={confirmSignOut} />
+      <ListRow icon="trash-outline" tint={CHAT.danger} label="Delete account" detail="Removes your account and personal data" destructive onPress={() => router.push("/delete-account")} last />
+    </Section>
   );
 }
 
@@ -55,9 +72,9 @@ function PendingCard({ store }: { store: string }) {
     <Card>
       <StatusPill icon="hourglass-outline" label="Pending review" fg={CHAT.warning} bg={CHAT.warningSoft} />
       <ChatText variant="headline">{`Waiting for ${store} to approve you`}</ChatText>
-      <ChatText variant="callout">{`Signed in as ${me.actor.email}. The chats open here the moment you're approved.`}</ChatText>
+      <ChatText variant="callout">{`Signed in as ${me.actor.email}. The chats open here the moment you're approved. With notifications on, we'll tell you.`}</ChatText>
+      <ShopButton />
       <ChatButton label="Check status" tone="outline" loading={checking} onPress={() => void check()} />
-      <SignOutButton />
     </Card>
   );
 }
@@ -85,7 +102,7 @@ function RejectedCard({ reason }: { reason: string | null }) {
       <Field label="Display name" icon="person-outline" value={name} onChangeText={setName} maxLength={NAME_MAX} autoCapitalize="words" />
       <FormError message={error} />
       <ChatButton label={me.community.joinMode === "open" ? "Rejoin the community" : "Send for review again"} size="lg" loading={reapply.isPending} onPress={submit} />
-      <SignOutButton />
+      <ChatButton label="Start shopping" icon="storefront-outline" tone="outline" onPress={() => router.navigate("/shop")} />
     </Card>
   );
 }
@@ -95,35 +112,42 @@ function RevokedCard({ reason }: { reason: string | null }) {
     <Card>
       <StatusPill icon="remove-circle-outline" label="Access removed" fg={CHAT.danger} bg={CHAT.dangerSoft} />
       <ChatText variant="callout">{reason ?? "The store removed your access to the community."}</ChatText>
-      <ChatText variant="footnote">{"You can still shop on the store's website. Contact the store if you think this is a mistake."}</ChatText>
-      <SignOutButton />
+      <ChatText variant="footnote">{"You can still shop here and on the store's website. Contact the store if you think this is a mistake."}</ChatText>
+      <ShopButton />
     </Card>
   );
 }
 
-function ClosedCard() {
+/** No community to be in (the store hasn't one, or it's off): a plain account page. */
+function AccountCard() {
   return (
     <Card>
-      <ChatText variant="callout">When the store opens its community, the chats, drops and DMs show up here — no need to sign up again.</ChatText>
-      <SignOutButton />
+      <ChatText variant="callout">Shop the catalog and follow every order from here: payment, packing and tracking.</ChatText>
+      <ShopButton />
+      <ChatButton label="Your orders" icon="receipt-outline" tone="outline" onPress={() => router.navigate("/my-orders")} />
     </Card>
   );
 }
 
 const HERO: Record<MembershipCard, { icon: IconName; title: (store: string) => string; body: string }> = {
-  none: { icon: "people", title: (s) => `${s}'s community isn't open yet`, body: "You're signed in. Shopping and your orders work as usual." },
+  none: { icon: "person", title: (s) => `Your ${s} account`, body: "It works here and on the store's website." },
   pending: { icon: "time", title: () => "Your request is in review", body: "The store checks every new member. Chats unlock the moment you're approved." },
   rejected: { icon: "alert-circle", title: () => "Request not approved", body: "The store reviewed your details. See why below, fix them and send it again." },
   revoked: { icon: "lock-closed", title: () => "Community access removed", body: "Your account still works for shopping." },
 };
 
-/** The Me tab for customers who aren't approved community members (yet). */
+/**
+ * The Me tab for customers who aren't approved community members (yet): their
+ * membership status (or a plain account page when there's no community), a way
+ * to the shop, and the account section — profile, notifications, sign out.
+ */
 export function MembershipScreen({ card }: { card: MembershipCard }) {
   const insets = useSafeAreaInsets();
   const b = useChatBrand();
   const { me } = useSignedIn();
   const { reloadMe } = useSession();
   const [refreshing, setRefreshing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const hero = HERO[card];
   const reason = me.community.rejectionReason;
   const onRefresh = async () => {
@@ -139,9 +163,16 @@ export function MembershipScreen({ card }: { card: MembershipCard }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={b.onBrand} />}
       >
         <LinearGradient colors={[b.brand, b.brandDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingTop: insets.top + 28, paddingHorizontal: GUTTER, paddingBottom: 60, gap: 10 }}>
-          <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name={hero.icon} size={28} color={b.onBrand} />
-          </View>
+          {card === "none" ? (
+            // A plain account page: the shopper's own face, not a status icon.
+            <View style={{ alignSelf: "flex-start", borderWidth: 3, borderColor: "rgba(255,255,255,0.85)", borderRadius: 32 }}>
+              <Avatar name={me.account.displayName} hue={me.community.profile?.avatarHue ?? 0} imageUrl={me.account.avatarUrl} size={56} />
+            </View>
+          ) : (
+            <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name={hero.icon} size={28} color={b.onBrand} />
+            </View>
+          )}
           <ChatText accessibilityRole="header" style={{ color: b.onBrand, fontFamily: INTER.bold, fontSize: 26, lineHeight: 31, letterSpacing: -0.6 }}>
             {hero.title(me.store.name)}
           </ChatText>
@@ -157,10 +188,14 @@ export function MembershipScreen({ card }: { card: MembershipCard }) {
           ) : card === "revoked" ? (
             <RevokedCard reason={reason} />
           ) : (
-            <ClosedCard />
+            <AccountCard />
           )}
         </View>
+        <View style={{ marginTop: 20 }}>
+          <AccountSection onEdit={() => setEditing(true)} />
+        </View>
       </ScrollView>
+      <EditProfileSheet key={editing ? "open" : "closed"} visible={editing} onClose={() => setEditing(false)} showBio={false} />
     </View>
   );
 }

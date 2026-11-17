@@ -33,7 +33,7 @@ const MAX_EMAIL_TRIES = 10;
 
 const SIGN_IN: Fail = { ok: false, code: "unauthenticated", message: "Enter your email to join this group buy." };
 const BAD_EMAIL: Fail = { ok: false, code: "invalid_input", message: "Please enter a valid email address." };
-const ACCOUNT_ONLY: Fail = { ok: false, code: "forbidden", message: "Message the store if you need this — it isn't available with an email-only join." };
+const ACCOUNT_ONLY: Fail = { ok: false, code: "forbidden", message: "Message the store if you need this. It isn't available with an email-only join." };
 const NO_STORE: Fail = { ok: false, code: "not_found", message: "Store not found." };
 const SLOW_DOWN: GroupBuyJoinResult = { ok: false, code: "rate_limited", message: "Too many tries. Please wait a few minutes." };
 const NOT_ADMIN: Fail = { ok: false, code: "forbidden", message: "Sign in to the store admin with group-buy access." };

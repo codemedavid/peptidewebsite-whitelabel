@@ -41,7 +41,7 @@ export function groupBuyMoqViolation(
     .reduce((sum, line) => sum + Math.max(0, line.qty), 0);
   if (vials === 0 || vials >= moqVials) return null;
   const more = moqVials - vials;
-  return `This group buy has a minimum order of ${moqVials} vials — add ${more} more to check out.`;
+  return `This group buy has a minimum order of ${moqVials} vials. Add ${more} more to check out.`;
 }
 
 export type KitProgress = {

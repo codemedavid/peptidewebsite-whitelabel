@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { createTenantWithSetup, type TenantSetupInput } from "@/lib/tenant/setup";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
@@ -1370,14 +1371,13 @@ async function callUploadHeroImage(req: NextRequest, args: Record<string, unknow
 
   try {
     const heroImage = await resolveMcpImage(tenant.id, image, "hero");
-    const result = await withTenant(tenant.id, async (db) => {
-      const branding = await db.branding.findUnique({
-        where: { tenantId: tenant.id },
-        select: { config: true },
-      });
-      const current = plainObject(branding?.config) ?? {};
+    // Merged into the LOCKED config: the stored hero fields fill whatever the
+    // call leaves unset, and a concurrent save to another key survives.
+    let heroMedia: ReturnType<typeof normalizeHeroMedia> | undefined;
+    await updateBrandingConfig(tenant.id, (locked) => {
+      const current = plainObject(locked) ?? {};
       const existingMedia = plainObject(current.heroMedia) ?? {};
-      const heroMedia = normalizeHeroMedia({
+      heroMedia = normalizeHeroMedia({
         heroMedia: {
           ...existingMedia,
           mode: "image",
@@ -1392,23 +1392,17 @@ async function callUploadHeroImage(req: NextRequest, args: Record<string, unknow
           linkUrl: args.linkUrl ?? existingMedia.linkUrl ?? "",
         },
       });
-      const config = { ...current, heroMedia };
-
-      await db.branding.upsert({
-        where: { tenantId: tenant.id },
-        update: { config: config as Prisma.InputJsonValue },
-        create: { tenantId: tenant.id, config: config as Prisma.InputJsonValue },
-      });
-
-      return {
-        tenant,
-        heroMedia,
-        assets: {
-          heroImageUrl: heroImage.url,
-          heroImageFileId: heroImage.fileId ?? null,
-        },
-      };
+      return { ...current, heroMedia };
     });
+
+    const result = {
+      tenant,
+      heroMedia,
+      assets: {
+        heroImageUrl: heroImage.url,
+        heroImageFileId: heroImage.fileId ?? null,
+      },
+    };
 
     revalidateTenant(tenant.id, tenant.slug);
 

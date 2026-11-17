@@ -61,7 +61,7 @@ const BODY: Record<OrderStatus, Lines> = {
     "It will be handed to the courier soon.",
   ],
   shipped: (f, hi, order) => [
-    `${hi} 🚚 Good news — your order ${order} has been shipped!`,
+    `${hi} 🚚 Good news, your order ${order} has been shipped!`,
     ...shippedLines(f.courier.trim(), f.trackingNumber.trim()),
   ],
   delivered: (f, hi, order) => [
@@ -82,7 +82,7 @@ export function buildBuyerUpdateMessage(f: BuyerUpdateFacts): string {
   const store = f.storeName.trim();
   const build = BODY[f.status as OrderStatus] ?? BODY.new;
   const lines = build({ ...f, storeName: store || "our store" }, hi, order);
-  const signOff = store ? ["", `— ${store}`] : [];
+  const signOff = store ? ["", store] : [];
   return [...lines, ...signOff]
     .map((l) => l.replace(/ {2,}/g, " "))
     .join("\n")

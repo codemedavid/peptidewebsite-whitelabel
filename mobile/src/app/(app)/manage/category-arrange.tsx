@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { Alert, FlatList, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
+import { Image } from "expo-image";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { adminBridge, unwrap, type AdminBrand } from "@/features/admin/bridge";
 import { IconButton } from "@/features/admin/catalog/components";
 import { catalogKeys, useAdminBrand, useCatalogProducts } from "@/features/admin/catalog/hooks";
 import { brandCategories, type CatalogProduct } from "@/features/admin/catalog/model";
-import { categoryOrderOf, categoryProducts, moveId } from "@/features/admin/catalog/category-arrange";
+import { categoryOrderOf, categoryProducts, moveId, OTHER_SECTION_ID, OTHER_SECTION_LABEL } from "@/features/admin/catalog/category-arrange";
 import { shopKeys } from "@/features/shop/api";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE } from "@/theme/tokens";
@@ -24,7 +25,8 @@ export default function CategoryArrangeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const brandQ = useAdminBrand();
   const productsQ = useCatalogProducts(brandQ.data);
-  const label = brandQ.data ? brandCategories(brandQ.data).find((c) => c.id === id)?.label : undefined;
+  const label =
+    id === OTHER_SECTION_ID ? OTHER_SECTION_LABEL : brandQ.data ? brandCategories(brandQ.data).find((c) => c.id === id)?.label : undefined;
   const title = <Stack.Screen options={{ title: label ? `Arrange “${label}”` : "Arrange products" }} />;
 
   if (brandQ.isPending || productsQ.isPending) return <>{title}<SkeletonList rows={5} /></>;
@@ -108,9 +110,24 @@ function Arranger({ categoryId, brand, products }: { categoryId: string; brand: 
             ]}
           >
             <AppText variant="label" color="faint" style={styles.num}>{index + 1}</AppText>
-            <AppText variant="bodyStrong" numberOfLines={2} style={{ flex: 1 }}>{item.name}</AppText>
+            {item.image ? (
+              <Image source={{ uri: item.image }} style={[styles.thumb, { backgroundColor: t.colors.surfaceAlt }]} contentFit="cover" />
+            ) : (
+              <View style={[styles.thumb, { backgroundColor: t.colors.surfaceAlt }]} />
+            )}
+            <View style={{ flex: 1, gap: 2 }}>
+              <AppText variant="bodyStrong" numberOfLines={2}>{item.name}</AppText>
+              {item.available === false ? <AppText variant="caption" color="muted">Hidden</AppText> : null}
+            </View>
+            <IconButton icon="arrow-up-circle-outline" label={`Move ${item.name} to the top`} disabled={index === 0} onPress={() => move(item.id, -index)} />
             <IconButton icon="chevron-up" label={`Move ${item.name} up`} disabled={index === 0} onPress={() => move(item.id, -1)} />
             <IconButton icon="chevron-down" label={`Move ${item.name} down`} disabled={index === rows.length - 1} onPress={() => move(item.id, 1)} />
+            <IconButton
+              icon="arrow-down-circle-outline"
+              label={`Move ${item.name} to the bottom`}
+              disabled={index === rows.length - 1}
+              onPress={() => move(item.id, rows.length - 1 - index)}
+            />
           </View>
         )}
       />
@@ -123,5 +140,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, borderWidth: StyleSheet.hairlineWidth, marginTop: -StyleSheet.hairlineWidth },
   first: { borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg },
   last: { borderBottomLeftRadius: RADIUS.lg, borderBottomRightRadius: RADIUS.lg },
+  thumb: { width: 40, height: 40, borderRadius: RADIUS.sm },
   num: { width: 24, textAlign: "right", fontVariant: ["tabular-nums"] },
 });

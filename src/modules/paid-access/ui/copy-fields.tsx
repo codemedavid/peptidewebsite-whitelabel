@@ -18,7 +18,7 @@ const TEXTS: { key: TextKey; label: string; placeholder: string; max: number; lo
     long: true,
   },
   { key: "button", label: "Button", placeholder: "Get access", max: COPY_LIMITS.button },
-  { key: "note", label: "Note under the button", placeholder: "Already approved? Verify your email on the next screen — no account needed.", max: COPY_LIMITS.note },
+  { key: "note", label: "Note under the button", placeholder: "Already approved? Verify your email on the next screen. No account needed.", max: COPY_LIMITS.note },
 ];
 
 const STEP_PLACEHOLDER: Record<PaidAccessStep, string> = { form: "Application form", payment: `Pay ${AMOUNT_TOKEN}`, approval: "Admin approval" };

@@ -132,6 +132,7 @@ export default function PromoScreen() {
                   isNew={editing.isNew}
                   currency={currency}
                   grants={grants}
+                  dualMarket={brand.dualMarket === true}
                   saving={list.saving}
                   onCancel={() => setEditing(null)}
                   onSave={async (row) => {
@@ -195,6 +196,7 @@ function PromoCard({
       lines={[
         `Usage: ${Number(promo.used) || 0} / ${limit ? String(limit) : "∞"}`,
         `Expiry: ${expiry ? new Date(expiry).toLocaleDateString() : "Never"}`,
+        Number(promo.minPurchase) > 0 ? `Min. ${currency}${Number(promo.minPurchase).toLocaleString()}` : null,
       ]}
       badges={
         <>
@@ -221,6 +223,7 @@ function PromoEditor({
   isNew,
   currency,
   grants,
+  dualMarket,
   saving,
   onCancel,
   onSave,
@@ -228,6 +231,8 @@ function PromoEditor({
   initial: Row;
   isNew: boolean;
   currency: string;
+  /** Dual-currency store: International (USD) value + minimum. */
+  dualMarket: boolean;
   grants: PromoEngineGrants;
   saving: boolean;
   onCancel: () => void;
@@ -242,6 +247,8 @@ function PromoEditor({
     expiry: str(initial.expiry),
     showInCart: initial.showInCart === true,
     campaignOnly: initial.campaignOnly === true,
+    usdValue: Number(initial.usdValue) > 0 ? String(initial.usdValue) : "",
+    usdMin: Number(initial.usdMinPurchase) > 0 ? String(initial.usdMinPurchase) : "",
   };
   const [code, setCode] = useState(start.code);
   const [type, setType] = useState<PromoType>(start.type);
@@ -251,13 +258,15 @@ function PromoEditor({
   const [expiry, setExpiry] = useState(start.expiry);
   const [showInCart, setShowInCart] = useState(start.showInCart);
   const [campaignOnly, setCampaignOnly] = useState(start.campaignOnly);
+  const [usdValue, setUsdValue] = useState(start.usdValue);
+  const [usdMin, setUsdMin] = useState(start.usdMin);
 
   // The web's date input can only hold a real YYYY-MM-DD; a typed one must be too.
   const expiryError = expiry.trim() && !isIsoDate(expiry.trim()) ? "Use the format YYYY-MM-DD, e.g. 2026-12-31." : null;
   const canSave = !!code.trim() && Number(value) > 0 && !expiryError;
   const dirty =
     code !== start.code || type !== start.type || value !== start.value || minP !== start.minP || limit !== start.limit || expiry !== start.expiry ||
-    showInCart !== start.showInCart || campaignOnly !== start.campaignOnly;
+    showInCart !== start.showInCart || campaignOnly !== start.campaignOnly || usdValue !== start.usdValue || usdMin !== start.usdMin;
 
   return (
     <EditorSheet
@@ -277,6 +286,10 @@ function PromoEditor({
           minPurchase: Number(minP) || 0,
           usageLimit: limit.trim() !== "" ? Number(limit) : null,
           expiry: expiry.trim() || null,
+          // Only positive USD amounts are stored; a percent code never keeps a
+          // USD value (as on the website, where switching type clears it).
+          usdValue: type === "fixed" && Number(usdValue) > 0 ? Number(usdValue) : undefined,
+          usdMinPurchase: Number(usdMin) > 0 ? Number(usdMin) : undefined,
           // Kept as-is when the grant is off, so revoking a feature never
           // silently rewrites a code on its next edit (as on the website).
           showInCart: (grants.ladder ? showInCart : start.showInCart) || undefined,
@@ -303,6 +316,24 @@ function PromoEditor({
       />
       <Field label="Value" value={value} onChangeText={setValue} keyboardType="decimal-pad" />
       <Field label={`Min. Purchase (${currency})`} value={minP} onChangeText={setMinP} keyboardType="decimal-pad" />
+      {dualMarket ? (
+        <>
+          {type === "fixed" ? (
+            <Field label="International value (USD)" value={usdValue} onChangeText={setUsdValue} keyboardType="decimal-pad" />
+          ) : null}
+          <Field
+            label="International min. purchase (USD)"
+            value={usdMin}
+            onChangeText={setUsdMin}
+            keyboardType="decimal-pad"
+            hint={
+              type === "fixed"
+                ? "Leave the USD value blank and this code only works in the Local cart."
+                : "A percentage code works in both carts; the USD minimum applies to International orders."
+            }
+          />
+        </>
+      ) : null}
       <Field label="Usage Limit" value={limit} onChangeText={setLimit} keyboardType="number-pad" placeholder="No limit" />
       <Field
         label="Expiry Date"

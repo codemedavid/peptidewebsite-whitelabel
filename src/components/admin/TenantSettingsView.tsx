@@ -532,7 +532,7 @@ export function TenantSettingsView({
         <div>
           <h2 className="set-title">Settings</h2>
           <p className="set-subtitle">
-            Configure how this tenant&apos;s storefront behaves — order numbering, checkout channels, and the
+            Configure how this tenant&apos;s storefront behaves: order numbering, checkout channels, and the
             copy customers see at the moment of purchase.
           </p>
         </div>
@@ -734,7 +734,7 @@ export function TenantSettingsView({
                 <h2>Contact channels</h2>
                 <p className="set-desc">
                   Customers place orders by messaging the store. Turn on the channels you use and set each
-                  destination — they appear as buttons at checkout.
+                  destination. They appear as buttons at checkout.
                 </p>
               </div>
               <span className={"badge " + (enabledCount > 0 ? "badge-success" : "badge-neutral")}>
@@ -746,7 +746,7 @@ export function TenantSettingsView({
                 <div className="set-notice" style={{ marginBottom: 14 }}>
                   <Ic.AlertCircle />
                   <div>
-                    No channels enabled — storefront checkout is currently <b>disabled</b>. Enable at least one
+                    No channels enabled. Storefront checkout is currently <b>disabled</b>. Enable at least one
                     channel to accept orders.
                   </div>
                 </div>
@@ -858,7 +858,7 @@ export function TenantSettingsView({
                 <div>
                   <div className="set-row-label">Require proof of payment</div>
                   <div className="set-row-help">
-                    When on, the proof upload is mandatory at checkout. Turn off to make it optional —
+                    When on, the proof upload is mandatory at checkout. Turn off to make it optional:
                     customers can place an order without attaching a screenshot.
                   </div>
                 </div>
@@ -989,7 +989,7 @@ export function TenantSettingsView({
                 <span className="set-eyebrow">Storefront</span>
                 <h2>Notice modal</h2>
                 <p className="set-desc">
-                  A pop-up shown to customers on every visit to this store — a
+                  A pop-up shown to customers on every visit to this store: a
                   disclaimer, delivery cut-offs, or any must-read note. Granting it
                   here unlocks the store owner&apos;s <strong>Notice Modal</strong>{" "}
                   editor, where they turn it on and write the copy. It stays hidden
@@ -1043,7 +1043,7 @@ export function TenantSettingsView({
                 <span className="set-eyebrow">Group buys</span>
                 <h2>Group buy payment</h2>
                 <p className="set-desc">
-                  When this store&apos;s customers pay for a group-buy order — on the website and in
+                  When this store&apos;s customers pay for a group-buy order, on the website and in
                   the PepWorld app alike. The store owner can change it too, under Group Buys.
                 </p>
               </div>
@@ -1091,7 +1091,7 @@ export function TenantSettingsView({
                 <span className="set-eyebrow">Checkout</span>
                 <h2>Admin fee</h2>
                 <p className="set-desc">
-                  A flat charge added on top of the order total at checkout — e.g. a processing or
+                  A flat charge added on top of the order total at checkout, e.g. a processing or
                   service fee. Customers see it as its own line in the totals; it&apos;s included in
                   the order&apos;s total everywhere (checkout, tracking, store admin, analytics).
                 </p>
@@ -1417,7 +1417,7 @@ export function TenantSettingsView({
                 <h2>Admin access</h2>
                 <p className="set-desc">
                   The email and password the store owner signs in with at{" "}
-                  <code>{domain}/#admin</code>. Both are required — you set them here and pass
+                  <code>{domain}/#admin</code>. Both are required. You set them here and pass
                   them to the owner. Separate from your platform login.
                 </p>
               </div>
@@ -1437,7 +1437,7 @@ export function TenantSettingsView({
                 <div className="set-notice" style={{ marginBottom: 14 }}>
                   <Ic.AlertCircle />
                   <div>
-                    No sign-in set — nobody can open this store&apos;s admin until you set both an
+                    No sign-in set. Nobody can open this store&apos;s admin until you set both an
                     email and a password below.
                   </div>
                 </div>
@@ -1474,7 +1474,7 @@ export function TenantSettingsView({
                   <div className="set-row-help">
                     {hasAdminPassword
                       ? "At least 6 characters. Leave blank to keep the current password."
-                      : "At least 6 characters. Stored hashed — you won't be able to read it back."}
+                      : "At least 6 characters. Stored hashed, so you won't be able to read it back."}
                   </div>
                 </div>
                 <div className="set-row-control">

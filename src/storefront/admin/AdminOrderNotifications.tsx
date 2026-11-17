@@ -42,7 +42,7 @@ export function AdminOrderNotifications({ brand, onBack }: { brand: Brand; onBac
       setTweak({ orderNotifications: value });
       toast(enabled ? "Order alerts on" : "Order alerts off");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -111,7 +111,7 @@ export function AdminOrderNotifications({ brand, onBack }: { brand: Brand; onBac
               <div className="admin-field__hint">
                 {email.trim() && !emailValid
                   ? "That doesn't look like a valid email address."
-                  : "Any inbox works — your Gmail, a shared team address, etc."}
+                  : "Any inbox works: your Gmail, a shared team address, etc."}
               </div>
             </div>
           )}

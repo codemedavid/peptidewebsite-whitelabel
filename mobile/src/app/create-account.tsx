@@ -89,7 +89,7 @@ export default function CreateAccount() {
       const reason = e instanceof ApiError ? ` (${e.message})` : "";
       Alert.alert(
         "Photo not added",
-        `Your account is ready, but your photo didn't upload${reason}. You can add it from your profile.`,
+        `Your account is ready, but your photo didn't upload${reason}. You can add it from Me → Edit profile.`,
       );
     }
   }

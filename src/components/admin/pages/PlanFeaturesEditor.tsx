@@ -153,7 +153,7 @@ export function PlanFeaturesEditor({
           <h1 className="page-title">Package contents</h1>
           <p className="page-sub">
             Choose which functionalities each package includes. Saving updates every tenant on that
-            plan — individual per-tenant overrides still win. Each package is edited independently.
+            plan. Individual per-tenant overrides still win. Each package is edited independently.
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -255,7 +255,7 @@ export function PlanFeaturesEditor({
                             <span
                               className="badge badge-accent"
                               style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 4 }}
-                              title="New functionality — store owners see a 'New' tag while this is on. Assign it to packages, then dismiss when ready."
+                              title="New functionality. Store owners see a 'New' tag while this is on. Assign it to packages, then dismiss when ready."
                             >
                               New
                               <button

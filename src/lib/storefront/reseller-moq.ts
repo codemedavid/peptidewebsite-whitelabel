@@ -58,7 +58,7 @@ export function resellerMoqViolation(
     if (!cfg) continue; // no wholesale tier → nothing to enforce
     if (qty >= cfg.moq) continue;
     const short = cfg.moq - qty;
-    return `${live.name} has a minimum reseller order of ${cfg.moq.toLocaleString()} units — your cart has ${qty.toLocaleString()}. Add ${short.toLocaleString()} more to check out at the reseller price.`;
+    return `${live.name} has a minimum reseller order of ${cfg.moq.toLocaleString()} units, and your cart has ${qty.toLocaleString()}. Add ${short.toLocaleString()} more to check out at the reseller price.`;
   }
   return null;
 }

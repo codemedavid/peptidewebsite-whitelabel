@@ -1,7 +1,6 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { FEATURES } from "@/lib/features/catalog";
@@ -17,6 +16,7 @@ import type {
 } from "@/lib/mobile/contract";
 import { storeDisplayName } from "@/lib/mobile/store-name";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { AUTO_REVIEWER, admitCustomer, joinModeOf } from "./admission.server";
 import { isCommunityModerator, type CommunityActor } from "./actor.server";
 import { STORE_KEY, avatarHue, customerKey, parseParticipantKey } from "./keys";
@@ -25,6 +25,7 @@ import { loadParticipants, publicParticipant, storeParticipant } from "./partici
 import { findOwnUpload } from "./uploads.server";
 import { communityTags } from "./tags";
 import { previewFor, previewPolicyOf } from "./preview";
+import { notifyMembersApproved } from "./push.server";
 import { parseDisplayName, parseProfileUpdate, parseReviewInput, type Parsed } from "./validate";
 import { communityWelcome, finalizeWelcome, parseWelcomeInput, videoPosterUrl } from "./welcome";
 
@@ -66,6 +67,9 @@ export async function buildCommunityMe(principal: Principal): Promise<CommunityM
       pendingApplications: pending,
     };
   }
+
+  // An app guest never joins: the community stays locked until they sign up.
+  if (principal.ctx.customer.guest) return none;
 
   // The first sign-in joins (or applies); an open community also admits
   // people who applied while the store still reviewed each member.
@@ -152,7 +156,8 @@ export type ReviewOutcome =
 export async function reviewMember(actor: CommunityActor, customerId: string, body: unknown): Promise<ReviewOutcome> {
   const input = parseReviewInput(body);
   if (!input.ok) return { kind: "invalid", message: input.error };
-  return withTenant(actor.tenantId, async (db): Promise<ReviewOutcome> => {
+  let newlyApproved = false;
+  const outcome = await withTenant(actor.tenantId, async (db): Promise<ReviewOutcome> => {
     const row = await db.communityMember.findFirst({ where: { customerId }, include: { customer: { select: { email: true, phone: true } } } });
     if (!row) return { kind: "not_found" };
     if (!actor.isTeam) {
@@ -163,6 +168,7 @@ export async function reviewMember(actor: CommunityActor, customerId: string, bo
     // A ban also locked the account — only unbanning (Safety) gives both back.
     if (row.bannedAt && input.value.approve) return { kind: "invalid", message: "This member is banned. Unban them from Safety first." };
     const status: MemberStatus = input.value.approve ? "approved" : row.status === "approved" ? "revoked" : "rejected";
+    newlyApproved = status === "approved" && row.status !== "approved";
     const now = new Date();
     await db.communityMember.updateMany({
       where: { customerId },
@@ -191,18 +197,11 @@ export async function reviewMember(actor: CommunityActor, customerId: string, bo
       },
     };
   });
-}
-
-/**
- * Merge keys into branding.config. Reads the CURRENT config (not the cached
- * context) so a concurrent website edit to another branding field is never
- * overwritten by this write.
- */
-async function patchBrandingConfig(tenantId: string, patch: Record<string, unknown>): Promise<void> {
-  const row = await prisma.branding.findUnique({ where: { tenantId }, select: { config: true } });
-  const current = (row?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, ...patch } as Prisma.InputJsonValue;
-  await prisma.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
+  // After the transaction: a push is a network call and must never hold it open.
+  if (outcome.kind === "ok" && newlyApproved) {
+    await notifyMembersApproved({ tenantId: actor.tenantId, customerIds: [customerId], storeName: storeDisplayName(actor.tenant) });
+  }
+  return outcome;
 }
 
 /**
@@ -286,6 +285,9 @@ export async function setMemberAdmin(actor: CommunityActor, customerId: string, 
   });
 }
 
+/** Most "you're in" pushes one switch to open sends. */
+const MAX_ADMIT_PUSH = 500;
+
 /**
  * Switch who can join. Going open lets everyone still waiting in at once;
  * going to approval only affects people who sign in from now on.
@@ -294,16 +296,24 @@ export async function setJoinMode(actor: CommunityActor, body: unknown): Promise
   const joinMode = body && typeof body === "object" ? (body as Record<string, unknown>).joinMode : undefined;
   if (!isJoinMode(joinMode)) return { ok: false, error: "Choose open or approval." };
   await patchBrandingConfig(actor.tenantId, { communityJoin: joinMode });
+  let admitted: string[] = [];
   if (joinMode === "open") {
     const now = new Date();
-    await withTenant(actor.tenantId, (db) =>
-      db.communityMember.updateMany({
+    admitted = await withTenant(actor.tenantId, async (db) => {
+      const waiting = await db.communityMember.findMany({ where: { status: "pending" }, select: { customerId: true }, take: MAX_ADMIT_PUSH });
+      await db.communityMember.updateMany({
         where: { status: "pending" },
         data: { status: "approved", reason: null, reviewedAt: now, reviewedBy: AUTO_REVIEWER },
-      }),
-    );
+      });
+      return waiting.map((m) => m.customerId);
+    });
   }
   revalidateTenant(actor.tenantId, actor.slug);
+  // Everyone who was waiting hears they're in (capped: a push is a courtesy, the
+  // approval itself already happened for all of them).
+  if (admitted.length > 0) {
+    await notifyMembersApproved({ tenantId: actor.tenantId, customerIds: admitted, storeName: storeDisplayName(actor.tenant) });
+  }
   return { ok: true, value: joinMode };
 }
 

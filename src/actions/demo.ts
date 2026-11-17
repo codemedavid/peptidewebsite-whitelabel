@@ -32,7 +32,7 @@ export async function createTenantDemoAction(
   _prev: CreateTenantState,
   formData: FormData,
 ): Promise<CreateTenantState> {
-  if (!isDemoMode()) return { error: "Not in demo mode — use the database-backed flow." };
+  if (!isDemoMode()) return { error: "Not in demo mode. Use the database-backed flow." };
 
   const name = String(formData.get("name") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
@@ -56,7 +56,7 @@ export async function saveOrderFormatDemoAction(
   slug: string,
   format: OrderNumberFormat,
 ): Promise<{ ok: true } | { error: string }> {
-  if (!isDemoMode()) return { error: "Not in demo mode — use the database-backed flow." };
+  if (!isDemoMode()) return { error: "Not in demo mode. Use the database-backed flow." };
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
   const prefixError = validatePrefix(format.prefix.toUpperCase());
@@ -72,7 +72,7 @@ export async function saveBrandingDemoAction(
   slug: string,
   branding: DemoBranding,
 ): Promise<{ ok: true } | { error: string }> {
-  if (!isDemoMode()) return { error: "Not in demo mode — use the database-backed flow." };
+  if (!isDemoMode()) return { error: "Not in demo mode. Use the database-backed flow." };
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
   saveDemoBranding(slug, branding);
@@ -86,7 +86,7 @@ export async function saveFeaturesDemoAction(
   slug: string,
   map: DemoFeatureMap,
 ): Promise<{ ok: true } | { error: string }> {
-  if (!isDemoMode()) return { error: "Not in demo mode — use the database-backed flow." };
+  if (!isDemoMode()) return { error: "Not in demo mode. Use the database-backed flow." };
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
   saveDemoFeatures(slug, map);

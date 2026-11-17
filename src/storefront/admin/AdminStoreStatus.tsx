@@ -52,7 +52,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
       setTweak({ storeStatus: draft });
       toast(open ? "Store is open" : "Store is closed");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -90,7 +90,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
           </h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
             Closing stops all orders without hiding your shop. Customers can still
-            browse your products and see your prices — every &ldquo;Add to
+            browse your products and see your prices. Every &ldquo;Add to
             Cart&rdquo; button just reads <strong>Closed</strong> until you
             reopen.
           </div>
@@ -102,7 +102,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
                 checked={!open}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOpen(!e.target.checked)}
               />
-              <span>Close my store — stop taking orders</span>
+              <span>Close my store (stop taking orders)</span>
             </label>
             <div className="admin-field__hint">
               Leave this off for business as usual. Turning it on takes effect
@@ -122,7 +122,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
               value={headline}
               maxLength={MAX_STORE_CLOSED_HEADLINE}
               onChange={(e) => setHeadline(e.target.value)}
-              placeholder={`Hello — ${brand.name || "your store"} is currently closed`}
+              placeholder={`Hello! ${brand.name || "your store"} is currently closed`}
             />
             <div className="admin-field__hint">
               Leave this blank and we&rsquo;ll greet your customers by your
@@ -138,7 +138,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
               value={message}
               maxLength={MAX_STORE_CLOSED_MESSAGE}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="We're restocking this week — back open Monday 9am. Thanks for your patience!"
+              placeholder="We're restocking this week. Back open Monday 9am. Thanks for your patience!"
             />
             <div className="admin-field__hint">
               Tell customers why you&rsquo;re closed and when you&rsquo;ll be
@@ -149,7 +149,7 @@ export function AdminStoreStatus({ brand, onBack }: { brand: Brand; onBack: () =
           <h2 className="admin-form__section" style={{ marginTop: 22 }}>Preview</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 12 }}>
             {open
-              ? "Nothing shows while your store is open — this is what customers would see if you closed it."
+              ? "Nothing shows while your store is open. This is what customers would see if you closed it."
               : "This banner sits above your catalog on every page."}
           </div>
           {/* The real banner markup, so the preview and the storefront can't

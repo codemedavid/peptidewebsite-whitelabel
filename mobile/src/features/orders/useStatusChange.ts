@@ -26,7 +26,7 @@ export function useStatusChange(order: OrderDetail | undefined) {
   function reportError(e: unknown) {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
     if (e instanceof OrderConflict) {
-      Alert.alert("This order just changed", "Someone else updated it. We've loaded the latest version — check it before trying again.");
+      Alert.alert("This order just changed", "Someone else updated it. We've loaded the latest version. Check it before trying again.");
     } else {
       Alert.alert("Couldn't update the order", e instanceof Error ? e.message : "Please try again.");
     }

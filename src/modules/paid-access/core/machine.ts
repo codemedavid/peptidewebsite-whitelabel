@@ -101,7 +101,7 @@ const RULES: Readonly<Record<PaidAccessEvent, Rule>> = {
     to: () => "cancelled",
     guard: (from, steps) =>
       from === "approval_pending" && paidBeforeApproval(steps)
-        ? "You've already paid — ask the store to cancel and refund you."
+        ? "You've already paid. Ask the store to cancel and refund you."
         : null,
   },
   revoke: { from: ["active"], by: ["admin"], to: () => "revoked", needsReason: true },
@@ -146,7 +146,7 @@ function actorRefusal(rule: Rule): string {
   if (rule.by.includes("admin")) return "Only a store admin can do that.";
   if (rule.by.includes("webhook")) return "Only the payment provider can confirm an online payment.";
   if (rule.by.includes("customer")) return "Only the member can do that.";
-  return "That happens automatically — it can't be done by hand.";
+  return "That happens automatically. It can't be done by hand.";
 }
 
 /** Decide one move. Never throws: wrong status, actor or input is a refusal. */
@@ -164,11 +164,11 @@ export function planTransition(input: TransitionInput): TransitionResult {
   }
   if (!rule.by.includes(actor.kind)) return { ok: false, error: actorRefusal(rule) };
   if (actor.kind === "admin" && input.selfReview) {
-    return { ok: false, error: "You can't review your own membership — ask another admin." };
+    return { ok: false, error: "You can't review your own membership. Ask another admin." };
   }
 
   const reason = typeof input.reason === "string" ? input.reason.trim().slice(0, REASON_MAX) : "";
-  if (rule.needsReason && !reason) return { ok: false, error: "Please give a reason — the member will see it." };
+  if (rule.needsReason && !reason) return { ok: false, error: "Please give a reason. The member will see it." };
 
   const refusal = rule.guard?.(from, snapshot.steps);
   if (refusal) return { ok: false, error: refusal };

@@ -16,6 +16,11 @@ import * as upgrade from "@/actions/upgrade";
 import * as storefrontGate from "@/actions/storefront-gate";
 import * as customerAccounts from "@/actions/customer-accounts";
 import * as promoEngine from "@/actions/promo-engine";
+import * as articles from "@/actions/articles";
+import * as assessment from "@/actions/assessment";
+import * as intlLocal from "@/actions/intl-local";
+import * as accountGate from "@/actions/account-gate";
+import * as contactMethods from "@/actions/contact-methods";
 import type { MobileContext } from "./auth";
 import { isAdminSubject } from "./sessions";
 
@@ -151,6 +156,10 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
   getStoreCustomerProfileAction: customerAccounts.getStoreCustomerProfileAction,
   linkStoreCustomerOrdersAction: customerAccounts.linkStoreCustomerOrdersAction,
 
+  // actions/contact-methods.ts (both open with requireStoreOwner)
+  getStoreContactMethodsAction: contactMethods.getStoreContactMethodsAction,
+  saveStoreContactMethodsAction: contactMethods.saveStoreContactMethodsAction,
+
   // actions/subscription-payments.ts (tenant side)
   submitSubscriptionPaymentAction: subscriptionPayments.submitSubscriptionPaymentAction,
   getBillingPaymentInfoAction: subscriptionPayments.getBillingPaymentInfoAction,
@@ -168,6 +177,37 @@ export const BRIDGED_ACTIONS: Readonly<Record<string, AnyAction>> = Object.freez
 
   // actions/storefront-export.ts
   exportStoreDataAction: storefrontExport.exportStoreDataAction,
+
+  // actions/articles.ts (admin side — requireStaffPermission("articles") + the
+  // SITE_BLOG grant). getPublishedArticleAction is shopper-facing: not here.
+  listArticlesAdminAction: articles.listArticlesAdminAction,
+  saveArticleAction: articles.saveArticleAction,
+  deleteArticleAction: articles.deleteArticleAction,
+
+  // actions/assessment.ts (admin side — requireStaffPermission("assessments") +
+  // the STORE_ASSESSMENT grant). submitAssessmentAction is shopper-facing: not here.
+  listAssessmentResponsesAction: assessment.listAssessmentResponsesAction,
+  updateAssessmentStatusAction: assessment.updateAssessmentStatusAction,
+  deleteAssessmentResponseAction: assessment.deleteAssessmentResponseAction,
+  saveAssessmentConfigAction: assessment.saveAssessmentConfigAction,
+
+  // actions/intl-local.ts (Website Layout + International market — each opens
+  // with requireStaffPermission("site-layout" | "shipping")). The public
+  // subscribeNewsletterAction is not here.
+  saveIntlLocalAction: intlLocal.saveIntlLocalAction,
+  saveIntlMarketAction: intlLocal.saveIntlMarketAction,
+  listNewsletterSubscribersAction: intlLocal.listNewsletterSubscribersAction,
+  unsubscribeNewsletterAction: intlLocal.unsubscribeNewsletterAction,
+
+  // actions/account-gate.ts (members-only store switch — requireStaffPermission("customers"))
+  getAccountGateAction: accountGate.getAccountGateAction,
+  setAccountGateAction: accountGate.setAccountGateAction,
+
+  // actions/group-buys.ts — Orders hub folders + member tracker
+  // (requireStaffPermission("orders")) and the dashboard panel (requireGroupBuyAdmin).
+  listOrderFoldersAction: groupBuys.listOrderFoldersAction,
+  getGroupBuyParticipationAction: groupBuys.getGroupBuyParticipationAction,
+  getDashboardGroupBuyAction: groupBuys.getDashboardGroupBuyAction,
 });
 
 /** FormData actions (image uploads) — reached only through /admin/upload/:fn. */

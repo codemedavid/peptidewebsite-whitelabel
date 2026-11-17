@@ -41,11 +41,11 @@ export function PayLaterSection({
       </View>
       {addOn ? (
         <Notice tone="success" icon="add-circle-outline">
-          {`Added to your ${round} invoice — no extra shipping fee.`}
+          {`Added to your ${round} invoice, with no extra shipping fee.`}
         </Notice>
       ) : shippingFee > 0 ? (
         <Notice tone="info" icon="cube-outline">
-          {`Shipping is ${money(shippingFee, currency)} once for the whole group buy. Order again before it closes and it joins the same invoice — no extra shipping.`}
+          {`Shipping is ${money(shippingFee, currency)} once for the whole group buy. Order again before it closes and it joins the same invoice, with no extra shipping.`}
         </Notice>
       ) : null}
     </FormSection>

@@ -17,6 +17,9 @@ import { brandLoaderDesign, brandLoaderVars } from "@/lib/storefront/brand-loade
 import { GateHeartbeat } from "@/storefront/components/GateHeartbeat";
 import { hasFeature } from "@/lib/features/entitlements";
 import { PresenceBeacon } from "@/storefront/components/PresenceBeacon";
+import { AppPromoBar } from "@/storefront/components/AppPromoBar";
+import { normalizeAppPromo, showAppPromo } from "@/lib/storefront/app-promo";
+import { customerAppOpen } from "@/lib/mobile/customer-app";
 import { evaluateAccountGate } from "@/lib/auth/account-gate-enforcement";
 import { AccountGate } from "@/storefront/components/AccountGate";
 import { isAccountGateExemptPath } from "@/lib/storefront/account-gate";
@@ -49,7 +52,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // Falls back to a generic vertical default when the tenant hasn't set one.
   const description =
     (typeof config.metaDescription === "string" && config.metaDescription.trim()) ||
-    `${name} — premium peptides with third-party certificates of analysis.`;
+    `${name}: premium peptides with third-party certificates of analysis.`;
 
   return {
     title: { default: name, template: `%s · ${name}` },
@@ -214,6 +217,23 @@ export default async function StorefrontLayout({
   const isStorefrontHome =
     pathname === "/" || pathname.startsWith("/p/") || pathname.startsWith("/protocols/");
 
+  // "Get our app" bar (lib/storefront/app-promo.ts): the owner's switch, and
+  // only while the store's customer app is open. Checked live, below the walls.
+  const appPromo = normalizeAppPromo((branding?.config as { appPromo?: unknown } | null)?.appPromo);
+  const appPromoBar =
+    appPromo.enabled && showAppPromo(appPromo, await customerAppOpen(tenantId), pathname) ? (
+      <AppPromoBar
+        storeName={name}
+        colors={(() => {
+          // The same Brand the storefront paints with (defaults < palette < saved config).
+          const b: Brand = { ...BRAND, ...brandPaletteFromBranding(branding), ...brandConfig, name };
+          return { surface: b.surface, text: b.text, button: b.button, button2: b.button2, buttonText: b.buttonText };
+        })()}
+        logoUrl={branding?.logoUrl ? imageUrl(branding.logoUrl, { width: 88 }) : null}
+        storeKey={tenant.slug}
+      />
+    ) : null;
+
   return (
     <div
       style={{ ...cssVars, ...loaderVars }}
@@ -233,6 +253,7 @@ export default async function StorefrontLayout({
           paints without waiting on the font binaries). */}
       <link rel="preload" as="style" href={fontsHref} />
       <link rel="stylesheet" href={fontsHref} />
+      {appPromoBar}
 
       {isStorefrontHome ? (
         children

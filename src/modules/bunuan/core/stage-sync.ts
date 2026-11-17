@@ -110,10 +110,10 @@ export function stageForStatusSave(
     return { ok: true, write: { stage: "closed", stageChangedAt: now }, move: { from: stage, to: "closed" } };
   }
   if (goingLive && stage === "payment") {
-    return { ok: false, error: "Payment time has started — this round can't reopen." };
+    return { ok: false, error: "Payment time has started, so this round can't reopen." };
   }
   if (goingLive && stage === "closed") {
-    if (prev.ligwakLockedAt) return { ok: false, error: "Ligwak is locked — this round can't reopen." };
+    if (prev.ligwakLockedAt) return { ok: false, error: "Ligwak is locked, so this round can't reopen." };
     return { ok: true, write: { stage: "open", stageChangedAt: now }, move: { from: "closed", to: "open" } };
   }
   return { ok: true, write: {}, move: null };

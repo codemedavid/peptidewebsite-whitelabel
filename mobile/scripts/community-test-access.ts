@@ -52,4 +52,17 @@ export function access() {
   assert.equal(approved.communityAdmin, false, "older servers omit isAdmin");
   const revokedAdmin = communityAccess({ mode: "customer", community: community("revoked", { isAdmin: true }) });
   assert.equal(revokedAdmin.runsCommunity, false);
+
+  // Guests (Continue as guest): Chats shows the sign-up lock, never the chats.
+  const guestActor = { kind: "customer" as const, displayName: "Guest", email: "", guest: true };
+  const guest = communityAccess({ mode: "customer", actor: guestActor, community: community("none") });
+  assert.equal(guest.guest, true);
+  assert.equal(guest.guestLocked, true);
+  assert.equal(guest.customerChatsTab, true, "the tab shows, locked");
+  assert.equal(guest.inCommunity, false, "no inbox polling, no threads");
+  assert.equal(guest.membershipCard, null, "Me shows the guest screen, not a membership card");
+  const guestNoCommunity = communityAccess({ mode: "customer", actor: guestActor, community: community("none", { enabled: false }) });
+  assert.equal(guestNoCommunity.guestLocked, false);
+  assert.equal(guestNoCommunity.customerChatsTab, false, "no community = no Chats tab at all");
+  assert.equal(approved.guest, false);
 }

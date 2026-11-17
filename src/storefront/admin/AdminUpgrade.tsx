@@ -70,7 +70,7 @@ export function AdminUpgrade({ brand, onBack }: Props) {
     setSubmitting(false);
     if ("error" in res) return toast(res.error);
     setSubmitted(true);
-    toast("Upgrade submitted — we're reviewing your payment.");
+    toast("Upgrade submitted. We're reviewing your payment.");
   };
 
   const inReview = submitted || ctx?.pendingRequest;
@@ -91,7 +91,7 @@ export function AdminUpgrade({ brand, onBack }: Props) {
         {ctx && inReview && (
           <div className="admin-card">
             <p className="admin-upgrade__lede">
-              <b>Your upgrade is in review.</b> We're confirming your payment — your Business plan
+              <b>Your upgrade is in review.</b> We're confirming your payment. Your Business plan
               (and your storefront, if it's paused) activates the moment it's approved.
             </p>
           </div>
@@ -119,7 +119,7 @@ export function AdminUpgrade({ brand, onBack }: Props) {
                 Then {formatPesos(ctx.quote.businessCents)}/month. Your storefront reactivates as
                 soon as we confirm your payment. All features unlock, including{" "}
                 <b>Sales Analytics</b>, <b>Product Card Customization</b>, <b>Checkout Fee</b> and{" "}
-                <b>Delivery Note</b> — and every new feature we release.
+                <b>Delivery Note</b>, plus every new feature we release.
               </p>
             </div>
 
@@ -127,7 +127,7 @@ export function AdminUpgrade({ brand, onBack }: Props) {
               <h2 className="admin-card__title">Payment</h2>
               {ctx.methods.length === 0 && (
                 <p className="admin-upgrade__note">
-                  No payment methods are configured yet — contact support to complete your upgrade.
+                  No payment methods are configured yet. Contact support to complete your upgrade.
                 </p>
               )}
               {ctx.methods.map((m) => (
@@ -144,7 +144,7 @@ export function AdminUpgrade({ brand, onBack }: Props) {
                   <span className="admin-upgrade__method-body">
                     <b>{m.method}</b>
                     <span className="admin-upgrade__note">
-                      {m.account} {m.number && `· ${m.number}`} {m.note && `— ${m.note}`}
+                      {m.account} {m.number && `· ${m.number}`} {m.note && `· ${m.note}`}
                     </span>
                     {method === m.method && m.qrUrl && (
                       // eslint-disable-next-line @next/next/no-img-element

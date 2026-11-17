@@ -320,10 +320,10 @@ function lineDose(product: LegacyCatalogProduct | undefined, item: LegacyOrderIt
   return options.has(wanted) ? wanted : "";
 }
 
-/** The whitelabel names a variation line "Product — Dose" (see makeVariationEntry),
+/** The whitelabel names a variation line "Product · Dose" (see makeVariationEntry),
  *  so an imported order reads identically to one placed through checkout. */
 function variationLabel(productName: string, variation: string): string {
-  return `${productName.trim()} — ${variation}`;
+  return `${productName.trim()} · ${variation}`;
 }
 
 /**

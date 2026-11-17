@@ -85,7 +85,7 @@ export function WholesaleList({ brand, wholesaleWarning }: { brand: AdminBrand; 
         </View>
       )}
       {list.length > 0 && priced === 0 ? (
-        <Hint>No products have reseller pricing yet — the reseller page will be empty until you set some.</Hint>
+        <Hint>No products have reseller pricing yet, so the reseller page will be empty until you set some.</Hint>
       ) : null}
     </Section>
   );

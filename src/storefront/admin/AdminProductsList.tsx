@@ -51,7 +51,7 @@ export function AdminProductsList({
       .then((res) => {
         if (res && "error" in res) toast(`Couldn't save the product order: ${res.error}`);
       })
-      .catch(() => toast("Couldn't save the product order — please sign in again and retry."));
+      .catch(() => toast("Couldn't save the product order. Please sign in again and retry."));
   };
 
   // "Products follow this order" (Admin → Categories): the shop groups products
@@ -94,7 +94,7 @@ export function AdminProductsList({
         if (res && "error" in res) toast(`Couldn't reset the product order: ${res.error}`);
         else toast("Product order reset");
       })
-      .catch(() => toast("Couldn't reset the product order — please sign in again and retry."));
+      .catch(() => toast("Couldn't reset the product order. Please sign in again and retry."));
   };
 
   const toggle = (id: string) => {
@@ -129,7 +129,7 @@ export function AdminProductsList({
         return next;
       });
     } catch {
-      toast("Couldn't delete — please sign in again and retry.");
+      toast("Couldn't delete. Please sign in again and retry.");
     } finally {
       setBusy(false);
     }

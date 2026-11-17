@@ -34,7 +34,7 @@ export function TrialBanner({ trial, onUpgrade, onPreviewStore }: Props) {
         <div className="admin-trial__info">
           <div className="admin-trial__title">Your trial has ended</div>
           <div className="admin-trial__note">
-            Your storefront is paused — customers currently see a &ldquo;We&rsquo;re currently on
+            Your storefront is paused. Customers currently see a &ldquo;We&rsquo;re currently on
             pause&rdquo; page.{" "}
             <button className="admin-trial__link" onClick={onPreviewStore}>
               Preview it

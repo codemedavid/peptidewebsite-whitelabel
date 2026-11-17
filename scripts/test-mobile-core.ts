@@ -32,6 +32,7 @@ import {
 } from "../src/lib/mobile/tokens";
 import { checkAccess, checkRefresh, type SessionRow } from "../src/lib/mobile/session-rules";
 import { buildMobileTheme, contrastRatio, DEFAULT_MOBILE_THEME } from "../src/lib/mobile/theme";
+import { normalizeBrandSplash } from "../src/lib/storefront/brand-splash";
 import { THEME_PRESETS } from "../src/lib/theme/presets";
 import { brandPaletteFromBranding } from "../src/lib/theme/resolve-css-vars";
 import {
@@ -44,6 +45,8 @@ import {
   statusesForFilter,
   statusCountsFrom,
   queueCountsFrom,
+  facetCountsFrom,
+  paymentFilterOf,
 } from "../src/lib/mobile/order-view";
 import { buildNewOrderPush, triageExpoTicket } from "../src/lib/mobile/push-message";
 import type { Order } from "../src/storefront/types";
@@ -407,6 +410,69 @@ test("filters map to real statuses only", () => {
   assert.equal(statusesForFilter("all"), null);
   assert.equal(statusesForFilter("bogus"), null);
 });
+test("payment filter reads only the three web chips (junk = all)", () => {
+  assert.equal(paymentFilterOf("unpaid"), "unpaid");
+  assert.equal(paymentFilterOf("paid"), "paid");
+  assert.equal(paymentFilterOf("all"), "all");
+  assert.equal(paymentFilterOf("PAID"), "all");
+  assert.equal(paymentFilterOf(null), "all");
+});
+test("facet counts match the web Orders screen: each facet under the other's choice", () => {
+  const groups = [
+    { status: "new", paymentStatus: "pending", count: 3 },
+    { status: "new", paymentStatus: "paid", count: 1 },
+    { status: "confirmed", paymentStatus: "PAID", count: 2 }, // legacy upper-case = paid
+    { status: "processing", paymentStatus: "pending", count: 4 },
+    { status: "cancelled", paymentStatus: "pending", count: 5 }, // nothing to collect
+  ];
+  const none = facetCountsFrom(groups, null, "all");
+  assert.deepEqual(none.paymentCounts, { all: 15, unpaid: 7, paid: 3 });
+  assert.deepEqual(none.statusCounts, { new: 4, confirmed: 2, processing: 4, cancelled: 5 });
+  assert.deepEqual(none.counts, { new: 4, toFulfil: 6 });
+  // Status tabs under "Not confirmed": paid and cancelled rows drop out.
+  const unpaid = facetCountsFrom(groups, null, "unpaid");
+  assert.deepEqual(unpaid.statusCounts, { new: 3, processing: 4 });
+  assert.deepEqual(unpaid.counts, { new: 3, toFulfil: 4 });
+  // Payment chips under the "New" tab.
+  const fresh = facetCountsFrom(groups, ["new"], "paid");
+  assert.deepEqual(fresh.paymentCounts, { all: 4, unpaid: 3, paid: 1 });
+  assert.deepEqual(fresh.statusCounts, { new: 1, confirmed: 2 });
+});
+test("detail carries the WhatsApp contact and the address row by row", () => {
+  const d = toOrderDetail(
+    order({
+      customer: {
+        name: "Ana Cruz",
+        email: "ana@example.com",
+        phone: "0917",
+        contactMethod: "whatsapp",
+        whatsapp: " +63 917 000 0000 ",
+        whatsappName: "Ana C",
+      },
+      shipping: {
+        address: "1 Main ",
+        barangay: "Poblacion",
+        city: "Makati",
+        province: "NCR",
+        postal: "1200",
+        country: "PH",
+        region: "NCR",
+        fee: 150,
+      },
+    }),
+    "₱",
+    "2026-09-29T02:00:05.000Z",
+  );
+  assert.equal(d.customer.whatsapp, "+63 917 000 0000");
+  assert.equal(d.customer.whatsappName, "Ana C");
+  assert.equal(d.shipping.street, "1 Main");
+  assert.equal(d.shipping.barangay, "Poblacion");
+  assert.ok(d.shipping.cityProvince?.includes("Makati"));
+  assert.ok(d.shipping.cityProvince?.includes("1200"));
+  assert.equal(d.shipping.country, "PH");
+  // No WhatsApp typed = empty strings, never undefined.
+  assert.equal(toOrderDetail(order(), "₱", "x").customer.whatsapp, "");
+});
 
 // ── push message ─────────────────────────────────────────────────────────────
 section("push-message");
@@ -506,6 +572,51 @@ test("queue badges from one grouped count: new vs to-fulfil, others ignored", ()
   ]);
   assert.deepEqual(counts, { new: 3, toFulfil: 7 });
   assert.deepEqual(queueCountsFrom([]), { new: 0, toFulfil: 0 });
+});
+
+console.log("\nbrand splash in the app theme (store loading = website loading)");
+test("unset splash colours fall back to the store's theme, like the website", () => {
+  const t = buildMobileTheme({
+    name: "Rose",
+    logoUrl: "https://cdn.test/logo.png",
+    palette: { main: "#c96b8a", background: "#fff8fa", surface: "#ffffff", text: "#222222" },
+    splash: normalizeBrandSplash({ design: "bar" }),
+  });
+  assert.ok(t.splash);
+  assert.equal(t.splash.design, "bar");
+  assert.equal(t.splash.accent, "#c96b8a", "accent → the brand's main colour");
+  assert.equal(t.splash.background, t.palette.surface, "backdrop → the theme surface");
+  assert.equal(t.splash.logoUrl, "https://cdn.test/logo.png", "no splash logo → the store logo");
+  assert.equal(t.splash.tagline, "", "tagline hidden unless showTagline");
+});
+test("the operator's splash settings win, and junk never reaches the app", () => {
+  const t = buildMobileTheme({
+    name: "Rose",
+    logoUrl: "https://cdn.test/logo.png",
+    palette: {},
+    splash: normalizeBrandSplash({
+      enabled: true,
+      design: "logo-pulse",
+      logoUrl: "https://cdn.test/splash.png",
+      bgColor: "#000000",
+      accentColor: "#ff0000",
+      textColor: "#fefefe",
+      tagline: "Research-grade",
+      showTagline: true,
+    }),
+  });
+  assert.equal(t.splash?.logoUrl, "https://cdn.test/splash.png");
+  assert.equal(t.splash?.background, "#000000");
+  assert.equal(t.splash?.accent, "#ff0000");
+  assert.equal(t.splash?.tagline, "Research-grade");
+  const junk = buildMobileTheme({ name: "R", palette: {}, splash: normalizeBrandSplash({ bgColor: "red;x:y", design: "nope", logoUrl: "javascript:alert(1)" }) });
+  assert.equal(junk.splash?.design, "ring", "unknown design → the default spinner");
+  assert.match(junk.splash?.background ?? "", /^#[0-9a-f]{6}$/i);
+  assert.equal(junk.splash?.logoUrl, null);
+});
+test("a splash the operator turned off stays off; no splash input = none sent", () => {
+  assert.equal(buildMobileTheme({ name: "R", palette: {}, splash: normalizeBrandSplash({ enabled: false }) }).splash?.enabled, false);
+  assert.equal(buildMobileTheme({ name: "R", palette: {} }).splash, undefined);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

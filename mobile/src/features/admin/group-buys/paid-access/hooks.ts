@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { adminBridge, unwrap } from "@/features/admin/bridge";
-import type { PaidAccessDecision, PaidAccessSettings, QueueResult, QueueTab, SettingsError, SettingsView } from "./model";
+import type {
+  ExpireResult,
+  HistoryResult,
+  PaidAccessDecision,
+  PaidAccessSettings,
+  QueueResult,
+  QueueTab,
+  SettingsError,
+  SettingsView,
+} from "./model";
 
 /**
  * Paid Access for the store team — the website's own actions
@@ -48,6 +57,40 @@ export function usePaidAccessQueue(tab: QueueTab, groupBuyId = "") {
   return useQuery({
     queryKey: paidAccessKeys.queue(scope, tab, groupBuyId),
     queryFn: () => paidAccessCall<QueueResult>("listPaidAccessQueueAction", { tab, ...(groupBuyId ? { groupBuyId } : {}) }),
+  });
+}
+
+/** Re-check while the Members tab is open, so a new proof shows without a pull (website POLL_MS). */
+const MEMBERS_POLL_MS = 30_000;
+
+/** Everyone in one round (the Members tab), polled while mounted. */
+export function useRoundMembers(groupBuyId: string) {
+  const { scope } = useSignedIn();
+  return useQuery({
+    queryKey: paidAccessKeys.queue(scope, "all", groupBuyId),
+    enabled: !!groupBuyId,
+    refetchInterval: MEMBERS_POLL_MS,
+    queryFn: () => paidAccessCall<QueueResult>("listPaidAccessQueueAction", { tab: "all", groupBuyId }),
+  });
+}
+
+/** Release lapsed payment holds on a round now (and promote the waitlist). */
+export function useExpireHolds() {
+  const { scope } = useSignedIn();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupBuyId: string) => paidAccessCall<ExpireResult>("expirePaidAccessHoldsAction", groupBuyId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: paidAccessKeys.all(scope) }),
+  });
+}
+
+/** One member's audit log, fetched only when its History is opened. */
+export function usePaidAccessHistory(membershipId: string, enabled: boolean) {
+  const { scope } = useSignedIn();
+  return useQuery({
+    queryKey: [...paidAccessKeys.all(scope), "history", membershipId] as const,
+    enabled: enabled && !!membershipId,
+    queryFn: () => paidAccessCall<HistoryResult>("getPaidAccessHistoryAction", { membershipId }),
   });
 }
 

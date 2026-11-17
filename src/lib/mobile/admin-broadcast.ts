@@ -52,10 +52,10 @@ export async function adminBroadcastAudience(tenantIds: readonly string[]): Prom
   return { recipients, phones: recipients.length, stores: new Set(out.map((r) => r.tenantId)).size };
 }
 
-/** Send it. `data.type = "announcement"` — the app opens on tap, nothing more. */
+/** Send it. `data.type = "announcement"` — the app opens on tap, nothing more. The chat sound, never the order chime. */
 export async function sendAdminBroadcast(input: BroadcastInput): Promise<{ sent: number; failed: number; phones: number }> {
   const { recipients } = await adminBroadcastAudience(input.tenantIds);
   if (recipients.length === 0) return { sent: 0, failed: 0, phones: 0 };
-  const res = await deliverPush(recipients, { title: input.title, body: input.body, data: { type: "announcement" } });
+  const res = await deliverPush(recipients, { title: input.title, body: input.body, data: { type: "announcement" } }, "messages");
   return { ...res, phones: recipients.length };
 }

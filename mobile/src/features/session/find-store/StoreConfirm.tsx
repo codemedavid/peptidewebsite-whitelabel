@@ -26,6 +26,8 @@ interface StoreConfirmProps {
   busy: boolean;
   onCreateAccount: () => void;
   onSignIn: () => void;
+  /** Shop now, account later — shown only when the store allows guests. */
+  onGuest: () => void;
   onOpenWebsite: () => void;
   onRetry: () => void;
 }
@@ -42,6 +44,7 @@ export function StoreConfirm({
   busy,
   onCreateAccount,
   onSignIn,
+  onGuest,
   onOpenWebsite,
   onRetry,
 }: StoreConfirmProps) {
@@ -93,6 +96,15 @@ export function StoreConfirm({
               <SecondaryCta label="I already have an account" icon="log-in-outline" onPress={onSignIn} />
             </>
           )}
+          {store.guestShopping ? (
+            <TextLink
+              label="Continue as guest (sign up later)"
+              color={accent.link}
+              onPress={onGuest}
+              disabled={busy}
+              style={styles.center}
+            />
+          ) : null}
         </View>
       ) : (
         <View style={{ gap: SPACE.md }}>

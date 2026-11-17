@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import { Stack } from "expo-router";
+import { HiddenView, isViewVisible, PreviewPublicPage } from "@/features/admin/content/page-guard";
 import { useCatalogProducts } from "@/features/admin/catalog/hooks";
 import { removeRows, upsertRow, useCollection } from "@/features/admin/setup/data";
 import { newId, str, type Row } from "@/features/admin/setup/rules";
@@ -37,7 +38,10 @@ export default function ReviewsScreen() {
     <>
       <Stack.Screen options={{ title: "Reviews" }} />
       <Loadable query={list.brand}>
-        {() => (
+        {(b) =>
+          !isViewVisible(b, "reviews") ? (
+            <HiddenView label="Reviews" />
+          ) : (
           <>
             <ListPage
               intro="Customer testimonials for your Reviews page and the products they're connected to."
@@ -50,6 +54,7 @@ export default function ReviewsScreen() {
                 void list.brand.refetch();
                 void products.refetch();
               }}
+              toolbar={<PreviewPublicPage hash="reviews" />}
             >
               {list.items.map((r, i) => {
                 const title = str(r.title) || "Untitled";
@@ -123,7 +128,8 @@ export default function ReviewsScreen() {
               </ImageViewer>
             ) : null}
           </>
-        )}
+          )
+        }
       </Loadable>
     </>
   );

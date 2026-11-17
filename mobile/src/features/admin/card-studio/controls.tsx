@@ -282,7 +282,7 @@ function ColorRow({
         })}
       </View>
       <Field
-        label={`${label} — custom hex`}
+        label={`${label} (custom hex)`}
         value={text}
         onChangeText={onText}
         placeholder="Blank = theme, e.g. #6366F1"

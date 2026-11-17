@@ -90,7 +90,7 @@ export default function StaffScreen() {
                     How admin sign-in works:
                   </AppText>
                   {
-                    " with no staff, the admin login asks for your password only. As soon as you add your first staff member, the login also asks for a username — you sign in as “owner” with your admin password, and each staff member signs in with the username you give them."
+                    " with no staff, the admin login asks for your password only. As soon as you add your first staff member, the login also asks for a username: you sign in as “owner” with your admin password, and each staff member signs in with the username you give them."
                   }
                 </AppText>
               </Notice>
@@ -99,7 +99,7 @@ export default function StaffScreen() {
                 <EmptyState
                   icon="people-outline"
                   title="No staff yet"
-                  body="Add a staff member to give a teammate limited access to this admin — they'll only see the modules you allow."
+                  body="Add a staff member to give a teammate limited access to this admin. They'll only see the modules you allow."
                   action={online ? { label: "Add your first staff member", onPress: startAdd } : undefined}
                 />
               ) : (

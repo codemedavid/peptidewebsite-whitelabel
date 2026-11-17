@@ -133,7 +133,7 @@ export function stepperView(
     case "expired":
       return {
         ...base,
-        headline: "Your slot was released — the payment window expired",
+        headline: "Your slot was released because the payment window expired",
         detail: "You can join again if there's still room.",
         tone: "neutral",
         action: { kind: "join", label: "Join again" },

@@ -136,7 +136,7 @@ test("every status has its own message", () => {
   for (const m of all) {
     assert.ok(m.startsWith("Hi Maria!"), m);
     assert.ok(m.includes("#HPG-1042"), m);
-    assert.ok(m.endsWith("— HP Glow"), m);
+    assert.ok(m.endsWith("\nHP Glow"), m);
   }
 });
 test("shipped carries courier + tracking number", () => {

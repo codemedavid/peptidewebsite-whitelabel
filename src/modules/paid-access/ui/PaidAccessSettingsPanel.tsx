@@ -97,7 +97,7 @@ export function PaidAccessSettingsPanel({ groupBuyId, roundName, currency, whole
       setDraft(res.settings);
       toast(view.exists ? "Saved. New members follow these rules; people already joining keep theirs." : "Join flow is on for this round.");
     } catch {
-      toast("Couldn't save — please try again.");
+      toast("Couldn't save. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -114,7 +114,7 @@ export function PaidAccessSettingsPanel({ groupBuyId, roundName, currency, whole
             How do people get into {roundName}?
           </h3>
           <p className="admin-field__hint">
-            {view.exists ? `Settings v${view.version} · ${view.slotsTaken} slot${view.slotsTaken === 1 ? "" : "s"} taken` : "Not set up yet — this round stays members-only and nobody can join until you save."}
+            {view.exists ? `Settings v${view.version} · ${view.slotsTaken} slot${view.slotsTaken === 1 ? "" : "s"} taken` : "Not set up yet. This round stays members-only and nobody can join until you save."}
           </p>
         </div>
       </header>

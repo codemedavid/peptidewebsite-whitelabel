@@ -355,7 +355,7 @@ export function CreateTenantDrawer({
                       </span>
                     }
                   />
-                  <ReviewRow k="Starts as" v="Trial — set the billing window on its Billing tab" />
+                  <ReviewRow k="Starts as" v="Trial. Set the billing window on its Billing tab" />
                 </div>
               </div>
               <div className="card" style={{ boxShadow: "none" }}>

@@ -4,6 +4,7 @@ import { useSignedIn } from "@/auth/SessionProvider";
 import { adminBridge, unwrap } from "@/features/admin/bridge";
 import { success } from "@/features/admin/setup/data";
 import type { DashboardResult, GroupBuy, ListResult, ReportResult } from "./model";
+import type { ParticipationResult } from "./participation";
 
 /**
  * Group Buys through the admin bridge: every call runs the website's own
@@ -18,6 +19,7 @@ export const gbKeys = {
   list: (scope: string) => [scope, "admin", "groupbuys", "list"] as const,
   dashboard: (scope: string, id: string) => [scope, "admin", "groupbuys", "dashboard", id] as const,
   report: (scope: string, id: string) => [scope, "admin", "groupbuys", "report", id] as const,
+  participation: (scope: string) => [scope, "admin", "groupbuys", "participation"] as const,
 };
 
 type Err = { error: string };
@@ -46,6 +48,15 @@ export function useSupplierReport(id: string) {
     queryKey: gbKeys.report(scope, id),
     enabled: !!id,
     queryFn: async () => unwrap(await adminBridge.call<ReportResult | Err>("getGroupBuySupplierReportAction", id)),
+  });
+}
+
+/** Every group-buy order, attributed to its round — the member tracker's one fetch (filters are local). */
+export function useGroupBuyParticipation() {
+  const { scope } = useSignedIn();
+  return useQuery({
+    queryKey: gbKeys.participation(scope),
+    queryFn: async () => unwrap(await adminBridge.call<ParticipationResult | Err>("getGroupBuyParticipationAction")),
   });
 }
 

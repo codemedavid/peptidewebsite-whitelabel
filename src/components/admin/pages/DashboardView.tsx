@@ -310,7 +310,7 @@ function NeedsAttention({ queue, expiringCount }: { queue: AttentionQueue; expir
       <div className="card attn-clear mb-4" role="status">
         <Ic.CheckCircle aria-hidden />
         <span>
-          Nothing waiting on you{expiringCount > 0 ? ` — ${expiringCount} subscription${expiringCount === 1 ? "" : "s"} expiring below` : ""}.
+          Nothing waiting on you{expiringCount > 0 ? `, but ${expiringCount} subscription${expiringCount === 1 ? "" : "s"} expiring below` : ""}.
         </span>
       </div>
     );

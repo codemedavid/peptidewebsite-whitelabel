@@ -37,7 +37,7 @@ export type DecisionResult = Ok | Fail;
 
 const NOT_ADMIN = fail("forbidden", "Only a store admin can do that.");
 const NOT_FOUND = fail("not_found", "We couldn't find that member.");
-const RACED = fail("conflict", "That changed just now — please refresh.");
+const RACED = fail("conflict", "That changed just now. Please refresh.");
 
 /** Thrown inside a transaction to roll it back with a readable refusal. */
 class Refusal extends Error {
@@ -69,7 +69,7 @@ const NO_EMAIL = fail("forbidden", "Your admin account needs an email address be
 function refuseSelfReview(m: MembershipRow, admin: Admin): void {
   if (!admin.email.trim()) throw new Refusal(NO_EMAIL);
   if (sameEmail(admin.email, m.customerEmail)) {
-    throw new Refusal(fail("forbidden", "You can't review your own membership — ask another admin."));
+    throw new Refusal(fail("forbidden", "You can't review your own membership. Ask another admin."));
   }
 }
 
@@ -173,7 +173,7 @@ async function requestProviderRefund(tenantId: string, r: NonNullable<Effects["r
     if (!m || m.refundStatus !== "processing") return;
     await moveMembership(db, m.id, "rejected", { refundStatus: "pending" });
     await logEvents(db, tenantId, [
-      { groupBuyId: m.groupBuyId, membershipId: m.id, kind: "refund", fromStatus: "processing", toStatus: "pending", actorKind: "system", actorId: "system", reason: `Automatic refund failed (${res.error}) — refund manually` },
+      { groupBuyId: m.groupBuyId, membershipId: m.id, kind: "refund", fromStatus: "processing", toStatus: "pending", actorKind: "system", actorId: "system", reason: `Automatic refund failed (${res.error}). Refund manually` },
     ]);
   });
 }

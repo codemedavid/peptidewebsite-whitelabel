@@ -1,9 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import type { SavedRepliesResponse, SavedReply } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
 import type { Outcome } from "./messages.server";
@@ -41,16 +41,16 @@ export async function listSavedReplies(actor: CommunityActor): Promise<SavedRepl
  * same moment each see the other's write instead of overwriting it.
  */
 async function changeList(actor: CommunityActor, change: (list: SavedReply[]) => ListResult): Promise<Outcome<SavedRepliesResponse>> {
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${actor.tenantId} FOR UPDATE`;
-    const row = await tx.branding.findUnique({ where: { tenantId: actor.tenantId }, select: { config: true } });
-    const current = (row?.config ?? {}) as Record<string, unknown>;
+  const out: { result?: ListResult } = {};
+  await updateBrandingConfig(actor.tenantId, (current) => {
     const result = change(savedReplies(current));
-    if (!result.ok) return result.notFound ? { kind: "not_found" } : { kind: "invalid", message: result.error };
-    const config = { ...current, communitySavedReplies: result.value } as Prisma.InputJsonValue;
-    await tx.branding.upsert({ where: { tenantId: actor.tenantId }, update: { config }, create: { tenantId: actor.tenantId, config } });
-    return { kind: "ok", value: { replies: result.value } };
+    out.result = result;
+    return result.ok ? { ...current, communitySavedReplies: result.value } : null;
   });
+  const result = out.result;
+  if (!result) return { kind: "invalid", message: "Couldn't save the reply." };
+  if (!result.ok) return result.notFound ? { kind: "not_found" } : { kind: "invalid", message: result.error };
+  return { kind: "ok", value: { replies: result.value } };
 }
 
 /**

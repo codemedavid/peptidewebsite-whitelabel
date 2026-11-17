@@ -60,7 +60,7 @@ export function validateStoreAdminCredentialInput(
     if (!input.hasExistingPassword) {
       return {
         ok: false,
-        error: "Set a password too — without one, nobody can sign in to this store's admin.",
+        error: "Set a password too. Without one, nobody can sign in to this store's admin.",
       };
     }
     return { ok: true, email, password: null };

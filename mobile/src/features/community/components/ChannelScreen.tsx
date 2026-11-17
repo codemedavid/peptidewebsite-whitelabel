@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { ActivityIndicator, Alert, FlatList, View } from "react-native";
 import { router } from "expo-router";
 import type { CommunityTopic } from "@contract";
+import { useChannelMute } from "../hooks/useChannelMute";
 import { useTopicMutations } from "../hooks/useCommunityData";
 import { useChannelDetail } from "../hooks/useInbox";
 import { hueFromString } from "../lib/color";
@@ -44,6 +45,7 @@ export function ChannelScreen({ id }: { id: string }) {
   const b = useChatBrand();
   const q = useChannelDetail(id);
   const menu = useTopicMenu();
+  const mute = useChannelMute();
   const channel = q.data?.channel;
   const topics = q.data?.topics ?? [];
   const total = topics.reduce((sum, t) => sum + t.messageCount, 0);
@@ -57,9 +59,20 @@ export function ChannelScreen({ id }: { id: string }) {
         subtitle={channel ? `${pluralize(topics.length, "topic")} · ${pluralize(total, "message")}` : undefined}
         leading={channel ? <EmojiAvatar emoji={channel.emoji} imageUrl={channel.imageUrl} hue={hueFromString(channel.id)} size={38} broadcast={broadcast} /> : null}
         right={
-          channel?.canManage ? (
-            <IconButton name="create-outline" label="Edit channel" onPress={() => router.push({ pathname: "/community/channel-edit", params: { id } })} />
-          ) : null
+          <>
+            {channel && channel.muted !== undefined ? (
+              <IconButton
+                name={channel.muted ? "notifications-off-outline" : "notifications-outline"}
+                label={channel.muted ? "Unmute notifications" : "Mute notifications"}
+                color={channel.muted ? CHAT.inkMuted : undefined}
+                disabled={mute.pending}
+                onPress={() => mute.toggle(id, !channel.muted)}
+              />
+            ) : null}
+            {channel?.canManage ? (
+              <IconButton name="create-outline" label="Edit channel" onPress={() => router.push({ pathname: "/community/channel-edit", params: { id } })} />
+            ) : null}
+          </>
         }
       />
       {q.isPending ? (

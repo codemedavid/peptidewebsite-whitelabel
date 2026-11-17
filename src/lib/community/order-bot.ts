@@ -59,7 +59,7 @@ export type OrderUpdateFacts = {
 /** The chat message body. Plain text: the app renders it inside the bot card. */
 export function orderUpdateText(o: OrderUpdateFacts): string {
   const meta = SHOPPER_STATUS[o.status as OrderStatus];
-  const lines = [`📦 Order ${o.orderNumber} — ${meta?.label ?? o.status}`, meta?.line ?? ""];
+  const lines = [`📦 Order ${o.orderNumber} · ${meta?.label ?? o.status}`, meta?.line ?? ""];
   const tracking = o.trackingNumber.trim();
   if (tracking) {
     const courier = o.courier.trim();

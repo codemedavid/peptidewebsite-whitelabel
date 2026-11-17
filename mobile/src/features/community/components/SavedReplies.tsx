@@ -217,7 +217,7 @@ export function SavedRepliesSheet({ visible, onClose, onUse, startWith, draft }:
                 <ChatEmpty
                   icon={query ? "search" : "chatbox-ellipses-outline"}
                   title={query ? "No matches" : "No saved replies yet"}
-                  body={query ? "Try another word from the title or message." : "Save the answers you type again and again — payment details, shipping days, how to order. Your whole team can use them."}
+                  body={query ? "Try another word from the title or message." : "Save the answers you type again and again: payment details, shipping days, how to order. Your whole team can use them."}
                 />
               }
               renderItem={({ item }) => (

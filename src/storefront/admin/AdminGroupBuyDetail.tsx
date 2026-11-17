@@ -248,7 +248,7 @@ export function AdminGroupBuyDetail({
             <p style={{ margin: "6px 0 0" }}>
               {drift.danglingAssignments.length} assigned product
               {drift.danglingAssignments.length === 1 ? "" : "s"} no longer exist
-              {drift.danglingAssignments.length === 1 ? "s" : ""} in your catalog — most likely
+              {drift.danglingAssignments.length === 1 ? "s" : ""} in your catalog, most likely
               deleted or replaced by a duplicate with the same name.
             </p>
           )}
@@ -293,7 +293,7 @@ export function AdminGroupBuyDetail({
             value={
               overview.minVials === null
                 ? "Not set"
-                : `${overview.minVials} vials — ${overview.minimumMet ? "met" : "not met"}`
+                : `${overview.minVials} vials (${overview.minimumMet ? "met" : "not met"})`
             }
           />
           <Row label="Participants" value={overview.participants} />

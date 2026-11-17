@@ -73,7 +73,7 @@ export function AdminStaffForm({ brand, staff, onBack, onSaved }: Props) {
       toast(isEdit ? "Staff member updated" : "Staff member added");
       onSaved();
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }

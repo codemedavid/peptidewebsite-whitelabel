@@ -95,7 +95,7 @@ export function AdminSiteBuilder({
       setTweak({ intlLocal: clean, homeLayout: res.homeLayout as Brand["homeLayout"] });
       toast(activate === true ? "Your store now uses this layout" : activate === false ? "Switched back to your previous layout" : "Saved");
     } catch {
-      toast("Couldn't save — please check your connection and try again.");
+      toast("Couldn't save. Please check your connection and try again.");
     } finally {
       setSaving(false);
     }

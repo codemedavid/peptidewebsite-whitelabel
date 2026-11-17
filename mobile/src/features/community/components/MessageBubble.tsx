@@ -91,7 +91,7 @@ function MessageBubbleImpl({ message, brand, startsGroup, endsGroup, onLongPress
   const deleted = !!message.deletedAt;
   // The safety bot hid it: the sender is told why; everyone else just sees it was removed.
   const moderated = deleted && message.moderated === true;
-  const deletedLabel = !moderated ? "Message deleted" : mine ? "Removed by the safety bot — inviting members to other groups isn't allowed" : "Removed by the safety bot";
+  const deletedLabel = !moderated ? "Message deleted" : mine ? "Removed by the safety bot. Inviting members to other groups isn't allowed" : "Removed by the safety bot";
   const pending = !!message.pending;
   const isProduct = message.kind === "product" && !deleted;
   const isProtocol = message.kind === "protocol" && !deleted;

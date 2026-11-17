@@ -1,4 +1,4 @@
-import { RESELLER_MIN_QTY, type CatalogProduct, type ProductClass, type Variation } from "./model";
+import { RESELLER_MIN_QTY, type CatalogProduct, type ProductClass, type ProductMarket, type Variation } from "./model";
 
 /**
  * The product editor's form state and the exact payload saveProductAction
@@ -25,8 +25,16 @@ export type VariationDraft = {
   extraImages?: string[];
   /** false = option off sale (set on the website's Inventory screen). */
   available?: boolean;
-  /** The option's packing list, edited on the website; carried so an app save can't erase it. */
+  /**
+   * What this option ships with, one item per line ("Complete set includes: …").
+   * undefined = no list (the "+ What's included" button shows); "" = list open
+   * but empty. Same states as AdminAddProduct.tsx.
+   */
   includes?: string;
+  /** International (USD) price; "" = not sold internationally. */
+  usdPrice: string;
+  /** Supplier kit size — no editor on web or app; carried so a save can't erase it. */
+  kitSize?: number;
 };
 
 export type ProductDraft = {
@@ -64,6 +72,12 @@ export type ProductDraft = {
   image: string;
   /** The product's photos beyond the main one, in gallery order. */
   extraImages: string[];
+  /** Dual-currency stores: which shop(s) it sells in + its USD prices. */
+  market: ProductMarket;
+  usdPrice: string;
+  usdDiscountPrice: string;
+  /** Vials per supplier kit (group-buy-only stores); "" = not set. */
+  vialsPerKit: string;
 };
 
 const s = (n: number | null | undefined): string => (typeof n === "number" && Number.isFinite(n) ? String(n) : "");
@@ -104,6 +118,8 @@ export function draftFromProduct(p: CatalogProduct | null, firstCategoryId: stri
       ...(v.extraImages?.length ? { extraImages: v.extraImages } : {}),
       ...(v.available === false ? { available: false } : {}),
       ...(v.includes ? { includes: v.includes } : {}),
+      usdPrice: s(v.usdPrice),
+      ...(v.kitSize ? { kitSize: v.kitSize } : {}),
     })),
     stock: s(p?.stock ?? 0),
     featured: p?.featured === true,
@@ -126,6 +142,12 @@ export function draftFromProduct(p: CatalogProduct | null, firstCategoryId: stri
     wholesalePrice: s(p?.wholesale?.price),
     image: p?.image ?? "",
     extraImages: p?.extraImages ?? [],
+    // Seeded even where the store has no control for them, so a save writes
+    // them back unchanged — the server rebuilds the product from the payload.
+    market: p?.market ?? "local",
+    usdPrice: s(p?.usdPrice),
+    usdDiscountPrice: s(p?.usdDiscountPrice),
+    vialsPerKit: s(p?.vialsPerKit),
   };
 }
 
@@ -183,7 +205,7 @@ export function saveBlockers(d: ProductDraft): string[] {
   if (!d.category) out.push("Choose a category.");
   if (!(Number(d.price) >= 0)) out.push("Enter a valid base price.");
   const unpriced = unpricedVariationNames(d.variations);
-  if (unpriced.length) out.push(`Set a price for ${unpriced.join(", ")} — an option without a price would be sold for free.`);
+  if (unpriced.length) out.push(`Set a price for ${unpriced.join(", ")}. An option without a price would be sold for free.`);
   const w = wholesaleError(d);
   if (w) out.push(w);
   return out;
@@ -211,12 +233,17 @@ export function toSavePayload(d: ProductDraft, initial: CatalogProduct | null, c
       // The server rebuilds each variation from the payload, so the extras
       // must ride along or they'd be erased.
       const withExtras = v.extraImages?.length ? { ...withImage, extraImages: v.extraImages } : withImage;
-      // The option's packing list ("Complete set includes: …") is edited on the
-      // website only; the server rebuilds each variation from this payload, so
-      // dropping it here wiped the storefront's list on every app save.
-      const withIncludes = v.includes ? { ...withExtras, includes: v.includes } : withExtras;
+      // The option's packing list ("Complete set includes: …"), trimmed like the
+      // website's save(). The server rebuilds each variation from this payload,
+      // so it must ride along or an app save would wipe the storefront's list.
+      const includes = (v.includes ?? "").trim();
+      const withIncludes = includes ? { ...withExtras, includes } : withExtras;
+      // USD price + kit size: the server names both, so a dropped key erases them.
+      const usd = toNum(v.usdPrice);
+      const withUsd = usd > 0 ? { ...withIncludes, usdPrice: usd } : withIncludes;
+      const withKit = v.kitSize ? { ...withUsd, kitSize: v.kitSize } : withUsd;
       // An option switched off on the website's Inventory screen stays off.
-      return v.available === false ? { ...withIncludes, available: false } : withIncludes;
+      return v.available === false ? { ...withKit, available: false } : withKit;
     })
     .filter((v) => v.name);
 
@@ -263,6 +290,12 @@ export function toSavePayload(d: ProductDraft, initial: CatalogProduct | null, c
     wholesale: { enabled: d.wholesaleOn, moq: toNum(d.wholesaleMoq), price: toNum(d.wholesalePrice) },
     image: d.image || null,
     extraImages: d.extraImages,
+    // Dual-currency market + USD prices and the kit size: every admin save
+    // funnels through one normalizer that names them, so they ride along whole.
+    market: d.market,
+    ...(toNum(d.usdPrice) > 0 ? { usdPrice: toNum(d.usdPrice) } : {}),
+    ...(toNum(d.usdDiscountPrice) > 0 ? { usdDiscountPrice: toNum(d.usdDiscountPrice) } : {}),
+    ...(toNum(d.vialsPerKit) > 0 ? { vialsPerKit: Math.floor(toNum(d.vialsPerKit)) } : {}),
   };
 }
 
@@ -278,11 +311,14 @@ export function withMainPhoto(main: string, extras: string[]): { image: string; 
 
 // ── variation presets (src/storefront/admin/variation-presets.ts) ────────────
 
+/** Longest packing list a variation may store — src/lib/storefront/variations.ts MAX_INCLUDES_LENGTH. */
+export const MAX_INCLUDES_LENGTH = 1000;
+
 export const VARIATION_PRESETS = ["Vials only", "Complete set"] as const;
 
 const norm = (name: string) => name.trim().toLowerCase();
 
-export const blankVariation = (name = ""): VariationDraft => ({ name, price: "", stock: "", gbPrice: "", salePrice: "", image: "" });
+export const blankVariation = (name = ""): VariationDraft => ({ name, price: "", stock: "", gbPrice: "", salePrice: "", image: "", usdPrice: "" });
 
 /** Add a preset once: names a blank row if there is one, else appends. */
 export function applyVariationPreset(items: readonly VariationDraft[], preset: string): VariationDraft[] {

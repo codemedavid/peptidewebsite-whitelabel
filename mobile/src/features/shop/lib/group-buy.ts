@@ -38,7 +38,7 @@ export function slotMeter(goal: number, filled: number): SlotMeter {
     left,
     reached,
     label: `${f} of ${g} slots filled`,
-    hint: reached ? "Goal reached — still open" : `${left} ${left === 1 ? "slot" : "slots"} left`,
+    hint: reached ? "Goal reached, still open" : `${left} ${left === 1 ? "slot" : "slots"} left`,
   };
 }
 

@@ -329,7 +329,7 @@ export function WelcomeSheet({ welcome, visible, onClose }: { welcome: WelcomeMe
         visible={visible}
         onClose={() => setEditing(null)}
         title={isNew ? "New welcome message" : `Message ${(editing.index ?? 0) + 1}`}
-        subtitle="Text, a photo or a video — add a caption to send them together."
+        subtitle="Text, a photo or a video. Add a caption to send them together."
       >
         <MessageEditor
           key={editing.item.key}

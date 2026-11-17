@@ -14,10 +14,10 @@
 // the ROUTE's job; by the time callUpdateBranding runs the caller has already
 // proven the admin token.
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { uploadTenantBrandingAsset } from "@/lib/tenant/setup";
 import { buildTenantBrandingUpdate } from "@/lib/tenant/branding-update";
 import { applyDefaultProductImage } from "@/lib/upload/branding-assets";
@@ -346,7 +346,6 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
       splashLogo ? resolveMcpImage(tenant.id, splashLogo, "splash") : Promise.resolve(null),
     ]);
 
-    let config = merged.config;
     const changed = [...merged.changed];
 
     const byKind = new Map(uploads.map((u) => [u.kind, u.upload]));
@@ -356,66 +355,74 @@ export async function callUpdateBranding(args: Record<string, unknown>): Promise
 
     if (logoUrl) changed.push("logo");
     if (faviconUrl) changed.push("favicon");
-    if (defaultProductImageUrl) {
-      config = applyDefaultProductImage(config, defaultProductImageUrl);
-      changed.push("defaultProductImage");
-    }
+    if (defaultProductImageUrl) changed.push("defaultProductImage");
+    if (splashMark) changed.push("splashLogo");
+    if (hero) changed.push("heroImage");
 
-    if (splashMark) {
-      // Merge, never replace: buildTenantBrandingUpdate may have just written
-      // colors and a tagline into this same object, and the operator's stored
-      // durations live here too.
-      config = {
-        ...config,
-        brandSplash: { ...(plainObject(config.brandSplash) ?? {}), logoUrl: splashMark.url },
-      };
-      changed.push("splashLogo");
-    }
+    // The uploads above can take seconds, so the config is rebuilt from the
+    // LOCKED row rather than the copy read before them: an owner save that
+    // landed meanwhile survives. The patch was already validated against the
+    // earlier read (merged.errors), so only the rebuilt config is used here.
+    const saved = await updateBrandingConfig(tenant.id, (locked) => {
+      let config = hasStylePatch
+        ? buildTenantBrandingUpdate({ themeId: current?.themeId, config: locked }, patch).config
+        : (plainObject(locked) ?? {});
 
-    if (hero) {
-      const existingMedia = plainObject(config.heroMedia) ?? {};
-      config = {
-        ...config,
-        heroMedia: normalizeHeroMedia({
-          heroMedia: {
-            ...existingMedia,
-            mode: "image",
-            url: hero.url,
-            alt:
-              cleanString(args.heroImageAlt, 200) ||
-              cleanString(existingMedia.alt, 200) ||
-              `${tenant.name} hero image`,
-            ratio: args.heroImageRatio ?? existingMedia.ratio ?? "standard",
-            focus: args.heroImageFocus ?? existingMedia.focus ?? "center",
-            overlay: args.heroImageOverlay ?? existingMedia.overlay ?? true,
-            scrim: args.heroImageScrim ?? existingMedia.scrim ?? 30,
-            linkType: existingMedia.linkType ?? "page",
-            linkPage: existingMedia.linkPage ?? "catalog",
-            linkUrl: existingMedia.linkUrl ?? "",
-          },
-        }),
-      };
-      changed.push("heroImage");
-    }
+      if (defaultProductImageUrl) {
+        config = applyDefaultProductImage(config, defaultProductImageUrl);
+      }
 
-    await withTenant(tenant.id, (db) =>
-      db.branding.upsert({
-        where: { tenantId: tenant.id },
-        update: {
-          ...(merged.themeId ? { themeId: merged.themeId } : {}),
-          ...(logoUrl ? { logoUrl } : {}),
-          ...(faviconUrl ? { faviconUrl } : {}),
-          config: config as Prisma.InputJsonValue,
-        },
-        create: {
-          tenantId: tenant.id,
-          themeId: merged.themeId ?? current?.themeId ?? "clinical-white",
-          ...(logoUrl ? { logoUrl } : {}),
-          ...(faviconUrl ? { faviconUrl } : {}),
-          config: config as Prisma.InputJsonValue,
-        },
-      }),
-    );
+      if (splashMark) {
+        // Merge, never replace: buildTenantBrandingUpdate may have just written
+        // colors and a tagline into this same object, and the operator's stored
+        // durations live here too.
+        config = {
+          ...config,
+          brandSplash: { ...(plainObject(config.brandSplash) ?? {}), logoUrl: splashMark.url },
+        };
+      }
+
+      if (hero) {
+        const existingMedia = plainObject(config.heroMedia) ?? {};
+        config = {
+          ...config,
+          heroMedia: normalizeHeroMedia({
+            heroMedia: {
+              ...existingMedia,
+              mode: "image",
+              url: hero.url,
+              alt:
+                cleanString(args.heroImageAlt, 200) ||
+                cleanString(existingMedia.alt, 200) ||
+                `${tenant.name} hero image`,
+              ratio: args.heroImageRatio ?? existingMedia.ratio ?? "standard",
+              focus: args.heroImageFocus ?? existingMedia.focus ?? "center",
+              overlay: args.heroImageOverlay ?? existingMedia.overlay ?? true,
+              scrim: args.heroImageScrim ?? existingMedia.scrim ?? 30,
+              linkType: existingMedia.linkType ?? "page",
+              linkPage: existingMedia.linkPage ?? "catalog",
+              linkUrl: existingMedia.linkUrl ?? "",
+            },
+          }),
+        };
+      }
+      return config;
+    });
+    const config = saved ?? {};
+
+    // The non-config columns. The config write above upserted the row, so this
+    // is an update; a row it just created gets the same theme fallback the old
+    // single upsert used (not the schema default).
+    const columns = {
+      ...(merged.themeId ? { themeId: merged.themeId } : !current ? { themeId: "clinical-white" } : {}),
+      ...(logoUrl ? { logoUrl } : {}),
+      ...(faviconUrl ? { faviconUrl } : {}),
+    };
+    if (Object.keys(columns).length) {
+      await withTenant(tenant.id, (db) =>
+        db.branding.update({ where: { tenantId: tenant.id }, data: columns }),
+      );
+    }
 
     revalidateTenant(tenant.id, tenant.slug);
 

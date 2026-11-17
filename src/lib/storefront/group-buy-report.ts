@@ -281,7 +281,7 @@ export function prepareReport(
     {
       label: "Note",
       value:
-        "Cancelled orders are listed on the Orders sheet but excluded from Total Vials Ordered, Total Sales and Products to Order. Active = Confirmed (paid) + Pending (unpaid) — size the supplier order against Products to Order.",
+        "Cancelled orders are listed on the Orders sheet but excluded from Total Vials Ordered, Total Sales and Products to Order. Active = Confirmed (paid) + Pending (unpaid). Size the supplier order against Products to Order.",
     },
   ];
 

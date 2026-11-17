@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import * as Haptics from "expo-haptics";
+import type { OrderStatus } from "@contract";
+import { listFrom, useAdminBrand } from "@/features/admin/setup/data";
+import { str } from "@/features/admin/setup/rules";
+import { SEED_COURIERS } from "@/features/admin/setup/seeds";
 import { OrderConflict, useOrder, useUpdateOrder } from "@/features/orders/hooks";
+import { Chips } from "@/ui/kit";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { useOnline } from "@/ui/feedback";
@@ -12,8 +17,15 @@ import { AppText, Button } from "@/ui/primitives";
 /**
  * Courier, tracking number and the note the customer sees. Opened from
  * "Mark as shipped" (`ship=1`) it saves the details AND the status in one
- * write; otherwise it only edits the details. Unsaved edits are guarded.
+ * write. Like the website, saving a tracking number also marks the order
+ * shipped — but only while it hasn't shipped yet (a delivered or cancelled
+ * order keeps its status). The courier is picked from the store's active
+ * couriers (Couriers admin), keeping an old value that has since been removed.
+ * Unsaved edits are guarded.
  */
+
+/** Statuses a saved tracking number moves to "shipped". */
+const NOT_YET_SHIPPED: readonly OrderStatus[] = ["new", "confirmed", "processing", "ready"];
 export default function TrackingSheet() {
   const t = useTheme();
   const navigation = useNavigation();
@@ -21,6 +33,7 @@ export default function TrackingSheet() {
   const { id, ship } = useLocalSearchParams<{ id: string; ship?: string }>();
   const { data: order } = useOrder(id ?? "");
   const update = useUpdateOrder(id ?? "");
+  const brand = useAdminBrand();
   const shipping = ship === "1";
   // Set right before a deliberate exit (saved / conflict) so the guard lets it through.
   const leaving = useRef(false);
@@ -57,6 +70,15 @@ export default function TrackingSheet() {
 
   if (!order) return <ActivityIndicator style={{ margin: SPACE.xxl }} color={t.brand.link} />;
 
+  const active = brand.data
+    ? listFrom(brand.data, "couriers", SEED_COURIERS)
+        .filter((c) => c.active !== false)
+        .map((c) => str(c.name).trim())
+        .filter(Boolean)
+    : [];
+  const courierOptions = [...new Set([...(order.courier && !active.includes(order.courier) ? [order.courier] : []), ...active])];
+  const shipsNow = shipping || (!!tracking.trim() && NOT_YET_SHIPPED.includes(order.status));
+
   async function save() {
     if (!online) {
       Alert.alert("You're offline", "Reconnect to save. Nothing was changed.");
@@ -67,7 +89,7 @@ export default function TrackingSheet() {
         courier: courier.trim(),
         trackingNumber: tracking.trim(),
         shippingNote: note,
-        ...(shipping ? { status: "shipped" as const } : {}),
+        ...(shipsNow ? { status: "shipped" as const } : {}),
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       leaving.current = true;
@@ -100,7 +122,14 @@ export default function TrackingSheet() {
             ? `Add how ${order.orderNumber} is being sent. The customer can use the tracking number to follow it.`
             : `Order ${order.orderNumber}`}
         </AppText>
-        <Field label="Courier" value={courier} onChangeText={setCourier} placeholder="e.g. LBC, J&T, Lalamove" maxLength={120} autoCapitalize="words" returnKeyType="next" />
+        {courierOptions.length > 0 ? (
+          <View style={{ gap: SPACE.sm }}>
+            <AppText variant="label" color="muted">Courier</AppText>
+            <Chips options={courierOptions.map((name) => ({ key: name, label: name }))} value={courier} onChange={setCourier} label="Courier" />
+          </View>
+        ) : (
+          <Field label="Courier" value={courier} onChangeText={setCourier} placeholder="e.g. LBC, J&T, Lalamove" maxLength={120} autoCapitalize="words" returnKeyType="next" />
+        )}
         <Field
           label="Tracking number"
           value={tracking}
@@ -114,14 +143,15 @@ export default function TrackingSheet() {
           label="Note for the customer"
           value={note}
           onChangeText={setNote}
-          placeholder="Optional — e.g. arriving Friday afternoon"
+          placeholder="Optional, e.g. arriving Friday afternoon"
           hint="Shown to the customer when they track their order."
           maxLength={500}
           multiline
         />
         <Button
-          label={shipping ? "Mark as shipped" : "Save"}
-          icon={shipping ? "paper-plane" : "checkmark"}
+          label={shipping ? "Mark as shipped" : shipsNow ? "Save & mark shipped" : "Save"}
+          icon={shipsNow ? "paper-plane" : "checkmark"}
+          accessibilityHint={!shipping && shipsNow ? "A tracking number moves this order to Shipped, like on the website" : undefined}
           loading={update.isPending}
           disabled={!online || (!shipping && !dirty)}
           onPress={() => void save()}

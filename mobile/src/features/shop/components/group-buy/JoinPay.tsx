@@ -38,12 +38,12 @@ export function PayStep({ state, roundId }: { state: GroupBuyJoinState; roundId:
       ) : null}
       {state.amountMode === "deposit" ? (
         <Notice tone="info" icon="information-circle-outline">
-          {`${state.amountLabel} is a deposit — it's credited to your group-buy order at checkout.`}
+          {`${state.amountLabel} is a deposit. It's credited to your group-buy order at checkout.`}
         </Notice>
       ) : null}
 
       {state.paymentOptions.online ? (
-        <FormSection title="Pay online" hint="You'll finish paying in your browser. Come back here when you're done — it updates once the payment arrives.">
+        <FormSection title="Pay online" hint="You'll finish paying in your browser. Come back here when you're done. It updates once the payment arrives.">
           {payOnline.error ? (
             <Notice tone="danger" icon="alert-circle-outline">
               {errorText(payOnline.error, "Couldn't start the payment.")}
@@ -81,7 +81,7 @@ function PayTo({ methods, amount }: { methods: ShopPaymentMethod[]; amount: stri
     <FormSection title={`Send exactly ${amount} to`}>
       {methods.length === 0 ? (
         <AppText variant="body" color="muted">
-          The store hasn&apos;t listed a payment account yet — message them for where to pay.
+          The store hasn&apos;t listed a payment account yet. Message them for where to pay.
         </AppText>
       ) : (
         methods.map((m) => (

@@ -380,7 +380,7 @@ check("wizard renders BusinessStep, PackageStep, CheckoutStep as the paid flow",
 });
 
 check("post-payment steps offer a skip and a 'Send details' finish", () => {
-  assert.ok(/Skip — we&apos;ll ask you on WhatsApp|Skip — we'll ask you on WhatsApp/.test(wizardSrc));
+  assert.ok(/Skip, we&apos;ll ask you on WhatsApp|Skip, we'll ask you on WhatsApp/.test(wizardSrc));
   assert.ok(/Send details/.test(wizardSrc));
   assert.ok(wizardSrc.includes("updateOnboardingDetailsAction"));
 });

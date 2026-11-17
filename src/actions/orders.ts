@@ -43,7 +43,6 @@ import { loadOrderList } from "@/lib/orders/order-list-cache";
 import {
   isDemoMode,
   getDemoBranding,
-  saveDemoBranding,
   getDemoProducts,
   getDemoStoreProducts,
   saveDemoStoreProducts,
@@ -124,11 +123,13 @@ import {
 } from "@/lib/storefront/promo";
 import type { Order, OrderItem, OrderStatusEvent, Product } from "@/storefront/types";
 import {
-  authoritativeItemPrice,
   effectiveShippingFee,
   orderHasFreeShippingProduct,
 } from "@/storefront/checkout";
 import type { GroupBuyPriceScope } from "@/lib/storefront/two-ways";
+import { repriceOrderItems } from "@/lib/orders/reprice";
+import { isStorefrontActionBlocked, STOREFRONT_BLOCKED_MESSAGE } from "@/lib/auth/storefront-blocked";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { isGroupBuyPreorder, twoWaysOrderViolation } from "@/lib/storefront/two-ways-cart";
 import { isOnHandHidden, storedTwoWaysMode } from "@/lib/storefront/two-ways-mode";
 import { groupBuyMoqViolation, type MoqLine } from "@/lib/storefront/gb-moq-kits";
@@ -244,7 +245,7 @@ function stockViolation(
     if (it.qty > stock) {
       return stock === 0
         ? `"${prod.name}" is out of stock.`
-        : `Only ${stock} of "${prod.name}" left in stock — you have ${it.qty} in your cart.`;
+        : `Only ${stock} of "${prod.name}" left in stock, and you have ${it.qty} in your cart.`;
     }
   }
   return null;
@@ -271,7 +272,7 @@ function purchasableViolation(
       it.productId ? x.id === it.productId : x.name === it.name,
     );
     if (prod?.purchasable === false) {
-      return `"${prod.name}" isn't available right now — please remove it from your cart.`;
+      return `"${prod.name}" isn't available right now. Please remove it from your cart.`;
     }
   }
   return null;
@@ -333,7 +334,7 @@ function checkoutRulesViolation(
   if (rules.adminFeeValidation && rules.ruleBasedCheckout && clientFee && typeof clientFee === "object") {
     const shown = Math.max(0, num((clientFee as Record<string, unknown>).amount));
     if (shown !== chargedFee) {
-      return "The store's fees changed while you were checking out — please review your updated total and try again.";
+      return "The store's fees changed while you were checking out. Please review your updated total and try again.";
     }
   }
 
@@ -359,28 +360,6 @@ function itemsSubtotal(items: OrderItem[]): number {
 }
 
 /**
- * Re-price every line from the live catalog so the order is STORED — and every
- * percentage fee/discount is charged — at the CURRENT price, never a stale or
- * tampered client value. Mirrors the same server-authoritative re-derive the
- * shipping fee, admin fee and discount already do. A line that matches no
- * catalog product (or whose variation was removed) keeps its sent price — the
- * same skip rule as the stock and Smart Checkout checks. Mutates in place; the
- * order object is local to this request. Must run BEFORE the fee/discount stamps
- * so they compute against the authoritative subtotal.
- */
-function repriceItems(
-  items: OrderItem[],
-  catalog: Product[],
-  groupBuyScope: GroupBuyPriceScope | null = null,
-  wholesaleScope: WholesaleScope | null = null,
-): void {
-  for (const it of items) {
-    const live = authoritativeItemPrice(it, catalog, groupBuyScope, wholesaleScope);
-    if (live != null) it.price = live;
-  }
-}
-
-/**
  * Re-derive the SERVER-AUTHORITATIVE shipping fee + courier from the tenant's
  * configured shipping locations, keyed by the `locationId` the checkout sent.
  * Mirrors the admin-fee stamp: the client's displayed fee is never trusted, so a
@@ -399,7 +378,7 @@ function stampShipping(
   // Two independent waivers, either one is enough: a tagged free-shipping
   // product in the order, or the store-wide minimum-spend rule
   // (lib/storefront/free-shipping) — measured on the RE-PRICED items subtotal,
-  // so this must run after repriceItems, exactly as the cart measures it.
+  // so this must run after repriceOrderItems, exactly as the cart measures it.
   const freeShipping =
     orderHasFreeShippingProduct(p.items, catalog) ||
     qualifiesForFreeShipping(promo.freeShipping, itemsSubtotal(p.items), {
@@ -453,7 +432,7 @@ function stampShipping(
  * discarded and the fee is recomputed from the tenant's OWN config — the method
  * the owner tagged as QR PH — so a tampered payload cannot skip the charge.
  *
- * Must run AFTER repriceItems, the admin-fee stamp, stampShipping and
+ * Must run AFTER repriceOrderItems, the admin-fee stamp, stampShipping and
  * stampDiscount, because the percentage is charged on what those produce.
  *
  * Returns a customer-facing error only in the one case we refuse to ship
@@ -476,7 +455,7 @@ function stampPaymentFee(
   });
   const fee = activePaymentFee(config.paymentMethods, p.paymentMethod, base, entitled);
   if (paymentFeeOvercharges(shown, fee?.amount ?? 0)) {
-    return "The store's fees changed while you were checking out — please review your updated total and try again.";
+    return "The store's fees changed while you were checking out. Please review your updated total and try again.";
   }
   p.paymentFee = fee ?? undefined;
   return null;
@@ -559,7 +538,7 @@ async function stampGroupBuy(
     p.groupBuyName = gb.name;
     // Pricing scope for THIS attributed round: only its assigned products (or the
     // whole catalog when assignment is off / the round covers all) get gbPrice.
-    // Returned so repriceItems prices exactly the round's products — never an
+    // Returned so repriceOrderItems prices exactly the round's products — never an
     // off-round gb product that merely rode along in the same order.
     const coversAll = !caps.productAssignment || gb.productIds.length === 0;
     // moqVials rides along so placement enforces the per-customer minimum of
@@ -740,7 +719,7 @@ function stampDiscount(
   // tab left open past the end of the sale can't place an order with one.
   const err = promoCodeError(promo, subtotal, "", new Date(), campaignWindow);
   if (err || !promo) {
-    return "The discount code is no longer valid — please review your total and try again.";
+    return "The discount code is no longer valid. Please review your total and try again.";
   }
   p.discount = { code: promo.code, label: promoLabel(promo.code), amount: promoDiscountAmount(promo, subtotal) };
   return null;
@@ -748,8 +727,8 @@ function stampDiscount(
 
 /**
  * Best-effort: bump a promo code's `used` counter by one after an order that
- * applied it is genuinely stored (so usage limits actually tighten). Read-modify-
- * write on branding.config.promoCodes, mirroring savePromoCodesAction. NEVER
+ * applied it is genuinely stored (so usage limits actually tighten). Locked
+ * read-modify-write on branding.config.promoCodes. NEVER
  * throws — a failed counter update must not fail an already-placed order, and the
  * worst case is a code that under-counts its uses.
  */
@@ -768,22 +747,18 @@ async function incrementPromoUsage(tenantId: string, slug: string, code: string 
     return { next: { ...config, promoCodes }, changed };
   };
   try {
-    if (isDemoMode()) {
-      const config = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      const { next, changed } = bump(config);
-      if (changed) saveDemoBranding(slug, { config: next });
-      return;
-    }
-    const branding = await prisma.branding.findUnique({ where: { tenantId }, select: { config: true } });
-    const config = (branding?.config ?? {}) as Record<string, unknown>;
-    const { next, changed } = bump(config);
-    if (!changed) return;
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: next as Prisma.InputJsonValue },
-      create: { tenantId, config: next as Prisma.InputJsonValue },
-    });
-    revalidateTenant(tenantId, slug);
+    // Under the branding row lock (updateBrandingConfig): two orders using the
+    // same code at once each add their +1, and neither can erase an owner's
+    // settings save that lands in between.
+    const written = await updateBrandingConfig(
+      tenantId,
+      (config) => {
+        const { next, changed } = bump(config);
+        return changed ? next : null;
+      },
+      { demoKey: slug },
+    );
+    if (written && !isDemoMode()) revalidateTenant(tenantId, slug);
   } catch {
     /* best-effort — never block a placed order on the usage counter */
   }
@@ -1018,15 +993,15 @@ async function validateLiveOrder(
   const promo = await resolvePromoEngine(tenantId, config);
   const catalogAll = stampCampaignWindow(catalogMade, promo.campaignWindow);
   // A market order is priced from that market's catalog — for International,
-  // the USD view of each product. Every line must be IN it: an unmatched line
-  // would otherwise keep the price the browser sent (repriceItems only rewrites
-  // lines it can match), which is how a peso product could ride into a USD cart.
+  // the USD view of each product. Every line must be IN it — checked here, ahead
+  // of the general re-price refusal, so a peso product in a USD cart gets the
+  // market-specific message.
   const catalog = market ? marketCatalog(catalogAll, market) : catalogAll;
   if (market) {
     const stray = p.items.find(
       (it) => !catalog.some((x) => (it.productId ? x.id === it.productId : x.name === it.name)),
     );
-    if (stray) return { error: `"${stray.name}" isn't sold in this shop — please remove it from your cart.` };
+    if (stray) return { error: `"${stray.name}" isn't sold in this shop. Please remove it from your cart.` };
     p.currency = marketCurrencyCode(market, currencySymbolToIso(String(storedConfig.currency ?? "")));
   }
   // Tenant slug (used for group-buy attribution + the on-hand gate below).
@@ -1066,7 +1041,11 @@ async function validateLiveOrder(
     const violation = resellerMoqViolation(p.items, catalog);
     if (violation) return { error: violation };
   }
-  repriceItems(p.items, catalog, gbScope, wholesaleScope);
+  // Every line must match a live product/option — an unmatched one is refused,
+  // never kept at the price the browser sent (lib/orders/reprice).
+  const repriced = repriceOrderItems(p.items, catalog, gbScope, wholesaleScope);
+  if (!repriced.ok) return { error: repriced.error };
+  p.items = repriced.items;
 
   // Admin fee is operator-revocable per tenant (admin → Features) AND
   // Business-exclusive under the trial system: when the tenant isn't entitled
@@ -1166,6 +1145,7 @@ async function validateLiveOrder(
 export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceOrderResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
 
   const p = normalizeOrderInput(input);
   if (!p.items.length) return { error: "Your cart is empty." };
@@ -1251,7 +1231,9 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
       const violation = resellerMoqViolation(p.items, demoProducts);
       if (violation) return { error: violation };
     }
-    repriceItems(p.items, demoProducts, demoGbScope, demoWholesaleScope);
+    const demoRepriced = repriceOrderItems(p.items, demoProducts, demoGbScope, demoWholesaleScope);
+    if (!demoRepriced.ok) return { error: demoRepriced.error };
+    p.items = demoRepriced.items;
     const demoPaused =
       purchasableViolation(demoProducts, p.items) ?? unavailableLineViolation(demoProducts, p.items);
     if (demoPaused) return { error: demoPaused };
@@ -1409,6 +1391,7 @@ export async function placeStorefrontOrderAction(input: unknown): Promise<PlaceO
 export async function quoteStorefrontOrderAction(input: unknown): Promise<QuoteResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
   if (isDemoMode()) return { error: "Quotes aren't available in demo mode." };
 
   const p = normalizeOrderInput(input);
@@ -1545,7 +1528,7 @@ async function createStorefrontOrder(
       throw e;
     }
   }
-  throw new Error("Couldn't allocate a unique order number — please try again.");
+  throw new Error("Couldn't allocate a unique order number. Please try again.");
 }
 
 // ── Track order — PUBLIC (lookup by order number) ────────────────────────────
@@ -1565,6 +1548,7 @@ export type TrackOrderResult =
 export async function trackStorefrontOrderAction(orderNumber: unknown): Promise<TrackOrderResult> {
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "Store not found." };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
   const code = str(orderNumber, 64).trim();
   if (!code) return { ok: true, order: null };
 

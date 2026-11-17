@@ -46,7 +46,7 @@ function CategoryImagePicker({
   const upload = async (file: File | undefined | null) => {
     if (!file || uploading) return;
     if (file.size > MAX_CATEGORY_IMAGE_BYTES) {
-      toast("That image is over 10 MB — please pick a smaller one.");
+      toast("That image is over 10 MB. Please pick a smaller one.");
       return;
     }
     setUploading(true);
@@ -67,7 +67,7 @@ function CategoryImagePicker({
       onChange(url);
       toast(`Image set for “${name}”.`);
     } catch {
-      toast("Upload failed — please try again.");
+      toast("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -103,7 +103,7 @@ function CategoryImagePicker({
           type="button"
           className="admin-cat-img__clear"
           aria-label={`Remove the image for ${name} (use the product photo)`}
-          title="Remove — use the product photo"
+          title="Remove (use the product photo)"
           onClick={() => onChange(undefined)}
         >
           ×
@@ -235,7 +235,7 @@ export function AdminCategoriesManager({
           : "Products are back to your Products arrangement (refresh to see it)",
       );
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSavingFollow(false);
     }
@@ -369,8 +369,8 @@ export function AdminCategoriesManager({
             </h2>
             <p className="admin-cats-follow__hint">
               {follow
-                ? "On — “All Products” lists the first category’s products first, then the next, in the order below. Drag the rows to change it. Inside a category, products keep your Products arrangement."
-                : "Off — the order below only sets the category tabs. Turn on to also list products category by category in this order."}
+                ? "On: “All Products” lists the first category’s products first, then the next, in the order below. Drag the rows to change it. Inside a category, products keep your Products arrangement."
+                : "Off: the order below only sets the category tabs. Turn on to also list products category by category in this order."}
             </p>
           </div>
           <button

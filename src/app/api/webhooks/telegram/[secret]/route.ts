@@ -102,7 +102,7 @@ export async function POST(
       const isGroup = intent.chatType !== "private";
       await sendMessage(creds.botToken, intent.chatId, {
         text: isGroup
-          ? "✅ Linked. This group will receive new-order alerts <b>without customer details</b> — turn them on in your store admin if everyone here should see buyer names and addresses."
+          ? "✅ Linked. This group will receive new-order alerts <b>without customer details</b>. Turn them on in your store admin if everyone here should see buyer names and addresses."
           : "✅ Linked. You'll get an alert here the moment someone orders, and you can confirm orders from the message.",
         parse_mode: "HTML",
       });
@@ -166,7 +166,7 @@ export async function POST(
           creds.botToken,
           intent.chatId,
           intent.messageId,
-          buildConfirmedText(rendered.text, `${actor.label} — ${note}`, new Date().toISOString()),
+          buildConfirmedText(rendered.text, `${actor.label} · ${note}`, new Date().toISOString()),
         );
       }
 

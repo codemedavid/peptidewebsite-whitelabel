@@ -21,7 +21,7 @@ import { IntlLocalFooter } from "../../components/intl-local/IntlLocalFooter";
 const FRAME_WIDTH = { desktop: 1200, phone: 390 } as const;
 type Device = keyof typeof FRAME_WIDTH;
 
-const previewSubscribe = async () => ({ error: "Preview only — sign-ups work on your live site." });
+const previewSubscribe = async () => ({ error: "Preview only. Sign-ups work on your live site." });
 
 export function SitePreview({ brand, categories, config }: { brand: Brand; categories: Category[]; config: IntlLocalConfig }) {
   const [device, setDevice] = useState<Device>("desktop");

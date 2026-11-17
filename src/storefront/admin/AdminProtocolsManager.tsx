@@ -85,7 +85,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
       }
       if (uploaded.length > 0) update(i, { images: [...current, ...uploaded] });
     } catch {
-      alert("Image upload failed — please try again.");
+      alert("Image upload failed. Please try again.");
     } finally {
       setUploadingIdx(null);
     }
@@ -156,7 +156,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
       }
       toast("Protocols saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -296,7 +296,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                   </p>
                 </aside>
               ) : (
-                <div className="protocols-note-editor__empty">No note — nothing extra shows on your page.</div>
+                <div className="protocols-note-editor__empty">No note. Nothing extra shows on your page.</div>
               )}
             </div>
           </div>
@@ -417,7 +417,7 @@ export function AdminProtocolsManager({ brand, onBack }: { brand: Brand; onBack:
                     <div className="admin-field__hint" style={{ marginBottom: 10 }}>
                       Upload one or more images (e.g. dosing charts or
                       infographics). They replace the typed details on the public
-                      page. Up to {MAX_PROTOCOL_IMAGES} — JPG, PNG, WebP, max 10 MB each.
+                      page. Up to {MAX_PROTOCOL_IMAGES} (JPG, PNG, WebP, max 10 MB each).
                     </div>
                     {galleryEditor(i, p)}
                   </div>

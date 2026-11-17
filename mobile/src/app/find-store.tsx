@@ -13,6 +13,7 @@ import { StoreConfirm } from "@/features/session/find-store/StoreConfirm";
 import { AuthField } from "@/features/session/sign-in/AuthField";
 import { BackButton, Banner, PrimaryCta, TextLink, useAuthAccent } from "@/features/session/sign-in/parts";
 import { SheetHeading } from "@/features/session/sign-in/StoreSteps";
+import { useSession } from "@/auth/SessionProvider";
 import { useStoreLink } from "@/store-link/StoreLinkProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
@@ -33,6 +34,7 @@ export default function FindStore() {
   const params = useLocalSearchParams<{ next?: string }>();
   const next = findStoreNext(params.next);
   const { choose } = useStoreLink();
+  const { startGuest } = useSession();
   const accent = useAuthAccent(false);
   const [code, setCode] = useState("");
   const [found, setFound] = useState<StorePreview | null>(null);
@@ -72,6 +74,20 @@ export default function FindStore() {
     }
   }
 
+  /** Shop as a guest: link the store, then open a guest session (the app swaps to the shop). */
+  async function handleGuest() {
+    if (!found || isLinking) return;
+    setIsLinking(true);
+    setError(null);
+    try {
+      await choose(found);
+      await startGuest(found.slug);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "We couldn't open the shop. Please try again.");
+      setIsLinking(false);
+    }
+  }
+
   function handleRetry() {
     setFound(null);
     setError(null);
@@ -97,6 +113,8 @@ export default function FindStore() {
         <BackButton onPress={found ? handleRetry : goBack} />
 
         {found ? (
+          <>
+          {error ? <Banner tone="danger" icon="alert-circle" text={error} /> : null}
           <StoreConfirm
             store={found}
             accent={accent}
@@ -104,9 +122,11 @@ export default function FindStore() {
             busy={isLinking}
             onCreateAccount={() => void handleContinue("/create-account")}
             onSignIn={() => void handleContinue("/sign-in")}
+            onGuest={() => void handleGuest()}
             onOpenWebsite={() => void WebBrowser.openBrowserAsync(found.websiteUrl)}
             onRetry={handleRetry}
           />
+          </>
         ) : (
           <>
             <SheetHeading

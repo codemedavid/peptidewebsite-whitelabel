@@ -404,7 +404,7 @@ export function ProductCard({
   /** Live group-buy kit progress for this product (roundKitProgress). Null /
    *  absent = no bar — no round, not in it, or no vials per kit set. */
   kit?: KitProgress | null;
-  /** Start on the first option (Brand.variationPreselect). Default: nothing picked. */
+  /** Start on the first option (Brand.variationPreselect). Default: first option; false = nothing picked. */
   preselectOption?: boolean;
   /** Open the full-detail quick-view modal for this product. Optional so the
    *  admin Card Studio preview (which renders this card outside the catalog)
@@ -760,9 +760,9 @@ export function ProductDetailModal({
   // A testimonial the customer asked to see large. The thumb below is 56px —
   // unreadable for the chat screenshots owners actually upload.
   const [reviewViewer, setReviewViewer] = useState<Review | null>(null);
-  // Nothing picked yet (-1): a product with options shows no price until the
-  // customer clicks one, same as the catalog card it opened from — unless the
-  // store preselects the first option (Brand.variationPreselect).
+  // Starts on the first option, same as the catalog card it opened from, so the
+  // price shows at once. A store that set Brand.variationPreselect=false starts
+  // on nothing (-1) and shows no price until the customer clicks one.
   const [optIdx, setOptIdx] = useState(() =>
     initialOptionIndex(buildProductOptions(product).length, brand.variationPreselect),
   );

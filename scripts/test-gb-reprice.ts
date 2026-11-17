@@ -98,7 +98,7 @@ check("a new line is priced from the catalog at its variation's group-buy price"
   const added = r.items[2];
   assert.deepEqual(
     [added.name, added.qty, added.price, added.productId, added.variation, added.placedAt, added.addedBy],
-    ["Tirzepatide — 30mg", 2, 2500, "tirz", "30mg", NOW, "store"],
+    ["Tirzepatide · 30mg", 2, 2500, "tirz", "30mg", NOW, "store"],
   );
   assert.deepEqual(r.kitDeltas, { [k30]: 2 });
   assert.deepEqual(r.changes.map((c) => c.kind), ["added"]);

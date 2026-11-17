@@ -317,8 +317,8 @@ export function cartStockViolations(
       blocking: true,
       message:
         stock <= 0
-          ? `"${name}" is out of stock — please remove it from your cart.`
-          : `Only ${stock} of "${name}" left in stock — you have ${qty} in your cart.`,
+          ? `"${name}" is out of stock. Please remove it from your cart.`
+          : `Only ${stock} of "${name}" left in stock, and you have ${qty} in your cart.`,
     });
   }
   return out;

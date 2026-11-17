@@ -82,7 +82,7 @@ const kissPeptin = product({ name: "KissPeptin-10", price: 3000 });
 console.log("\ncartDisplayName — the dose survives onto the checkout line\n");
 
 check("a bare add of a single-variation product carries its dose", () => {
-  assert.strictEqual(cartDisplayName(semaglutide), "Semaglutide — 5mg × 10 vials");
+  assert.strictEqual(cartDisplayName(semaglutide), "Semaglutide · 5mg × 10 vials");
 });
 
 check("a bare group-buy add is named identically to the same product picked", () => {
@@ -94,7 +94,7 @@ check("a bare group-buy add is named identically to the same product picked", ()
 
 check("a chosen variation is not double-appended", () => {
   const picked = makeVariationEntry(semaglutide, semaglutide.variations![0]);
-  assert.strictEqual(cartDisplayName(picked), "Semaglutide — 5mg × 10 vials");
+  assert.strictEqual(cartDisplayName(picked), "Semaglutide · 5mg × 10 vials");
 });
 
 check("a name that already carries its dose is left alone", () => {
@@ -114,7 +114,7 @@ check("several unchosen doses are NOT merged into one line name", () => {
 
 check("a chosen dose survives on a multi-variation product", () => {
   const picked = makeVariationEntry(tirzepatide, tirzepatide.variations![1]);
-  assert.strictEqual(cartDisplayName(picked), "Tirzepatide — 10mg × 10 vials");
+  assert.strictEqual(cartDisplayName(picked), "Tirzepatide · 10mg × 10 vials");
 });
 
 check("a distinct Standard base price suppresses the append", () => {
@@ -132,7 +132,7 @@ check("a re-hydrated live cart entry still carries the dose", () => {
   // liveCartLines re-reads every entry from the catalog before pricing it; the
   // name the checkout renders comes out of THAT, not the add-time snapshot.
   const live = resolveLiveProduct(semaglutide, [semaglutide]);
-  assert.strictEqual(cartDisplayName(live), "Semaglutide — 5mg × 10 vials");
+  assert.strictEqual(cartDisplayName(live), "Semaglutide · 5mg × 10 vials");
 });
 
 check("an empty variation name never leaves a dangling separator", () => {

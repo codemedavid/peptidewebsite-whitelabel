@@ -71,7 +71,7 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
       setTweak({ adminFee: value });
       toast("Checkout fee saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -106,7 +106,7 @@ export function AdminFeeSettings({ brand, onBack }: { brand: Brand; onBack: () =
         <div className="admin-form__card">
           <h2 className="admin-form__section">🧾 Checkout Fee</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            A single charge added on top of the order total at checkout — e.g. a
+            A single charge added on top of the order total at checkout, e.g. a
             shipping, service or processing fee. Customers see it as its own line
             in the totals. Use this if you&apos;d rather charge one flat fee than
             set a fee on every shipping location.

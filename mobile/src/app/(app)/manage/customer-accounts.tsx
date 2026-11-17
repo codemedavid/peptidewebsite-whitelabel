@@ -1,14 +1,33 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { router, Stack } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { callAction } from "@/features/admin/account/data";
+import { adminBridge } from "@/features/admin/bridge";
 import { setupKeys, success, useAdminBrand } from "@/features/admin/setup/data";
 import { formatMoney } from "@/features/admin/catalog/currency";
 import { brandSymbol } from "@/features/admin/catalog/model";
-import { Chips } from "@/ui/kit";
+import { AccountsInsights, SEGMENT_TONE, shortDate } from "@/features/customer-accounts/AccountsInsights";
+import { MembersOnlyCard } from "@/features/customer-accounts/MembersOnlyCard";
+import {
+  CUSTOMER_FILTERS,
+  FILTER_ORDER,
+  PERIODS,
+  SEGMENT_LABELS,
+  VIP_SPEND,
+  buildAccountStats,
+  countByFilter,
+  customersCsv,
+  filterCustomers,
+  type AccountStats,
+  type CustomerFilter,
+  type CustomerPeriod,
+  type LedgerEntry,
+} from "@/features/customer-accounts/analytics";
+import { shareCsv } from "@/features/insights/shareCsv";
+import { Chips, SectionHeader } from "@/ui/kit";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
@@ -33,15 +52,11 @@ type StoreCustomer = {
   unlinkedOrders: number;
 };
 
-type Sort = "newest" | "spent" | "orders";
-const byNewest = (a: StoreCustomer, b: StoreCustomer) => b.joinedAt.localeCompare(a.joinedAt);
-const COMPARE: Record<Sort, (a: StoreCustomer, b: StoreCustomer) => number> = {
-  newest: byNewest,
-  spent: (a, b) => (b.spent ?? 0) - (a.spent ?? 0) || b.orderCount - a.orderCount || byNewest(a, b),
-  orders: (a, b) => b.orderCount - a.orderCount || (b.spent ?? 0) - (a.spent ?? 0) || byNewest(a, b),
-};
+type CustomerList = { customers: StoreCustomer[]; ledger: LedgerEntry[] | null };
 
-const shortDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "never");
+const THOUSAND = 1000;
+/** Lifetime figures with no orders read as a dash, like the website table. */
+const dash = "—";
 
 type CustomerDraft = Pick<StoreCustomer, "name" | "email" | "phone">;
 
@@ -80,39 +95,174 @@ function CustomerEditor({
   );
 }
 
+/** One label/value fact on a customer's card ("Avg order ₱1,200"). */
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.fact}>
+      <AppText variant="caption" color="faint">{label}</AppText>
+      <AppText variant="label" style={styles.tabular}>{value}</AppText>
+    </View>
+  );
+}
+
+type CardProps = {
+  c: StoreCustomer;
+  s: AccountStats | undefined;
+  hasLedger: boolean;
+  canOrders: boolean;
+  online: boolean;
+  busyId: string | null;
+  editing: boolean;
+  money: (n: number) => string;
+  onEdit: () => void;
+  onSave: (draft: CustomerDraft) => void;
+  onCancelEdit: () => void;
+  onReset: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+};
+
+/** One customer: the website table row's columns, then its row tools. */
+function CustomerCard(p: CardProps) {
+  const { c, s, hasLedger, money, busyId, online } = p;
+  const segment = s?.segment ?? "none";
+  const orders = hasLedger ? (s?.orders ?? 0) : c.orderCount;
+  const spent = hasLedger ? (s?.spent ?? 0) : c.spent;
+  const openHistory = () => router.push({ pathname: "/customer-account/[id]", params: { id: c.id } });
+  return (
+    <Card style={{ gap: SPACE.sm }}>
+      <View style={styles.head}>
+        <AppText variant="bodyStrong" style={{ flex: 1 }}>{c.name}</AppText>
+        {spent !== null ? <AppText variant="bodyStrong" style={styles.tabular}>{money(spent)}</AppText> : null}
+      </View>
+      <View style={styles.pills}>
+        {hasLedger ? <Pill tone={SEGMENT_TONE[segment]} size="sm" label={SEGMENT_LABELS[segment]} /> : null}
+        {c.emailOnly ? <Pill tone="info" size="sm" label="Email only" /> : null}
+        <Pill tone={c.status === "active" ? "success" : "danger"} size="sm" label={c.status === "active" ? "Active" : "Disabled"} />
+      </View>
+      <AppText variant="caption" color="muted">{c.phone ? `${c.email} · ${c.phone}` : c.email}</AppText>
+      <View style={styles.facts}>
+        <Fact label="Orders" value={orders.toLocaleString()} />
+        {hasLedger ? <Fact label="Avg order" value={s && s.orders > 0 ? money(s.avg) : dash} /> : null}
+        {hasLedger ? <Fact label="Last order" value={shortDate(s?.lastAt ?? null)} /> : null}
+        <Fact label="Joined" value={shortDate(c.joinedAt)} />
+        <Fact label="Last sign-in" value={c.lastLoginAt ? shortDate(c.lastLoginAt) : "never"} />
+      </View>
+      {p.canOrders && c.unlinkedOrders > 0 ? (
+        <Button
+          label={`${c.unlinkedOrders} earlier order${c.unlinkedOrders === 1 ? "" : "s"} to link`}
+          variant="ghost"
+          icon="link-outline"
+          onPress={openHistory}
+        />
+      ) : null}
+      {p.canOrders ? (
+        <Button
+          label={orders > 0 ? `Order history · ${orders}` : "Order history"}
+          icon="receipt-outline"
+          accessibilityHint="Opens every order this customer placed"
+          onPress={openHistory}
+        />
+      ) : null}
+      {p.editing ? (
+        <CustomerEditor customer={c} saving={busyId === c.id} onSave={p.onSave} onCancel={p.onCancelEdit} />
+      ) : (
+        <Button label="Edit details" variant="secondary" icon="create-outline" disabled={!online || busyId !== null} onPress={p.onEdit} />
+      )}
+      {c.status === "active" && !c.emailOnly ? (
+        <Button label="Reset password" variant="secondary" icon="key-outline" disabled={!online || busyId !== null} onPress={p.onReset} />
+      ) : null}
+      <Button
+        label={c.status === "active" ? "Disable" : "Re-enable"}
+        variant={c.status === "active" ? "danger" : "secondary"}
+        icon={c.status === "active" ? "ban-outline" : "checkmark-circle-outline"}
+        loading={busyId === c.id}
+        disabled={!online || (busyId !== null && busyId !== c.id)}
+        onPress={p.onToggle}
+      />
+      <Button label="Delete account" variant="ghost" icon="trash-outline" disabled={!online || busyId !== null} onPress={p.onDelete} />
+    </Card>
+  );
+}
+
+/** Whether this account can open Promo Codes (the server's own admin menu: visibility + grants + locks). */
+function usePromoAllowed(): boolean {
+  const { scope } = useSignedIn();
+  const menu = useQuery({ queryKey: [scope, "admin", "menu"], queryFn: adminBridge.menu });
+  return !!menu.data?.groups.some((g) => g.items.some((i) => i.view === "promo" && !i.locked));
+}
+
 /**
- * The website's Customers view (AdminCustomers): shoppers who made an account,
- * with disable (signs them out everywhere), re-enable, and reset password (a
- * temp one for the owner to send a shopper who forgot theirs), edit (name /
- * email / phone) and delete (personal data purged, orders kept). With the Orders
- * permission each card opens the account's order history. Runs the website's own
- * actions, gated on the "customers" permission and the store's feature.
+ * The website's Customers page (AdminCustomers + CustomersInsights +
+ * AdminMemberSignIn): the Members-only switch, then — with the Orders grant —
+ * the analytics (KPIs per period, revenue from accounts, segments, Top
+ * spenders, concentration, needs-attention), then every account with segment
+ * filters + counts, search, CSV export of the filtered list, and the row tools:
+ * order history, edit (name / email / phone), reset password (a temp one for
+ * the owner to send), disable / re-enable (signs them out everywhere) and
+ * delete (personal data purged, orders kept). Every number comes from the
+ * website's customer-analytics (copied to features/customer-accounts); every
+ * write runs the website's own action, gated on the "customers" permission.
  */
 export default function CustomerAccountsScreen() {
   const t = useTheme();
   const online = useOnline();
   const { me, scope } = useSignedIn();
   const qc = useQueryClient();
+  const listRef = useRef<FlatList<StoreCustomer>>(null);
+  const tableY = useRef(0);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<CustomerFilter>("all");
+  const [period, setPeriod] = useState<CustomerPeriod>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [sort, setSort] = useState<Sort>("newest");
   const brand = useAdminBrand();
+  const promoAllowed = usePromoAllowed();
   const symbol = brand.data ? brandSymbol(brand.data) : "₱";
   const money = (n: number) => formatMoney(Math.round(n), symbol, { decimals: false });
+  const moneyShort = (n: number) => (n >= THOUSAND ? `${symbol}${(n / THOUSAND).toFixed(1).replace(/\.0$/, "")}k` : money(n));
 
   const key = [...setupKeys.all(scope), "customer-accounts"];
   const list = useQuery({
     queryKey: key,
-    queryFn: async () => (await callAction<{ ok: true; customers: StoreCustomer[] }>("listStoreCustomersAction")).customers,
+    queryFn: async (): Promise<CustomerList> => {
+      const res = await callAction<{ ok: true; customers: StoreCustomer[]; ledger: LedgerEntry[] | null }>("listStoreCustomersAction");
+      return { customers: res.customers, ledger: res.ledger ?? null };
+    },
   });
+  const patchList = (fn: (prev: CustomerList) => CustomerList) =>
+    qc.setQueryData<CustomerList>(key, (prev) => (prev ? fn(prev) : prev));
+
+  // "Now" is pinned per load (the fetch time), so the windows don't drift between renders.
+  const now = useMemo(() => new Date(list.dataUpdatedAt), [list.dataUpdatedAt]);
+  const accounts = useMemo(() => list.data?.customers ?? [], [list.data]);
+  const ledger = list.data?.ledger ?? null;
+  const hasLedger = ledger !== null;
+  const stats = useMemo(() => buildAccountStats(accounts, ledger ?? [], now), [accounts, ledger, now]);
+  const counts = useMemo(() => countByFilter(accounts, stats), [accounts, stats]);
+  const visible = useMemo(() => filterCustomers(accounts, stats, filter, query), [accounts, stats, filter, query]);
+  // Empty tabs are noise: keep All and whatever is selected, hide the rest at 0.
+  const filters = FILTER_ORDER.filter(
+    (f) => (hasLedger || !CUSTOMER_FILTERS[f].needsLedger) && (f === "all" || f === filter || counts[f] > 0),
+  );
+
+  const showFilter = (f: CustomerFilter) => {
+    setFilter(f);
+    listRef.current?.scrollToOffset({ offset: Math.max(0, tableY.current), animated: true });
+  };
+
+  const exportCsv = () => {
+    if (visible.length === 0) return void Alert.alert("Nothing to export", "No customers match this filter.");
+    const stamp = now.toISOString().slice(0, 10);
+    void shareCsv(`customers-${filter}-${stamp}.csv`, customersCsv(visible, hasLedger ? stats : null));
+  };
 
   async function setStatus(c: StoreCustomer, status: StoreCustomer["status"]) {
     setBusyId(c.id);
     try {
       await callAction("setStoreCustomerStatusAction", c.id, status);
       success();
-      qc.setQueryData<StoreCustomer[]>(key, (prev) => prev?.map((r) => (r.id === c.id ? { ...r, status } : r)));
+      patchList((prev) => ({ ...prev, customers: prev.customers.map((r) => (r.id === c.id ? { ...r, status } : r)) }));
       Alert.alert(status === "disabled" ? "Account disabled" : "Account re-enabled");
     } catch (e) {
       Alert.alert("Couldn't update the customer", e instanceof Error ? e.message : "Please try again.");
@@ -146,7 +296,7 @@ export default function CustomerAccountsScreen() {
     try {
       const { customer } = await callAction<{ ok: true; customer: CustomerDraft & { id: string } }>("updateStoreCustomerAction", c.id, draft);
       success();
-      qc.setQueryData<StoreCustomer[]>(key, (prev) => prev?.map((r) => (r.id === c.id ? { ...r, ...customer } : r)));
+      patchList((prev) => ({ ...prev, customers: prev.customers.map((r) => (r.id === c.id ? { ...r, ...customer } : r)) }));
       setEditingId(null);
     } catch (e) {
       Alert.alert("Couldn't save the customer", e instanceof Error ? e.message : "Please try again.");
@@ -160,7 +310,10 @@ export default function CustomerAccountsScreen() {
     try {
       await callAction("deleteStoreCustomerAction", c.id);
       success();
-      qc.setQueryData<StoreCustomer[]>(key, (prev) => prev?.filter((r) => r.id !== c.id));
+      patchList((prev) => ({
+        customers: prev.customers.filter((r) => r.id !== c.id),
+        ledger: prev.ledger?.filter((e) => e.accountId !== c.id) ?? null,
+      }));
       if (editingId === c.id) setEditingId(null);
     } catch (e) {
       Alert.alert("Couldn't delete the customer", e instanceof Error ? e.message : "Please try again.");
@@ -196,127 +349,104 @@ export default function CustomerAccountsScreen() {
     ]);
   };
 
-  const q = query.trim().toLowerCase();
-  const rows = (list.data ?? [])
-    .filter((c) => !q || [c.name, c.email, c.phone].some((v) => v.toLowerCase().includes(q)))
-    .sort(COMPARE[sort]);
-  // Spend only comes with the Orders grant — no spender sort without it.
-  const hasSpend = (list.data ?? []).some((c) => c.spent !== null);
-  const sorts: ReadonlyArray<{ key: Sort; label: string }> = [
-    { key: "newest", label: "Newest" },
-    ...(hasSpend ? [{ key: "spent" as const, label: "Top spenders" }] : []),
-    { key: "orders", label: "Most orders" },
-  ];
+  const q = query.trim();
+  const header = (
+    <View style={{ gap: SPACE.xl, marginBottom: SPACE.md }}>
+      <MembersOnlyCard />
+      <AppText variant="caption" color="muted">
+        {hasLedger
+          ? "Who buys, how much, and how often, from shoppers with an account on your store."
+          : "Shoppers with an account on your store. Guest checkout still works for everyone else."}
+      </AppText>
+      {hasLedger && ledger && accounts.length > 0 ? (
+        <View style={{ gap: SPACE.lg }}>
+          <Chips<CustomerPeriod> options={PERIODS.map((p) => ({ key: p.key, label: p.label }))} value={period} onChange={setPeriod} label="Date range" />
+          <AccountsInsights
+            accounts={accounts}
+            ledger={ledger}
+            stats={stats}
+            period={period}
+            now={now}
+            money={money}
+            moneyShort={moneyShort}
+            vipRule={`${money(VIP_SPEND)}+ total spent`}
+            onOpenProfile={(id) => router.push({ pathname: "/customer-account/[id]", params: { id } })}
+            onFilter={showFilter}
+            onOpenPromo={promoAllowed ? () => router.push("/manage/promo") : undefined}
+          />
+        </View>
+      ) : null}
+      {accounts.length > 0 ? (
+        <View style={{ gap: SPACE.md }} onLayout={(e) => (tableY.current = e.nativeEvent.layout.y)}>
+          <SectionHeader eyebrow="Customers" title="All customers" action={{ label: "Export CSV", onPress: exportCsv }} />
+          <Field label="Search" value={query} onChangeText={setQuery} placeholder="Name, email or phone" autoCapitalize="none" autoCorrect={false} />
+          <Chips<CustomerFilter>
+            options={filters.map((f) => ({ key: f, label: CUSTOMER_FILTERS[f].label, count: counts[f] }))}
+            value={filter}
+            onChange={setFilter}
+            label="Filter customers"
+          />
+          <AppText variant="caption" color="faint">
+            {`Showing ${visible.length} of ${accounts.length} customer${accounts.length === 1 ? "" : "s"}`}
+          </AppText>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: "Customer accounts" }} />
       <OfflineBanner />
       {list.isPending ? (
-        <SkeletonList />
+        <View style={styles.pending}>
+          <MembersOnlyCard />
+          <SkeletonList />
+        </View>
       ) : list.isError ? (
         <ErrorState message={list.error.message} onRetry={() => void list.refetch()} />
       ) : (
         <FlatList
-          data={rows}
+          ref={listRef}
+          data={visible}
           keyExtractor={(c) => c.id}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           ItemSeparatorComponent={() => <View style={{ height: SPACE.md }} />}
           refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} tintColor={t.brand.link} />}
-          ListHeaderComponent={
-            <View style={{ gap: SPACE.md, marginBottom: SPACE.md }}>
-              <AppText variant="caption" color="muted">
-                Shoppers who created an account on your store. Disabling one signs them out everywhere.
-              </AppText>
-              <Field label="Search" value={query} onChangeText={setQuery} placeholder="Name, email or phone" autoCapitalize="none" autoCorrect={false} />
-              <Chips options={sorts} value={sort} onChange={setSort} label="Sort customers" />
-            </View>
-          }
+          ListHeaderComponent={header}
           ListEmptyComponent={
-            <EmptyState
-              icon={q ? "search" : "people-outline"}
-              title={q ? "No matching customers" : "No customer accounts yet"}
-              body={q ? `Nothing found for “${query.trim()}”.` : "When shoppers sign up on your store, they'll show up here."}
-            />
+            accounts.length === 0 ? (
+              <EmptyState
+                icon="people-outline"
+                title="No customer accounts yet"
+                body="Shoppers can sign up from the account icon in your store's header. They'll show up here."
+              />
+            ) : (
+              <EmptyState
+                icon="search"
+                title="No matching customers"
+                body={q ? `No customers match “${q}”.` : "No customers match this filter."}
+              />
+            )
           }
-          renderItem={({ item: c, index }) => (
-            <Card style={{ gap: SPACE.sm }}>
-              <View style={styles.head}>
-                {sort === "spent" && !q && (c.spent ?? 0) > 0 ? (
-                  <Pill tone="success" icon="trophy-outline" size="sm" label={`#${index + 1}`} />
-                ) : null}
-                <AppText variant="bodyStrong" style={{ flex: 1 }}>
-                  {c.name}
-                </AppText>
-                {c.spent !== null ? (
-                  <AppText variant="bodyStrong" style={styles.tabular}>
-                    {money(c.spent)}
-                  </AppText>
-                ) : null}
-                {c.emailOnly ? <Pill tone="info" size="sm" label="Email only" /> : null}
-                <Pill tone={c.status === "active" ? "success" : "danger"} size="sm" label={c.status === "active" ? "Active" : "Disabled"} />
-              </View>
-              <AppText variant="caption" color="muted">
-                {c.phone ? `${c.email} · ${c.phone}` : c.email}
-              </AppText>
-              <AppText variant="caption" color="faint">
-                {`${c.orderCount} order${c.orderCount === 1 ? "" : "s"} · Joined ${shortDate(c.joinedAt)} · Last sign-in ${shortDate(c.lastLoginAt)}`}
-              </AppText>
-              {me.can.orders && c.unlinkedOrders > 0 ? (
-                <AppText variant="caption" color="link">
-                  {`${c.unlinkedOrders} earlier guest order${c.unlinkedOrders === 1 ? "" : "s"} to link — open Order history`}
-                </AppText>
-              ) : null}
-              {me.can.orders ? (
-                <Button
-                  label={c.orderCount > 0 ? `Order history · ${c.orderCount}` : "Order history"}
-                  icon="receipt-outline"
-                  accessibilityHint="Opens every order this customer placed"
-                  onPress={() => router.push({ pathname: "/customer-account/[id]", params: { id: c.id } })}
-                />
-              ) : null}
-              {editingId === c.id ? (
-                <CustomerEditor
-                  customer={c}
-                  saving={busyId === c.id}
-                  onSave={(draft) => void saveEdit(c, draft)}
-                  onCancel={() => setEditingId(null)}
-                />
-              ) : (
-                <Button
-                  label="Edit details"
-                  variant="secondary"
-                  icon="create-outline"
-                  disabled={!online || busyId !== null}
-                  onPress={() => setEditingId(c.id)}
-                />
-              )}
-              {c.status === "active" && !c.emailOnly && (
-                <Button
-                  label="Reset password"
-                  variant="secondary"
-                  icon="key-outline"
-                  disabled={!online || busyId !== null}
-                  onPress={() => confirmReset(c)}
-                />
-              )}
-              <Button
-                label={c.status === "active" ? "Disable" : "Re-enable"}
-                variant={c.status === "active" ? "danger" : "secondary"}
-                icon={c.status === "active" ? "ban-outline" : "checkmark-circle-outline"}
-                loading={busyId === c.id}
-                disabled={!online || (busyId !== null && busyId !== c.id)}
-                onPress={() => toggle(c)}
-              />
-              <Button
-                label="Delete account"
-                variant="ghost"
-                icon="trash-outline"
-                disabled={!online || busyId !== null}
-                onPress={() => confirmDelete(c)}
-              />
-            </Card>
+          renderItem={({ item: c }) => (
+            <CustomerCard
+              c={c}
+              s={stats.get(c.id)}
+              hasLedger={hasLedger}
+              canOrders={me.can.orders}
+              online={online}
+              busyId={busyId}
+              editing={editingId === c.id}
+              money={money}
+              onEdit={() => setEditingId(c.id)}
+              onSave={(draft) => void saveEdit(c, draft)}
+              onCancelEdit={() => setEditingId(null)}
+              onReset={() => confirmReset(c)}
+              onToggle={() => toggle(c)}
+              onDelete={() => confirmDelete(c)}
+            />
           )}
         />
       )}
@@ -326,7 +456,11 @@ export default function CustomerAccountsScreen() {
 
 const styles = StyleSheet.create({
   list: { padding: SPACE.lg, paddingBottom: SPACE.xxxl, flexGrow: 1 },
+  pending: { padding: SPACE.lg, gap: SPACE.lg },
   head: { flexDirection: "row", alignItems: "center", gap: SPACE.md },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.sm },
+  facts: { flexDirection: "row", flexWrap: "wrap", columnGap: SPACE.lg, rowGap: SPACE.sm },
+  fact: { minWidth: 88 },
   editActions: { flexDirection: "row", gap: SPACE.md },
   tabular: { fontVariant: ["tabular-nums"] },
 });

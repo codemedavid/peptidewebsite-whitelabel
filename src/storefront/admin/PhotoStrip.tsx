@@ -53,7 +53,7 @@ export function PhotoStrip({
     if (urls.length) onChange([...photos, ...urls].slice(0, max));
     if (firstError) setErr(`${firstError} (${urls.length} of ${picked.length} uploaded)`);
     else if (files.length > picked.length) {
-      setErr(`Only ${max} extra photos fit — ${files.length - picked.length} skipped.`);
+      setErr(`Only ${max} extra photos fit, ${files.length - picked.length} skipped.`);
     }
   };
 

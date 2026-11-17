@@ -7,7 +7,10 @@ import { CHAT, INTER, useChatBrand } from "@/features/community/theme";
 import { cartCount } from "@/features/shop/lib/cart";
 import { LiveGroupBuyStrip } from "@/features/shop/components/group-buy/LiveGroupBuyStrip";
 import { useShop } from "@/features/shop/ShopProvider";
+import { useSignedIn } from "@/auth/SessionProvider";
+import { useTrackerAccess } from "@/features/tracker/hooks";
 import type { IconName } from "@/ui/primitives";
+import { readingScreenLayout } from "@/ui/ReadingColumn";
 
 function tabIcon(name: IconName, active: IconName) {
   return function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
@@ -26,8 +29,10 @@ function TabBarWithLiveStrip(props: BottomTabBarProps) {
 }
 
 /**
- * The customer app: Chats (approved members only) · Shop · Orders · Me.
- * Anyone not approved yet lands on Me, which shows their membership status.
+ * The customer app: Chats (approved members only) · Shop · Tracker (granted
+ * stores only) · Orders · Me.
+ * Anyone not approved yet lands on Shop (what they signed up for); Me shows
+ * their membership status.
  * While a group buy is open, a LIVE strip sits above the tab bar on every tab.
  */
 export default function CustomerTabsLayout() {
@@ -35,10 +40,15 @@ export default function CustomerTabsLayout() {
   const access = useCommunityAccess();
   const unread = useUnreadChats();
   const inCart = cartCount(useShop().lines);
+  const tracker = useTrackerAccess();
+  const { me } = useSignedIn();
+  // A guest sees the tracker tab as a sign-up lock (no tracker data, no API).
+  const isGuest = me.actor.kind === "customer" && me.actor.guest === true;
 
   return (
     <Tabs
-      initialRouteName={access.customerChatsTab ? "community" : "me"}
+      screenLayout={readingScreenLayout}
+      initialRouteName={access.customerChatsTab && !access.guestLocked ? "community" : "shop"}
       tabBar={TabBarWithLiveStrip}
       screenOptions={{
         headerShown: false,
@@ -53,7 +63,12 @@ export default function CustomerTabsLayout() {
       <Tabs.Protected guard={access.customerChatsTab}>
         <Tabs.Screen
           name="community"
-          options={{ title: "Chats", tabBarIcon: tabIcon("chatbubbles-outline", "chatbubbles"), tabBarBadge: unread > 0 ? (unread > 99 ? "99+" : unread) : undefined }}
+          options={{
+            title: "Chats",
+            // A guest's Chats is the sign-up lock: a padlock, no unread count.
+            tabBarIcon: access.guestLocked ? tabIcon("lock-closed-outline", "lock-closed") : tabIcon("chatbubbles-outline", "chatbubbles"),
+            tabBarBadge: unread > 0 ? (unread > 99 ? "99+" : unread) : undefined,
+          }}
         />
       </Tabs.Protected>
       <Tabs.Screen
@@ -65,6 +80,16 @@ export default function CustomerTabsLayout() {
           tabBarAccessibilityLabel: inCart > 0 ? `Shop, ${inCart} in cart` : "Shop",
         }}
       />
+      {/* Peptide Tracker (docs/mobile-admin/TRACKER.md): granted stores only. */}
+      <Tabs.Protected guard={tracker.tab}>
+        <Tabs.Screen
+          name="tracker"
+          options={{
+            title: "Tracker",
+            tabBarIcon: isGuest ? tabIcon("lock-closed-outline", "lock-closed") : tabIcon("pulse-outline", "pulse"),
+          }}
+        />
+      </Tabs.Protected>
       <Tabs.Screen name="my-orders" options={{ title: "Orders", tabBarIcon: tabIcon("receipt-outline", "receipt") }} />
       <Tabs.Screen name="me" options={{ title: "Me", tabBarIcon: tabIcon("person-circle-outline", "person-circle") }} />
     </Tabs>

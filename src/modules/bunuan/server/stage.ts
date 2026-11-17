@@ -151,7 +151,7 @@ export async function setStage(
       if (!state) return NOT_FOUND;
       const now = new Date();
       if (!stageMoveEligible(state.round, now)) {
-        return gbFail("conflict", "This round isn't live — open it first.");
+        return gbFail("conflict", "This round isn't live. Open it first.");
       }
       const view = stageView(state, ctx.caps, now);
       const current = view.stage;

@@ -112,13 +112,13 @@ function Billing({ brand }: { brand: AdminBrand }) {
           ) : (
             <AppText variant="body" color="muted">
               {`Next payment due ${fmtDate(sub.endsAt)}${
-                typeof sub.daysLeft === "number" ? ` — ${sub.daysLeft} day${sub.daysLeft === 1 ? "" : "s"} left` : ""
+                typeof sub.daysLeft === "number" ? `, ${sub.daysLeft} day${sub.daysLeft === 1 ? "" : "s"} left` : ""
               }. Pay early and file your proof below so your provider can confirm it.`}
             </AppText>
           )
         ) : (
           <AppText variant="body" color="muted">
-            No active subscription window is set. You can still file a payment below — your provider will match it to your account.
+            No active subscription window is set. You can still file a payment below. Your provider will match it to your account.
           </AppText>
         )}
         {typeof amountDueCents === "number" ? (
@@ -146,7 +146,7 @@ function Billing({ brand }: { brand: AdminBrand }) {
       >
         {done ? (
           <Notice tone="success" icon="checkmark-circle-outline">
-            {"Payment submitted — awaiting your provider's confirmation. File another below if needed."}
+            {"Payment submitted. Awaiting your provider's confirmation. File another below if needed."}
           </Notice>
         ) : null}
         <Field
@@ -178,6 +178,7 @@ function Billing({ brand }: { brand: AdminBrand }) {
           </View>
         </View>
         <ImageField
+            kind="subscription-proof"
           label="Payment screenshot"
           hint="A GCash/bank receipt screenshot helps your provider confirm faster. Optional but recommended."
           value={proofUrl}
@@ -205,7 +206,7 @@ function InvoiceList({ query }: { query: { data?: InvoiceRow[]; isPending: boole
   if (query.isPending) return <Hint>Loading your payments…</Hint>;
   const rows = query.isError ? [] : (query.data ?? []);
   if (rows.length === 0) {
-    return <Hint>No payments filed yet — payments you submit above will appear here with their confirmation status.</Hint>;
+    return <Hint>No payments filed yet. Payments you submit above will appear here with their confirmation status.</Hint>;
   }
   return (
     <View style={{ gap: SPACE.md }}>

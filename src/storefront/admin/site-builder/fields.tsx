@@ -198,7 +198,7 @@ const DISPLAYABLE = new Set(IMAGE_ACCEPT.split(","));
 function imageFileProblem(file: File): string {
   const heic = /\.(heic|heif)$/i.test(file.name) || /hei[cf]/i.test(file.type);
   if (heic) return "iPhone HEIC photos can't be shown on websites. Pick a JPG or PNG (on iPhone: Share → Save as JPEG, or set Camera → Formats → Most Compatible).";
-  if (file.type && !DISPLAYABLE.has(file.type)) return "That file type isn't supported — use a JPG, PNG, WebP or GIF image.";
+  if (file.type && !DISPLAYABLE.has(file.type)) return "That file type isn't supported. Use a JPG, PNG, WebP or GIF image.";
   return "";
 }
 
@@ -229,12 +229,12 @@ export function ImageInput({ label, value, onChange, hint }: { label: string; va
       }
       const issue = heroMediaSrcIssue(res.url);
       if (issue) {
-        setError(issue === "too-large" ? "That image is too large to store — try a smaller file." : "That file type isn't supported.");
+        setError(issue === "too-large" ? "That image is too large to store. Try a smaller file." : "That file type isn't supported.");
         return;
       }
       onChange(res.url);
     } catch {
-      setError("Upload failed — please check your connection and try again.");
+      setError("Upload failed. Please check your connection and try again.");
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -351,13 +351,13 @@ export function linkProblem(link: IlLink, env: LinkEnv): string {
         ? "International selling is off (Website Layout → Markets), so this link is hidden."
         : "Your shop page is switched off, so this link is hidden.";
     case "url":
-      return link.url.trim() ? "That address isn't a valid link (use https://…, mailto: or tel:)." : "Add a link — it's hidden until then.";
+      return link.url.trim() ? "That address isn't a valid link (use https://…, mailto: or tel:)." : "Add a link. It's hidden until then.";
     case "contact":
       return "No contact channel is set up yet, so this is hidden.";
     case "info":
       return "That info page has no text yet, so this link is hidden. Write it under Footer → Info pages.";
     case "none":
-      return "No link — this is hidden.";
+      return "No link, so this is hidden.";
     default:
       return "This link is hidden.";
   }

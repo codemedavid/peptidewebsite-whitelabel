@@ -573,7 +573,7 @@ export function buildTenantBrandingUpdate(
 
   if (!pass.errors.length && !pass.changed.length) {
     pass.errors.push(
-      "Nothing to update — the patch matched the tenant's current branding, or every section was empty.",
+      "Nothing to update. The patch matched the tenant's current branding, or every section was empty.",
     );
   }
 

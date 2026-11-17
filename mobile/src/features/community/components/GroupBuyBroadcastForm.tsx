@@ -17,7 +17,7 @@ import { GroupBuyChatCard } from "./GroupBuyChatCard";
 import { ModalHeader } from "./Headers";
 
 const NOTE_MAX = 500;
-const SUGGESTIONS = ["New group buy is open! 🎉", "Slots are filling fast", "Last call — closing soon"];
+const SUGGESTIONS = ["New group buy is open! 🎉", "Slots are filling fast", "Last call, closing soon"];
 
 /**
  * "Send to everyone": the live round's card lands in each chosen channel's
@@ -130,14 +130,14 @@ export function GroupBuyBroadcastForm() {
               <Chip label="None" onPress={() => setPicked(new Set())} />
             </View>
           ) : (
-            <ChatText variant="footnote">Create a channel first — the group buy is posted in one.</ChatText>
+            <ChatText variant="footnote">Create a channel first. The group buy is posted in one.</ChatText>
           )}
         </FormCard>
 
         <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start", padding: 12, borderRadius: RADII.md, backgroundColor: b.brandTint }}>
           <Ionicons name="notifications" size={18} color={b.brandText} style={{ marginTop: 1 }} />
           <ChatText variant="footnote" style={{ flex: 1, color: CHAT.inkSoft }}>
-            Every member gets one push notification. The card stays live — slots and the countdown update on their own, and it reads “ended” when the round closes.
+            Every member gets one push notification. The card stays live: slots and the countdown update on their own, and it reads “ended” when the round closes.
           </ChatText>
         </View>
       </ScrollView>

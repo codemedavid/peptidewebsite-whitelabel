@@ -1,5 +1,6 @@
 // Where a tapped push notification should go. The payload is only a pointer;
 // the screen re-loads through the authenticated API.
+import { trackerHref, trackerTarget, type TrackerTarget } from "../../tracker/lib/target";
 
 export type PushTarget =
   | { screen: "order"; id: string }
@@ -12,7 +13,13 @@ export type PushTarget =
   /** A customer paid to join a group buy — the team's join-request queue. */
   | { screen: "gb_join_request" }
   /** The store decided the shopper's join request — their store chat, else the group buy. */
-  | { screen: "gb_join_update"; threadId: string | null };
+  | { screen: "gb_join_update"; threadId: string | null }
+  /** The store let the shopper into the community — Chats. */
+  | { screen: "member_approved" }
+  /** A LOCAL tracker reminder (dose / refill / check-in) — never a server push. */
+  | { screen: "tracker"; target: TrackerTarget }
+  /** The store's promo / event announcement (opt-in) — the shop. */
+  | { screen: "promo" };
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const ORDER_NUMBER_RE = /^[A-Za-z0-9#_-]{1,40}$/;
@@ -28,6 +35,10 @@ export function pushTarget(data: unknown): PushTarget | null {
   if (d.type === "safety") return { screen: "safety" };
   if (d.type === "gb_join_request") return { screen: "gb_join_request" };
   if (d.type === "gb_join_update") return { screen: "gb_join_update", threadId: id(d.threadId) };
+  if (d.type === "member_approved") return { screen: "member_approved" };
+  if (d.type === "promo") return { screen: "promo" };
+  const tracker = trackerTarget(data);
+  if (tracker) return { screen: "tracker", target: tracker };
   const threadId = id(d.threadId);
   if (!threadId) return null;
   if (d.type === "order_update") {
@@ -36,19 +47,29 @@ export function pushTarget(data: unknown): PushTarget | null {
     return { screen: "order_update", threadId, orderNumber };
   }
   if (d.type === "dm") return { screen: "dm", id: threadId };
+  // A chat message in a channel topic.
+  if (d.type === "topic") return { screen: "topic", id: threadId };
   // A drop, and a group buy sent to everyone, land in a channel's General topic.
   if (d.type === "drop" || d.type === "group_buy") return { screen: "topic", id: threadId };
   return null;
 }
 
-export type PushAccess = { mode: "admin" | "customer"; canOrders: boolean; inCommunity: boolean };
+export type PushAccess = {
+  mode: "admin" | "customer";
+  canOrders: boolean;
+  inCommunity: boolean;
+  /** This account uses the tracker (features/tracker/access.ts `active`): customers' tab or the team's page. */
+  tracker?: boolean;
+};
 
 export type PushRoute =
   | { pathname: "/order/[id]"; params: { id: string }; method: "push" }
   | { pathname: "/my-order/[number]"; params: { number: string }; method: "push" }
   | { pathname: "/community/dm/[id]" | "/community/topic/[id]"; params: { id: string }; method: "navigate" }
-  | { pathname: "/" | "/community" | "/me" | "/community/safety"; params?: undefined; method: "navigate" }
-  | { pathname: "/manage/join-requests" | "/group-buy"; params?: undefined; method: "push" };
+  | { pathname: "/" | "/community" | "/me" | "/shop" | "/community/safety"; params?: undefined; method: "navigate" }
+  | { pathname: "/manage/join-requests" | "/group-buy"; params?: undefined; method: "push" }
+  /** Tracker screens, as a full href (the log sheet carries ?protocolId=&slot=). */
+  | { pathname: "/tracker"; href: string; params?: undefined; method: "push" | "navigate" };
 
 /** The mode's home tab — where a tap lands when its target isn't open to this account. */
 export function homeRoute(access: PushAccess): PushRoute {
@@ -79,6 +100,20 @@ export function resolvePushRoute(target: PushTarget | null, access: PushAccess):
     return access.inCommunity && target.threadId
       ? { pathname: "/community/dm/[id]", params: { id: target.threadId }, method: "navigate" }
       : { pathname: "/group-buy", method: "push" };
+  }
+  if (target.screen === "member_approved") {
+    // A stale /me (still "pending") waits in useNotificationRouting for the reload.
+    return access.mode === "customer" && access.inCommunity ? { pathname: "/community", method: "navigate" } : homeRoute(access);
+  }
+  if (target.screen === "promo") {
+    return access.mode === "customer" ? { pathname: "/shop", method: "navigate" } : homeRoute(access);
+  }
+  if (target.screen === "tracker") {
+    // Customers' tab or the team's own page — useNotificationRouting maps "/tracker" to the right home.
+    if (!access.tracker) return homeRoute(access);
+    const href = trackerHref(target.target);
+    // The tab itself navigates (no stacked copy); the log / check-in sheets push over it.
+    return { pathname: "/tracker", href, method: href === "/tracker" ? "navigate" : "push" };
   }
   if (target.screen === "order_update") {
     if (access.mode !== "customer") return homeRoute(access);

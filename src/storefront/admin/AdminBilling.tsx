@@ -119,7 +119,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
       if ("error" in res) toast(res.error);
       else setProofUrl(res.url);
     } catch {
-      toast("Upload failed — please try again.");
+      toast("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -148,7 +148,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
       toast("Payment submitted for review");
       void loadHistory();
     } catch {
-      toast("Couldn't submit — please sign in again and retry.");
+      toast("Couldn't submit. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -186,13 +186,13 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
             ) : (
               <div className="admin-field__hint" style={{ marginTop: -8 }}>
                 Next payment due <b>{fmtDate(sub.endsAt)}</b>
-                {typeof sub.daysLeft === "number" ? ` — ${sub.daysLeft} day${sub.daysLeft === 1 ? "" : "s"} left` : ""}. Pay early
+                {typeof sub.daysLeft === "number" ? `, ${sub.daysLeft} day${sub.daysLeft === 1 ? "" : "s"} left` : ""}. Pay early
                 and file your proof below so your provider can confirm it.
               </div>
             )
           ) : (
             <div className="admin-field__hint" style={{ marginTop: -8 }}>
-              No active subscription window is set. You can still file a payment below — your provider will match it
+              No active subscription window is set. You can still file a payment below. Your provider will match it
               to your account.
             </div>
           )}
@@ -269,7 +269,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
               className="admin-field__hint"
               style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 8, background: "var(--sf-success-soft, #f0fdf4)", color: "var(--sf-success, #15803d)", fontWeight: 600 }}
             >
-              ✓ Payment submitted — awaiting your provider&apos;s confirmation. File another below if needed.
+              ✓ Payment submitted. Awaiting your provider&apos;s confirmation. File another below if needed.
             </div>
           )}
 
@@ -356,7 +356,7 @@ export function AdminBilling({ brand, onBack }: { brand: Brand; onBack: () => vo
             <div className="admin-field__hint" style={{ marginTop: -8 }}>Loading your payments…</div>
           ) : history.length === 0 ? (
             <div className="admin-field__hint" style={{ marginTop: -8 }}>
-              No payments filed yet — payments you submit above will appear here with their confirmation status.
+              No payments filed yet. Payments you submit above will appear here with their confirmation status.
             </div>
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>

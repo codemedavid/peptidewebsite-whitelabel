@@ -19,8 +19,8 @@ const SAVE_LABEL: Record<SaveState, string> = {
   idle: "Drag the grip, or use the arrows",
   pending: "Unsaved changes…",
   saving: "Saving…",
-  saved: "Saved — live on your store",
-  error: "Couldn't save — try again",
+  saved: "Saved and live on your store",
+  error: "Couldn't save. Try again",
 };
 
 /**
@@ -80,7 +80,7 @@ export function AdminCategoryProductsArranger({
       } catch {
         dirty.current = true;
         setState("error");
-        toast("Couldn't save the order — please sign in again and retry.");
+        toast("Couldn't save the order. Please sign in again and retry.");
       }
     });
     return chain.current;

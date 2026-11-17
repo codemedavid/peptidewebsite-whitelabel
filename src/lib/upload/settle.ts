@@ -21,7 +21,7 @@ const BODY_LIMIT_THROW = /body exceeded|request entity too large|payload too lar
 /** Human-readable message for anything an upload action can throw. */
 export function uploadErrorMessage(thrown: unknown): string {
   const raw = (thrown instanceof Error ? thrown.message : String(thrown ?? "")).trim();
-  if (BODY_LIMIT_THROW.test(raw)) return "File too large — try a smaller image.";
+  if (BODY_LIMIT_THROW.test(raw)) return "File too large. Try a smaller image.";
   return raw || "Upload failed. Please try again.";
 }
 

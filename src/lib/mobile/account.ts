@@ -1,10 +1,10 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { normalizeStoreStatus } from "@/lib/storefront/store-status";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { rateLimit } from "@/lib/security/rate-limit";
 import type { MobileContext } from "./auth";
 import { stampFor } from "./auth";
@@ -20,19 +20,16 @@ const FIFTEEN_MIN = 15 * 60 * 1000;
 
 /** Flip the shop switch, keeping the owner's closed-notice copy intact. */
 export async function setStoreOpen(ctx: MobileContext, open: boolean): Promise<{ open: boolean }> {
-  // Read the CURRENT config (not the cached context) so a concurrent website
-  // edit to another branding field is never overwritten by this write.
-  const row = await prisma.branding.findUnique({ where: { tenantId: ctx.tenantId }, select: { config: true } });
-  const current = (row?.config ?? {}) as Record<string, unknown>;
-  const storeStatus = normalizeStoreStatus({ ...normalizeStoreStatus(current.storeStatus), open });
-  const config = { ...current, storeStatus };
-  await prisma.branding.upsert({
-    where: { tenantId: ctx.tenantId },
-    update: { config: config as Prisma.InputJsonValue },
-    create: { tenantId: ctx.tenantId, config: config as Prisma.InputJsonValue },
+  // Merge into the LOCKED current config (not the cached context) so a
+  // concurrent website edit to another branding field is never overwritten.
+  let isOpen = open;
+  await updateBrandingConfig(ctx.tenantId, (current) => {
+    const storeStatus = normalizeStoreStatus({ ...normalizeStoreStatus(current.storeStatus), open });
+    isOpen = storeStatus.open;
+    return { ...current, storeStatus };
   });
   revalidateTenant(ctx.tenantId, ctx.slug);
-  return { open: storeStatus.open };
+  return { open: isOpen };
 }
 
 export type PasswordResult = { ok: true } | { ok: false; message: string };

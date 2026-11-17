@@ -49,10 +49,10 @@ export const CHECKOUT_RULES_DEFAULTS: CheckoutRules = {
 };
 
 export const CHECKOUT_RULE_DEFAULT_MESSAGES: CheckoutRuleMessages = {
-  singleOrderType: "Reseller (wholesale) and retail items can't be combined in one order — please place them separately.",
-  mixedCart: "Your cart mixes product categories — please order one category at a time.",
-  minQuantity: "This store requires at least {min} items per order — you have {count}.",
-  bacWater: "Peptide vials need bacteriostatic water for reconstitution — please add bacteriostatic water to your order.",
+  singleOrderType: "Reseller (wholesale) and retail items can't be combined in one order. Please place them separately.",
+  mixedCart: "Your cart mixes product categories. Please order one category at a time.",
+  minQuantity: "This store requires at least {min} items per order. You have {count}.",
+  bacWater: "Peptide vials need bacteriostatic water for reconstitution. Please add bacteriostatic water to your order.",
 };
 
 export const clampMinQuantity = (n: number): number =>
@@ -117,9 +117,9 @@ export type GroupBuyRules = {
   validation: { cart: boolean; checkout: boolean };
 };
 
-export const DEFAULT_RATIO_MESSAGE = "Every peptide needs {ratio} bacteriostatic water — add {shortfall} more to check out.";
+export const DEFAULT_RATIO_MESSAGE = "Every peptide needs {ratio} bacteriostatic water. Add {shortfall} more to check out.";
 export const DEFAULT_CAP_MESSAGE =
-  "Bacteriostatic water can't exceed your peptide vials — your cart allows {allowed}, you have {bacWater}. Please remove {surplus}.";
+  "Bacteriostatic water can't exceed your peptide vials. Your cart allows {allowed}, you have {bacWater}. Please remove {surplus}.";
 
 export const clampRatio = (n: number): number => (Number.isFinite(n) ? Math.min(RATIO_MAX, Math.max(1, Math.round(n))) : 1);
 

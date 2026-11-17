@@ -198,7 +198,7 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
           </h2>
           <p className="ftr-sub">
             Defines which storefront features are available to this tenant. Toggle within the plan&rsquo;s
-            ceiling — locked features need a plan upgrade.
+            ceiling. Locked features need a plan upgrade.
           </p>
         </div>
         <div className="ftr-phead-right">
@@ -214,7 +214,7 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
           )}
           {status === "error" && (
             <button type="button" className="ftr-save-pill error" role="alert" onClick={persist}>
-              Save failed — retry
+              Save failed. Retry
             </button>
           )}
           <a href={`http://${slug}.${ROOT}`} target="_blank" rel="noreferrer" className="ftr-vstore">
@@ -314,7 +314,7 @@ export function FeaturesEditor({ slug, name, planLabel, items, children }: Props
                       {inertParent && (
                         <span className="ftr-inert" title={`Switch on "${labelOf(inertParent)}" to activate this`}>
                           <AlertTriangle size={11} aria-hidden />
-                          Inert — needs {labelOf(inertParent)}
+                          Inert: needs {labelOf(inertParent)}
                         </span>
                       )}
                     </div>

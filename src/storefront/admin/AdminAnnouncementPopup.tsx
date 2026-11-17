@@ -115,7 +115,7 @@ export function AdminAnnouncementPopup({ brand, onBack }: { brand: Brand; onBack
   const upload = async (file: File | undefined | null) => {
     if (!file || uploading) return;
     if (file.size > MAX_IMAGE_BYTES) {
-      toast("That image is over 10 MB — please pick a smaller one.");
+      toast("That image is over 10 MB. Please pick a smaller one.");
       return;
     }
     setUploading(true);
@@ -132,7 +132,7 @@ export function AdminAnnouncementPopup({ brand, onBack }: { brand: Brand; onBack
       const image: PopupImage = { url: res.url, aspect };
       set("image", image);
     } catch {
-      toast("Upload failed — please try again.");
+      toast("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -158,7 +158,7 @@ export function AdminAnnouncementPopup({ brand, onBack }: { brand: Brand; onBack
       setTweak({ announcementPopup: prepared });
       toast(prepared.enabled ? "Pop-up is live" : "Pop-up saved (off)");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -237,7 +237,7 @@ export function AdminAnnouncementPopup({ brand, onBack }: { brand: Brand; onBack
               <label className="admin-field__label" htmlFor="pp-msg">Message</label>
               <textarea id="pp-msg" className="admin-textarea" rows={4} value={draft.message}
                         maxLength={POPUP_LIMITS.message} onChange={(e) => set("message", e.target.value)}
-                        placeholder="Limited vials this round — order before Friday." />
+                        placeholder="Limited vials this round. Order before Friday." />
               <div className="admin-field__hint">{draft.message.length}/{POPUP_LIMITS.message}</div>
             </div>
             <div className="admin-field">

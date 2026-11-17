@@ -3,7 +3,7 @@
     "name": "PepWorld",
     "slug": "pepweb-admin",
     "scheme": "pepwebadmin",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -42,7 +42,11 @@
         "expo-notifications",
         {
           "color": "#2E5C46",
-          "defaultChannel": "orders"
+          "defaultChannel": "orders_chime",
+          "sounds": [
+            "./assets/sounds/order_chime.wav",
+            "./assets/sounds/chat_pop.wav"
+          ]
         }
       ],
       [

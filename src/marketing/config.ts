@@ -29,7 +29,7 @@ export const SITE = {
     h1Lead: "Built to Help",
     h1Em: "Peptide Brands",
     h1Tail: "Scale",
-    sub: "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation — all in one platform that keeps improving every month.",
+    sub: "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation, all in one platform that keeps improving every month.",
     primaryCta: "Start Today",
     secondaryCta: "View Demo",
     demoSlug: "ar-jonina",
@@ -130,8 +130,8 @@ export function packageLabel(key: string): string {
 // ──────────────────────────── Why monthly ────────────────────────────
 export const WHY_MONTHLY = {
   eyebrow: "Why monthly?",
-  title: "Your business keeps growing — and so does Pepweb.",
-  body: "Your subscription includes everything needed to keep your business running smoothly — hindi lang website, kundi buong system na patuloy na ginagalingan.",
+  title: "Your business keeps growing, and so does Pepweb.",
+  body: "Your subscription includes everything needed to keep your business running smoothly: hindi lang website, kundi buong system na patuloy na ginagalingan.",
   items: [
     "Secure cloud hosting",
     "Platform maintenance",
@@ -194,11 +194,11 @@ export const FAQS: Faq[] = [
   { q: "Can I upgrade later?", a: "Yes. Upgrade anytime as your business grows." },
   {
     q: "What domain does my store use?",
-    a: "Every plan includes a free default domain: yourbusinessname.pepweb.store. Want your own .com? It's ₱1,400 — this covers the domain for 1 year, plus service, tax, and processing fees. Already own a domain? We'll connect it for a ₱500 service and setup fee.",
+    a: "Every plan includes a free default domain: yourbusinessname.pepweb.store. Want your own .com? It's ₱1,400. This covers the domain for 1 year, plus service, tax, and processing fees. Already own a domain? We'll connect it for a ₱500 service and setup fee.",
   },
   {
     q: "Can I change the branding or color theme?",
-    a: "Yes, you can! We will customize your store based on your branding — logo, colors, and fonts.",
+    a: "Yes, you can! We will customize your store based on your branding: logo, colors, and fonts.",
   },
   {
     q: "Why is there a setup fee?",

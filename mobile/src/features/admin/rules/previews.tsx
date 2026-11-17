@@ -96,7 +96,7 @@ export function TrackNotePreview({ config }: { config: TrackNote }) {
   if (empty) {
     return (
       <AppText variant="caption" color="faint">
-        Nothing to show yet — add a title or at least one row.
+        Nothing to show yet. Add a title or at least one row.
       </AppText>
     );
   }

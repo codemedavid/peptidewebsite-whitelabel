@@ -65,7 +65,7 @@ const LINK_TYPES: { key: LinkType; label: string }[] = [
 const MEDIA_LINK_TYPES: { key: HeroMedia["linkType"]; label: string }[] = [
   { key: "page", label: "A page on your site" },
   { key: "custom", label: "Custom URL" },
-  { key: "none", label: "Nothing — not clickable" },
+  { key: "none", label: "Nothing (not clickable)" },
 ];
 const MODES: { key: HeroMedia["mode"]; label: string; hint: string }[] = [
   { key: "text", label: "Written hero", hint: "Headline, tagline and buttons styled by your theme." },
@@ -171,7 +171,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
   return (
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} onSave={onSave} />}>
       <AppText variant="body" color="muted">
-        The big banner at the top of your storefront homepage. Choose how it looks — write your own copy, or upload a single
+        The big banner at the top of your storefront homepage. Choose how it looks: write your own copy, or upload a single
         image and use that instead. Colors, fonts and layout are set by your provider.
       </AppText>
 
@@ -183,6 +183,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
         <>
           <Section title="Banner image">
             <ImageField
+            kind="branding"
               label="Banner image"
               hint="JPG, PNG or WebP · at least 2000×1000px · up to 10 MB"
               value={fields.media.url}
@@ -202,7 +203,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
             />
             {fields.media.url ? (
               <>
-                <Hint>{fileName ?? "Current banner — uploaded to your store's media library"}</Hint>
+                <Hint>{fileName ?? "Current banner, uploaded to your store's media library"}</Hint>
                 <ChoicePills label="Banner height" options={HERO_RATIOS} value={fields.media.ratio} onChange={(ratio) => setMedia({ ratio })} />
                 <ChoicePills label="Focus point" options={HERO_FOCUSES} value={fields.media.focus} onChange={(focus) => setMedia({ focus })} />
                 <Hint>Focus point keeps the important part of the photo visible on phones.</Hint>
@@ -267,9 +268,9 @@ function Editor({ brand }: { brand: AdminBrand }) {
             placeholder={name || "e.g. NEW ARRIVAL"}
             hint="The small pill above the headline. Leave blank to show your store name."
           />
-          <Field label="Headline — line 1" value={fields.line1} onChangeText={(v) => set("line1", v)} maxLength={HERO_SHORT_MAX} placeholder="Premium products," />
+          <Field label="Headline (line 1)" value={fields.line1} onChangeText={(v) => set("line1", v)} maxLength={HERO_SHORT_MAX} placeholder="Premium products," />
           <Field
-            label="Headline — line 2 (accent)"
+            label="Headline (line 2, accent)"
             value={fields.line2}
             onChangeText={(v) => set("line2", v)}
             maxLength={HERO_SHORT_MAX}

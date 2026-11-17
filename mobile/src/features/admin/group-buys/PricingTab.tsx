@@ -40,7 +40,7 @@ function gbPriceError(p: CatalogProduct, next: number): string | null {
   if (next <= 0) return "The group-buy price has to be more than 0.";
   const regular = Math.max(0, p.price || 0);
   if (next >= regular) {
-    return `The group-buy price (${next.toLocaleString()}) has to be below the regular price (${regular.toLocaleString()}) — otherwise the storefront shows no saving.`;
+    return `The group-buy price (${next.toLocaleString()}) has to be below the regular price (${regular.toLocaleString()}). Otherwise the storefront shows no saving.`;
   }
   return null;
 }
@@ -103,11 +103,11 @@ export function PricingTab({
       // A warning is not a failure — the write went through — but it changes what the round sells.
       if (res.warning) {
         setRowError(res.warning);
-        Alert.alert("Saved — please check", res.warning);
+        Alert.alert("Saved, but please check", res.warning);
       }
       return true;
     } catch (e) {
-      setRowError(e instanceof Error ? e.message : "Couldn't save — please try again.");
+      setRowError(e instanceof Error ? e.message : "Couldn't save. Please try again.");
       return false;
     } finally {
       setBusyId(null);
@@ -126,7 +126,7 @@ export function PricingTab({
     const headsUp = live.length ? `"${p.name}" is in the LIVE round "${live[0].name}". Removing it changes what customers see right now.\n\n` : "";
     Alert.alert(
       `Remove "${p.name}" from the group buy?`,
-      `${headsUp}It stays in your catalog at its regular price — only the group-buy price and the round assignment are cleared.`,
+      `${headsUp}It stays in your catalog at its regular price. Only the group-buy price and the round assignment are cleared.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Remove", style: "destructive", onPress: () => void run(p.id, { op: "remove" }) },
@@ -146,7 +146,7 @@ export function PricingTab({
         onChange={setFilter}
       />
       <Field label="Search" value={query} onChangeText={setQuery} placeholder="Search products…" autoCorrect={false} returnKeyType="search" />
-      {!caps.canEdit ? <Hint>Your plan includes group buys but not editing — prices are read-only here.</Hint> : null}
+      {!caps.canEdit ? <Hint>Your plan includes group buys but not editing, so prices are read-only here.</Hint> : null}
       {rowError && editingId === null ? <Hint tone="danger">{rowError}</Hint> : null}
 
       {visible.length === 0 ? (
@@ -157,7 +157,7 @@ export function PricingTab({
               ? `No products match “${query.trim()}”.`
               : filter === "gb"
                 ? "No products have a group-buy price yet. Switch to All products and tap one to set its price."
-                : "No products yet — add some on the Products screen first."
+                : "No products yet. Add some on the Products screen first."
           }
         />
       ) : null}

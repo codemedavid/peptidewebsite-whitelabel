@@ -1,7 +1,5 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { FEATURES } from "@/lib/features/catalog";
 import type { CustomerContext } from "@/lib/mobile/auth";
@@ -9,6 +7,7 @@ import type { PreviewPolicyResponse } from "@/lib/mobile/contract";
 import { loadShopCatalog } from "@/lib/mobile/shop-catalog";
 import { parseLines } from "@/lib/mobile/shop-orders";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import type { CommunityActor } from "./actor.server";
 import { admitCustomer } from "./admission.server";
 import { parsePreviewPolicyUpdate, previewFor, previewOrderBlocked, previewPolicyOf, type PreviewPolicy } from "./preview";
@@ -31,18 +30,17 @@ export async function savePreviewPolicy(
   actor: CommunityActor,
   body: unknown,
 ): Promise<{ ok: true; value: PreviewPolicyResponse } | { ok: false; error: string }> {
-  const result = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${actor.tenantId} FOR UPDATE`;
-    const row = await tx.branding.findUnique({ where: { tenantId: actor.tenantId }, select: { config: true } });
-    const current = (row?.config ?? {}) as Record<string, unknown>;
+  const out: { parsed?: ReturnType<typeof parsePreviewPolicyUpdate> } = {};
+  await updateBrandingConfig(actor.tenantId, (current) => {
     const parsed = parsePreviewPolicyUpdate(body, previewPolicyOf(current));
-    if (!parsed.ok) return parsed;
-    const config = { ...current, previewAccess: parsed.value } as Prisma.InputJsonValue;
-    await tx.branding.upsert({ where: { tenantId: actor.tenantId }, update: { config }, create: { tenantId: actor.tenantId, config } });
-    return { ok: true as const, value: { policy: parsed.value } };
+    out.parsed = parsed;
+    return parsed.ok ? { ...current, previewAccess: parsed.value } : null;
   });
-  if (result.ok) revalidateTenant(actor.tenantId, actor.slug);
-  return result;
+  const parsed = out.parsed;
+  if (!parsed) return { ok: false, error: "Couldn't save the preview settings." };
+  if (!parsed.ok) return parsed;
+  revalidateTenant(actor.tenantId, actor.slug);
+  return { ok: true, value: { policy: parsed.value } };
 }
 
 /** Someone in preview has somewhere to post: a channel set to chat, or the store's DM. */

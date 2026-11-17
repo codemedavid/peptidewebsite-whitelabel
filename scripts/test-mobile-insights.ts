@@ -5,6 +5,8 @@
  *   npm run test:mobile-insights
  */
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { buildInsights, parseRange, windowFor } from "../src/lib/mobile/insights";
 import {
@@ -276,6 +278,55 @@ test("summary: returning rate, new this month, lapsed", () => {
   assert.equal(s.returningRate, 1 / 3);
   assert.equal(s.newThisMonth, 2);
   assert.equal(s.lapsed, 1);
+});
+
+// ── website parity: International orders + Group Buys card ──────────────────
+section("international + group buys");
+const tag = (o: Order, extra: Partial<Order>): Order => ({ ...o, ...extra }) as Order;
+test("foreign-currency orders stay out of every figure and are listed per currency", () => {
+  const local = order({ at: "2026-09-28T02:00:00Z", price: 1000 });
+  const usd = tag(order({ at: "2026-09-28T03:00:00Z", price: 50, email: "intl@x" }), { currency: "USD" });
+  const cancelledUsd = tag(order({ at: "2026-09-28T03:00:00Z", price: 70, status: "cancelled" }), { currency: "USD" });
+  const php = tag(order({ at: "2026-09-28T04:00:00Z", price: 500 }), { currency: "PHP" });
+  const all = [local, usd, cancelledUsd, php];
+  const r = buildInsights(all, all, { range: "7d", now: NOW, currency: "₱" });
+  assert.equal(r.kpis.orders.value, 2, "PHP-stamped + unstamped count; USD never");
+  assert.equal(r.kpis.revenue.value, 1500);
+  assert.equal(r.kpis.customers.value, 1, "the USD buyer is not a ₱ customer");
+  assert.equal(r.statusMix.reduce((n, s) => n + s.count, 0), 2, "cancelled USD is not in the ₱ pipeline either");
+  assert.equal(r.international?.length, 1);
+  assert.equal(r.international?.[0].code, "USD");
+  assert.equal(r.international?.[0].orders, 1, "cancelled excluded");
+  assert.match(r.international?.[0].totalLabel ?? "", /50/);
+  const none = buildInsights([local], [local], { range: "7d", now: NOW, currency: "₱" });
+  assert.deepEqual(none.international, []);
+});
+test("group buys: revenue per round in the window, share of group-buy revenue", () => {
+  const gbA1 = tag(order({ at: "2026-09-27T02:00:00Z", price: 1000, qty: 2 }), { groupBuyId: "gb-a", groupBuyName: "October run" });
+  const gbA2 = tag(order({ at: "2026-09-28T02:00:00Z", price: 500 }), { groupBuyId: "gb-a", groupBuyName: "October run" });
+  const gbB = tag(order({ at: "2026-09-28T02:00:00Z", price: 1000 }), { groupBuyName: "Legacy round" });
+  const cancelled = tag(order({ at: "2026-09-28T02:00:00Z", price: 9000, status: "cancelled" }), { groupBuyId: "gb-a" });
+  const old = tag(order({ at: "2026-08-01T02:00:00Z", price: 9000 }), { groupBuyId: "gb-a" });
+  const plain = order({ at: "2026-09-28T02:00:00Z", price: 300 });
+  const all = [gbA1, gbA2, gbB, cancelled, old, plain];
+  const r = buildInsights(all, all, { range: "7d", now: NOW, currency: "₱" });
+  const rows = r.groupBuys?.rows ?? [];
+  assert.deepEqual(rows.map((g) => g.name), ["October run", "Legacy round"]);
+  assert.equal(rows[0].value, 2500);
+  assert.equal(rows[0].detail, "2 orders · 3 units");
+  assert.equal(rows[1].detail, "1 order · 1 unit");
+  assert.ok(Math.abs(rows[0].share - 2500 / 3500) < 1e-9);
+  assert.match(r.groupBuys?.totalLabel ?? "", /3,500/);
+});
+
+// ── the app's copy of the website's customer analytics ───────────────────────
+section("copied modules");
+test("mobile customer-accounts analytics is a verbatim copy of the website's", () => {
+  const root = process.cwd();
+  const web = readFileSync(path.join(root, "src/lib/storefront/customer-analytics.ts"), "utf8");
+  const app = readFileSync(path.join(root, "mobile/src/features/customer-accounts/analytics.ts"), "utf8");
+  const body = app.slice(app.indexOf("*/\n") + 3);
+  assert.equal(body, web, "re-copy src/lib/storefront/customer-analytics.ts into the app (keep the header)");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

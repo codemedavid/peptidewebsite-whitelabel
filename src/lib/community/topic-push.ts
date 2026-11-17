@@ -37,6 +37,27 @@ export function topicPushAudience(customerIds: string[], opts: { senderKey: stri
   return [...out];
 }
 
+/**
+ * The key a channel mute is stored under. Members mute as themselves (`c:<id>`);
+ * the store team all post as `store`, so each team member mutes PERSONALLY
+ * (`team:owner` / `team:s:<staffId>`) — one staff member silencing a busy
+ * channel must not silence it for the owner. Null = this reader can't mute.
+ */
+export function channelMuteKey(actor: { key: string; isTeam?: boolean; authorKey: string | null; customerId?: string | null; preview?: unknown }): string | null {
+  if (actor.isTeam) return actor.authorKey ? `team:${actor.authorKey}` : null;
+  if (!actor.customerId || actor.preview) return null;
+  return actor.key;
+}
+
+/** The team members to push (by author key): never the one who wrote it, never one who muted the channel. */
+export function teamPushAudience(authorKeys: string[], opts: { senderAuthorKey: string | null; mutedKeys: ReadonlySet<string> }): string[] {
+  const out = new Set<string>();
+  for (const k of authorKeys) {
+    if (k !== opts.senderAuthorKey && !opts.mutedKeys.has(`team:${k}`)) out.add(k);
+  }
+  return [...out];
+}
+
 /** PUT /community/channels/:id/mute { muted } — true / false, or null when malformed. */
 export function parseMuteRequest(body: unknown): boolean | null {
   if (!body || typeof body !== "object") return null;

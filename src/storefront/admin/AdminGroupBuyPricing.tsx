@@ -91,7 +91,7 @@ export function AdminGroupBuyPricing({
       }
       return true;
     } catch {
-      setRowError("Couldn't save — please sign in again and retry.");
+      setRowError("Couldn't save. Please sign in again and retry.");
       return false;
     } finally {
       setBusyId(null);
@@ -133,7 +133,7 @@ export function AdminGroupBuyPricing({
       : "";
     if (
       !confirm(
-        `${heads_up}Remove "${product.name}" from the group buy?\n\nIt stays in your catalog at its regular price — only the group-buy price and the round assignment are cleared.`,
+        `${heads_up}Remove "${product.name}" from the group buy?\n\nIt stays in your catalog at its regular price. Only the group-buy price and the round assignment are cleared.`,
       )
     ) {
       return;
@@ -181,7 +181,7 @@ export function AdminGroupBuyPricing({
 
       {!caps.canEdit && (
         <div className="admin-field__hint" style={{ marginBottom: 10 }}>
-          Your plan includes group buys but not editing — prices are read-only here.
+          Your plan includes group buys but not editing, so prices are read-only here.
         </div>
       )}
 
@@ -296,7 +296,7 @@ export function AdminGroupBuyPricing({
               ? `No products match “${query.trim()}”.`
               : filter === "gb"
                 ? "No products have a group-buy price yet. Switch to All products and click one to set its price."
-                : "No products yet — add some on the Products screen first."}
+                : "No products yet. Add some on the Products screen first."}
           </div>
         )}
       </div>

@@ -113,7 +113,7 @@ export function ProofLightbox({
       className="od-proof-viewer"
       role="dialog"
       aria-modal="true"
-      aria-label={`Payment proof — ${label}`}
+      aria-label={`Payment proof: ${label}`}
       onClick={close}
     >
       <div className="od-proof-viewer__bar" onClick={(e) => e.stopPropagation()}>

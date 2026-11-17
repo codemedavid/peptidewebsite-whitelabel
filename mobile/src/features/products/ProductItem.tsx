@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Switch, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, type Href } from "expo-router";
@@ -8,6 +8,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
 import { AppText, Button, Pill } from "@/ui/primitives";
 import { useUpdateProduct } from "./hooks";
+import { OptionSwitches } from "./OptionSwitches";
 
 const STOCK_PILL = {
   out: { tone: "danger", icon: "alert-circle-outline", label: "Out of stock" },
@@ -32,9 +33,15 @@ function Stepper({ value, onChange }: { value: number; onChange: (n: number) => 
   return (
     <View style={styles.stepper}>
       {btn("Decrease stock", "remove", -1)}
-      <View accessible accessibilityLabel={`Stock ${value}`} accessibilityLiveRegion="polite">
-        <AppText variant="title" style={styles.stepValue}>{String(value)}</AppText>
-      </View>
+      {/* Typed too, like the website's number box — a delivery of 240 isn't 240 taps. */}
+      <TextInput
+        accessibilityLabel="Stock"
+        value={String(value)}
+        onChangeText={(v) => onChange(Math.max(0, Math.floor(Number(v.replace(/[^0-9]/g, "")) || 0)))}
+        keyboardType="number-pad"
+        selectTextOnFocus
+        style={[t.type.title, styles.stepValue, { color: t.colors.text, borderColor: t.colors.border }]}
+      />
       {btn("Increase stock", "add", 1)}
     </View>
   );
@@ -173,6 +180,7 @@ export const ProductItem = memo(function ProductItem({
                 : "This product tracks stock per option. Adjust it under Edit product details → Variations."}
             </AppText>
           )}
+          <OptionSwitches productId={product.id} disabled={disabled} />
           <Button
             label="Edit product details"
             icon="create-outline"
@@ -197,5 +205,5 @@ const styles = StyleSheet.create({
   stepBtn: { width: TOUCH + 8, height: TOUCH + 8, borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
   arrows: { gap: 2 },
   arrow: { width: 36, height: 34, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
-  stepValue: { minWidth: 64, textAlign: "center", fontVariant: ["tabular-nums"] },
+  stepValue: { minWidth: 88, textAlign: "center", fontVariant: ["tabular-nums"], borderWidth: 1, borderRadius: RADIUS.md, paddingVertical: 6 },
 });

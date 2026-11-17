@@ -58,7 +58,7 @@ async function onPaid(db: TenantTx, tenantId: string, evt: WebhookEvent, p: Paym
   // Too late (slot released, round closed) or a second charge: never applied.
   await movePayment(db, p.id, "initiated", { status: "refund_due" });
   await logEvents(db, tenantId, [
-    { ...sys(m, p.provider), kind: "payment", reason: alreadyPaid ? "Duplicate charge — refund due" : "Paid after the slot or group buy closed — refund due", data: { paymentId: p.id, event: evt.id } },
+    { ...sys(m, p.provider), kind: "payment", reason: alreadyPaid ? "Duplicate charge, refund due" : "Paid after the slot or group buy closed, refund due", data: { paymentId: p.id, event: evt.id } },
   ]);
   return { refund: { ...p, status: "refund_due" } };
 }
@@ -74,7 +74,7 @@ async function onRefund(db: TenantTx, tenantId: string, evt: WebhookEvent, p: Pa
   }
   if (m.status === "rejected" && m.refundStatus === "processing") {
     await moveMembership(db, m.id, "rejected", { refundStatus: "pending" });
-    await logEvents(db, tenantId, [{ ...sys(m, p.provider), kind: "refund", fromStatus: "processing", toStatus: "pending", reason: "The provider couldn't refund — refund manually", data: { event: evt.id } }]);
+    await logEvents(db, tenantId, [{ ...sys(m, p.provider), kind: "refund", fromStatus: "processing", toStatus: "pending", reason: "The provider couldn't refund. Refund manually", data: { event: evt.id } }]);
   }
 }
 

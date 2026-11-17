@@ -83,7 +83,7 @@ export function buildOrderAlert(order: Order, opts: OrderAlertOptions): Telegram
   lines.push("");
 
   for (const item of order.items ?? []) {
-    lines.push(`• ${item.qty}× ${esc(item.name)} — ${money((item.price || 0) * (item.qty || 0))}`);
+    lines.push(`• ${item.qty}× ${esc(item.name)} · ${money((item.price || 0) * (item.qty || 0))}`);
   }
 
   lines.push("");

@@ -99,16 +99,16 @@ function Editor({ brand, settings }: { brand: AdminBrand; settings: ResellerSett
     );
 
   const status = !settings.available
-    ? { tone: "danger" as const, text: "Your plan doesn't include the Reseller feature yet — contact your provider to enable it. You can still set a password below so it's ready the moment they do." }
+    ? { tone: "danger" as const, text: "Your plan doesn't include the Reseller feature yet. Contact your provider to enable it. You can still set a password below so it's ready the moment they do." }
     : !settings.pageAvailable
       ? {
           tone: "danger" as const,
-          text: `The Reseller feature is on, but the Wholesale reseller page isn't enabled for your store yet — ask your provider to turn it on. Wholesale pricing on your regular storefront is ${
+          text: `The Reseller feature is on, but the Wholesale reseller page isn't enabled for your store yet. Ask your provider to turn it on. Wholesale pricing on your regular storefront is ${
             settings.wholesaleAvailable ? "already active" : "also off"
           }.`,
         }
       : hasCode
-        ? { tone: "success" as const, text: "Live — your reseller page is open at /reseller to anyone with the password." }
+        ? { tone: "success" as const, text: "Live: your reseller page is open at /reseller to anyone with the password." }
         : { tone: "neutral" as const, text: "Set a password to take your reseller page live." };
 
   return (
@@ -117,7 +117,7 @@ function Editor({ brand, settings }: { brand: AdminBrand; settings: ResellerSett
     >
       <Section
         title="Reseller page password"
-        hint="Your reseller page lives at /reseller. Resellers open it, enter the password below, and see your wholesale prices — regular shoppers never do. Share the link and the password with your resellers."
+        hint="Your reseller page lives at /reseller. Resellers open it, enter the password below, and see your wholesale prices. Regular shoppers never do. Share the link and the password with your resellers."
       >
         {status.tone === "success" ? (
           <Pill tone="success" icon="checkmark-circle-outline" label="Live" />
@@ -141,7 +141,7 @@ function Editor({ brand, settings }: { brand: AdminBrand; settings: ResellerSett
           error={codeError}
           hint={
             hasCode
-              ? "Your current password can't be shown — it's stored encrypted. Type a new one to replace it. Changing or removing it signs out every reseller using the old one."
+              ? "Your current password can't be shown because it's stored encrypted. Type a new one to replace it. Changing or removing it signs out every reseller using the old one."
               : "At least 4 characters. It's stored encrypted and never shown again, so keep your own copy."
           }
         />

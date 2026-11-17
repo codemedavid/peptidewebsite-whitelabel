@@ -38,7 +38,7 @@ export function validateStepOrder(steps: readonly string[]): string | null {
   if (new Set(steps).size !== steps.length) return "You can use each step only once.";
   if (steps.length > PAID_ACCESS_STEPS.length) return "A flow can have at most three steps: form, payment and approval.";
   const formAt = steps.indexOf("form");
-  if (formAt > 0) return "The application form has to be the first step — people apply before they pay or are approved.";
+  if (formAt > 0) return "The application form has to be the first step. People apply before they pay or are approved.";
   return null;
 }
 
@@ -134,7 +134,7 @@ function crossFieldErrors(s: Base, ctx: SettingsContext): SettingsError[] {
     if (s.payment.method !== "manual" && !ctx.onlinePaymentsAvailable) {
       errors.push({
         path: "payment.method",
-        message: "Online payments aren't connected for this store yet — use manual proof upload for now.",
+        message: "Online payments aren't connected for this store yet. Use manual proof upload for now.",
       });
     }
     if (s.refundOnReject === "auto" && s.payment.method === "manual") {

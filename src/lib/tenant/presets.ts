@@ -222,7 +222,7 @@ export const KGLOW_TWO_WAYS_ID = "kglow-two-ways";
  */
 const KGLOW_TWO_WAYS: TenantPreset = {
   id: KGLOW_TWO_WAYS_ID,
-  name: "K Glow — Group buy + on-hand",
+  name: "K Glow: Group buy + on-hand",
   tagline:
     "Group-buy rounds, ratio rules and Lab Reports on the classic home. The two-ways split home is included but off by default.",
   config: {

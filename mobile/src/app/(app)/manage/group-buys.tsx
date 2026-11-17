@@ -106,7 +106,8 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
 
   const data = list.data;
   const caps = data?.caps;
-  const content = contentOverride ?? data?.content ?? normalizeGroupBuyContent(brand.groupBuyContent);
+  // Normalized: a server that predates the button-text field sends no joinLabel.
+  const content = contentOverride ?? normalizeGroupBuyContent(data?.content ?? brand.groupBuyContent);
   const liveBanner =
     liveBannerOverride && liveBannerOverride.base === data?.liveBanner
       ? liveBannerOverride.value
@@ -199,6 +200,14 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
         ) : (
           <>
             <CommunityShareCard />
+            {/* Website: Orders → Group buys → Member tracker. */}
+            <Button
+              label="Member tracker"
+              variant="secondary"
+              icon="stats-chart-outline"
+              accessibilityHint="How many group buys each member joined, by month"
+              onPress={() => router.push("/manage/member-tracker" as Href)}
+            />
             {/* The group-buy-only layout owns the ways — no switches to show. */}
             {brand.homeLayout !== "groupbuy" ? <WaysCard ways={ways} setWays={setWays} /> : null}
             {caps.productAssignment && ways.onHand === "open" ? <AllowOnHandCard initial={brand.groupBuyAllowOnHand !== false} /> : null}
@@ -264,7 +273,7 @@ function GroupBuys({ brand }: { brand: AdminBrand }) {
           initial={editor.round}
           caps={data.caps}
           settings={data.settings}
-          products={(products.data ?? []).map((p) => ({ id: p.id, name: p.name }))}
+          products={(products.data ?? []).map((p) => ({ id: p.id, name: p.name, options: (p.variations ?? []).map((v) => v.name) }))}
           groupBuyOnly={ways.onHand === "hidden"}
           saving={save.isPending}
           onCancel={() => setEditor(null)}
@@ -378,7 +387,7 @@ function RoundsList({
       {canCreate ? <Button label="New Group Buy" icon="add" disabled={!online} onPress={onCreate} /> : null}
       {awaiting.size > 0 && !showArchived ? (
         <AppText variant="caption" color="muted">
-          {`${awaiting.size} finished round${awaiting.size === 1 ? " has" : "s have"} reports ready — archive a round once you're done with it.`}
+          {`${awaiting.size} finished round${awaiting.size === 1 ? " has" : "s have"} reports ready. Archive a round once you're done with it.`}
         </AppText>
       ) : null}
       {visible.length === 0 ? (

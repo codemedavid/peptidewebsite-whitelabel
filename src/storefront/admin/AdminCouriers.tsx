@@ -101,7 +101,7 @@ function CourierModal({
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value)}
           />
           <div className="admin-field__hint">
-            Shown under the courier choice when a customer picks this courier —
+            Shown under the courier choice when a customer picks this courier:
             coverage area, pick-up point, cut-off time.
           </div>
         </div>
@@ -126,7 +126,7 @@ function CourierModal({
             </div>
             {bookingUrl.trim() && !safeExternalUrl(bookingUrl) && (
               <div className="admin-field__hint" style={{ color: "#b45309", fontWeight: 600 }}>
-                That isn&apos;t a web link — it won&apos;t be saved. Start it with
+                That isn&apos;t a web link, so it won&apos;t be saved. Start it with
                 https://
               </div>
             )}
@@ -142,7 +142,7 @@ function CourierModal({
                 setNoLocation(e.target.checked)
               }
             />
-            <span>No shipping location / fee — cash on delivery only</span>
+            <span>No shipping location / fee (cash on delivery only)</span>
           </label>
           <div className="admin-field__hint">
             For couriers like Lalamove or Maxim where the customer just pays COD.
@@ -338,7 +338,7 @@ export function AdminCouriers({
                       color: "var(--brand-accent)",
                     }}
                   >
-                    Cash on delivery — no shipping location or fee
+                    Cash on delivery (no shipping location or fee)
                   </div>
                 )}
                 {c.active && !c.noLocation && !hasActiveLocation(c.id) && (
@@ -369,7 +369,7 @@ export function AdminCouriers({
                       <line x1="12" y1="9" x2="12" y2="13" />
                       <line x1="12" y1="17" x2="12.01" y2="17" />
                     </svg>
-                    No shipping location — won&apos;t show at checkout
+                    No shipping location, so it won&apos;t show at checkout
                   </div>
                 )}
               </div>
@@ -378,8 +378,8 @@ export function AdminCouriers({
                 onClick={() => toggle(c.id)}
                 title={
                   c.active
-                    ? "Active — click to disable"
-                    : "Disabled — click to enable"
+                    ? "Active (click to disable)"
+                    : "Disabled (click to enable)"
                 }
                 style={{ background: "none", border: 0, cursor: "pointer" }}
               >

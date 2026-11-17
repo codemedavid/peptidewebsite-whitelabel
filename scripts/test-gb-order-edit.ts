@@ -151,7 +151,7 @@ async function main() {
     const stray = await edit(ann.id, [{ index: 4, qty: 1 }], { preview: true });
     assert.ok(!stray.ok);
     const empty = await edit(ann.id, [], { preview: true });
-    assert.ok(!empty.ok && /cancel the order instead/.test(empty.message));
+    assert.ok(!empty.ok && /Cancel the order instead/.test(empty.message));
   });
 
   console.log("\nsave, Bunuan warning, audit");

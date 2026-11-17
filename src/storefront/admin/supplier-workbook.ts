@@ -183,7 +183,7 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
   perCustomer.getRow(1).font = { bold: true };
   for (const m of prep.memberOrders) {
     m.products.forEach((p, i) => {
-      const product = p.variation && !p.product.includes(p.variation) ? `${p.product} — ${p.variation}` : p.product;
+      const product = p.variation && !p.product.includes(p.variation) ? `${p.product} · ${p.variation}` : p.product;
       perCustomer.addRow(
         i === 0
           ? [m.name, m.contact, m.whatsapp, m.whatsappName, m.email, product, p.qty, p.amount]
@@ -191,7 +191,7 @@ export async function buildCustomerWorkbook(prep: ReportPrep): Promise<Workbook>
       );
     });
     perCustomer.addRow([
-      `${m.name} — total`,
+      `${m.name} (total)`,
       "",
       "",
       "",

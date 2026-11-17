@@ -48,7 +48,7 @@ export const TWO_WAYS_MODE_DEFAULT: TwoWaysMode = { onHand: "open", groupBuy: "o
  *  concerned, so it gets HIDDEN_WAY_MESSAGES instead. */
 export const WAY_BLOCK_MESSAGES: Record<WayKey, string> = {
   onHand:
-    "On-hand orders are paused right now — only the group buy is open. Please remove these items to check out.",
+    "On-hand orders are paused right now. Only the group buy is open. Please remove these items to check out.",
   groupBuy:
     "The group buy isn't taking orders right now. Please remove these items to check out.",
 } as const;

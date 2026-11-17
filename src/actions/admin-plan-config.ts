@@ -77,7 +77,7 @@ export async function savePlanConfigAction(input: PlanConfig): Promise<PlanConfi
     await syncPlanCatalog(prisma, resolvePlanFeatureSets(await getPlanFeatureConfig()));
     await persistFeatureRegistry(registry);
   } catch {
-    return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
+    return { error: "Could not save. Has the platform_settings table been pushed? (npm run db:push)" };
   }
 
   // The save re-synced every plan's feature ceiling, so every tenant's cached

@@ -77,7 +77,7 @@ function paymentOption(ctx: StageContext): StageOption {
 
 function reopenOption(ctx: StageContext): StageOption {
   return ctx.ligwakLocked
-    ? { stage: "open", allowed: false, reason: "Ligwak is locked — this round can't reopen." }
+    ? { stage: "open", allowed: false, reason: "Ligwak is locked, so this round can't reopen." }
     : { stage: "open", allowed: true };
 }
 

@@ -27,7 +27,7 @@ export function StorePaused({ brand }: { brand: Brand }) {
         )}
         <h1 className="sf-paused__title">We&rsquo;re currently on pause</h1>
         <p className="sf-paused__copy">
-          Our shop is taking a short break. Please check back soon — we&rsquo;ll be right back with
+          Our shop is taking a short break. Please check back soon. We&rsquo;ll be right back with
           your favorites.
         </p>
       </div>

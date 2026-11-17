@@ -314,7 +314,7 @@ function DetailsFlow({
       if ("error" in res) setSendError(res.error);
       else onFinish(signup);
     } catch {
-      setSendError("We couldn't send your details — please try again, or skip and message us on WhatsApp.");
+      setSendError("We couldn't send your details. Please try again, or skip and message us on WhatsApp.");
     } finally {
       setSending(false);
     }
@@ -345,7 +345,7 @@ function DetailsFlow({
     <div className="mk-wizard">
       <div className="mk-step-body">
         <p className="mk-hint" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 0, color: "var(--green)", fontWeight: 600 }}>
-          <CircleCheck size={16} aria-hidden="true" /> Payment submitted — your store is reserved at {signup.url}
+          <CircleCheck size={16} aria-hidden="true" /> Payment submitted. Your store is reserved at {signup.url}
         </p>
         <p className="mk-hint" style={{ margin: "4px 0 2px" }}>
           Help us build your store faster · Optional · {step + 1} of {DETAILS_STEPS.length}
@@ -367,7 +367,7 @@ function DetailsFlow({
         </button>
         <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 10, marginLeft: "auto" }}>
           <button type="button" className="mk-btn mk-btn-ghost" onClick={onSkip} disabled={sending}>
-            Skip — we&apos;ll ask you on WhatsApp
+            Skip, we&apos;ll ask you on WhatsApp
           </button>
           <button type="button" className="mk-btn mk-btn-primary" onClick={onContinue} disabled={sending}>
             {sending ? (

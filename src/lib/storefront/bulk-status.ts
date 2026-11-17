@@ -115,7 +115,7 @@ export function bulkStatusFailureMessage(saved: number, e: unknown): string {
     return e instanceof Error && e.message ? e.message : "Couldn't update the orders.";
   }
   if (saved > 0) {
-    return `Saved ${saved} order${saved === 1 ? "" : "s"} before running out of time. The rest were left unchanged — select them and try again.`;
+    return `Saved ${saved} order${saved === 1 ? "" : "s"} before running out of time. The rest were left unchanged. Select them and try again.`;
   }
   return "That took too long to save. Please select fewer orders and try again.";
 }

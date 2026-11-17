@@ -25,7 +25,7 @@ export function UpgradeRequestsManager({ initial, loadError }: Props) {
       const res = await decideUpgradeRequestAction(id, decision);
       if ("error" in res) return showToast(res.error);
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: decision } : r)));
-      showToast(decision === "approved" ? "Upgrade approved — store is on Business." : "Request rejected.");
+      showToast(decision === "approved" ? "Upgrade approved. Store is on Business." : "Request rejected.");
     });
   }
 
@@ -130,7 +130,7 @@ export function UpgradeRequestsManager({ initial, loadError }: Props) {
       {rows.length === 0 && !loadError && (
         <div className="card">
           <div className="card-body" style={{ padding: 16, fontSize: 13 }}>
-            No upgrade requests yet — trial stores that submit payment will appear here.
+            No upgrade requests yet. Trial stores that submit payment will appear here.
           </div>
         </div>
       )}

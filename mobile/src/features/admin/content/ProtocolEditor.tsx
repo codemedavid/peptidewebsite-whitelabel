@@ -101,7 +101,7 @@ export function ProtocolEditor({
       {mode === "image" ? (
         <Section title="Protocol images">
           {gallery(
-            `Upload one or more images (e.g. dosing charts or infographics). They replace the typed details on the public page. Up to ${MAX_PROTOCOL_IMAGES} — JPG, PNG, WebP, max 10 MB each.`,
+            `Upload one or more images (e.g. dosing charts or infographics). They replace the typed details on the public page. Up to ${MAX_PROTOCOL_IMAGES} images (JPG, PNG, WebP, max 10 MB each).`,
           )}
         </Section>
       ) : (

@@ -110,7 +110,7 @@ export function makeVariationEntry(
   return {
     ...product,
     id: variationEntryId(product.id, variation.name),
-    name: `${product.name} — ${variation.name}`,
+    name: `${product.name} · ${variation.name}`,
     price,
     variantOf: product.id,
     variantName: variation.name,
@@ -164,7 +164,7 @@ export function cartDisplayName(product: Product): string {
   if (options.length !== 1 || !options[0].variation) return name;
 
   const only = options[0].name.trim();
-  return only ? `${name} — ${only}` : name;
+  return only ? `${name} · ${only}` : name;
 }
 
 /** Group the flat cart (one entry per unit) into deduplicated lines. */
@@ -366,8 +366,8 @@ export function liveCartLines(cart: Product[], catalog: Product[]): CartLine[] {
  * way as the stock/rules checks — by `productId` (the client stamps the base
  * product id) else exact name. A variation's price comes straight from the live
  * option (variations carry no discount/reseller). Returns null when the line
- * matches no live product or its variation is gone, so the caller keeps the
- * client-sent price rather than zeroing or mispricing an unknown line.
+ * matches no live product or its variation is gone; order placement refuses
+ * such a line (lib/orders/reprice) rather than trust the client-sent price.
  */
 export function authoritativeItemPrice(
   item: { productId?: string; name: string; qty: number; variation?: string },
@@ -438,9 +438,9 @@ export function buildOrderMessage(
       const up = unitPrice(l.product, l.qty, null, wholesale);
       const line = up * l.qty;
       const tag = isResellerQty(l.product, l.qty, wholesale)
-        ? ` (reseller — ${resellerTierLabel(l.product)?.toLowerCase()} @ ${money(up, cur)}/ea)`
+        ? ` (reseller, ${resellerTierLabel(l.product)?.toLowerCase()} @ ${money(up, cur)}/ea)`
         : "";
-      return `• ${cartDisplayName(l.product)} ×${l.qty} — ${money(line, cur)}${tag}`;
+      return `• ${cartDisplayName(l.product)} ×${l.qty} · ${money(line, cur)}${tag}`;
     })
     .join("\n");
   const subtotal = cartTotal(lines, null, wholesale);
@@ -504,13 +504,13 @@ export function buildOrderMessage(
         "Payment:",
         `Method: ${payment.methodName || "—"}`,
         payment.hasProof
-          ? "Proof of payment: attached — sending in this chat"
+          ? "Proof of payment: attached (sending in this chat)"
           : "Proof of payment: —",
       ]
     : [];
 
   return [
-    `${orderNumber ? `Order #${orderNumber} — ` : "New order — "}${brand.name}`,
+    `${orderNumber ? `Order #${orderNumber} · ` : "New order · "}${brand.name}`,
     "",
     "Items:",
     items,

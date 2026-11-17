@@ -18,6 +18,7 @@
 //   • one generic miss message, whichever field was wrong; rate-limited per IP.
 
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
+import { isStorefrontActionBlocked, STOREFRONT_BLOCKED_MESSAGE } from "@/lib/auth/storefront-blocked";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { withTenant } from "@/lib/db/tenant-client";
 import { hasFeature } from "@/lib/features/entitlements";
@@ -88,6 +89,7 @@ async function lookupTenant(): Promise<string | null> {
 export async function lookupMyGroupBuyOrderAction(input: unknown): Promise<MyGroupBuyOrderResult> {
   const tenantId = await lookupTenant();
   if (!tenantId) return { error: UNAVAILABLE };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
 
   const limit = rateLimit(`my-gb-order:${tenantId}:${await clientIp()}`, LOOKUPS_PER_WINDOW, LOOKUP_WINDOW_MS);
   if (!limit.ok) {

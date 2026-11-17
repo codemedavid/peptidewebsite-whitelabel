@@ -159,7 +159,7 @@ export function AdminAnalytics({
       // Server actions reject on transport failure; without this the view
       // would stay on "Loading…" forever with the Refresh button disabled.
       setLoadFailed(true);
-      alert("Couldn't load analytics — check your connection and press Refresh.");
+      alert("Couldn't load analytics. Check your connection and press Refresh.");
     } finally {
       setLoading(false);
     }
@@ -254,8 +254,8 @@ export function AdminAnalytics({
         ) : orders.length === 0 ? (
           <div className="admin-empty-set" style={{ padding: "60px 20px" }}>
             {loadFailed
-              ? "Couldn't load orders — press Refresh to try again."
-              : "No orders yet — analytics will appear once your store takes its first order."}
+              ? "Couldn't load orders. Press Refresh to try again."
+              : "No orders yet. Analytics will appear once your store takes its first order."}
           </div>
         ) : (
           <div className={loading ? "ana-busy" : undefined}>
@@ -263,8 +263,8 @@ export function AdminAnalytics({
               <p className="admin-field__hint" role="note" style={{ margin: "0 0 14px" }}>
                 {foreign
                   .map(([code, f]) => `${code}: ${f.count} order${f.count === 1 ? "" : "s"} · ${formatMoney(f.total, code)}`)
-                  .join(" · ")}{" "}
-                — International orders, shown separately and not included in the figures below.
+                  .join(" · ")}.{" "}
+                These are International orders, shown separately and not included in the figures below.
               </p>
             )}
             <div className="admin__stats">

@@ -35,7 +35,7 @@ export async function suspendTenantAction(slug: string): Promise<AdminActionResu
     where: { id: tenant.id, status: tenant.status },
     data: { status: next },
   });
-  if (flipped.count === 0) return { error: "The tenant's status just changed — refresh and try again." };
+  if (flipped.count === 0) return { error: "The tenant's status just changed. Refresh and try again." };
   // Bust the host-resolver + tenant caches on every host (custom domains
   // included) so the kill-switch — and a reactivation — takes effect on the
   // next storefront request instead of after the resolver's 5-minute TTL.
@@ -284,7 +284,7 @@ function normalizeHostname(raw: string): { host: string } | { error: string } {
   // Platform subdomains (slug.<root>) are handled automatically — they don't go
   // through the custom-domain table, so reject them here to avoid confusion.
   if (h === ROOT || h.endsWith(`.${ROOT}`)) {
-    return { error: `${ROOT} subdomains are automatic — only add domains you own elsewhere.` };
+    return { error: `${ROOT} subdomains are automatic. Only add domains you own elsewhere.` };
   }
   return { host: h };
 }

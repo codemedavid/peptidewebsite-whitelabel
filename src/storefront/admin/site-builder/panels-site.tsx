@@ -232,7 +232,7 @@ function NavItemEditor({
       {item.children.length === 0 && (
         <LinkEditor label="Menu title goes to" link={item.link} onChange={(link) => onChange({ ...item, link })} env={env} />
       )}
-      <p className="sb-sub">Dropdown links {item.children.length === 0 && "(none — the title is a plain link)"}</p>
+      <p className="sb-sub">Dropdown links {item.children.length === 0 && "(none, so the title is a plain link)"}</p>
       <LinkList
         items={item.children}
         onChange={(children) => onChange({ ...item, children })}

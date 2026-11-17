@@ -49,10 +49,12 @@ type ChatRowProps = {
   avatar?: ReactNode;
   /** A DM: only my own messages get an author prefix ("You: …"). */
   oneToOne?: boolean;
+  /** I muted this chat's notifications: a muted speaker by the name, a grey unread badge. */
+  muted?: boolean;
 };
 
 /** One WhatsApp/Telegram chat-list row. */
-export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, broadcast = false, hub = false, square = false, pinned = false, context, preview, fallback, time, unread, onPress, onLongPress, avatar, oneToOne = false }: ChatRowProps) {
+export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, broadcast = false, hub = false, square = false, pinned = false, context, preview, fallback, time, unread, onPress, onLongPress, avatar, oneToOne = false, muted = false }: ChatRowProps) {
   const b = useChatBrand();
   const author = preview?.author && (!oneToOne || preview.author === "You") ? preview.author : null;
   const line = preview?.text ?? fallback;
@@ -62,7 +64,7 @@ export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, bro
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}${hub ? ", verified resellers hub" : ""}${hasUnread ? `, ${unread} unread` : ""}. ${author ? `${author}: ` : ""}${line}`}
+      accessibilityLabel={`${title}${hub ? ", verified resellers hub" : ""}${muted ? ", muted" : ""}${hasUnread ? `, ${unread} unread` : ""}. ${author ? `${author}: ` : ""}${line}`}
       accessibilityHint={onLongPress ? "Long press for options" : undefined}
       style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingLeft: GUTTER, backgroundColor: pressed ? CHAT.surfacePressed : CHAT.surface })}
     >
@@ -74,6 +76,7 @@ export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, bro
           <ChatText numberOfLines={1} style={{ flexShrink: 1, fontFamily: INTER.semibold, fontSize: 16, lineHeight: 21 }}>
             {title}
           </ChatText>
+          {muted ? <Ionicons name="volume-mute" size={14} color={CHAT.inkFaint} /> : null}
           <View style={{ flex: 1 }} />
           {preview?.author === "You" ? <Ionicons name="checkmark-done" size={15} color={b.brandText} /> : null}
           <RelativeTime iso={preview?.at ?? time} color={hasUnread ? b.brandText : CHAT.inkMuted} fontFamily={hasUnread ? INTER.semibold : INTER.regular} />
@@ -85,7 +88,7 @@ export const ChatRow = memo(function ChatRow({ emoji, imageUrl, title, seed, bro
             {line}
           </ChatText>
           {hasUnread ? (
-            <CountBadge count={unread} />
+            <CountBadge count={unread} muted={muted} />
           ) : pinned ? (
             <Ionicons name="pin" size={15} color={CHAT.inkFaint} style={{ transform: [{ rotate: "45deg" }] }} accessibilityLabel="Pinned" />
           ) : null}
@@ -119,8 +122,9 @@ export const ChannelRowItem = memo(function ChannelRowItem({ channel: ch, onMenu
       time={ch.lastMessageAt}
       unread={ch.unread}
       pinned={ch.postRole === "admins"}
+      muted={ch.muted === true}
       onPress={() => openChannel(ch)}
-      onLongPress={ch.canManage ? () => onMenu(ch) : undefined}
+      onLongPress={ch.canManage || ch.muted !== undefined ? () => onMenu(ch) : undefined}
     />
   );
 });

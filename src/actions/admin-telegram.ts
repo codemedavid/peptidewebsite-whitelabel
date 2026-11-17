@@ -101,7 +101,7 @@ export async function loadTelegramPanelAction(
     // plainly rather than throwing an unhandled rejection into the panel.
     const msg = e instanceof Error ? e.message : "Couldn't load the Telegram setup.";
     return { error: /telegram_(recipients|pairings)|does not exist/i.test(msg)
-      ? "Telegram tables are missing — run `npm run db:push` and reload."
+      ? "Telegram tables are missing. Run `npm run db:push` and reload."
       : msg };
   }
 }
@@ -132,7 +132,7 @@ async function registerWebhook(token: string, secret: string): Promise<string | 
   const host = webhookHost();
   const issue = webhookHostIssue(host);
   if (issue) {
-    return `Bot connected and token saved. Webhook NOT registered: ${issue} It will register from a deployed environment — or use a tunnel and re-register here.`;
+    return `Bot connected and token saved. Webhook NOT registered: ${issue} It will register from a deployed environment, or use a tunnel and re-register here.`;
   }
   const hooked = await setWebhook(token, buildWebhookUrl(host, secret), secret);
   return hooked.ok ? null : `Connected, but Telegram refused the webhook: ${hooked.error}`;

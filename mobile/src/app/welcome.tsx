@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
@@ -14,6 +14,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
+import { ApiError } from "@/api/client";
 import { useSession } from "@/auth/SessionProvider";
 import { APP_NAME, PRIVACY_URL, TERMS_URL } from "@/config";
 import { withAlpha } from "@/features/community/lib/color";
@@ -136,7 +137,12 @@ export default function Welcome() {
             ) : null}
 
             <Animated.View entering={enter(3)} style={styles.ctas}>
-              <WelcomeDoors door={door} accent={accent} websiteUrl={linked?.websiteUrl ?? null} />
+              <WelcomeDoors
+                door={door}
+                accent={accent}
+                websiteUrl={linked?.websiteUrl ?? null}
+                guestStore={linked?.guestShopping ? linked.slug : null}
+              />
             </Animated.View>
 
             {linked ? (
@@ -192,8 +198,31 @@ function welcomeCopy(storeName: string | null, canCreateAccount: boolean): Welco
 type Door = "find-store" | "shopper" | "team-only";
 
 /** The ways in: by store code, as a shopper of the linked store, or team-only. */
-function WelcomeDoors({ door, accent, websiteUrl }: { door: Door; accent: AuthAccent; websiteUrl: string | null }) {
+function WelcomeDoors({
+  door,
+  accent,
+  websiteUrl,
+  guestStore,
+}: {
+  door: Door;
+  accent: AuthAccent;
+  websiteUrl: string | null;
+  /** The linked store's slug when it lets shoppers in without an account. */
+  guestStore: string | null;
+}) {
   const signIn = () => router.push("/sign-in");
+  const { startGuest } = useSession();
+  const [isStartingGuest, setIsStartingGuest] = useState(false);
+  const continueAsGuest = async () => {
+    if (!guestStore || isStartingGuest) return;
+    setIsStartingGuest(true);
+    try {
+      await startGuest(guestStore);
+    } catch (e) {
+      Alert.alert("Couldn't open the shop", e instanceof ApiError ? e.message : "Please try again.");
+      setIsStartingGuest(false);
+    }
+  };
   if (door === "find-store") {
     return (
       <>
@@ -225,6 +254,15 @@ function WelcomeDoors({ door, accent, websiteUrl }: { door: Door; accent: AuthAc
           accessibilityHint="Opens sign in"
           onPress={signIn}
         />
+        {guestStore ? (
+          <TextLink
+            label="Continue as guest (sign up later)"
+            color={accent.link}
+            onPress={() => void continueAsGuest()}
+            disabled={isStartingGuest}
+            style={styles.guestLink}
+          />
+        ) : null}
       </>
     );
   }
@@ -294,6 +332,7 @@ function LiveDot({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 1 },
+  guestLink: { alignSelf: "center" },
   sheet: {
     flexGrow: 1,
     marginTop: -SHEET_OVERLAP,

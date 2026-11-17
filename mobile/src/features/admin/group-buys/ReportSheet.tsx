@@ -5,13 +5,14 @@ import { EmptyState, ErrorState, SkeletonList } from "@/ui/feedback";
 import { SPACE } from "@/theme/tokens";
 import { useSupplierReport } from "./hooks";
 import { reportCsv, shareCsv, shareCustomerWorkbook, shareSupplierWorkbook } from "./export";
+import { shareReportPdf } from "./pdf";
 import { OrderLineCard, ProductsToOrder, TileGrid, ViewSheet, useProofViewer } from "./parts";
 import { moneyOf, type GroupBuy, type GroupBuyCapabilities } from "./model";
 
 /**
  * The website's Round Report modal (getGroupBuySupplierReportAction): headline
  * counts, products to order, every order line, the per-customer rollup and the
- * exports the plan allows (CSV, supplier .xlsx, customers .xlsx) — shared from
+ * exports the plan allows (CSV, supplier .xlsx, customers .xlsx, PDF) — shared from
  * the phone instead of downloaded.
  */
 export function ReportSheet({
@@ -44,13 +45,13 @@ export function ReportSheet({
   };
 
   const footer =
-    data && hasLines && (caps.reports.csv || caps.reports.excel) ? (
+    data && hasLines && (caps.reports.csv || caps.reports.excel || caps.reports.pdf) ? (
       <View style={styles.exports}>
         {caps.reports.excel ? (
           <Button
             label="Supplier .xlsx"
             icon="share-outline"
-            accessibilityHint="Product quantities only — safe to send to the supplier"
+            accessibilityHint="Product quantities only, safe to send to the supplier"
             loading={exporting === "supplier"}
             disabled={!!exporting}
             onPress={() => void run("supplier", () => shareSupplierWorkbook(data.prep))}
@@ -61,7 +62,7 @@ export function ReportSheet({
             label="Customers .xlsx"
             variant="secondary"
             icon="share-outline"
-            accessibilityHint="Customers, orders and totals — your copy, do not send to the supplier"
+            accessibilityHint="Customers, orders and totals. Your copy, do not send to the supplier"
             loading={exporting === "customers"}
             disabled={!!exporting}
             onPress={() => void run("customers", () => shareCustomerWorkbook(data.prep))}
@@ -84,11 +85,32 @@ export function ReportSheet({
             }
           />
         ) : null}
+        {caps.reports.pdf ? (
+          <Button
+            label="PDF"
+            variant="secondary"
+            icon="document-outline"
+            loading={exporting === "pdf"}
+            disabled={!!exporting}
+            onPress={() =>
+              void run("pdf", () =>
+                shareReportPdf({
+                  roundName: groupBuy.name,
+                  currency,
+                  counts: data.counts,
+                  productsToOrder: data.productsToOrder,
+                  orderRows: data.orderRows,
+                  customers: data.customers,
+                }),
+              )
+            }
+          />
+        ) : null}
       </View>
     ) : undefined;
 
   return (
-    <ViewSheet title={`Round Report — ${groupBuy.name}`} onClose={onClose} footer={footer}>
+    <ViewSheet title={`Round Report: ${groupBuy.name}`} onClose={onClose} footer={footer}>
       {report.isError ? (
         <ErrorState message={report.error?.message ?? "Please try again."} onRetry={() => void report.refetch()} />
       ) : !data ? (

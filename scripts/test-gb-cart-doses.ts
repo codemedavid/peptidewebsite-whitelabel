@@ -222,7 +222,7 @@ function main() {
     const doseless = joinable
       .map((line) => cartDisplayName(joinGb(line)))
       .filter((name) => !hasDoseToken(name));
-    assert.deepEqual(doseless, ["KPV — 5 vials", "BBG70 klow"]);
+    assert.deepEqual(doseless, ["KPV · 5 vials", "BBG70 klow"]);
   });
 
   check("every cart line names the option the card had selected", () => {
@@ -243,22 +243,22 @@ function main() {
     cartDisplayName(joinGb(view.lines.find((l) => l.product.id === p.id)!));
 
   check("multi-dose Tirzepatide → the first dose, not a bare name", () => {
-    assert.equal(nameOf(tirzepatide), "Tirzepatide — 5mg × 10 vials");
+    assert.equal(nameOf(tirzepatide), "Tirzepatide · 5mg × 10 vials");
   });
   check("Retatrutide → its first dose", () => {
-    assert.equal(nameOf(retatrutide), "Retatrutide — 5mg × 10 vials");
+    assert.equal(nameOf(retatrutide), "Retatrutide · 5mg × 10 vials");
   });
   check("single-variation Semaglutide → one line, dose appended once", () => {
-    assert.equal(nameOf(semaglutide), "Semaglutide — 5mg × 10 vials");
+    assert.equal(nameOf(semaglutide), "Semaglutide · 5mg × 10 vials");
   });
   check("a distinct base price does NOT default the card to doseless 'Standard'", () => {
-    assert.equal(nameOf(semax), "Semax — 5mg × 10 vials");
+    assert.equal(nameOf(semax), "Semax · 5mg × 10 vials");
   });
   check("a name that already carries its dose is not doubled", () => {
-    assert.equal(nameOf(lemonBottle), "Lemon Bottle 10ml — 10ml");
+    assert.equal(nameOf(lemonBottle), "Lemon Bottle 10ml · 10ml");
   });
   check("a doseless option still names itself", () => {
-    assert.equal(nameOf(kpv), "KPV — 5 vials");
+    assert.equal(nameOf(kpv), "KPV · 5 vials");
   });
   check("a product with no options at all is added bare", () => {
     assert.equal(nameOf(bbg70), "BBG70 klow");
@@ -283,7 +283,7 @@ function main() {
     const line = view.lines.find((l) => l.product.id === retatrutide.id)!;
     const add = gbCardAddition(line, 1); // the 30mg option
     const entry = makeVariationEntry(add.product, add.variation!);
-    assert.equal(cartDisplayName(entry), "Retatrutide — 30mg × 10 vials");
+    assert.equal(cartDisplayName(entry), "Retatrutide · 30mg × 10 vials");
     assert.equal(unitPrice(entry, 1, SCOPE), 9924);
   });
 
@@ -333,10 +333,10 @@ function main() {
       postal: "",
     });
     for (const expected of [
-      "Tirzepatide — 5mg × 10 vials",
-      "Retatrutide — 5mg × 10 vials",
-      "Semaglutide — 5mg × 10 vials",
-      "Semax — 5mg × 10 vials",
+      "Tirzepatide · 5mg × 10 vials",
+      "Retatrutide · 5mg × 10 vials",
+      "Semaglutide · 5mg × 10 vials",
+      "Semax · 5mg × 10 vials",
     ]) {
       assert.ok(message.includes(expected), `order message is missing "${expected}"`);
     }

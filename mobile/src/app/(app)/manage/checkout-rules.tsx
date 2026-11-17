@@ -102,17 +102,17 @@ function Editor({ brand }: { brand: AdminBrand }) {
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} disabled={!canSave} onSave={onSave} />}>
       <Section
         title="Cart restrictions"
-        hint="Hard limits on what a single cart may contain. These always apply — the rule-based checkout switch below doesn't soften them."
+        hint="Hard limits on what a single cart may contain. These always apply. The rule-based checkout switch below doesn't soften them."
       >
         <ToggleRow
           label="Single order type per cart"
-          hint="Reseller (wholesale-priced) and retail items can't be combined in one order — customers place them separately."
+          hint="Reseller (wholesale-priced) and retail items can't be combined in one order. Customers place them separately."
           value={rules.singleOrderType}
           onChange={toggle("singleOrderType")}
         />
         <ToggleRow
           label="Mixed cart prevention"
-          hint="One product category per cart — adding an item from a second category is rejected with your message below."
+          hint="One product category per cart. Adding an item from a second category is rejected with your message below."
           value={rules.mixedCartPrevention}
           onChange={toggle("mixedCartPrevention")}
         />
@@ -155,7 +155,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
         />
         <ToggleRow
           label="Bac water validation"
-          hint="Peptide orders must include bacteriostatic water. Off by default — a peptide-only order is a normal order. Leave it off if you use Order Ratio Control to LIMIT bac water instead, or the two rules contradict each other."
+          hint="Peptide orders must include bacteriostatic water. Off by default, so a peptide-only order is a normal order. Leave it off if you use Order Ratio Control to LIMIT bac water instead, or the two rules contradict each other."
           value={rules.bacWaterValidation}
           onChange={toggle("bacWaterValidation")}
         />
@@ -179,11 +179,11 @@ function Editor({ brand }: { brand: AdminBrand }) {
           onChangeText={(checkoutNotice) => set({ checkoutNotice })}
           maxLength={CHECKOUT_RULE_NOTICE_MAX}
           multiline
-          placeholder="e.g. Double-check your shipping address — peptides are temperature-sensitive."
+          placeholder="e.g. Double-check your shipping address. Peptides are temperature-sensitive."
         />
         <ToggleRow
           label="Customer note box"
-          hint="Lets the buyer add a request at checkout — a delivery window, a gate code, packaging preferences. Always optional; it never blocks an order. You'll see it on the order and in your export."
+          hint="Lets the buyer add a request at checkout, like a delivery window, a gate code, packaging preferences. Always optional; it never blocks an order. You'll see it on the order and in your export."
           value={rules.customerNoteEnabled}
           onChange={toggle("customerNoteEnabled")}
         />
@@ -214,7 +214,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
         <Hint>
           {rules.ruleBasedCheckout
             ? "The minimum-quantity and bac water messages block checkout until the cart is fixed."
-            : "Rule-based checkout is off — the minimum-quantity and bac water messages show as warnings and orders still go through. Cart restrictions always apply."}
+            : "Rule-based checkout is off. The minimum-quantity and bac water messages show as warnings and orders still go through. Cart restrictions always apply."}
         </Hint>
       </Section>
     </FormPage>

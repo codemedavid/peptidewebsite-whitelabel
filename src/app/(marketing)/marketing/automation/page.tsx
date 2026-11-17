@@ -41,9 +41,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Peptide Business Automation System — Stop Being Your Own Customer Support",
+  title: "Peptide Business Automation System: Stop Being Your Own Customer Support",
   description:
-    "Automate the repetitive part of your peptide business. Display products, organize COAs, answer the same questions 24/7, and let only serious buyers reach you — so you can focus on growth.",
+    "Automate the repetitive part of your peptide business. Display products, organize COAs, answer the same questions 24/7, and let only serious buyers reach you, so you can focus on growth.",
   openGraph: {
     title: "Stop Being The Customer Support Of Your Own Peptide Business",
     description:
@@ -248,7 +248,7 @@ function Problem() {
       <SectionHeading
         eyebrow="Sound familiar?"
         title="Buong araw, customer support ka sa sarili mong business"
-        subtitle="Maganda ang product mo. Pero sa halip na mag-grow, naka-upo ka sa chat — sinasagot ang parehong tanong, paulit-ulit, araw-araw."
+        subtitle="Maganda ang product mo. Pero sa halip na mag-grow, naka-upo ka sa chat, sinasagot ang parehong tanong, paulit-ulit, araw-araw."
       />
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {PROBLEMS.map((p) => (
@@ -275,7 +275,7 @@ function HiddenCost() {
             3 oras kada araw. <span className="text-[#c43768]">90 oras kada buwan.</span> Saan napupunta?
           </>
         }
-        subtitle="Tingnan natin ang totoong gastos ng manwal na operasyon — hindi sa pera, kundi sa oras na hindi na babalik."
+        subtitle="Tingnan natin ang totoong gastos ng manwal na operasyon, hindi sa pera, kundi sa oras na hindi na babalik."
       />
 
       <div className="mt-12 grid items-stretch gap-4 sm:grid-cols-3">
@@ -302,7 +302,7 @@ function HiddenCost() {
 
       <p className="mx-auto mt-10 max-w-2xl text-center text-base text-zinc-600">
         That&apos;s more than <span className="font-semibold text-zinc-900">six full weeks</span> of full-time
-        work every year — spent answering questions a system could answer for you.
+        work every year, spent answering questions a system could answer for you.
       </p>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -333,15 +333,15 @@ function RealProblem() {
             The problem isn&apos;t your product.
             <br />
             <span className="bg-gradient-to-r from-[#f687a8] to-[#e94b7d] bg-clip-text text-transparent">
-              The problem is — ikaw ang system.
+              The problem is: ikaw ang system.
             </span>
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-zinc-300 sm:text-lg">
-            Sulit ka, legit ka, may COA ka. Pero lahat ng dumadaan — dumadaan sa&apos;yo. Ikaw ang catalog.
+            Sulit ka, legit ka, may COA ka. Pero lahat ng dumadaan, dumadaan sa&apos;yo. Ikaw ang catalog.
             Ikaw ang FAQ. Ikaw ang customer service. Ikaw ang stockroom.
           </p>
           <p className="mx-auto mt-4 max-w-2xl text-pretty text-base leading-relaxed text-zinc-400 sm:text-lg">
-            Ang totoo? Wala kang business — may trabaho kang hindi ka pwedeng mag-absent. Sa araw na
+            Ang totoo? Wala kang business. May trabaho kang hindi ka pwedeng mag-absent. Sa araw na
             tumigil kang mag-reply, doon din titigil ang benta.
           </p>
           <div className="mt-9">
@@ -361,7 +361,7 @@ function FutureVision() {
       <SectionHeading
         eyebrow="Imagine this"
         title="A business na gumagana kahit tulog ka"
-        subtitle="Isipin mo ang umaga na walang backlog ng tanong — kundi listahan ng mga taong handa nang bumili."
+        subtitle="Isipin mo ang umaga na walang backlog ng tanong, kundi listahan ng mga taong handa nang bumili."
       />
       <div className="mt-12 grid gap-5 sm:grid-cols-2">
         {VISION.map((v) => (
@@ -386,7 +386,7 @@ function Solution() {
       <SectionHeading
         eyebrow="Introducing"
         title="The Peptide Business Automation System"
-        subtitle="Hindi lang website. Hindi lang software. It’s a digital employee na nagtatrabaho 24/7 — hindi humihingi ng off, hindi nagkakasakit, hindi nagrereklamo."
+        subtitle="Hindi lang website. Hindi lang software. It’s a digital employee na nagtatrabaho 24/7: hindi humihingi ng off, hindi nagkakasakit, hindi nagrereklamo."
       />
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         {SOLUTION_CARDS.map((c) => (
@@ -409,7 +409,7 @@ function HowItWorks() {
       <SectionHeading
         eyebrow="How it works"
         title="Limang hakbang, zero paulit-ulit"
-        subtitle="Ito ang dadaanan ng bawat customer mo — kusang gumagana, kahit wala ka."
+        subtitle="Ito ang dadaanan ng bawat customer mo, kusang gumagana, kahit wala ka."
         className="!max-w-2xl"
       />
       <ol className="relative mt-12">
@@ -442,7 +442,7 @@ function Benefits() {
     <Section className="bg-zinc-50/60">
       <SectionHeading
         eyebrow="Why it changes everything"
-        title="Bawiin mo ang oras mo — at ang business mo"
+        title="Bawiin mo ang oras mo, at ang business mo"
         subtitle="Hindi lang ito tungkol sa convenience. Tungkol ito sa kung paano gumagana ang buong operasyon mo."
       />
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -466,7 +466,7 @@ function Features() {
       <SectionHeading
         eyebrow="What's inside"
         title="Everything your business needs, in one system"
-        subtitle="Bawat tool na kailangan mo para magmukhang propesyonal at gumana nang mag-isa — nasa loob na."
+        subtitle="Bawat tool na kailangan mo para magmukhang propesyonal at gumana nang mag-isa: nasa loob na."
       />
       <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {FEATURES.map((f) => (
@@ -488,7 +488,7 @@ function ValueStack() {
     <Section className="border-t border-zinc-100">
       <SectionHeading
         eyebrow="What you're really getting"
-        title="A complete system — built piece by piece"
+        title="A complete system, built piece by piece"
         subtitle="Kung pagbubukud-bukurin at ipapagawa mo nang isa-isa, ganito ang halaga. Sa system na ito, sabay-sabay na silang lahat."
       />
 
@@ -512,7 +512,7 @@ function ValueStack() {
 
       <div className="mx-auto mt-8 max-w-2xl text-center">
         <p className="text-pretty text-base text-zinc-600">
-          Hindi mo kailangang gastusin ang ₱115,000 — at lalong hindi mo kailangang ibuhos ang{" "}
+          Hindi mo kailangang gastusin ang ₱115,000, at lalong hindi mo kailangang ibuhos ang{" "}
           <span className="font-semibold text-zinc-900">90 oras kada buwan</span>. Kunin ang custom quote
           mo in minutes, at makikita mo muna ang buong plano bago ka magdesisyon.
         </p>
@@ -627,7 +627,7 @@ function SiteFooter() {
         <div className="max-w-sm">
           <Logo />
           <p className="mt-3 text-sm leading-relaxed text-zinc-500">
-            The automation system for peptide sellers — display, organize, and answer 24/7, so you can
+            The automation system for peptide sellers: display, organize, and answer 24/7, so you can
             focus on growth instead of replies.
           </p>
         </div>

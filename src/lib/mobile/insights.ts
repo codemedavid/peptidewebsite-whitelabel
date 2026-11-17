@@ -13,6 +13,7 @@
 import type { Order, OrderStatus } from "../../storefront/types";
 import { computeOrderTotals, hasPaymentProof, itemCount } from "../../storefront/admin/order-detail";
 import { formatMoney } from "../storefront/currency";
+import { isForeignCurrencyOrder } from "../storefront/markets";
 import {
   buildPeriodSeries,
   clampToNow,
@@ -28,6 +29,8 @@ import type { InsightsPoint, InsightsQuery, InsightsRange, InsightsResponse, Kpi
 import { customerId, customerKeyOf } from "./customers";
 
 const TOP_ROWS = 5;
+/** Group buys listed in the "Group Buys" card (the website shows 8). */
+const GROUP_BUY_ROWS = 8;
 
 /** Ranges a request may name. Anything else (or nothing) → 7 days, the app's default. */
 export function parseRange(value: unknown): InsightsRange {
@@ -98,6 +101,27 @@ function ranked(map: Map<string, Agg>, money: (n: number) => string, detail: (a:
     }));
 }
 
+/** The website's Group Buys card: revenue per round, share of group-buy revenue. */
+function groupBuyRows(
+  map: Map<string, Agg>,
+  orders: Map<string, number>,
+  money: (n: number) => string,
+): NonNullable<InsightsResponse["groupBuys"]> {
+  const all = [...map.values()].sort((a, b) => b.value - a.value || b.count - a.count);
+  const whole = all.reduce((s, r) => s + r.value, 0);
+  return {
+    totalLabel: money(whole),
+    rows: all.slice(0, GROUP_BUY_ROWS).map((r) => ({
+      name: r.name,
+      value: r.value,
+      valueLabel: money(r.value),
+      // `count` is units for this map; orders are counted beside it.
+      detail: `${plural(orders.get(r.key) ?? 0, "order", "orders")} · ${plural(r.count, "unit", "units")}`,
+      share: whole > 0 ? r.value / whole : 0,
+    })),
+  };
+}
+
 const withoutKey = ({ key: _key, ...row }: RankedRow & { key: string }): RankedRow => row;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -108,12 +132,35 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * @param history  every active order the store has — only used to tell a
  *                 returning customer from a first-timer
  */
+/**
+ * International (foreign-currency) orders, per currency, cancelled excluded —
+ * the website's Sales Analytics note (AdminAnalytics `foreign`). All time, like
+ * the website: they are reported beside the figures, never inside them.
+ */
+export function internationalSummary(orders: Order[], currency: unknown): NonNullable<InsightsResponse["international"]> {
+  const symbol = typeof currency === "string" ? currency : undefined;
+  const byCode = new Map<string, { orders: number; total: number }>();
+  for (const o of orders) {
+    if (o.status === "cancelled" || !isForeignCurrencyOrder(o, symbol)) continue;
+    const code = (o.currency ?? "").trim().toUpperCase();
+    const row = byCode.get(code) ?? { orders: 0, total: 0 };
+    byCode.set(code, { orders: row.orders + 1, total: row.total + computeOrderTotals(o).total });
+  }
+  return [...byCode.entries()].map(([code, r]) => ({ code, orders: r.orders, totalLabel: formatMoney(r.total, code) }));
+}
+
 export function buildInsights(
-  orders: Order[],
-  history: Order[],
+  allOrders: Order[],
+  allHistory: Order[],
   opts: { range: InsightsRange; now: Date; currency: unknown; query?: Omit<InsightsQuery, "range"> },
 ): InsightsResponse {
   const { now, currency } = opts;
+  // Dual-currency stores: every figure is in the STORE's currency, so orders
+  // charged in another one are kept out (₱ + $ is not a number) and summarised
+  // on their own line — the website's AdminAnalytics rule.
+  const symbol = typeof currency === "string" ? currency : undefined;
+  const orders = allOrders.filter((o) => !isForeignCurrencyOrder(o, symbol));
+  const history = allHistory === allOrders ? orders : allHistory.filter((o) => !isForeignCurrencyOrder(o, symbol));
   const nowMs = now.getTime();
   const earliest = history.reduce<number | null>((min, o) => {
     const t = new Date(o.date).getTime();
@@ -133,6 +180,9 @@ export function buildInsights(
   const customers = new Map<string, Agg>();
   const payments = new Map<string, Agg>();
   const places = new Map<string, Agg>();
+  // Orders carry groupBuyId/groupBuyName when placed inside a live round.
+  const groupBuys = new Map<string, Agg>();
+  const groupBuyOrders = new Map<string, number>();
 
   let revenue = 0;
   let collected = 0;
@@ -187,6 +237,12 @@ export function buildInsights(
       (o.shipping?.region || "").trim() ||
       "Not specified";
     bump(places, place.toLowerCase(), place, total, 1);
+    if (o.groupBuyId || o.groupBuyName) {
+      const gbName = (o.groupBuyName || "").trim() || "Group buy";
+      const gbKey = o.groupBuyId || `name:${o.groupBuyName}`;
+      bump(groupBuys, gbKey, gbName, total, itemCount(o));
+      groupBuyOrders.set(gbKey, (groupBuyOrders.get(gbKey) ?? 0) + 1);
+    }
   }
 
   // First-ever (non-cancelled) order per customer decides new vs returning.
@@ -257,6 +313,8 @@ export function buildInsights(
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
     cancelled,
+    international: internationalSummary(allOrders, currency),
+    groupBuys: groupBuyRows(groupBuys, groupBuyOrders, wholeMoney),
     period: {
       from: period.from,
       to: period.to,

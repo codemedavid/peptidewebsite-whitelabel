@@ -1,10 +1,10 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { prisma } from "@/lib/db/prisma";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig, updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { saveGateSession, clearGateSession } from "@/lib/auth/storefront-gate";
@@ -140,18 +140,7 @@ export async function setGateSettingsAction(input: unknown): Promise<ActionResul
     }
 
     const slug = await getTenantSlug();
-    const branding = await prisma.branding.findUnique({
-      where: { tenantId },
-      select: { config: true },
-    });
-    const current = (branding?.config ?? {}) as Record<string, unknown>;
-    const config = { ...current, accessGate: { enabled, heading } };
-
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
+    await patchBrandingConfig(tenantId, { accessGate: { enabled, heading } });
     revalidateTenant(tenantId, slug);
     return { ok: true };
   } catch (err) {
@@ -192,21 +181,13 @@ export async function rotateAccessCodeAction(
 
     // Auto-enable the gate (keep the existing heading). Setting a code = "make my
     // store private", so the gate goes live without a separate toggle.
-    const branding = await prisma.branding.findUnique({
-      where: { tenantId },
-      select: { config: true },
-    });
-    const current = (branding?.config ?? {}) as Record<string, unknown>;
-    const prevGate = (current.accessGate ?? {}) as { heading?: string };
-    const heading =
-      typeof prevGate.heading === "string" && prevGate.heading.trim()
-        ? prevGate.heading.trim()
-        : "Enter access code";
-    const config = { ...current, accessGate: { enabled: true, heading } };
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
+    await updateBrandingConfig(tenantId, (current) => {
+      const prevGate = (current.accessGate ?? {}) as { heading?: string };
+      const heading =
+        typeof prevGate.heading === "string" && prevGate.heading.trim()
+          ? prevGate.heading.trim()
+          : "Enter access code";
+      return { ...current, accessGate: { enabled: true, heading } };
     });
 
     await recordAuthAudit((row) => prisma.authAudit.create({ data: row }), {

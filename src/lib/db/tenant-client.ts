@@ -83,6 +83,8 @@ const TENANT_MODELS = new Set<string>([
   "accountProfile",
   // "Live now" visitor heartbeats (lib/presence/live.ts)
   "livePresence",
+  // Peptide Tracker sync (lib/tracker/sync.server.ts)
+  "trackerRecord",
 ]);
 
 const SCOPED_READS = new Set([

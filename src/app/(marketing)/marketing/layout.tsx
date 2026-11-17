@@ -17,16 +17,16 @@ async function assertApex() {
 
 export const metadata: Metadata = {
   title: {
-    default: "Pepweb — The All-in-One Platform for Peptide Businesses",
+    default: "Pepweb: The All-in-One Platform for Peptide Businesses",
     template: "%s · Pepweb",
   },
   description:
-    "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation — all in one platform that keeps improving every month.",
+    "Launch a professional peptide storefront with ordering, tracking, COAs, protocols, analytics, and automation, all in one platform that keeps improving every month.",
   icons: { icon: "/favicon.ico" },
   openGraph: {
-    title: "Pepweb — The All-in-One Platform for Peptide Businesses",
+    title: "Pepweb: The All-in-One Platform for Peptide Businesses",
     description:
-      "Everything you need to sell peptides online: storefront, ordering, tracking, COAs, protocols, analytics, and automation — done-for-you in 2–5 days.",
+      "Everything you need to sell peptides online: storefront, ordering, tracking, COAs, protocols, analytics, and automation, done-for-you in 2–5 days.",
     type: "website",
   },
 };

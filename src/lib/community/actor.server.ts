@@ -8,6 +8,7 @@ import type { AuthFailure, Principal } from "@/lib/mobile/auth";
 import type { LiveSession } from "@/lib/mobile/sessions";
 import { storeDisplayName } from "@/lib/mobile/store-name";
 import { admitCustomer } from "./admission.server";
+import { GUEST_COMMUNITY_LOCKED } from "@/lib/mobile/app-guest";
 import { isActiveAdmin } from "./membership";
 import { previewPolicyOf } from "./preview";
 import { STORE_KEY, authorKeyFor, customerKey } from "./keys";
@@ -97,6 +98,9 @@ export async function resolveCommunityActor(
       },
     };
   }
+
+  // App guests see nothing of the community until they create an account.
+  if (principal.ctx.customer.guest) return { ok: false, failure: { code: "forbidden", message: GUEST_COMMUNITY_LOCKED } };
 
   const customerId = principal.ctx.customer.id;
   const member = await admitCustomer(ctx.tenant, ctx.tenantId, principal.ctx.customer);

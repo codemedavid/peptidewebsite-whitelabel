@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSignedIn } from "@/auth/SessionProvider";
+import { communityAccess } from "@/features/community/lib/access";
 import { disablePush, enablePush, isPushEnabledHere, markAsked, permissionStatus, type PushSetup } from "@/notifications/push";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE } from "@/theme/tokens";
@@ -28,6 +29,7 @@ function Benefit({ icon, title, body }: { icon: IconName; title: string; body: s
 export default function NotificationsScreen() {
   const t = useTheme();
   const { me } = useSignedIn();
+  const inCommunity = communityAccess(me).inCommunity;
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [denied, setDenied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,8 +78,11 @@ export default function NotificationsScreen() {
         </AppText>
 
         <Card style={{ gap: SPACE.lg }}>
-          <Benefit icon="flash-outline" title="Instant" body="Tap the alert to open the order and confirm it right away." />
-          <Benefit icon="lock-closed-outline" title="Private on your lock screen" body="Only the order number shows — never the customer's name, items or amount." />
+          <Benefit icon="flash-outline" title="Instant, with its own chime" body="New orders ring with a two-note chime you'll recognise. Tap the alert to open the order and confirm it right away." />
+          {inCommunity ? (
+            <Benefit icon="chatbubbles-outline" title="Group chats too" body="A soft pop when someone posts in your community chats. Tap the bell in any chat to mute just that one." />
+          ) : null}
+          <Benefit icon="lock-closed-outline" title="Private on your lock screen" body="Only the order number, total and item count show, never the customer's name or what they bought." />
           <Benefit icon="phone-portrait-outline" title="Only this phone, only this store" body="Signing out or switching stores stops them here." />
         </Card>
 

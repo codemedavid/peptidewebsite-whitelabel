@@ -97,7 +97,7 @@ export function AdminInventory({ brand, onBack }: { brand: Brand; onBack: () => 
       });
       toast(`Updated "${saved.name}"`);
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSavingId(null);
     }

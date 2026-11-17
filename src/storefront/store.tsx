@@ -495,7 +495,7 @@ export function StoreProvider({
         toast(
           isOnHandHidden(brand.twoWaysMode)
             ? `Message us for the price of ${product.name}.`
-            : `${product.name} is on hand — message us for the price.`,
+            : `${product.name} is on hand. Message us for the price.`,
         );
         return;
       }
@@ -746,7 +746,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save payment methods — please sign in again and retry.");
+          toast("Couldn't save payment methods. Please sign in again and retry.");
         });
     },
     [toast, paymentMethods],
@@ -770,7 +770,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save protocols — please sign in again and retry.");
+          toast("Couldn't save protocols. Please sign in again and retry.");
         });
     },
     [toast, protocols],
@@ -794,7 +794,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save lab reports — please sign in again and retry.");
+          toast("Couldn't save lab reports. Please sign in again and retry.");
         });
     },
     [toast, coaReports],
@@ -816,7 +816,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save reviews — please sign in again and retry.");
+          toast("Couldn't save reviews. Please sign in again and retry.");
         });
     },
     [toast, reviews],
@@ -844,7 +844,7 @@ export function StoreProvider({
             }
           })
           .catch(() => {
-            toast("Couldn't save FAQ — please sign in again and retry.");
+            toast("Couldn't save FAQ. Please sign in again and retry.");
           });
       }, 600);
     },
@@ -866,7 +866,7 @@ export function StoreProvider({
             if (r && "error" in r) toast(`Couldn't save card design: ${r.error}`);
           })
           .catch(() => {
-            toast("Couldn't save card design — please sign in again and retry.");
+            toast("Couldn't save card design. Please sign in again and retry.");
           });
       }, 600);
     },
@@ -888,7 +888,7 @@ export function StoreProvider({
           if (r && "error" in r) toast(`Couldn't save template: ${r.error}`);
         })
         .catch(() => {
-          toast("Couldn't save template — please sign in again and retry.");
+          toast("Couldn't save template. Please sign in again and retry.");
         });
     },
     [toast, brand.cardTemplates],
@@ -912,7 +912,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save couriers — please sign in again and retry.");
+          toast("Couldn't save couriers. Please sign in again and retry.");
         });
     },
     [toast, couriers],
@@ -936,7 +936,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save promo codes — please sign in again and retry.");
+          toast("Couldn't save promo codes. Please sign in again and retry.");
         });
     },
     [toast, promoCodes],
@@ -960,7 +960,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save shipping locations — please sign in again and retry.");
+          toast("Couldn't save shipping locations. Please sign in again and retry.");
         });
     },
     [toast, shippingLocations],
@@ -984,7 +984,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save categories — please sign in again and retry.");
+          toast("Couldn't save categories. Please sign in again and retry.");
         });
     },
     [toast, categories],
@@ -1007,7 +1007,7 @@ export function StoreProvider({
           }
         })
         .catch(() => {
-          toast("Couldn't save sort categories — please sign in again and retry.");
+          toast("Couldn't save sort categories. Please sign in again and retry.");
         });
     },
     [toast, sortCategories],

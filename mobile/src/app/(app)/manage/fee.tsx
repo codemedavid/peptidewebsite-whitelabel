@@ -52,6 +52,9 @@ function Editor({ brand }: { brand: AdminBrand }) {
   const [label, setLabel] = useState(initial.label);
   // Raw text so a partial entry ("12.") doesn't fight the field; parsed on save.
   const [amount, setAmount] = useState(initial.amount > 0 ? String(initial.amount) : "");
+  const [oncePerGroupBuy, setOncePerGroupBuy] = useState(initial.oncePerGroupBuy);
+  const [usdAmount, setUsdAmount] = useState(initial.usdAmount ? String(initial.usdAmount) : "");
+  const dualMarket = brand.dualMarket === true;
   const [flash, showSaved, hideSaved] = useSavedFlash();
   const save = useSetupSave("saveStoreAdminFeeAction");
 
@@ -63,8 +66,24 @@ function Editor({ brand }: { brand: AdminBrand }) {
 
   // This view edits the flat fee only — the saved mode/percent ride through so a
   // percentage fee set by the operator isn't clobbered to fixed.
-  const value = normalizeAdminFee({ enabled, label, amount: Number(amount) || 0, mode: initial.mode, percent: initial.percent });
-  const dirty = value.enabled !== initial.enabled || value.label !== initial.label || value.amount !== initial.amount;
+  // usdAmount is sent only where its field shows; elsewhere the server keeps
+  // the stored value (mergeAdminFeeInput) — same as the website.
+  const value = normalizeAdminFee({
+    enabled,
+    label,
+    amount: Number(amount) || 0,
+    mode: initial.mode,
+    percent: initial.percent,
+    oncePerGroupBuy,
+    ...(dualMarket ? { usdAmount: Number(usdAmount) || 0 } : { usdAmount: initial.usdAmount }),
+  });
+  const payload = dualMarket ? { ...value, usdAmount: Number(usdAmount) || 0 } : { ...value, usdAmount: undefined };
+  const dirty =
+    value.enabled !== initial.enabled ||
+    value.label !== initial.label ||
+    value.amount !== initial.amount ||
+    value.oncePerGroupBuy !== initial.oncePerGroupBuy ||
+    (dualMarket && (value.usdAmount ?? 0) !== (initial.usdAmount ?? 0));
   useDiscardGuard(dirty);
 
   const edit = <T,>(set: (v: T) => void) => (v: T) => {
@@ -74,11 +93,12 @@ function Editor({ brand }: { brand: AdminBrand }) {
 
   function onSave() {
     if (!canSave) return;
-    save.mutate(value, {
+    save.mutate(payload, {
       onSuccess: () => {
         setInitial(value);
         setLabel(value.label);
         setAmount(value.amount > 0 ? String(value.amount) : "");
+        setUsdAmount(value.usdAmount ? String(value.usdAmount) : "");
         showSaved();
       },
       onError: (e) => Alert.alert("Couldn't save", e.message),
@@ -93,7 +113,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} disabled={!canSave} onSave={onSave} />}>
       <Section
         title="Checkout fee"
-        hint="A single charge added on top of the order total at checkout — e.g. a shipping, service or processing fee. Customers see it as its own line in the totals. Use this if you'd rather charge one flat fee than set a fee on every shipping location."
+        hint="A single charge added on top of the order total at checkout, e.g. a shipping, service or processing fee. Customers see it as its own line in the totals. Use this if you'd rather charge one flat fee than set a fee on every shipping location."
       >
         <ToggleRow
           label="Charge a fee at checkout"
@@ -129,12 +149,30 @@ function Editor({ brand }: { brand: AdminBrand }) {
               error={amountError}
             />
           </View>
+          {dualMarket ? (
+            <View style={styles.amount}>
+              <Field
+                label="International amount (USD)"
+                value={usdAmount}
+                onChangeText={edit(setUsdAmount)}
+                keyboardType="decimal-pad"
+                placeholder="No fee on USD orders"
+                hint="Charged on International cart orders. Leave blank to charge no fee there."
+              />
+            </View>
+          ) : null}
+          <ToggleRow
+            label="Charge once per customer per group buy"
+            hint="For group buys: a customer pays the fee on their first order in a round only. Orders they add later in the same round carry no fee. Signed-in customers are matched by their account; guests by email or phone number."
+            value={oncePerGroupBuy}
+            onChange={edit(setOncePerGroupBuy)}
+          />
         </Section>
       ) : null}
 
       <Hint>
         {enabled && amountValid
-          ? `Checkout will show “${previewLabel}: ${currency}${amountNum.toLocaleString()}” above the total.`
+          ? `Checkout will show “${previewLabel}: ${currency}${amountNum.toLocaleString()}” above the total${oncePerGroupBuy ? ", on a customer's first order in each group buy" : ""}.`
           : "No fee is charged at checkout."}
       </Hint>
     </FormPage>

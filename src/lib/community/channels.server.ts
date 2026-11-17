@@ -24,7 +24,7 @@ import { countUnreadChats, readBaseline } from "./unread";
 import { parseChannelInput, parseTopicInput } from "./validate";
 import { findOwnUpload } from "./uploads.server";
 import { messagePreview } from "./view.server";
-import { parseMuteRequest } from "./topic-push";
+import { channelMuteKey, parseMuteRequest } from "./topic-push";
 import type { Outcome } from "./messages.server";
 import { welcomeIfNew } from "./welcome.server";
 
@@ -175,12 +175,14 @@ function topicView(actor: CommunityActor, t: TopicRow, channel: ChannelRow, stat
 }
 
 /**
- * The channels this reader muted — only full members, the only ones a channel
- * message pushes (null for the store team and for people in preview).
+ * The channels this reader muted — full members and each store-team member
+ * (muted personally, see channelMuteKey). Null for people in preview, who get
+ * no channel pushes.
  */
 async function mutedChannels(db: TenantTx, actor: CommunityActor): Promise<ReadonlySet<string> | null> {
-  if (!actor.customerId || actor.preview) return null;
-  const rows = await db.communityChannelMute.findMany({ where: { participantKey: actor.key }, select: { channelId: true } });
+  const key = channelMuteKey(actor);
+  if (!key) return null;
+  const rows = await db.communityChannelMute.findMany({ where: { participantKey: key }, select: { channelId: true } });
   return new Set(rows.map((r) => r.channelId));
 }
 
@@ -336,23 +338,25 @@ export async function getChannel(actor: CommunityActor, channelId: string): Prom
 }
 
 /**
- * Mute / unmute a channel's chat messages on this member's phones. Members
- * only — the store team and people in preview get no channel pushes. Safe to
- * repeat (muting twice is one row; unmuting what isn't muted is a no-op).
+ * Mute / unmute a channel's chat messages on this reader's phones: a member,
+ * or one store-team member for themselves (not the whole team). People in
+ * preview get no channel pushes, so there's nothing to mute. Safe to repeat
+ * (muting twice is one row; unmuting what isn't muted is a no-op).
  */
 export async function setChannelMute(actor: CommunityActor, channelId: string, body: unknown): Promise<Outcome<ChannelMuteResponse>> {
   if (!ID_RE.test(channelId)) return NOT_FOUND;
   const muted = parseMuteRequest(body);
   if (muted === null) return invalid("Choose whether to mute this channel.");
-  if (!actor.customerId || actor.preview) return forbidden("Only community members can mute a channel.");
+  const muteKey = channelMuteKey(actor);
+  if (!muteKey) return forbidden("Only community members can mute a channel.");
   return withTenant(actor.tenantId, async (db): Promise<Outcome<ChannelMuteResponse>> => {
     const channel = await db.communityChannel.findFirst({ where: { id: channelId } });
     if (!channel || !canSeeChannel(actor, channel)) return NOT_FOUND;
-    const where = { tenantId: actor.tenantId, participantKey: actor.key, channelId };
+    const where = { tenantId: actor.tenantId, participantKey: muteKey, channelId };
     if (muted) {
       await db.communityChannelMute.upsert({ where: { tenantId_participantKey_channelId: where }, create: where, update: {} });
     } else {
-      await db.communityChannelMute.deleteMany({ where: { participantKey: actor.key, channelId } });
+      await db.communityChannelMute.deleteMany({ where: { participantKey: muteKey, channelId } });
     }
     return { kind: "ok", value: { channelId, muted } };
   });

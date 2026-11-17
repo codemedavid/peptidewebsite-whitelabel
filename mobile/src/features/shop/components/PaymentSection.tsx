@@ -39,7 +39,7 @@ export function PaymentSection({
     return (
       <FormSection title="Payment">
         <AppText variant="body" color="muted">
-          No upfront payment needed — the store will tell you how to pay.
+          No upfront payment needed. The store will tell you how to pay.
         </AppText>
       </FormSection>
     );
@@ -151,7 +151,7 @@ function ProofPicker({ url, onChange, required }: { url: string; onChange: (url:
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch (e) {
       if (e instanceof ApiError && e.code === "aborted") return;
-      setState({ status: "error", uri: photo.uri, message: e instanceof Error ? e.message : "Upload failed — please try again." });
+      setState({ status: "error", uri: photo.uri, message: e instanceof Error ? e.message : "Upload failed. Please try again." });
     }
   }
 

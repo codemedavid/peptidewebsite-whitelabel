@@ -209,12 +209,12 @@ export const BRAND: Brand = {
 export const SEED_PRODUCTS: Product[] = [
   { id: "p1", name: "Product One (kit)", description: "Short, descriptive copy about the product's primary benefit and what's in the kit.", price: 1500, currency: "₱", purity: "99%", category: "weight", featured: true, image: null },
   { id: "p2", name: "Product Two (kit)", description: "Recommended for users with a higher weekly dosage. Sold by kit with complete supplies.", price: 2500, currency: "₱", purity: "99%", category: "weight", featured: true, image: null },
-  { id: "p3", name: "Vial — Variant A", description: "Concise variant description goes here so cards stay scannable at a glance.", price: 1100, currency: "₱", purity: "99%", category: "peptides", featured: false, image: null },
+  { id: "p3", name: "Vial (Variant A)", description: "Concise variant description goes here so cards stay scannable at a glance.", price: 1100, currency: "₱", purity: "99%", category: "peptides", featured: false, image: null },
   { id: "p4", name: "Accessory Pack", description: "Sold per box.", price: 1500, currency: "₱", purity: "99%", category: "wellness", featured: false, image: null },
   { id: "p5", name: "Product Five", description: "Beauty & anti-aging formulation. Targeted, evidence-based.", price: 1800, currency: "₱", purity: "99%", category: "beauty", featured: false, image: null },
   { id: "p6", name: "Product Six", description: "Vitality and wellness blend with verified third-party COAs.", price: 2100, currency: "₱", purity: "99%", category: "wellness", featured: false, image: null },
-  { id: "p7", name: "Insulin Pen — Standard", description: "Pre-filled pen device. Discreet, nationwide shipping.", price: 3200, currency: "₱", purity: "99%", category: "insulin", featured: false, image: null },
-  { id: "p8", name: "Sample Eight", description: "Compact starter option — ideal for first-time buyers.", price: 900, currency: "₱", purity: "99%", category: "peptides", featured: false, image: null },
+  { id: "p7", name: "Insulin Pen (Standard)", description: "Pre-filled pen device. Discreet, nationwide shipping.", price: 3200, currency: "₱", purity: "99%", category: "insulin", featured: false, image: null },
+  { id: "p8", name: "Sample Eight", description: "Compact starter option, ideal for first-time buyers.", price: 900, currency: "₱", purity: "99%", category: "peptides", featured: false, image: null },
 ];
 
 export const SEED_CATEGORIES: Category[] = [
@@ -285,7 +285,7 @@ export const SEED_FAQ_GROUPS: FaqGroup[] = [
     id: "payment", label: "Payment", icon: "payment",
     items: [
       { q: "What payment methods do you accept?", a: "Major credit cards, bank transfers, and e-wallets." },
-      { q: "Is payment secure?", a: "Yes — all transactions are processed over encrypted channels." },
+      { q: "Is payment secure?", a: "Yes, all transactions are processed over encrypted channels." },
     ],
   },
   {
@@ -300,49 +300,49 @@ export const SEED_FAQ_GROUPS: FaqGroup[] = [
 export const SEED_PROTOCOLS: Protocol[] = [
   {
     category: "Weight Management", name: "Tirzepetide 15MG Protocol",
-    dosage: "2.5mg - 7.5mg weekly (dose based on vial size)", frequency: "Once weekly on the same day", duration: "12-16 weeks per cycle",
-    notes: ["Start with 2.5mg for first 4 weeks", "Increase by 2.5mg every 4 weeks as tolerated", "This is the 15mg vial - yields multiple doses", "Inject subcutaneously in abdomen, thigh, or upper arm", "Take with or without food", "Rotate injection sites"],
+    dosage: "2.5mg to 7.5mg weekly (dose based on vial size)", frequency: "Once weekly on the same day", duration: "12-16 weeks per cycle",
+    notes: ["Start with 2.5mg for first 4 weeks", "Increase by 2.5mg every 4 weeks as tolerated", "This is the 15mg vial, which yields multiple doses", "Inject subcutaneously in abdomen, thigh, or upper arm", "Take with or without food", "Rotate injection sites"],
     storage: "Refrigerate at 2-8°C. Once in use, can be kept at room temperature for up to 21 days.",
   },
   {
     category: "Weight Management", name: "Tirzepetide 30MG Protocol",
-    dosage: "5mg - 15mg weekly (higher dose vial)", frequency: "Once weekly on the same day", duration: "12-16 weeks per cycle",
-    notes: ["Start with 5mg for first 4 weeks if experienced", "Increase by 2.5-5mg every 4 weeks as tolerated", "Maximum dose is 15mg weekly", "This larger vial offers more flexibility", "Inject subcutaneously", "May cause nausea initially - eat smaller meals"],
+    dosage: "5mg to 15mg weekly (higher dose vial)", frequency: "Once weekly on the same day", duration: "12-16 weeks per cycle",
+    notes: ["Start with 5mg for first 4 weeks if experienced", "Increase by 2.5-5mg every 4 weeks as tolerated", "Maximum dose is 15mg weekly", "This larger vial offers more flexibility", "Inject subcutaneously", "May cause nausea initially, so eat smaller meals"],
     storage: "Refrigerate at 2-8°C.",
   },
   {
     category: "Longevity & Anti-Aging", name: "NAD+ 500MG Protocol",
-    dosage: "100mg - 250mg daily", frequency: "Once daily, preferably morning", duration: "8-12 weeks per cycle",
+    dosage: "100mg to 250mg daily", frequency: "Once daily, preferably morning", duration: "8-12 weeks per cycle",
     notes: ["Start with 100mg and increase gradually", "Subcutaneous or intramuscular injection", "Higher dose vial allows extended use", "Take in morning to avoid sleep disruption", "Supports cellular energy and repair", "Some initial flushing is normal"],
     storage: "Refrigerate after reconstitution. Protect from light.",
   },
   {
     category: "Beauty & Regeneration", name: "GHK CU 50MG Protocol",
-    dosage: "1mg - 2mg daily", frequency: "Once daily", duration: "8-12 weeks per cycle",
+    dosage: "1mg to 2mg daily", frequency: "Once daily", duration: "8-12 weeks per cycle",
     notes: ["Can be used topically or via injection", "Promotes collagen synthesis", "Supports skin elasticity and wound healing", "Also used for hair regrowth", "Copper peptide with many benefits", "Safe for long-term use"],
     storage: "Refrigerate after reconstitution.",
   },
   {
     category: "Beauty & Regeneration", name: "GHK CU 100MG Protocol",
-    dosage: "2mg - 3mg daily", frequency: "Once daily", duration: "8-12 weeks per cycle",
+    dosage: "2mg to 3mg daily", frequency: "Once daily", duration: "8-12 weeks per cycle",
     notes: ["Higher concentration for extended protocols", "Excellent for anti-aging protocols", "Can inject near treatment area", "Supports tissue repair", "Works synergistically with other peptides", "Monitor for copper sensitivity"],
     storage: "Refrigerate after reconstitution.",
   },
   {
     category: "Sleep & Recovery", name: "DSIP 5MG Protocol",
-    dosage: "100mcg - 300mcg before bed", frequency: "Once daily, 30 min before sleep", duration: "2-4 weeks per cycle",
+    dosage: "100mcg to 300mcg before bed", frequency: "Once daily, 30 min before sleep", duration: "2-4 weeks per cycle",
     notes: ["Start with 100mcg to assess tolerance", "Promotes deep, restorative sleep", "Do not combine with other sedatives", "Effects build over several days", "Take 2-4 week breaks between cycles", "Subcutaneous injection preferred"],
     storage: "Refrigerate after reconstitution.",
   },
   {
     category: "Sleep & Recovery", name: "DSIP 15MG Protocol",
-    dosage: "200mcg - 400mcg before bed", frequency: "Once daily, 30 min before sleep", duration: "4-6 weeks per cycle",
+    dosage: "200mcg to 400mcg before bed", frequency: "Once daily, 30 min before sleep", duration: "4-6 weeks per cycle",
     notes: ["Larger vial for extended sleep support", "Gradually increase dose as needed", "Supports natural sleep architecture", "May help with stress-related insomnia", "Avoid alcohol when using", "Take breaks to prevent tolerance"],
     storage: "Refrigerate after reconstitution.",
   },
   {
     category: "Detox & Skin Brightening", name: "Glutathione 1500MG Protocol",
-    dosage: "200mg - 500mg every other day", frequency: "3-4 times weekly", duration: "8-12 weeks per cycle",
+    dosage: "200mg to 500mg every other day", frequency: "3-4 times weekly", duration: "8-12 weeks per cycle",
     notes: ["Master antioxidant for detoxification", "Skin brightening and evening tone", "Can inject subcutaneously or intramuscularly", "Often combined with Vitamin C", "Supports liver function", "Results visible after 4-6 weeks"],
     storage: "Refrigerate. Protect from light and heat.",
   },
@@ -354,13 +354,13 @@ export const SEED_PROTOCOLS: Protocol[] = [
   },
   {
     category: "Mitochondrial Health", name: "SS31 10MG Protocol",
-    dosage: "5mg - 10mg daily", frequency: "Once daily", duration: "4-6 weeks per cycle",
+    dosage: "5mg to 10mg daily", frequency: "Once daily", duration: "4-6 weeks per cycle",
     notes: ["Targets inner mitochondrial membrane", "Protects against oxidative stress", "Supports cellular energy production", "Inject subcutaneously", "Best taken in morning", "Take 4-week breaks between cycles"],
     storage: "Refrigerate. Protect from light.",
   },
   {
     category: "Mitochondrial Health", name: "SS31 50MG Protocol",
-    dosage: "10mg - 20mg daily", frequency: "Once daily", duration: "4-8 weeks per cycle",
+    dosage: "10mg to 20mg daily", frequency: "Once daily", duration: "4-8 weeks per cycle",
     notes: ["Higher dose for intensive protocols", "Advanced mitochondrial support", "Anti-aging at cellular level", "Monitor energy levels", "May enhance exercise performance", "Rotate injection sites"],
     storage: "Refrigerate. Protect from light.",
   },
@@ -414,13 +414,13 @@ export const SEED_PROTOCOLS: Protocol[] = [
   },
   {
     category: "Anti-Inflammatory", name: "KPV 5MG Protocol",
-    dosage: "100mcg - 200mcg daily", frequency: "Once daily", duration: "4-8 weeks per cycle",
+    dosage: "100mcg to 200mcg daily", frequency: "Once daily", duration: "4-8 weeks per cycle",
     notes: ["Potent anti-inflammatory peptide", "Alpha-MSH fragment", "Gut health and skin conditions", "Subcutaneous injection", "No significant side effects", "Works systemically"],
     storage: "Refrigerate after reconstitution.",
   },
   {
     category: "Anti-Inflammatory", name: "KPV 10MG Protocol",
-    dosage: "200mcg - 400mcg daily", frequency: "Once or twice daily", duration: "4-8 weeks per cycle",
+    dosage: "200mcg to 400mcg daily", frequency: "Once or twice daily", duration: "4-8 weeks per cycle",
     notes: ["Higher dose for stronger effect", "Excellent for inflammatory conditions", "Can split dose morning/evening", "Supports gut barrier function", "Anti-microbial properties", "Safe for extended use"],
     storage: "Refrigerate after reconstitution.",
   },
@@ -432,13 +432,13 @@ export const SEED_PROTOCOLS: Protocol[] = [
   },
   {
     category: "Growth Hormone", name: "Tsamorelin 10MG Protocol",
-    dosage: "1mg - 2mg daily", frequency: "Once daily before bed on empty stomach", duration: "12-26 weeks per cycle",
+    dosage: "1mg to 2mg daily", frequency: "Once daily before bed on empty stomach", duration: "12-26 weeks per cycle",
     notes: ["Larger vial for extended use", "Same protocol as 5MG", "Consistent timing important", "Best taken before bed", "Avoid eating after injection", "Results visible after 8-12 weeks"],
     storage: "Refrigerate at 2-8°C.",
   },
   {
     category: "Longevity & Anti-Aging", name: "Epitalon 10MG Protocol",
-    dosage: "5mg - 10mg daily for 10-20 days", frequency: "Once daily, preferably before bed", duration: "10-20 day cycles, 4-6 months apart",
+    dosage: "5mg to 10mg daily for 10-20 days", frequency: "Once daily, preferably before bed", duration: "10-20 day cycles, 4-6 months apart",
     notes: ["Telomere elongation peptide", "Short intense cycles", "Promotes melatonin production", "Anti-aging at DNA level", "Take 2-3 cycles per year", "Subcutaneous injection"],
     storage: "Refrigerate. Stable for 6 months.",
   },
@@ -450,7 +450,7 @@ export const SEED_PROTOCOLS: Protocol[] = [
   },
   {
     category: "Sexual Wellness", name: "PT141 10MG Protocol",
-    dosage: "500mcg - 2mg as needed", frequency: "As needed, 1-2 hours before activity", duration: "Use as needed, 24hr minimum between doses",
+    dosage: "500mcg to 2mg as needed", frequency: "As needed, 1-2 hours before activity", duration: "Use as needed, 24hr minimum between doses",
     notes: ["Also known as Bremelanotide", "Start with 500mcg to assess tolerance", "Effects last 24-72 hours", "Inject subcutaneously 45min-2hrs before", "May cause nausea initially", "Maximum once per 24 hours"],
     storage: "Refrigerate. Use within 30 days.",
   },
@@ -458,9 +458,9 @@ export const SEED_PROTOCOLS: Protocol[] = [
 
 export const SEED_REVIEWS: Review[] = [
   { headline: "Plateau breaker 🔥", title: "Plateau breaker 🔥", subtitle: "Scale not moving? This combo got me through.", badge: "Testimonial", image: "" },
-  { headline: "Best results", title: "Combo therapy", subtitle: "Great pairing — saw results within weeks.", badge: "Testimonial", image: "" },
+  { headline: "Best results", title: "Combo therapy", subtitle: "Great pairing. Saw results within weeks.", badge: "Testimonial", image: "" },
   { headline: "Down 4 kg", title: "5 to 4.5", subtitle: "With consistency & patience, you'll reap what you sow.", badge: "Testimonial", image: "" },
   { headline: "Results", title: "Results", subtitle: "April to May progress update.", badge: "Testimonial", image: "" },
-  { headline: "Energy is on 🔥", title: "NAD+ is on 🔥", subtitle: "Best energy boost — feels noticeable from day one.", badge: "Testimonial", image: "" },
+  { headline: "Energy is on 🔥", title: "NAD+ is on 🔥", subtitle: "Best energy boost, noticeable from day one.", badge: "Testimonial", image: "" },
   { headline: "Amazing results!", title: "Amazing results!", subtitle: "2 months of progress and counting.", badge: "Testimonial", image: "" },
 ];

@@ -311,10 +311,10 @@ export function BrandingEditor({
         setSaved(true);
         setSavedPrint(fingerprint);
       } else {
-        setSaveError(res.error === "FORBIDDEN" ? "Your session expired — sign in again to save." : res.error);
+        setSaveError(res.error === "FORBIDDEN" ? "Your session expired. Sign in again to save." : res.error);
       }
     } catch {
-      setSaveError("Couldn't save — check your connection and try again.");
+      setSaveError("Couldn't save. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -486,7 +486,7 @@ export function BrandingEditor({
             badge={`${Object.keys(THEME_PRESETS).length} themes`}
           >
             <p className="text-xs text-muted-foreground">
-              Pick a preset to re-skin the whole storefront — colors, fonts &amp; radius. You can
+              Pick a preset to re-skin the whole storefront: colors, fonts &amp; radius. You can
               fine-tune any color below afterward.
             </p>
             <div className="mt-3">
@@ -714,7 +714,7 @@ export function BrandingEditor({
                   slug={slug}
                   kind="defaultProductImage"
                   label="Default product image"
-                  help="Shown on products that have no photo of their own — instead of the grey placeholder. Products with their own image keep it. JPG/PNG/WebP, max 10 MB."
+                  help="Shown on products that have no photo of their own, instead of the grey placeholder. Products with their own image keep it. JPG/PNG/WebP, max 10 MB."
                   value={defaultProductImage}
                   onChange={onDefaultProductImageChange}
                 />
@@ -912,7 +912,7 @@ function StorefrontPreview({
   // no hero overrides are supplied (e.g. the Brand tab's logo/color preview).
   const heroVariant = hero?.heroVariant || "centered";
   const chip = (hero?.heroChipLabel || "").trim() || "Research-grade";
-  const line1 = (hero?.heroLine1 || "").trim() || `${name} —`;
+  const line1 = (hero?.heroLine1 || "").trim() || name;
   const line2 = hero ? (hero.heroLine2 || "").trim() : "precision peptides";
   const sub =
     (hero?.heroSub || "").trim() ||
@@ -1396,7 +1396,7 @@ function ContrastHint({ label, ratio }: { label: string; ratio: number }) {
   const ok = ratio >= 4.5;
   return (
     <p className={ok ? "text-muted-foreground" : "text-destructive"}>
-      {ok ? "✓" : "⚠"} {label}: {ratio.toFixed(1)}:1 {ok ? "(AA)" : "(below 4.5:1 — hard to read)"}
+      {ok ? "✓" : "⚠"} {label}: {ratio.toFixed(1)}:1 {ok ? "(AA)" : "(below 4.5:1, hard to read)"}
     </p>
   );
 }

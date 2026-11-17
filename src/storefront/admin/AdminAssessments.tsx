@@ -305,8 +305,8 @@ export function AdminAssessments({ brand, onBack }: { brand: Brand; onBack: () =
 
       <div className="admin-form__body">
         <div className="admin__tip" style={{ marginTop: 0, textAlign: "left" }}>
-          Customers who took your quiz, with the goals they chose. Answers include self-reported medical history —
-          treat them as private and follow up personally.
+          Customers who took your quiz, with the goals they chose. Answers include self-reported medical history.
+          Treat them as private and follow up personally.
         </div>
         <div className="asm-admin__tabs" role="tablist" aria-label="Assessments">
           <button className="asm-admin__tab" role="tab" aria-selected={tab === "submissions"} onClick={() => setTab("submissions")}>

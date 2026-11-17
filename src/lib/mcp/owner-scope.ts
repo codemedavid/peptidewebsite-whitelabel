@@ -10,10 +10,10 @@ import "server-only";
 // (lib/auth/app-actor-scope.ts); the connector reuses it. Auth is the ROUTE's
 // job — nothing here runs until the operator's MCP admin token checked out.
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { runAsAppActor } from "@/lib/auth/app-actor-scope";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { resolveTenantArg, type ResolvedTenant } from "@/lib/mcp/tenant-lookup-tool";
 import { resolveMcpImage, type McpMediaKind } from "@/lib/mcp/tenant-media";
 import type { McpImageAsset } from "@/lib/mcp/image-assets";
@@ -63,16 +63,11 @@ export async function readConfig(tenantId: string): Promise<Row> {
   return (plainObject(branding?.config) ?? {}) as Row;
 }
 
-/** Read-modify-write a config patch (fresh read, so an action that ran just
- *  before in the same call is never overwritten), then bust the storefront cache. */
+/** Read-modify-write a config patch under the branding row lock (so an action
+ *  that ran just before in the same call, or a concurrent save, is never
+ *  overwritten), then bust the storefront cache. `patch` must be synchronous. */
 export async function writeConfigPatch(tenant: ResolvedTenant, patch: (current: Row) => Row): Promise<void> {
-  const current = await readConfig(tenant.id);
-  const config = patch(current) as Prisma.InputJsonValue;
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await updateBrandingConfig(tenant.id, (current) => patch((plainObject(current) ?? {}) as Row));
   revalidateTenant(tenant.id, tenant.slug);
 }
 

@@ -79,7 +79,7 @@ function ShippingLocationModal({
           >
             <option value="" disabled>
               {selectableCouriers.length === 0
-                ? "No couriers yet — add one first"
+                ? "No couriers yet. Add one first"
                 : "Select a courier…"}
             </option>
             {courierOrphaned && (
@@ -127,7 +127,7 @@ function ShippingLocationModal({
           <input
             className="admin-input"
             value={name}
-            placeholder="e.g., LBC - Metro Manila"
+            placeholder="e.g., LBC Metro Manila"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               setName(e.target.value)
             }
@@ -147,7 +147,7 @@ function ShippingLocationModal({
             }
           />
           <div className="admin-field__hint">
-            Leave this blank to charge no fee for this location — useful when you
+            Leave this blank to charge no fee for this location, useful when you
             charge a single flat shipping fee elsewhere instead of per-location
             rates.
           </div>
@@ -230,7 +230,7 @@ export function AdminShippingLocations({
       })
       .catch(() => {
         store.setTweak({ intlMarket: prev });
-        store.toast("Couldn't save — please try again.");
+        store.toast("Couldn't save. Please try again.");
       });
   };
   const [editing, setEditing] = useState<ShippingLocationEditing | null>(null);
@@ -369,7 +369,7 @@ export function AdminShippingLocations({
         )}
         {intl && (
           <p className="admin-field__hint" style={{ marginBottom: 14 }}>
-            What International (USD) orders pay for shipping. Link each rate to a courier (e.g. DHL) — the
+            What International (USD) orders pay for shipping. Link each rate to a courier (e.g. DHL). The
             International checkout only offers couriers that have a rate here.
           </p>
         )}
@@ -391,8 +391,8 @@ export function AdminShippingLocations({
                 onClick={() => toggle(l.id)}
                 title={
                   l.active
-                    ? "Active — click to disable"
-                    : "Disabled — click to enable"
+                    ? "Active (click to disable)"
+                    : "Disabled (click to enable)"
                 }
                 style={{ background: "none", border: 0, cursor: "pointer" }}
               >

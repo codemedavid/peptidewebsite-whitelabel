@@ -7,10 +7,10 @@ import { isModuleAllowed } from "@/storefront/admin/staff-permissions";
 import { customerStampFor, resolveActor, storeAvailability } from "@/lib/mobile/auth";
 import { deliverPush, type OutgoingPush, type Recipient } from "@/lib/mobile/push";
 import { decodeSubject } from "@/lib/mobile/sessions";
-import { STORE_KEY, customerKey, parseParticipantKey } from "./keys";
+import { STORE_KEY, authorKeyFor, customerKey, parseParticipantKey } from "./keys";
 import { isAudience } from "./rules";
 import { firstName } from "./text";
-import { buildTopicPush, topicPushAudience } from "./topic-push";
+import { buildTopicPush, teamPushAudience, topicPushAudience } from "./topic-push";
 
 /**
  * Community pushes, through the same Expo sender as new-order alerts.
@@ -18,8 +18,10 @@ import { buildTopicPush, topicPushAudience } from "./topic-push";
  *   DM   → the OTHER participant's phones: a customer's own sessions, or — for
  *          the store — the owner's and every staff phone holding `community`.
  *   drop / group buy broadcast → every approved member's phones.
- *   topic message → every approved member who can see the channel, except the
- *          sender and members who muted the channel (CommunityChannelMute).
+ *   topic message → every approved member who can see the channel AND every
+ *          store-team phone holding `community`, except the sender and anyone
+ *          who muted the channel (CommunityChannelMute — team members mute
+ *          personally as `team:<authorKey>`).
  *
  * Payload is {type, threadId} only; the lock screen names the sender but never
  * shows the message. Every recipient is re-authorised at send time (live
@@ -27,7 +29,6 @@ import { buildTopicPush, topicPushAudience } from "./topic-push";
  * `MobilePushDevice.messages` is the per-phone opt-out. Never throws.
  */
 
-const CHANNEL_ID = "messages";
 
 /**
  * At most one DM push per conversation per recipient every 3 minutes, so a
@@ -97,23 +98,31 @@ async function customerRecipients(tenantId: string, customerIds: string[], anyMe
     .map(toRecipient);
 }
 
-/** The store's phones: owner + staff with the Community module. */
-async function storeRecipients(tenantId: string, moduleKey = "community"): Promise<Recipient[]> {
-  const out: Recipient[] = [];
+type TeamRecipient = Recipient & { authorKey: string };
+
+/** The store's phones: owner + staff with the module, each tagged with who holds it (`owner | s:<id>`). */
+async function teamRecipients(tenantId: string, moduleKey = "community"): Promise<TeamRecipient[]> {
+  const out: TeamRecipient[] = [];
   for (const d of await liveDevices(tenantId)) {
     const s = decodeSubject(d.session.subject);
     if (!s || s.kind === "customer") continue;
     const actor = await resolveActor(tenantId, s);
-    if (actor && actor.stamp === d.session.credentialStamp && isModuleAllowed(actor.actor, moduleKey)) out.push(toRecipient(d));
+    if (actor && actor.stamp === d.session.credentialStamp && isModuleAllowed(actor.actor, moduleKey)) {
+      out.push({ ...toRecipient(d), authorKey: authorKeyFor(s) });
+    }
   }
   return out;
+}
+
+async function storeRecipients(tenantId: string, moduleKey = "community"): Promise<Recipient[]> {
+  return (await teamRecipients(tenantId, moduleKey)).map(({ id, token, platform }) => ({ id, token, platform }));
 }
 
 async function send(tenantId: string, recipients: Recipient[], message: OutgoingPush): Promise<void> {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } });
   if (await storeAvailability(tenant)) return;
   if (!(await hasFeature(tenantId, FEATURES.MOBILE_COMMUNITY))) return;
-  if (recipients.length > 0) await deliverPush(recipients, message, CHANNEL_ID);
+  if (recipients.length > 0) await deliverPush(recipients, message, "messages");
 }
 
 function logFailure(kind: string, e: unknown) {
@@ -155,24 +164,34 @@ export async function notifyTopicMessage(args: {
   topic: { id: string; name: string; isGeneral: boolean };
   channel: { id: string; name: string; emoji: string; audience: string };
   senderKey: string;
+  /** The team member who wrote it (`owner | s:<id>`) — their own phones stay quiet. Null for members. */
+  senderAuthorKey: string | null;
   senderName: string;
   storeName: string;
 }): Promise<void> {
   try {
     if (!isAudience(args.channel.audience)) return;
-    const [members, mutes] = await Promise.all([
+    const [members, mutes, team] = await Promise.all([
       prisma.communityMember.findMany({ where: { tenantId: args.tenantId, status: "approved" }, select: { customerId: true } }),
       prisma.communityChannelMute.findMany({ where: { tenantId: args.tenantId, channelId: args.channel.id }, select: { participantKey: true } }),
+      teamRecipients(args.tenantId),
     ]);
-    const audience = topicPushAudience(
-      members.map((m) => m.customerId),
-      { senderKey: args.senderKey, mutedKeys: new Set(mutes.map((m) => m.participantKey)) },
-    );
+    const mutedKeys = new Set(mutes.map((m) => m.participantKey));
+    const audience = topicPushAudience(members.map((m) => m.customerId), { senderKey: args.senderKey, mutedKeys });
     const due = audience.filter((id) => claimDmPushSlot(`${args.tenantId}:topic:${args.topic.id}:${id}`));
-    if (due.length === 0) return;
+    const teamDue = new Set(
+      teamPushAudience(team.map((r) => r.authorKey), { senderAuthorKey: args.senderAuthorKey, mutedKeys }).filter((k) =>
+        claimDmPushSlot(`${args.tenantId}:topic:${args.topic.id}:team:${k}`),
+      ),
+    );
+    if (due.length === 0 && teamDue.size === 0) return;
+    const recipients = [
+      ...(due.length > 0 ? await customerRecipients(args.tenantId, due) : []),
+      ...team.filter((r) => teamDue.has(r.authorKey)).map(({ id, token, platform }) => ({ id, token, platform })),
+    ];
     await send(
       args.tenantId,
-      await customerRecipients(args.tenantId, due),
+      recipients,
       buildTopicPush({
         storeName: args.storeName,
         channel: args.channel,
@@ -237,7 +256,7 @@ export async function notifyGroupBuy(args: { tenantId: string; topicId: string; 
     const members = await audienceOf(args.tenantId, args.topicId);
     await send(args.tenantId, await customerRecipients(args.tenantId, members.map((m) => m.customerId)), {
       title: args.storeName,
-      body: `👥 ${args.roundName} is open — join the group buy`,
+      body: `👥 ${args.roundName} is open. Join the group buy`,
       data: { type: "group_buy", threadId: args.topicId },
     });
   } catch (e) {
@@ -267,6 +286,24 @@ export async function notifyOrderUpdate(args: {
     });
   } catch (e) {
     logFailure("order_update", e);
+  }
+}
+
+/**
+ * The store let these customers into the community (an approval, or the store
+ * switching to open while they waited): tell their phones the chats are open.
+ * Without it a shopper who signed up to a reviewed community only finds out by
+ * reopening the app. Re-checked at send time like every member push. Tap → Chats.
+ */
+export async function notifyMembersApproved(args: { tenantId: string; customerIds: string[]; storeName: string }): Promise<void> {
+  try {
+    await send(args.tenantId, await customerRecipients(args.tenantId, args.customerIds), {
+      title: args.storeName,
+      body: `You're in! ${args.storeName}'s community chats are open. Come say hi.`,
+      data: { type: "member_approved" },
+    });
+  } catch (e) {
+    logFailure("member_approved", e);
   }
 }
 

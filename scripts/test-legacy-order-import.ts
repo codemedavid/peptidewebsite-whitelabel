@@ -250,7 +250,7 @@ check("a variation line resolves to the BASE product id and keeps its dose", () 
   assert.equal(line.variation, "30mg");
   // Named the way a native checkout names it (makeVariationEntry / cartDisplayName)
   // so an imported order reads identically to a real one in the admin list.
-  assert.equal(line.name, "Tirzepatide — 30mg");
+  assert.equal(line.name, "Tirzepatide · 30mg");
 });
 
 check("a dose baked into the old NAME folds back onto the matching variation", () => {
@@ -262,7 +262,7 @@ check("a dose baked into the old NAME folds back onto the matching variation", (
   });
   assert.equal(line.productId, "p-glut");
   assert.equal(line.variation, "1500mg");
-  assert.equal(line.name, "Glutathione — 1500mg");
+  assert.equal(line.name, "Glutathione · 1500mg");
 });
 
 check("a product whose dose IS its name resolves with no variation", () => {
@@ -389,7 +389,7 @@ check("a voucher becomes a snapshotted discount; no voucher means no discount", 
 
 check("items carry faithful qty and unit price, linked where the product survives", () => {
   assert.deepEqual(A.items, [
-    { name: "Tirzepatide — 30mg", qty: 2, price: 4299, productId: "p-tirz", variation: "30mg" },
+    { name: "Tirzepatide · 30mg", qty: 2, price: 4299, productId: "p-tirz", variation: "30mg" },
   ]);
   assert.equal(B.items.length, 2);
   assert.equal(B.items[0].productId, "p-glut");
@@ -644,7 +644,7 @@ check("a line links by its legacy product id, even after a rename", () => {
   const line = resolveLegacyLine(PEPPY_INDEX, { ...J.orderItems[2], product_name: "Old Pen Name" });
   assert.equal(line.productId, "cuid-pen");
   assert.equal(line.variation, "Orange");
-  assert.equal(line.name, "Reusable Peppy Pen — Orange");
+  assert.equal(line.name, "Reusable Peppy Pen · Orange");
 });
 
 check("a complete-set line becomes the Complete Set option", () => {
@@ -657,7 +657,7 @@ check("a complete-set line becomes the Complete Set option", () => {
 check("a vial-only line of a set product becomes the Vial Only option", () => {
   const line = resolveLegacyLine(PEPPY_INDEX, J.orderItems[1]);
   assert.equal(line.variation, "Vial Only");
-  assert.equal(line.name, "AOD+Tesamorelin+Motsc Blend — Vial Only");
+  assert.equal(line.name, "AOD+Tesamorelin+Motsc Blend · Vial Only");
 });
 
 check("an unknown legacy id still falls back to name matching", () => {

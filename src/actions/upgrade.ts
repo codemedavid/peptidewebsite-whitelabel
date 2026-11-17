@@ -157,7 +157,7 @@ export async function submitUpgradeRequestAction(input: {
   try {
     const open = await prisma.upgradeRequest.count({ where: { tenantId, status: "pending" } });
     if (open > 0) {
-      return { error: "Your upgrade is already being reviewed — we'll activate it shortly." };
+      return { error: "Your upgrade is already being reviewed. We'll activate it shortly." };
     }
     const quote = upgradeQuote(config, trial.onTrial);
     await prisma.upgradeRequest.create({
@@ -172,7 +172,7 @@ export async function submitUpgradeRequestAction(input: {
       },
     });
   } catch {
-    return { error: "Couldn't file your upgrade right now — please try again or contact support." };
+    return { error: "Couldn't file your upgrade right now. Please try again or contact support." };
   }
 
   revalidateTenant(tenantId, await getTenantSlug());

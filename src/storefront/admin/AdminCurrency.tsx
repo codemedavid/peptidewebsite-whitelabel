@@ -65,7 +65,7 @@ export function AdminCurrency({ brand, onBack }: { brand: Brand; onBack: () => v
       setTweak({ currency: draft.symbol });
       toast(`Now selling in ${draft.label}`);
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -163,7 +163,7 @@ export function AdminCurrency({ brand, onBack }: { brand: Brand; onBack: () => v
           {changed && (
             <div className="admin-field__hint" style={{ marginTop: 18 }}>
               <strong>Your prices do not change.</strong> A product priced{" "}
-              {SAMPLE.toLocaleString()} stays {SAMPLE.toLocaleString()} — only the
+              {SAMPLE.toLocaleString()} stays {SAMPLE.toLocaleString()}. Only the
               currency beside it changes, on every product you already have. If
               your new prices should be different numbers, edit them in Manage
               Products after saving.

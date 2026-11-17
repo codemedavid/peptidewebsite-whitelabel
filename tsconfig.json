@@ -38,11 +38,12 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-b1/types/**/*.ts",
+    ".next-gbjoin/types/**/*.ts",
     ".next-mamamica/types/**/*.ts",
     ".next-perf/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-gbjoin/types/**/*.ts"
+    ".next-deploycheck/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,7 +1,18 @@
 import { setMemberAdmin, setVerifiedReseller } from "@/lib/community/members.server";
+import { getMemberDetail } from "@/lib/community/member-account.server";
 import { fail, ok, readJson, withCommunity } from "@/lib/mobile/http";
 
 type Params = { params: Promise<{ customerId: string }> };
+
+// GET /api/mobile/v1/community/members/:customerId (moderators) — one member's
+// full card: roles, account dates and, for the store team only, contact details,
+// safety record and whether they may reset the password.
+export async function GET(req: Request, { params }: Params) {
+  return withCommunity(req, { route: "community/members:detail", moderator: true }, async (actor) => {
+    const member = await getMemberDetail(actor, (await params).customerId);
+    return member ? ok(member) : fail("not_found", "This member isn't available.");
+  });
+}
 
 // PATCH /api/mobile/v1/community/members/:customerId (the store team)
 //   { verifiedReseller: boolean } → may / may not post in a hub's On hand

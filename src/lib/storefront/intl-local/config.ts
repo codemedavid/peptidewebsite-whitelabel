@@ -371,7 +371,7 @@ export const DEFAULT_INTL_LOCAL: IntlLocalConfig = {
   },
   topBar: {
     show: true,
-    text: "Welcome — shop locally or internationally.",
+    text: "Welcome! Shop locally or internationally.",
     subscribeLabel: "Subscribe",
     showSocials: true,
     background: colorBackground(IL_PALETTE.lavenderDeep),
@@ -513,7 +513,7 @@ export const DEFAULT_INTL_LOCAL: IntlLocalConfig = {
     icon: "mail",
     placeholder: "Your email address",
     buttonLabel: "Subscribe",
-    successMessage: "You're subscribed — thank you!",
+    successMessage: "You're subscribed. Thank you!",
     background: colorBackground(IL_PALETTE.yellow),
     textColor: "",
   },

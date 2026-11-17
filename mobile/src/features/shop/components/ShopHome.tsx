@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import { BrandLoader } from "@/ui/BrandLoader";
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -13,7 +14,6 @@ import { categoryChips, filterProducts } from "../lib/catalog";
 import { cartCount } from "../lib/cart";
 import { useShop } from "../ShopProvider";
 import { ProductCard } from "./ProductCard";
-import { GridSkeleton } from "./GridSkeleton";
 import { CartButton, ProductImage } from "./ShopUI";
 import { CatalogError, ClosedBanner, goToSignIn } from "./ShopStates";
 import { GroupBuyBanner } from "./group-buy/GroupBuyBanner";
@@ -21,6 +21,7 @@ import { GroupBuyJoinBanner } from "./group-buy/JoinBanner";
 import { SaleCampaignBar } from "./SaleCampaignBar";
 import { SectionedCatalog } from "./SectionedCatalog";
 import { hasSections } from "../lib/sections";
+import { useGrid } from "@/ui/responsive";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -34,13 +35,12 @@ const GUTTER = SPACE.lg;
 export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; headerRight?: ReactNode } = {}) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { columns, tile } = useGrid(GUTTER, GAP);
   const shop = useShop();
   const q = useCatalog();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const catalog = q.data;
-  const tile = Math.floor((width - GUTTER * 2 - GAP) / 2);
 
   const products = useMemo(
     () => (catalog ? filterProducts(catalog.products, search, category) : []),
@@ -63,14 +63,8 @@ export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; head
     />
   );
 
-  if (q.isPending) {
-    return (
-      <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-        {header}
-        <GridSkeleton tile={tile} />
-      </View>
-    );
-  }
+  // First open with nothing saved yet: the store's own loading screen, as on its website.
+  if (q.isPending) return <BrandLoader label="Opening the shop at" />;
   if (q.isError || !catalog) {
     return (
       <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
@@ -130,8 +124,10 @@ export function ShopHome({ asTab = false, headerRight }: { asTab?: boolean; head
       <OfflineBanner />
       <FlatList
         data={products}
+        // A new column count needs a fresh list (FlatList can't change numColumns in place).
+        key={`grid-${columns}`}
         keyExtractor={(p) => p.id}
-        numColumns={2}
+        numColumns={columns}
         columnWrapperStyle={{ gap: GAP }}
         contentContainerStyle={[styles.list, { paddingBottom: SPACE.xxxl + insets.bottom }]}
         ItemSeparatorComponent={Separator}

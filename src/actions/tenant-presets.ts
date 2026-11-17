@@ -19,12 +19,12 @@
 // theme or the owner-editable blocks (see removeTenantPreset's contract).
 
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPlatformUser } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { getEntitlements } from "@/lib/features/entitlements";
 import {
   applyTenantPreset,
@@ -62,7 +62,7 @@ async function resolve(input: Input) {
   // Demo mode is file-backed: there is no Branding row or Feature table to write,
   // so bail with a message instead of a confusing "Tenant not found". Matches the
   // guard every sibling action on this page uses (actions/admin.ts, tenant-admin).
-  if (isDemoMode()) return fail("Store presets need a database — not available in demo mode.");
+  if (isDemoMode()) return fail("Store presets need a database, so they're not available in demo mode.");
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input.");
@@ -172,25 +172,25 @@ export async function applyTenantPresetAction(
   const p = await planApply(input);
   if (!p.ok) return { error: p.error };
 
-  const { tenantId, slug, application, featureRows, missingFeatures } = p;
+  const { tenantId, slug, application, featureRows, missingFeatures, preset, current } = p;
 
-  await prisma.$transaction([
-    // themeId is deliberately absent from both branches: a preset never changes
-    // how a store looks, so an existing tenant keeps its theme and a new Branding
-    // row takes the schema default.
-    prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: application.config as Prisma.InputJsonValue },
-      create: { tenantId, config: application.config as Prisma.InputJsonValue },
-    }),
-    ...featureRows.map((f) =>
+  // The config is re-derived from the LOCKED row, not the copy planApply read,
+  // so an owner save landing between the plan and this write survives. themeId
+  // is deliberately not written: a preset never changes how a store looks, so an
+  // existing tenant keeps its theme and a new Branding row takes the schema default.
+  await updateBrandingConfig(tenantId, (locked) =>
+    applyTenantPreset({ ...current, config: locked }, preset).config,
+  );
+  // Idempotent upserts, so a failure here is fixed by re-running the apply.
+  await prisma.$transaction(
+    featureRows.map((f) =>
       prisma.tenantFeatureOverride.upsert({
         where: { tenantId_featureId: { tenantId, featureId: f.id } },
         update: { enabled: true, expiresAt: null },
         create: { tenantId, featureId: f.id, enabled: true },
       }),
     ),
-  ]);
+  );
 
   revalidateAfterPresetWrite(tenantId, slug);
 
@@ -261,27 +261,25 @@ export async function removeTenantPresetAction(
   const p = await planRemove(input);
   if (!p.ok) return { error: p.error };
 
-  const { tenantId, slug, removal, featureRows } = p;
+  const { tenantId, slug, removal, featureRows, preset, current } = p;
 
-  await prisma.$transaction([
-    // Update-only: with no preset applied there is nothing to revert, and
-    // creating a Branding row here would write a config the tenant never had.
-    ...(removal.changes.some((c) => c.kind === "config")
-      ? [
-          prisma.branding.update({
-            where: { tenantId },
-            data: { config: removal.config as Prisma.InputJsonValue },
-          }),
-        ]
-      : []),
-    ...featureRows.map((f) =>
+  // Re-derived from the LOCKED row like the apply path. Null (no config change)
+  // skips the write: with no preset applied there is nothing to revert, and
+  // creating a Branding row here would write a config the tenant never had.
+  await updateBrandingConfig(tenantId, (locked) => {
+    const next = removeTenantPreset({ ...current, config: locked }, preset);
+    return next.changes.some((c) => c.kind === "config") ? next.config : null;
+  });
+  // Idempotent upserts, so a failure here is fixed by re-running the removal.
+  await prisma.$transaction(
+    featureRows.map((f) =>
       prisma.tenantFeatureOverride.upsert({
         where: { tenantId_featureId: { tenantId, featureId: f.id } },
         update: { enabled: false, expiresAt: null },
         create: { tenantId, featureId: f.id, enabled: false },
       }),
     ),
-  ]);
+  );
 
   revalidateAfterPresetWrite(tenantId, slug);
 

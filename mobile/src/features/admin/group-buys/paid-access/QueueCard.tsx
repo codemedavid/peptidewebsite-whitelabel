@@ -88,7 +88,7 @@ export function QueueCard({ row, roundName, busy, onDecide, onPrompt }: Props) {
       </View>
 
       {p?.duplicateReference ? (
-        <Warning text="This reference number is on another payment too — check the proof carefully." />
+        <Warning text="This reference number is on another payment too. Check the proof carefully." />
       ) : null}
 
       {row.formAnswers.length > 0 ? (

@@ -20,15 +20,18 @@ import {
   computeOrderTotals,
   buildAddressLine,
   buildBookingText,
+  cityProvinceLine,
   hasPaymentProof,
   itemCount,
 } from "../../storefront/admin/order-detail";
+import { isAwaitingPayment, isPaid } from "../storefront/order-list-filter";
 import { formatMoney } from "../storefront/currency";
 import { inventoryMove, ORDER_STATUSES } from "../storefront/order-status";
 import type {
   NextAction,
   OrderDetail,
   OrderFilterKey,
+  OrderPaymentFilter,
   OrderSummary,
   PaymentView,
   StockMove,
@@ -94,6 +97,58 @@ export function queueCountsFrom(groups: ReadonlyArray<{ status: string; count: n
     if (toFulfil.has(g.status)) fulfil += g.count;
   }
   return { new: fresh, toFulfil: fulfil };
+}
+
+// ── payment filter + facet counts ────────────────────────────────────────────
+
+/** Every payment filter the API accepts ("unpaid" = the web's "Not confirmed"). */
+export const ORDER_PAYMENT_FILTERS: readonly OrderPaymentFilter[] = ["all", "unpaid", "paid"];
+
+/** A `payment` query value → the filter it means; junk reads as "all". */
+export function paymentFilterOf(raw: unknown): OrderPaymentFilter {
+  return (ORDER_PAYMENT_FILTERS as readonly unknown[]).includes(raw) ? (raw as OrderPaymentFilter) : "all";
+}
+
+type FacetGroup = { status: string; paymentStatus: string | null; count: number };
+
+/**
+ * The status tabs' and payment chips' counts from ONE grouped count by
+ * (status, paymentStatus) over the current folder/round. Each facet is counted
+ * under the OTHER facet's choice — exactly the web Orders screen
+ * (lib/storefront/order-list-filter.ts statusCounts/paymentCounts) — so the
+ * number on a chip is always the number of rows tapping it shows. The queue
+ * badges follow the payment choice like the status tabs do.
+ */
+export function facetCountsFrom(
+  groups: ReadonlyArray<FacetGroup>,
+  statuses: readonly OrderStatus[] | null,
+  payment: OrderPaymentFilter,
+): {
+  counts: { new: number; toFulfil: number };
+  statusCounts: Partial<Record<OrderStatus, number>>;
+  paymentCounts: Record<OrderPaymentFilter, number>;
+} {
+  // isPaid lower-cases, so a legacy "PAID" row counts as paid exactly as on the web.
+  const rows = groups.map((g) => ({
+    status: g.status as OrderStatus,
+    paymentStatus: (g.paymentStatus ?? "") as Order["paymentStatus"],
+    count: g.count,
+  }));
+  const underPayment = rows.filter((r) =>
+    payment === "paid" ? isPaid(r) : payment === "unpaid" ? isAwaitingPayment(r) : true,
+  );
+  const paymentCounts: Record<OrderPaymentFilter, number> = { all: 0, unpaid: 0, paid: 0 };
+  for (const r of rows) {
+    if (statuses && !statuses.includes(r.status)) continue;
+    paymentCounts.all += r.count;
+    if (isPaid(r)) paymentCounts.paid += r.count;
+    else if (isAwaitingPayment(r)) paymentCounts.unpaid += r.count;
+  }
+  return {
+    counts: queueCountsFrom(underPayment),
+    statusCounts: statusCountsFrom(underPayment),
+    paymentCounts,
+  };
 }
 
 // ── next step ────────────────────────────────────────────────────────────────
@@ -228,11 +283,18 @@ export function toOrderDetail(
       email: order.customer?.email ?? "",
       phone: order.customer?.phone ?? "",
       contactMethod: order.customer?.contactMethod ?? "",
+      whatsapp: (order.customer?.whatsapp ?? "").trim(),
+      whatsappName: (order.customer?.whatsappName ?? "").trim(),
     },
     shipping: {
       addressLine: buildAddressLine(order.shipping),
       region: order.shipping?.region ?? "",
       bookingText: buildBookingText(order),
+      // The web detail's address table, row by row (each copyable there too).
+      street: (order.shipping?.address ?? "").trim(),
+      barangay: (order.shipping?.barangay ?? "").trim(),
+      cityProvince: cityProvinceLine(order.shipping),
+      country: (order.shipping?.country ?? "").trim(),
     },
     items: (order.items ?? []).map((i) => ({
       name: i.name,

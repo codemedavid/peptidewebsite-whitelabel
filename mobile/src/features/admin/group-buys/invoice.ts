@@ -334,7 +334,7 @@ export function buildGroupBuyInvoice(input: {
   const total = round2(Math.max(0, subtotal + adminFee + paymentFee - discount) + shippingFee);
 
   const breakdown = [
-    ...merged.map((l) => `${invoiceShortName(l.name)} - ${units(l.qty, config.unit)} = ${money(l.amount)}`),
+    ...merged.map((l) => `${invoiceShortName(l.name)} × ${units(l.qty, config.unit)} = ${money(l.amount)}`),
     ...extras.map((e) => `${e.label} = ${money(e.amount)}`),
     ...(discount > 0 ? [`Discount = -${money(discount)}`] : []),
   ].join("\n");
@@ -350,7 +350,7 @@ export function buildGroupBuyInvoice(input: {
     shippingFee: money(shippingFee),
     gbName: input.roundName.trim(),
     gbDate: shortDate(input.closedAt),
-    items: merged.map((l) => `${l.name} - ${units(l.qty, config.unit)}`).join("\n"),
+    items: merged.map((l) => `${l.name} × ${units(l.qty, config.unit)}`).join("\n"),
     breakdown,
     subtotal: money(subtotal),
     total: money(total),

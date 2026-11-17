@@ -411,7 +411,7 @@ export function FontStylePicker({
               {current ? current.name : "Custom"}
             </span>
             <span className="twk-fp-tsub">
-              {current ? current.description : "Mixed fonts — pick a style to unify"}
+              {current ? current.description : "Mixed fonts. Pick a style to unify"}
             </span>
           </span>
           <FontPickerChevron />
@@ -442,7 +442,7 @@ export function FontStylePicker({
                   <span className="twk-fp-odesc">{p.description}</span>
                   <span className="twk-fp-oprev">
                     <span className="twk-fp-obody" style={{ fontFamily: fontFamilyValue(p.body) }}>
-                      Ag — quick brown fox
+                      Ag · quick brown fox
                     </span>
                     <span className="twk-fp-ochip" style={{ fontFamily: fontFamilyValue(p.button) }}>
                       Shop Now
@@ -683,7 +683,7 @@ export function ColorField({
           ? "Invalid color. Try #B0345E, rgb(176 52 94), hsl(340 55% 45%), oklch(0.55 0.18 350)"
           : inheriting
             ? inheritLabel
-            : "Hex · RGB · HSL · OKLCH · named — any CSS color works."}
+            : "Hex · RGB · HSL · OKLCH · named: any CSS color works."}
       </div>
       {options.length > 0 && (
         <div style={s.swatches}>
@@ -735,7 +735,7 @@ export function LogoUpload({
       if ("url" in res) onChange(res.url);
       else setError(res.error);
     } catch {
-      setError("Upload failed — please try again.");
+      setError("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }

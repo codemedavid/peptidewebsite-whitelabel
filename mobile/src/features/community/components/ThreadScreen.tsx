@@ -1,13 +1,15 @@
 import { useCallback, useRef, useState } from "react";
 import { Alert, Platform, Pressable, View, type FlatList, type TextInput } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import type { CommunityMessage, Participant, SavedReply, SavedReplyImage, ThreadType } from "@contract";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { cartCount } from "@/features/shop/lib/cart";
 import { useShop } from "@/features/shop/ShopProvider";
+import { setActiveThread } from "@/notifications/push";
 import { OfflineBanner } from "@/ui/feedback";
+import { useChannelMute } from "../hooks/useChannelMute";
 import { useInbox } from "../hooks/useInbox";
 import { useInChatSearch } from "../hooks/useSearch";
 import { useThread } from "../hooks/useThread";
@@ -65,6 +67,15 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
   const openProduct = useOpenProduct();
   const listRef = useRef<FlatList<Row>>(null);
   const inputRef = useRef<TextInput>(null);
+
+  const mute = useChannelMute();
+  // While this chat is on screen its own pushes stay silent (notifications/push.ts).
+  useFocusEffect(
+    useCallback(() => {
+      setActiveThread(id);
+      return () => setActiveThread(null);
+    }, [id]),
+  );
 
   const info = thread.state?.thread ?? null;
   const peer = info?.peer ?? null;
@@ -210,6 +221,15 @@ export function ThreadScreen({ type, id, q, focus }: Props) {
               {/* A one-topic channel opens straight into this chat, so its name and description are edited from here. */}
               {info?.canManage && !dm && info.channelId ? (
                 <IconButton name="create-outline" label="Edit channel" onPress={() => router.push({ pathname: "/community/channel-edit", params: { id: info.channelId! } })} />
+              ) : null}
+              {!dm && info?.channelId && info.channelMuted !== undefined ? (
+                <IconButton
+                  name={info.channelMuted ? "notifications-off-outline" : "notifications-outline"}
+                  label={info.channelMuted ? "Unmute notifications" : "Mute notifications"}
+                  color={info.channelMuted ? CHAT.inkMuted : undefined}
+                  disabled={mute.pending}
+                  onPress={() => mute.toggle(info.channelId!, !info.channelMuted)}
+                />
               ) : null}
               <IconButton name="search" label="Search this chat" onPress={search.start} />
               <IconButton name="images-outline" label="Media, links and docs" onPress={openShared} />

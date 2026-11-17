@@ -65,7 +65,7 @@ export default function NewTenantPage() {
       <div className="max-w-lg">
         <h1 className="font-heading text-2xl font-bold">Tenant created 🎉</h1>
         <p className="mt-2 text-muted-foreground">
-          <strong>{state.createdSlug}</strong> is live — no deploy needed.
+          <strong>{state.createdSlug}</strong> is live. No deploy needed.
         </p>
         <a
           href={`http://${state.createdSlug}.${ROOT}`}

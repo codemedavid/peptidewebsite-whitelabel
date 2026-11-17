@@ -48,7 +48,7 @@ function CoaEditorModal({
       if ("url" in res) setImage(res.url);
       else alert(res.error);
     } catch {
-      alert("Image upload failed — please try again.");
+      alert("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -105,7 +105,7 @@ function CoaEditorModal({
                     setLab(e.target.value)
                   }
                 >
-                  <option value="">— Select —</option>
+                  <option value="">Select…</option>
                   {partners.map((p) => (
                     <option key={p.label} value={p.label}>
                       {p.label}
@@ -243,7 +243,7 @@ function CoaEditorModal({
                     marginTop: 4,
                   }}
                 >
-                  PNG, JPG — keep it under 2.5 MB
+                  PNG or JPG. Keep it under 2.5 MB
                 </div>
               </>
             )}
@@ -259,7 +259,7 @@ function CoaEditorModal({
           </div>
         </div>
 
-        <div className="admin-coa-modal__or">— and / or —</div>
+        <div className="admin-coa-modal__or">and / or</div>
 
         <div className="admin-modal__row">
           <label className="admin-field__label">Document link</label>
@@ -627,7 +627,7 @@ export function AdminLabResults({
               className="admin-empty-set"
               style={{ gridColumn: "1 / -1" }}
             >
-              No lab reports yet. Add one — it&apos;ll show up on your public
+              No lab reports yet. Add one and it&apos;ll show up on your public
               Lab Reports page.
               <button className="admin-empty-set__cta" onClick={startAdd}>
                 + Add your first lab report

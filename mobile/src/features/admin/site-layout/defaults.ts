@@ -1,0 +1,260 @@
+// COPIED from src/lib/storefront/intl-local/config.ts (DEFAULT_NAV,
+// DEFAULT_INTL_LOCAL, newCustomSection) — keep in sync; the server re-normalizes.
+//
+// The reference defaults: what "Restore defaults" puts back and what any key a
+// store never saved falls back to.
+
+import {
+  IL_PALETTE,
+  IL_SECTION_KEYS,
+  button,
+  colorBackground,
+  type IlButton,
+  type IlCard,
+  type IlIcon,
+  type IlMarketCard,
+  type IlNavChild,
+  type IlNavItem,
+  type IntlLocalConfig,
+  type IlBand,
+} from "./config";
+import { CONTACT_LINK, NO_LINK, catalogLink, infoLink, marketLink, pageLink, sectionLink, type IlLink } from "./links";
+
+const child = (id: string, label: string, link: IlLink): IlNavChild => ({ id, show: true, label, link });
+
+const DEFAULT_NAV: IlNavItem[] = [
+  {
+    id: "learn",
+    show: true,
+    label: "Learn",
+    link: pageLink("articles"),
+    children: [
+      child("articles", "Articles / Blog", pageLink("articles")),
+      child("guides", "Beginner Guides", pageLink("protocols")),
+      child("library", "Reference Library", pageLink("articles")),
+      child("protocols", "Protocols", pageLink("protocols")),
+      child("calculator", "Calculator", pageLink("calculator")),
+      child("coas", "COAs", pageLink("coa")),
+    ],
+  },
+  {
+    id: "shop",
+    show: true,
+    label: "Shop",
+    link: catalogLink(),
+    children: [
+      child("local", "Philippines · PHP", marketLink("local")),
+      child("international", "International · USD", marketLink("international")),
+    ],
+  },
+  {
+    id: "community",
+    show: true,
+    label: "Community",
+    link: sectionLink("community"),
+    children: [child("join", "Join Community", sectionLink("community")), child("reviews", "Customer Reviews", pageLink("reviews"))],
+  },
+  {
+    id: "help",
+    show: true,
+    label: "Help",
+    link: pageLink("faq"),
+    children: [
+      child("faqs", "FAQs", pageLink("faq")),
+      child("contact", "Contact Us", CONTACT_LINK),
+      child("ordering", "Ordering & Payments", pageLink("faq")),
+      child("shipping", "Shipping", infoLink("shipping")),
+    ],
+  },
+  {
+    id: "account",
+    show: true,
+    label: "Account",
+    link: pageLink("account"),
+    children: [
+      child("login", "Login / Sign Up", pageLink("account")),
+      child("profile", "Profile & Addresses", pageLink("account")),
+      child("orders", "Orders / Track Order", pageLink("track")),
+      child("payments", "Payments & Tracking", pageLink("track")),
+      child("gb-access", "Group Buy Access", pageLink("groupbuy")),
+      child("email", "Email Preferences", sectionLink("newsletter")),
+    ],
+  },
+];
+
+const marketCard = (id: string, eyebrow: string, title: string, currency: string, description: string, icon: IlIcon, btn: IlButton, bg: string): IlMarketCard => ({
+  id,
+  show: true,
+  eyebrow,
+  title,
+  currency,
+  description,
+  icon,
+  imageUrl: "",
+  imageBlend: "blend",
+  imageSize: "md",
+  imageFocus: "center",
+  imageOpacity: 90,
+  button: btn,
+  background: colorBackground(bg),
+  textColor: "",
+});
+
+const learnCard = (id: string, title: string, description: string, icon: IlIcon, ctaLabel: string, link: IlLink, iconBg: string, bg: string): IlCard => ({
+  id,
+  show: true,
+  title,
+  description,
+  icon,
+  imageUrl: "",
+  ctaLabel,
+  link,
+  iconBg,
+  background: colorBackground(bg),
+  textColor: "",
+});
+
+export const DEFAULT_INTL_LOCAL: IntlLocalConfig = {
+  theme: {
+    useBrandColors: false,
+    pageBg: IL_PALETTE.cream,
+    surface: "#FFFFFF",
+    ink: IL_PALETTE.ink,
+    muted: IL_PALETTE.muted,
+    accent: IL_PALETTE.accent,
+    accentText: "#FFFFFF",
+    radius: 18,
+    headingFont: "Outfit",
+    bodyFont: "DM Sans",
+    headingWeight: 800,
+    scale: "md",
+    spacing: "cozy",
+  },
+  topBar: {
+    show: true,
+    text: "Welcome! Shop locally or internationally.",
+    subscribeLabel: "Subscribe",
+    showSocials: true,
+    background: colorBackground(IL_PALETTE.lavenderDeep),
+    textColor: "",
+  },
+  header: { brandName: "", showLogo: true, logoUrl: "", logoHeight: 40, bgColor: "#FFFFFF", textColor: "", showSearch: true, showCart: true, sticky: true },
+  nav: DEFAULT_NAV,
+  hero: {
+    show: true,
+    eyebrow: "Beauty · Body · Wellness",
+    title: "Discover. Understand. Choose.",
+    description: "Explore educational resources and shop our products.",
+    align: "left",
+    imageUrl: "",
+    mobileImageUrl: "",
+    imageAlt: "",
+    imageSide: "right",
+    buttons: [button("Explore Learn", pageLink("articles")), button("Shop Products", sectionLink("markets"), "outline")],
+    background: colorBackground(IL_PALETTE.pink),
+    textColor: "",
+  },
+  markets: {
+    show: true,
+    title: "Shop your market",
+    description: "One store. Two ways to shop. Choose the option that fits your location and needs.",
+    cards: [
+      marketCard("local", "Local shopping", "Philippines", "PHP", "On-hand & Group Buy · Vial / Box", "truck", button("Shop Philippines", marketLink("local")), IL_PALETTE.yellow),
+      marketCard(
+        "international",
+        "International shopping",
+        "International",
+        "USD",
+        "Wholesale · Direct Delivery · Full boxes only",
+        "globe",
+        button("Shop International", marketLink("international")),
+        IL_PALETTE.lavenderDeep,
+      ),
+    ],
+  },
+  learn: {
+    show: true,
+    title: "Learn & explore",
+    description: "Build your knowledge with our curated resources.",
+    cards: [
+      learnCard("guides", "Beginner Guides", "Start with the essentials and learn at your own pace.", "book", "Explore Guides", pageLink("protocols"), IL_PALETTE.lavenderDeep, IL_PALETTE.lavender),
+      learnCard("articles", "Articles & Research", "Explore topics, studies, and evidence.", "file", "Explore Articles", pageLink("articles"), "#F6BFD0", IL_PALETTE.pink),
+      learnCard("tools", "Protocols & Tools", "Guides, tools and calculator for smarter choices.", "tools", "Explore Tools", pageLink("calculator"), IL_PALETTE.yellow, IL_PALETTE.butter),
+    ],
+  },
+  community: {
+    id: "community",
+    show: true,
+    title: "Community & Reviews",
+    description: "Join the conversation, ask questions and read real customer experiences.",
+    icon: "users",
+    imageUrl: "",
+    button: button("Visit Community", pageLink("reviews")),
+    background: colorBackground(IL_PALETTE.lavenderDeep),
+    textColor: "",
+  },
+  newsletter: {
+    show: true,
+    title: "Stay in the Loop",
+    description: "Articles, announcements, and Group Buy updates.",
+    icon: "mail",
+    placeholder: "Your email address",
+    buttonLabel: "Subscribe",
+    successMessage: "You're subscribed. Thank you!",
+    background: colorBackground(IL_PALETTE.yellow),
+    textColor: "",
+  },
+  customSections: [],
+  order: [...IL_SECTION_KEYS],
+  footer: {
+    show: true,
+    brandName: "",
+    tagline: "Beauty · Body · Wellness",
+    links: [
+      child("about", "About", infoLink("about")),
+      child("contact", "Contact", CONTACT_LINK),
+      child("privacy", "Privacy", infoLink("privacy")),
+      child("terms", "Terms", infoLink("terms")),
+      child("shipping", "Shipping", infoLink("shipping")),
+      child("returns", "Returns", infoLink("returns")),
+    ],
+    useStoreSocials: true,
+    socials: [],
+    copyright: "© {year} {brand}. All rights reserved.",
+    background: colorBackground(""),
+    textColor: "",
+  },
+  fab: {
+    show: true,
+    label: "Contact Us",
+    icon: "chat",
+    color: "",
+    textColor: "",
+    position: "right",
+    showDesktop: true,
+    showMobile: true,
+    link: CONTACT_LINK,
+  },
+  infoPages: [
+    { id: "about", title: "About us", body: "" },
+    { id: "privacy", title: "Privacy policy", body: "" },
+    { id: "terms", title: "Terms of service", body: "" },
+    { id: "shipping", title: "Shipping", body: "" },
+    { id: "returns", title: "Returns", body: "" },
+  ],
+};
+
+/** A fresh custom band for the "Add section" button. */
+export function newCustomSection(id: string): IlBand {
+  return {
+    id,
+    show: true,
+    title: "New section",
+    description: "Describe what this section is about.",
+    icon: "sparkle",
+    imageUrl: "",
+    button: { ...button("Learn more", NO_LINK), show: false },
+    background: colorBackground(IL_PALETTE.lavender),
+    textColor: "",
+  };
+}

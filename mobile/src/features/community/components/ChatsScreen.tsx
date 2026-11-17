@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, View } 
 import { router, type Href } from "expo-router";
 import type { CommunityChannel, SearchHit } from "@contract";
 import { useChannelMutations, useLiveGroupBuy } from "../hooks/useCommunityData";
+import { useChannelMute } from "../hooks/useChannelMute";
 import { useCommunityAccess, useInbox } from "../hooks/useInbox";
 import { useMessageSearch } from "../hooks/useSearch";
 import { buildChatRows, matchChatsByName, type ChatListRow, type Folder } from "../lib/inbox";
@@ -23,24 +24,33 @@ const rowKey = (r: Row) =>
   r.kind === "channel" ? `c-${r.channel.id}` : r.kind === "direct" ? `d-${r.conversation.id}` : r.kind === "section" ? `s-${r.title}` : `m-${r.hit.message.id}`;
 
 /** Long-press on a channel (moderators): edit or delete. */
+/** Long-press on a channel: mute for anyone who can, edit / delete for managers. */
 function useChannelMenu() {
   const { mutate: removeChannel } = useChannelMutations().remove;
+  const { toggle: setMuted } = useChannelMute();
   return useCallback(
     (channel: CommunityChannel) =>
     Alert.alert(channel.name, undefined, [
-      { text: "Edit channel", onPress: () => router.push({ pathname: "/community/channel-edit", params: { id: channel.id } }) },
-      {
-        text: "Delete channel",
-        style: "destructive",
-        onPress: () =>
-          Alert.alert(`Delete ${channel.name}?`, "Every topic and message in it is removed for everyone. This can't be undone.", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Delete", style: "destructive", onPress: () => removeChannel(channel.id, { onError: (e) => Alert.alert("Couldn't delete", e.message) }) },
-          ]),
-      },
-      { text: "Cancel", style: "cancel" },
+      ...(channel.muted !== undefined
+        ? [{ text: channel.muted ? "Unmute notifications" : "Mute notifications", onPress: () => setMuted(channel.id, !channel.muted) }]
+        : []),
+      ...(channel.canManage
+        ? [
+            { text: "Edit channel", onPress: () => router.push({ pathname: "/community/channel-edit", params: { id: channel.id } }) },
+            {
+              text: "Delete channel",
+              style: "destructive" as const,
+              onPress: () =>
+                Alert.alert(`Delete ${channel.name}?`, "Every topic and message in it is removed for everyone. This can't be undone.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Delete", style: "destructive", onPress: () => removeChannel(channel.id, { onError: (e) => Alert.alert("Couldn't delete", e.message) }) },
+                ]),
+            },
+          ]
+        : []),
+      { text: "Cancel", style: "cancel" as const },
     ]),
-    [removeChannel],
+    [removeChannel, setMuted],
   );
 }
 

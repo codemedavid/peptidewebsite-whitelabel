@@ -19,7 +19,7 @@ export type CalendarActionResult = { ok: true } | { error: string };
 
 /** Shown when the table hasn't been created yet — same idiom as admin-upgrades. */
 const NOT_PUSHED =
-  "Could not save — has the platform_calendar_events table been pushed? (npm run db:push)";
+  "Could not save. Has the platform_calendar_events table been pushed? (npm run db:push)";
 
 const DEMO_BLOCKED = "Calendar entries aren't supported in demo mode.";
 

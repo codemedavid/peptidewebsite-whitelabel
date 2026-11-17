@@ -104,7 +104,7 @@ function parseEdit(raw: unknown, position: number): Edit | VariationPlanError {
   }
   if (price.kind === "value") {
     if (price.value <= 0) {
-      return { error: `"${name}" must cost more than 0 — an option priced at 0 checks out free.` };
+      return { error: `"${name}" must cost more than 0. An option priced at 0 checks out free.` };
     }
     edit.price = price.value;
   }
@@ -255,7 +255,7 @@ export function buildVariationPlan(
 
   const rawList = Array.isArray(input.variations) ? input.variations : [];
   if (!rawList.length) {
-    return { error: "Provide at least one variation — name, price, and optionally stock, gbPrice, image." };
+    return { error: "Provide at least one variation: name, price, and optionally stock, gbPrice, image." };
   }
   if (rawList.length > MAX_VARIATIONS) {
     return { error: `A product can hold at most ${MAX_VARIATIONS} variations; ${rawList.length} were sent.` };

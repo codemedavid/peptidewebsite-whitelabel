@@ -213,7 +213,7 @@ check("orders.ts re-prices against the ORDER-WIDE wholesale scope", () => {
   assert.match(ordersSrc, /orderWholesaleScope\(/);
   const built = ordersSrc.match(/orderWholesaleScope\(/g) ?? [];
   assert.strictEqual(built.length, 2, "one scope per placement path (demo + DB)");
-  const priced = ordersSrc.match(/repriceItems\(\s*p\.items,[^)]*Scope\s*\)/g) ?? [];
+  const priced = ordersSrc.match(/repriceOrderItems\(\s*p\.items,[^)]*Scope\s*\)/g) ?? [];
   assert.strictEqual(priced.length, 2, "both re-price calls must receive a wholesale scope");
 });
 

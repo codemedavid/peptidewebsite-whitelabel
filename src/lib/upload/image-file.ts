@@ -32,7 +32,7 @@ const IMAGE_EXTENSIONS = new Set([
 const DOCUMENT_EXTENSIONS = new Set(["pdf", "doc", "docx", "pages", "heicdoc"]);
 
 const SCREENSHOT_HINT =
-  "We can only read image receipts — please upload a screenshot of your payment instead.";
+  "We can only read image receipts. Please upload a screenshot of your payment instead.";
 
 /** Lowercased extension of `name`, or "" when it has none. */
 function extensionOf(name: string): string {
@@ -70,6 +70,6 @@ export function classifyProofFile(name: string, type: string): ProofFileVerdict 
     ok: false,
     reason: mime.startsWith("application/") || mime.startsWith("text/")
       ? SCREENSHOT_HINT
-      : "That file doesn't look like an image — please upload a screenshot of your payment.",
+      : "That file doesn't look like an image. Please upload a screenshot of your payment.",
   };
 }

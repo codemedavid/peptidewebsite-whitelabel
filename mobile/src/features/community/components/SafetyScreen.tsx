@@ -180,7 +180,7 @@ function FlagCard({
       <ContextLines flag={flag} />
       {dm ? (
         <ChatText variant="caption" color={CHAT.inkMuted}>
-          Private chat — you only see the flagged message and the two lines before it.
+          Private chat. You only see the flagged message and the two lines before it.
         </ChatText>
       ) : null}
       {flag.status === "pending" ? (
@@ -210,7 +210,7 @@ function BanSheet({ flag, busy, onClose, onConfirm }: { flag: ModerationFlag | n
         <ChatText variant="body" color={CHAT.inkSoft}>
           {banned
             ? "They'll be back in the community and can sign in with their account again."
-            : "They're removed from the community and can't sign in with this account again — not to chats, the shop or their orders. You can unban them later."}
+            : "They're removed from the community and can't sign in with this account again (not to chats, the shop or their orders). You can unban them later."}
         </ChatText>
         <ChatButton label={banned ? "Unban" : `Ban ${name}`} icon={banned ? "refresh" : "ban"} tone={banned ? "primary" : "danger"} size="lg" loading={busy} onPress={onConfirm} />
         <ChatButton label="Cancel" tone="ghost" onPress={onClose} />

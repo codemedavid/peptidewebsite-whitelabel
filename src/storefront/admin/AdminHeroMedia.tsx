@@ -86,7 +86,7 @@ export function AdminHeroMedia({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast(`Image too large (${prettySize(file.size)}) — the limit is 10 MB.`);
+      toast(`Image too large (${prettySize(file.size)}). The limit is 10 MB.`);
       return;
     }
     setUploading(true);
@@ -121,7 +121,7 @@ export function AdminHeroMedia({
         ...(media.alt.trim() ? {} : { alt: altFromName(file.name) }),
       });
     } catch {
-      toast("Upload failed — please try again.");
+      toast("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -272,7 +272,7 @@ export function AdminHeroMedia({
               >
                 <option value="page">A page on your site</option>
                 <option value="custom">Custom URL</option>
-                <option value="none">Nothing — not clickable</option>
+                <option value="none">Nothing (not clickable)</option>
               </select>
               {media.linkType === "page" && (
                 <select

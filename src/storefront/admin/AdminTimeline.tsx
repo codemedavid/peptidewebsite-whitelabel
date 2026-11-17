@@ -93,7 +93,7 @@ export function AdminTimeline({ brand, onBack }: AdminTimelineProps) {
       setTweak({ timeline: draft });
       toast(enabled ? "Timeline saved and showing" : "Timeline saved (hidden)");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -179,7 +179,7 @@ export function AdminTimeline({ brand, onBack }: AdminTimelineProps) {
                   <label className="admin-check">
                     <input type="radio" name="timeline-current" checked={currentId === step.id}
                            onChange={() => setCurrentId(step.id)} />
-                    <span>Step {i + 1} — this is the current step</span>
+                    <span>Step {i + 1}: this is the current step</span>
                   </label>
                   <div>
                     <div className="small">Title</div>

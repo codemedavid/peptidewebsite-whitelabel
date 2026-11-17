@@ -310,7 +310,7 @@ export async function createTenantAction(
     // The demo provisioner is file-backed and has no preset support. Fail loudly
     // rather than silently creating a plain storefront the operator did not ask for.
     if (String(formData.get("presetId") ?? "").trim()) {
-      return { error: "Store presets need a database — not available in demo mode." };
+      return { error: "Store presets need a database, so they're not available in demo mode." };
     }
     return createTenantDemoAction(prev, formData);
   }

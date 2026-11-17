@@ -782,8 +782,8 @@ export type Brand = {
   // (operator-grantable, default OFF) AND the owner's assessment.enabled.
   // `assessment` is the normalized owner config (copy + goal keyword map).
   showPageAssessment?: boolean;
-  // Start variation products on their FIRST option (price visible at once)
-  // instead of the default "pick an option to see the price". Default off.
+  // Variation products start on their FIRST option (price + sale visible at
+  // once). Default ON; `false` restores "pick an option to see the price".
   variationPreselect?: boolean;
   // Classic home: the "why us" trust strip under the catalog, built from
   // boutique.assurances. Default off, so no classic store changes on deploy.

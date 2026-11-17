@@ -62,7 +62,7 @@ function AdminPaymentMethodForm({
       if ("url" in res) setQrImage(res.url);
       else alert(res.error);
     } catch {
-      alert("Image upload failed — please try again.");
+      alert("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -156,7 +156,7 @@ function AdminPaymentMethodForm({
                 </label>
               </div>
               <div className="admin-field__hint">
-                Each cart checks out with its own payment methods — e.g. GCash for Local, PayPal or a
+                Each cart checks out with its own payment methods, e.g. GCash for Local, PayPal or a
                 USD bank account for International.
                 {qrph ? " QR PH is a peso payment, so it's Local only." : ""}
                 {!markets.local && !markets.international ? " Tick at least one, or no shopper will see this method." : ""}
@@ -179,7 +179,7 @@ function AdminPaymentMethodForm({
               <div className="admin-field__hint">
                 Tag this if it's your QR PH account. QR PH charges you a
                 percentage on what it collects, so a {QRPH_FEE_PERCENT}% processing
-                fee is added to the customer's total when they pay this way —
+                fee is added to the customer's total when they pay this way,
                 shown as its own line before they place the order. Your other
                 payment methods are never charged.
               </div>
@@ -242,7 +242,7 @@ function AdminPaymentMethodForm({
                   <div className="admin-image-drop__title">Click to upload QR image</div>
                   <div className="admin-image-drop__sub">or drag and drop</div>
                   <div className="admin-image-drop__formats">
-                    All image formats (JPG, PNG, WebP, SVG…) — max 2 MB
+                    All image formats (JPG, PNG, WebP, SVG…), max 2 MB
                   </div>
                 </>
               )}

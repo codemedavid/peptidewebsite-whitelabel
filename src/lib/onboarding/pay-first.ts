@@ -71,7 +71,7 @@ export function detailsUpdateDecision(
   if (sub.tenantStatus !== "pending_setup") {
     return {
       ok: false,
-      error: "Your store is already live — message us on WhatsApp and we'll update it for you.",
+      error: "Your store is already live. Message us on WhatsApp and we'll update it for you.",
     };
   }
   return { ok: true };

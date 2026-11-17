@@ -93,7 +93,7 @@ export function RoundCard({
             icon="document-text-outline"
             accessibilityHint={
               awaitingReport
-                ? "This round has finished — download the supplier and customer reports"
+                ? "This round has finished. Download the supplier and customer reports"
                 : "Supplier and customer reports for this round"
             }
             onPress={onReport}

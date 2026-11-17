@@ -96,7 +96,7 @@ function Editor({ settings, storeName }: { settings: GateSettings; storeName: st
     }
     const body = hasCode
       ? "The old code stops working immediately and everyone already inside is signed out. The gate turns on."
-      : "Your store becomes private right away — visitors will need this code to see it.";
+      : "Your store becomes private right away. Visitors will need this code to see it.";
     Alert.alert(hasCode ? "Update the access code?" : "Set the access code?", body, [
       { text: "Cancel", style: "cancel" },
       {
@@ -131,8 +131,8 @@ function Editor({ settings, storeName }: { settings: GateSettings; storeName: st
     enabled && hasCode
       ? { tone: "success" as const, icon: "lock-closed-outline" as const, label: "Gate is ON", hint: `Visitors need the code to view ${storeName || "your store"}.` }
       : hasCode
-        ? { tone: "warning" as const, icon: "lock-open-outline" as const, label: "Gate is OFF", hint: "A code is set but the gate is off — your store is currently open to everyone." }
-        : { tone: "neutral" as const, icon: "key-outline" as const, label: "No code set", hint: "Set a code below — that turns the gate on automatically." };
+        ? { tone: "warning" as const, icon: "lock-open-outline" as const, label: "Gate is OFF", hint: "A code is set but the gate is off, so your store is currently open to everyone." }
+        : { tone: "neutral" as const, icon: "key-outline" as const, label: "No code set", hint: "Set a code below. That turns the gate on automatically." };
 
   return (
     <FormPage
@@ -155,7 +155,7 @@ function Editor({ settings, storeName }: { settings: GateSettings; storeName: st
         <Hint>{status.hint}</Hint>
         <ToggleRow
           label="Require an access code to view the store"
-          hint={hasCode ? undefined : "Set a code first — the gate can't be enabled without one."}
+          hint={hasCode ? undefined : "Set a code first. The gate can't be enabled without one."}
           value={enabled}
           disabled={!hasCode || toggleSave.isPending}
           onChange={setGate}

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { isModuleAllowed } from "@/storefront/admin/staff-permissions";
 import { resolveActor, storeAvailability } from "./auth";
 import { decodeSubject, encodeSubject, isAdminSubject, type MobileSubject } from "./sessions";
+import { PUSH_SOUND_CHANNELS, type PushSoundChannel } from "./contract";
 import {
   buildNewOrderPush,
   isExpoPushToken,
@@ -39,7 +40,6 @@ function pushEndpoint(): string {
 }
 const EXPO_BATCH = 100;
 const SEND_TIMEOUT_MS = 10_000;
-const ANDROID_CHANNEL_ID = "orders";
 
 export type RegisterResult = { ok: true; newOrders: boolean } | { ok: false; message: string };
 
@@ -142,15 +142,17 @@ async function postToExpo(messages: object[]): Promise<ExpoTicket[] | null> {
   }
 }
 
-function toExpoMessage(r: Recipient, m: OutgoingPush, channelId: string) {
+/** iOS plays `sound` (falls back to the default when the build lacks the file); Android uses the channel's. */
+export function toExpoMessage(r: Recipient, m: OutgoingPush, kind: PushSoundChannel) {
+  const channel = PUSH_SOUND_CHANNELS[kind];
   return {
     to: r.token,
     title: m.title,
     body: m.body,
     data: m.data,
-    sound: "default",
+    sound: channel.sound,
     priority: "high",
-    channelId,
+    channelId: channel.androidChannelId,
   };
 }
 
@@ -158,12 +160,12 @@ function toExpoMessage(r: Recipient, m: OutgoingPush, channelId: string) {
 async function sendBatch(
   batch: Recipient[],
   message: OutgoingPush,
-  channelId = ANDROID_CHANNEL_ID,
+  kind: PushSoundChannel,
 ): Promise<[number, number]> {
   let pending = batch;
   let sent = 0;
   for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
-    const tickets = await postToExpo(pending.map((r) => toExpoMessage(r, message, channelId)));
+    const tickets = await postToExpo(pending.map((r) => toExpoMessage(r, message, kind)));
     const retry: Recipient[] = [];
     for (let i = 0; i < pending.length; i++) {
       const outcome = triageExpoTicket(tickets?.[i]);
@@ -190,12 +192,12 @@ async function sendBatch(
 export async function deliverPush(
   recipients: Recipient[],
   message: OutgoingPush,
-  channelId = ANDROID_CHANNEL_ID,
+  kind: PushSoundChannel = "orders",
 ): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
   for (let i = 0; i < recipients.length; i += EXPO_BATCH) {
-    const [s, f] = await sendBatch(recipients.slice(i, i + EXPO_BATCH), message, channelId);
+    const [s, f] = await sendBatch(recipients.slice(i, i + EXPO_BATCH), message, kind);
     sent += s;
     failed += f;
   }

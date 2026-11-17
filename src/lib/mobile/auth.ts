@@ -15,6 +15,7 @@ import type { ApiErrorCode, CustomerActor, MobileActor } from "./contract";
 import { readAccessSession, revokeSession, type LiveSession, type MobileSubject } from "./sessions";
 import { credentialStamp, parseBearer } from "./tokens";
 import { customerAppOpen } from "@/lib/mobile/customer-app";
+import { APP_GUEST_NAME, isAppGuestHash } from "./app-guest";
 
 /**
  * The mobile API's equivalent of getStorefrontAdminActor(): turn a bearer token
@@ -43,7 +44,8 @@ export type MobileContext = {
 };
 
 /** A storefront customer signed in to the app (docs/mobile-admin/COMMUNITY.md). */
-export type CustomerInfo = { id: string; email: string; name: string; phone: string };
+/** `guest` = an app guest (app-guest.ts): shops and orders, no community. */
+export type CustomerInfo = { id: string; email: string; name: string; phone: string; guest: boolean };
 
 export type CustomerContext = {
   session: LiveSession;
@@ -128,9 +130,13 @@ export async function resolveCustomer(tenantId: string, customerId: string): Pro
     customerAppOpen(tenantId),
   ]);
   if (!row || row.status !== "active" || !entitled) return null;
+  const guest = isAppGuestHash(row.passwordHash);
   return {
-    customer: { id: row.id, email: row.email, name: row.name, phone: row.phone },
-    info: { kind: "customer", displayName: row.name || row.email, email: row.email },
+    customer: { id: row.id, email: row.email, name: row.name, phone: row.phone, guest },
+    // A guest's placeholder email is never shown (app-guest.ts).
+    info: guest
+      ? { kind: "customer", displayName: APP_GUEST_NAME, email: "", guest: true }
+      : { kind: "customer", displayName: row.name || row.email, email: row.email },
     stamp: customerStampFor(row.email, row.passwordHash, row.sessionVersion),
   };
 }

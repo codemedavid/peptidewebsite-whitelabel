@@ -11,10 +11,33 @@
 import { evaluateVisitorGate } from "@/lib/auth/gate-enforcement";
 import { evaluateAccountGate } from "@/lib/auth/account-gate-enforcement";
 import { getTenantContext } from "@/lib/tenant/context";
+import { currentAppShopperScope } from "@/lib/auth/app-shopper-scope";
 
 export async function isStorefrontBlocked(tenantId: string): Promise<boolean> {
   if ((await evaluateVisitorGate(tenantId)).status === "blocked") return true;
   const { branding } = await getTenantContext(tenantId);
   const config = (branding?.config ?? {}) as { accountGate?: unknown };
   return (await evaluateAccountGate(tenantId, config.accountGate)) === "blocked";
+}
+
+/** What a gated storefront action answers a walled-out caller. */
+export const STOREFRONT_BLOCKED_MESSAGE =
+  "This store is private. Refresh the page and enter the access code to continue.";
+
+/**
+ * The same wall, for the PUBLIC storefront server actions (catalog refresh,
+ * quote, placement, order tracking, articles). A server action is a public
+ * POST endpoint whose id ships in the client bundle, so walling only the
+ * layout and page left a gated store's catalog, prices and checkout one
+ * hand-rolled request away. Each such action asks this first.
+ *
+ * App shop requests are exempt here because they are gated BEFORE the action
+ * runs: lib/mobile/shop.ts refuses signed-out callers on a private store and
+ * admits signed-in customers, then enters the app-shopper scope. Re-checking
+ * here would read browser cookies an app request never carries and lock every
+ * app customer out of a gated store.
+ */
+export async function isStorefrontActionBlocked(tenantId: string): Promise<boolean> {
+  if (currentAppShopperScope()) return false;
+  return isStorefrontBlocked(tenantId);
 }

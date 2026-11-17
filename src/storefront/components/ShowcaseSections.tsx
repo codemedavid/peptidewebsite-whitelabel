@@ -120,7 +120,7 @@ export function ShowcasePromos({
               </p>
               <h2 className="sc-promo__title font-display">Protocols hub</h2>
               <p className="sc-promo__body">
-                Step-by-step guides for every peptide — read them before you order.
+                Step-by-step guides for every peptide. Read them before you order.
               </p>
               <button
                 type="button"

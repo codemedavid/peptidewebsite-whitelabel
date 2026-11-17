@@ -95,7 +95,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
             autoComplete="email"
             textContentType="emailAddress"
             error={emailError}
-            hint="Any inbox works — your Gmail, a shared team address, etc."
+            hint="Any inbox works: your Gmail, a shared team address, etc."
           />
         ) : null}
       </Section>

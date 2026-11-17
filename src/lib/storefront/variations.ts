@@ -110,14 +110,14 @@ export function buildProductOptions(product: OptionSource): ProductOption[] {
 }
 
 /**
- * Which option a card/modal starts on. By default NOTHING is selected (-1): the
- * price stays hidden until the customer picks (see the reveal rule above).
- * A store that opts in (Brand.variationPreselect) starts on the first option
- * instead, so its price shows straight away — The Peppy Lab's old site opened
- * every card on "Vial Only" with its price visible.
+ * Which option a card/modal starts on. By default the FIRST option ("Standard",
+ * or the seller's first variation) is preselected, so a visitor sees the price,
+ * and any sale on it, at a glance without clicking (owner request 2026-11-17).
+ * A store that sets Brand.variationPreselect to `false` keeps the older
+ * reveal-on-click behavior: nothing selected (-1) until the customer picks.
  */
 export function initialOptionIndex(optionCount: number, preselect: boolean | undefined): number {
-  return preselect === true && optionCount > 0 ? 0 : -1;
+  return preselect !== false && optionCount > 0 ? 0 : -1;
 }
 
 /**

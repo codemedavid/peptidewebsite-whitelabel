@@ -116,6 +116,9 @@ model Tenant {
   mobileSessions           MobileSession[]
   mobilePushDevices        MobilePushDevice[]
   mobileOrderAlerts        MobileOrderAlert[]
+  // Peptide Tracker sync (docs/mobile-admin/TRACKER.md §5)
+  trackerRecords           TrackerRecord[]
+  promoPushes              StorePromoPush[]
   // Pepweb app community (docs/mobile-admin/COMMUNITY.md)
   communityMembers         CommunityMember[]
   accountProfiles          AccountProfile[]
@@ -648,6 +651,11 @@ model StorefrontCustomer {
   // value and stops resolving on its next request (resolveCustomerSession).
   sessionVersion Int       @default(1)
   lastLoginAt    DateTime?
+  // App promo & event notifications (lib/mobile/promo-push.ts). OPT-IN only —
+  // App Store 4.5.4: no promotional pushes without the customer's consent.
+  // The time they said yes is kept as the consent record.
+  promoPushOptIn   Boolean   @default(false)
+  promoPushOptInAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -656,6 +664,8 @@ model StorefrontCustomer {
   communityMember CommunityMember?
   // Paid Access memberships (SetNull — the payment record outlives the account).
   paidAccessMemberships   PaidAccessMembership[]
+  // Peptide Tracker records (Cascade — deleting the account deletes its tracker).
+  trackerRecords          TrackerRecord[]
 
   @@unique([tenantId, email])
   @@index([tenantId, createdAt])
@@ -1158,6 +1168,8 @@ model StorefrontStaff {
   permissions  Json     @default("[]") // string[] of staff-permission module keys
   createdAt    DateTime @default(now())
   updatedAt    DateTime @default(now()) @updatedAt
+  // Their own Peptide Tracker (TrackerRecord.staffId) — goes with the account.
+  trackerRecords TrackerRecord[]
 
   @@unique([tenantId, username]) // one username per store (display/legacy identifier)
   @@unique([tenantId, email]) // email is the LOGIN key — must be unique per store
@@ -1243,6 +1255,25 @@ model MobilePushDevice {
 
   @@index([tenantId])
   @@map("mobile_push_devices")
+}
+
+// A promo / event announcement the store team pushed to its app customers
+// (lib/mobile/promo-push.server.ts). Only customers who OPTED IN get it
+// (StorefrontCustomer.promoPushOptIn). Rows are the send log the composer shows
+// and the daily cap counts; `sentBy` is the sender's session subject
+// ("owner" | "staff:<id>").
+model StorePromoPush {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  headline   String
+  message    String
+  sentBy     String
+  recipients Int      @default(0)
+  sentAt     DateTime @default(now())
+
+  @@index([tenantId, sentAt])
+  @@map("store_promo_pushes")
 }
 
 // Idempotency claim for the new-order push: at most one alert fan-out per order,
@@ -1619,6 +1650,41 @@ model CommunityUpload {
 
   @@index([tenantId, urlHash])
   @@map("community_uploads")
+}
+
+// Peptide Tracker (docs/mobile-admin/TRACKER.md §5): one generic table for every
+// tracker record a customer syncs from the app — protocol | dose | skip | vial |
+// checkin | settings. The phone is the source of truth; `data` is the whole
+// record, validated per kind by src/lib/tracker/records.ts. Last write wins on
+// `updatedAt` (the CLIENT clock); deletes are tombstones (`deletedAt`).
+// `syncedAt` is the SERVER clock, set explicitly on every write — the pull
+// cursor is (syncedAt, id). The owner of a row is `subject` — the app session's
+// subject ("owner" | "staff:<id>" | "customer:<id>", lib/mobile/sessions.ts):
+// customers AND the store team each keep their OWN tracker. Only that
+// account's bearer session reads or writes its rows
+// (src/lib/tracker/sync.server.ts); nobody reads anyone else's — there is no
+// store-side read path. customerId / staffId mirror the subject so deleting the
+// customer or staff member cascades (the owner's go with the tenant).
+model TrackerRecord {
+  id         String              @id @default(cuid())
+  tenantId   String
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subject    String
+  customerId String?
+  customer   StorefrontCustomer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  staffId    String?
+  staff      StorefrontStaff?    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  kind       String
+  localId    String
+  data       Json
+  updatedAt  DateTime
+  deletedAt  DateTime?
+  syncedAt   DateTime            @default(now())
+  createdAt  DateTime            @default(now())
+
+  @@unique([tenantId, subject, kind, localId])
+  @@index([tenantId, subject, syncedAt])
+  @@map("tracker_records")
 }
 
 // ════════════════════════════════════════════════════════════════════════════

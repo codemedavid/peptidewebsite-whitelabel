@@ -184,7 +184,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
 
       <Section
         title="Preview"
-        hint={draft.enabled ? "What customers see when they open your store." : "Currently hidden from customers — this is how it would look."}
+        hint={draft.enabled ? "What customers see when they open your store." : "Currently hidden from customers. This is how it would look."}
       >
         <NoticeModalPreview config={preview} />
         <Hint>{"The live pop-up uses your storefront's colours and fonts."}</Hint>

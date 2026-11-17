@@ -138,7 +138,7 @@ export const INITIAL_DRAFT: Draft = {
 
 /** Before payment — the only steps counted in the progress rail. */
 export const STEPS = [
-  { key: "business", rail: "Business", title: "Your business", subtitle: "Just the basics — we'll handle the rest." },
+  { key: "business", rail: "Business", title: "Your business", subtitle: "Just the basics. We'll handle the rest." },
   { key: "package", rail: "Package", title: "Choose your package", subtitle: "Pick the plan that fits your business." },
   { key: "checkout", rail: "Pay", title: "Pay & submit", subtitle: "Pay, upload your proof, and submit." },
 ] as const;
@@ -146,7 +146,7 @@ export const STEPS = [
 /** After payment — optional, each skippable ("we'll ask you on WhatsApp"). */
 export const DETAILS_STEPS = [
   { key: "branding", title: "Branding & design", subtitle: "Pick a style and your brand colors." },
-  { key: "products", title: "Products", subtitle: "Add what you sell — you can add more later." },
+  { key: "products", title: "Products", subtitle: "Add what you sell. You can add more later." },
   { key: "orders", title: "Order destination", subtitle: "Where should customer orders go?" },
   { key: "payments", title: "Payment methods", subtitle: "How will your customers pay you?" },
 ] as const;
@@ -158,7 +158,7 @@ export const THEME_STYLE_OPTIONS = [
   { id: "luxury", label: "Luxury / Clean", desc: "Elegant and premium, serif accents.", themeId: "champagne-gold", icon: "Gem" },
   { id: "ecommerce", label: "Modern E-commerce", desc: "Bright, conversion-focused catalog.", themeId: "clinical-white", icon: "ShoppingBag" },
   { id: "dark", label: "Dark Mode", desc: "Sleek dark surfaces, high contrast.", themeId: "midnight-lab", icon: "Moon" },
-  { id: "custom", label: "Custom", desc: "Start neutral — we'll tailor it to your pegs.", themeId: "clinical-white", icon: "Wand2" },
+  { id: "custom", label: "Custom", desc: "Start neutral. We'll tailor it to your pegs.", themeId: "clinical-white", icon: "Wand2" },
 ] as const;
 
 export const ORDER_DESTINATION_OPTIONS = [

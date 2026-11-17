@@ -28,6 +28,7 @@ import { AdminAnnouncementPopup } from "./AdminAnnouncementPopup";
 import { AdminStoreStatus } from "./AdminStoreStatus";
 import { AdminCurrency } from "./AdminCurrency";
 import { AdminTrackNote } from "./AdminTrackNote";
+import { AdminContactMethods } from "./AdminContactMethods";
 import { AdminTimeline } from "./AdminTimeline";
 import { AdminFAQManager } from "./AdminFAQManager";
 import { AdminProtocolsManager } from "./AdminProtocolsManager";
@@ -105,6 +106,7 @@ const VIEWS = [
   "notice",
   "store-status",
   "tracknote",
+  "contact",
   "timeline",
   "billing",
   "upgrade",
@@ -396,6 +398,7 @@ export function AdminPage({
   if (activeView === "store-status") return <AdminStoreStatus brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "currency") return <AdminCurrency brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "tracknote") return <AdminTrackNote brand={brand} onBack={() => setView("dashboard")} />;
+  if (activeView === "contact") return <AdminContactMethods brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "timeline") return <AdminTimeline brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "faq") return <AdminFAQManager brand={brand} onBack={() => setView("dashboard")} />;
   if (activeView === "proto") return <AdminProtocolsManager brand={brand} onBack={() => setView("dashboard")} />;

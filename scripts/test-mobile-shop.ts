@@ -311,7 +311,7 @@ async function main() {
   await test("a tampered client price is ignored", async () => {
     const r = await quote({ store: "alpha", lines: [{ productId: bpc.id, variation: "10mg", qty: 1, price: 1 }] });
     assert.equal(r.json.data.items[0].price, 1800);
-    assert.equal(r.json.data.items[0].name, "BPC-157 — 10mg");
+    assert.equal(r.json.data.items[0].name, "BPC-157 · 10mg");
   });
   await test("a valid promo code discounts; an invalid one is refused", async () => {
     const ok = await quote({ store: "alpha", lines: [{ productId: sale.id, qty: 2 }], promoCode: "secret10" });

@@ -130,7 +130,7 @@ export function AdminBannerSettings({ brand, onBack }: { brand: Brand; onBack: (
       savedTimer.current = setTimeout(() => setShowSaved(false), 2200);
       toast("Announcement banner saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -166,7 +166,7 @@ export function AdminBannerSettings({ brand, onBack }: { brand: Brand; onBack: (
           <div className="hero-editor__intro">
             <h2 className="admin-form__section" style={{ margin: "0 0 8px" }}>Banner under your header</h2>
             <p className="admin-field__hint" style={{ fontSize: 14, lineHeight: 1.6 }}>
-              A slim bar that appears directly under your site header — great for
+              A slim bar that appears directly under your site header, great for
               promos, shipping notices or launches. Turn it on, pick a style, and
               add your messages.
             </p>
@@ -211,7 +211,7 @@ export function AdminBannerSettings({ brand, onBack }: { brand: Brand; onBack: (
           <div className="hero-editor__card">
             <div className="hero-editor__eyebrow"><span /> Messages</div>
             {banner.slides.length === 0 && (
-              <p className="admin-field__hint">No messages yet — add your first one below.</p>
+              <p className="admin-field__hint">No messages yet. Add your first one below.</p>
             )}
             {banner.slides.map((slide, i) => (
               <div key={slide.id} className="admin-field" style={{ border: "1px solid var(--brand-border, #eee)", borderRadius: 10, padding: 12, marginBottom: 12 }}>
@@ -375,7 +375,7 @@ export function AdminBannerSettings({ brand, onBack }: { brand: Brand; onBack: (
           <p className="hero-editor__preview-note">
             {banner.enabled
               ? "Preview reflects your storefront theme and updates as you edit."
-              : "The banner is currently turned off — the preview shows how it would look once enabled."}
+              : "The banner is currently turned off. The preview shows how it would look once enabled."}
           </p>
         </aside>
       </div>

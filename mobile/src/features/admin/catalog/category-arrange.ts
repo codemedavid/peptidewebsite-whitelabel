@@ -14,6 +14,10 @@ type Arrangeable = { id: string; category?: string };
 
 const ALL = "all";
 
+/** The trailing section for products that match no category (category-sections.ts). */
+export const OTHER_SECTION_ID = "__other";
+export const OTHER_SECTION_LABEL = "Other";
+
 /** Product's stored category → one of the store's category ids (exact id,
  *  then case/space-insensitive id, then label), or null. */
 export function categoryResolver(categories: readonly Cat[]): (raw: string | undefined) => string | null {
@@ -58,11 +62,27 @@ export function categoryProducts<T extends Arrangeable>(
   categoryId: string,
 ): T[] {
   const resolve = categoryResolver(categories);
-  const inCategory = products.filter((p) => resolve(p.category) === categoryId);
+  // "Other" holds every product that resolves to no category.
+  const inCategory =
+    categoryId === OTHER_SECTION_ID ? products.filter((p) => resolve(p.category) === null) : products.filter((p) => resolve(p.category) === categoryId);
   const rank = new Map((order[categoryId] ?? []).map((id, i) => [id, i]));
   const listed = inCategory.filter((p) => rank.has(p.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
   const rest = inCategory.filter((p) => !rank.has(p.id));
   return [...listed, ...rest];
+}
+
+/**
+ * Products per category the way the storefront sections count them (loose
+ * matching; unmatched → OTHER_SECTION_ID) — category-sections.ts countByCategory.
+ */
+export function countByCategory(products: readonly { category?: string }[], categories: readonly Cat[]): Map<string, number> {
+  const resolve = categoryResolver(categories);
+  const counts = new Map<string, number>();
+  for (const p of products) {
+    const id = resolve(p.category) ?? OTHER_SECTION_ID;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /** Move one id by `delta` places (clamped). Unknown id = unchanged copy. */

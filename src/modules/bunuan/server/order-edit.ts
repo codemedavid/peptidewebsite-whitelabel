@@ -122,8 +122,8 @@ export async function editOrderLines(
       return gbFail(
         "conflict",
         stage === "payment"
-          ? "Payment time has started — order lines can't change now."
-          : "Ligwak is locked — press Recalculate before changing order lines.",
+          ? "Payment time has started, so order lines can't change now."
+          : "Ligwak is locked. Press Recalculate before changing order lines.",
       );
     }
 

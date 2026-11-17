@@ -59,18 +59,18 @@ export function isGroupBuyPreorder(
 /** Customer-facing copy for the mixing rule, per direction of the rejected add. */
 export const TWO_WAYS_MIX_MESSAGES = {
   gbIntoOnHand:
-    "Group-buy items ship after the round closes, so they're ordered separately — please check out your on-hand items first.",
+    "Group-buy items ship after the round closes, so they're ordered separately. Please check out your on-hand items first.",
   onHandIntoGb:
-    "On-hand items ship now and can't join a group-buy order — please check out your group-buy items first.",
+    "On-hand items ship now and can't join a group-buy order. Please check out your group-buy items first.",
 } as const;
 
 /** The same rule on a group-buy-only store (on-hand way hidden): the stray
  *  line is out of the round, but the store has no "on-hand" to name. */
 export const ONE_WAY_MIX_MESSAGES = {
   gbIntoOther:
-    "Your cart has an item that isn't part of this group buy — please remove it first.",
+    "Your cart has an item that isn't part of this group buy. Please remove it first.",
   otherIntoGb: "This item isn't part of the group buy, so it can't join your group-buy order.",
-  order: "Some items in your cart aren't part of this group buy — please remove them to check out.",
+  order: "Some items in your cart aren't part of this group buy. Please remove them to check out.",
 } as const;
 
 /**
@@ -114,5 +114,5 @@ export function twoWaysOrderViolation(
   if (!hasGb || !hasOnHand) return null;
   return onHandHidden
     ? ONE_WAY_MIX_MESSAGES.order
-    : "This order mixes group-buy and on-hand items — they ship separately, so please place them as two orders.";
+    : "This order mixes group-buy and on-hand items. They ship separately, so please place them as two orders.";
 }

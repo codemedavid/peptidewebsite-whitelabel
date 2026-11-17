@@ -111,7 +111,7 @@ function Plans({ ctx, onUpgrade }: { ctx: UpgradeContext; onUpgrade: () => void 
   return (
     <>
       <AppText variant="body" color="muted">
-        Reactivate your storefront instantly — keep everything with Business, or keep it simple with Starter.
+        Reactivate your storefront instantly. Keep everything with Business, or keep it simple with Starter.
       </AppText>
 
       <Section title="Business">
@@ -119,7 +119,7 @@ function Plans({ ctx, onUpgrade }: { ctx: UpgradeContext; onUpgrade: () => void 
         <MoneyLine label="Per month" value={fmtPesos(ctx.quote.businessCents)} strong />
         {ctx.quote.creditCents > 0 ? (
           <Notice tone="success" icon="pricetag-outline">
-            {`Your ${fmtPesos(ctx.quote.creditCents)} trial payment is deducted — pay only ${fmtPesos(ctx.quote.dueTodayCents)} today`}
+            {`Your ${fmtPesos(ctx.quote.creditCents)} trial payment is deducted, so you pay only ${fmtPesos(ctx.quote.dueTodayCents)} today`}
           </Notice>
         ) : null}
         <View style={{ gap: SPACE.sm }}>
@@ -133,11 +133,11 @@ function Plans({ ctx, onUpgrade }: { ctx: UpgradeContext; onUpgrade: () => void 
             </View>
           ))}
         </View>
-        <Hint>Always growing: every new feature we launch is added to Business as an exclusive — at no extra cost.</Hint>
+        <Hint>Always growing: every new feature we launch is added to Business as an exclusive, at no extra cost.</Hint>
         <Button label="Upgrade to Business" icon="arrow-up-circle-outline" onPress={onUpgrade} />
       </Section>
 
-      <Section title="Starter" hint="Pick one combination — the rest stays locked">
+      <Section title="Starter" hint="Pick one combination. The rest stays locked">
         <MoneyLine label="Per month" value={fmtPesos(ctx.starterCents)} strong />
         <View accessibilityRole="radiogroup" accessibilityLabel="Starter combination" style={{ gap: SPACE.sm }}>
           {STARTER_COMBOS.map((c) => (
@@ -186,7 +186,7 @@ function Pay({ ctx }: { ctx: UpgradeContext }) {
         <View style={{ gap: 2 }}>
           <AppText variant="bodyStrong">Your upgrade is in review.</AppText>
           <AppText variant="caption" color="muted">
-            {"We're confirming your payment — your Business plan (and your storefront, if it's paused) activates the moment it's approved."}
+            {"We're confirming your payment. Your Business plan (and your storefront, if it's paused) activates the moment it's approved."}
           </AppText>
         </View>
       </Notice>
@@ -203,20 +203,20 @@ function Pay({ ctx }: { ctx: UpgradeContext }) {
         ) : null}
         <MoneyLine label="Due today" value={fmtPesos(ctx.quote.dueTodayCents)} strong />
         <Hint>
-          {`Then ${fmtPesos(ctx.quote.businessCents)}/month. Your storefront reactivates as soon as we confirm your payment. All features unlock, including Sales Analytics, Product Card Customization, Checkout Fee and Delivery Note — and every new feature we release.`}
+          {`Then ${fmtPesos(ctx.quote.businessCents)}/month. Your storefront reactivates as soon as we confirm your payment. All features unlock, including Sales Analytics, Product Card Customization, Checkout Fee and Delivery Note, plus every new feature we release.`}
         </Hint>
       </Section>
 
       <Section title="Payment">
         {noMethods ? (
           <Notice tone="warning" icon="alert-circle-outline">
-            No payment methods are configured yet — contact support to complete your upgrade.
+            No payment methods are configured yet. Contact support to complete your upgrade.
           </Notice>
         ) : (
           <View accessibilityRole="radiogroup" accessibilityLabel="Payment method" style={{ gap: SPACE.sm }}>
             {ctx.methods.map((m) => {
               const selected = method === m.method;
-              const sub = [m.account, m.number && `· ${m.number}`, m.note && `— ${m.note}`].filter(Boolean).join(" ");
+              const sub = [m.account, m.number && `· ${m.number}`, m.note && `· ${m.note}`].filter(Boolean).join(" ");
               return (
                 <RadioRow key={m.id} selected={selected} title={m.method} sub={sub || undefined} onPress={() => setMethod(m.method)}>
                   {selected && m.qrUrl ? <Thumb uri={m.qrUrl} label={`${m.method} QR`} size={160} /> : null}

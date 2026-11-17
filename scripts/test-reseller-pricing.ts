@@ -90,7 +90,7 @@ const msg = buildOrderMessage(
   [{ product: tirz15, qty: 10 }, { product: nad, qty: 5 }],
   { name: "A", email: "a@b.c", phone: "1", address: "x", barangay: "bgy", city: "y", province: "z", postal: "" },
 );
-const hasResellerTag = msg.includes("Tirzepatide 15 mg ×10") && msg.includes("reseller — complete set @ ₱1,450/ea");
+const hasResellerTag = msg.includes("Tirzepatide 15 mg ×10") && msg.includes("reseller, complete set @ ₱1,450/ea");
 const nadNoTag = msg.includes("NAD+ 500 mg ×5") && !/NAD\+ 500 mg ×5.*reseller/.test(msg);
 const totalLine = msg.includes("Total: ₱23,000");
 eq("message: Tirz line tagged reseller", hasResellerTag, true);

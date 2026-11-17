@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { ActivityIndicator, FlatList, Linking, Pressable, RefreshControl, ScrollView, Switch, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Switch, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { JoinMode, MemberApplication, MemberStatus } from "@contract";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useMembers, useModeration, useReviewMember, useSetJoinMode, useSetMemberAdmin, useSetVerifiedReseller } from "../hooks/useCommunityData";
+import { useMembers, useModeration, useReviewMember, useSetJoinMode } from "../hooks/useCommunityData";
 import { hueFromString } from "../lib/color";
 import { formatRelative } from "../lib/format";
 import { CHAT, GUTTER, RADII, SHADOWS, useChatBrand } from "../theme";
@@ -23,19 +23,8 @@ const REASON_PRESETS = ["Contact number is unreachable", "Name doesn't match our
 const REASON_MAX = 200;
 const LABEL: Record<MemberStatus, string> = { pending: "Pending", approved: "Approved", rejected: "Not approved", revoked: "Revoked" };
 
-function Contact({ icon, value, onPress }: { icon: IconName; value: string; onPress?: () => void }) {
-  return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "link" : "text"} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32, opacity: pressed ? 0.6 : 1 })}>
-      <Ionicons name={icon} size={16} color={CHAT.inkMuted} />
-      <ChatText variant="subhead" selectable numberOfLines={1} style={{ flex: 1, color: onPress ? CHAT.info : CHAT.inkMuted }}>
-        {value}
-      </ChatText>
-    </Pressable>
-  );
-}
-
 /** Safety bot record on a member card: offenses, mute, ban. */
-function SafetyBadges({ row }: { row: MemberApplication }) {
+export function SafetyBadges({ row }: { row: MemberApplication }) {
   const offenses = row.offenses ?? 0;
   if (!offenses && !row.muted && !row.banned) return null;
   const pill = (label: string, icon: IconName, fg: string, bg: string) => (
@@ -61,7 +50,7 @@ function SafetyEntry() {
   const q = useModeration("pending");
   const pending = q.data?.counts.pending ?? 0;
   const on = q.data?.settings.enabled ?? false;
-  const body = !q.data ? "Checks chats and DMs for invites to other groups." : !on ? "Off — turn it on to check chats and DMs." : pending ? `${pending} hidden message${pending === 1 ? "" : "s"} to review` : "On — nothing to review";
+  const body = !q.data ? "Checks chats and DMs for invites to other groups." : !on ? "Off. Turn it on to check chats and DMs." : pending ? `${pending} hidden message${pending === 1 ? "" : "s"} to review` : "On, nothing to review";
   return (
     <Pressable
       onPress={() => router.push("/community/safety")}
@@ -87,7 +76,7 @@ function SafetyEntry() {
 }
 
 /** Store team, approved members: a labelled switch (verified reseller, community admin). */
-function MemberSwitch({
+export function MemberSwitch({
   icon,
   title,
   body,
@@ -133,36 +122,36 @@ function ApplicationCard({
   row,
   isTeam,
   busy,
-  resellerBusy,
-  adminBusy,
   onApprove,
   onReject,
-  onReseller,
-  onAdmin,
-  onOrders,
+  onOpen,
 }: {
   row: MemberApplication;
-  /** The store team sees contact details and the reseller / admin switches. */
+  /** The store team sees contact details (community admins get them blank). */
   isTeam: boolean;
   busy: boolean;
-  resellerBusy: boolean;
-  adminBusy: boolean;
   onApprove: () => void;
   onReject: () => void;
-  onReseller: (next: boolean) => void;
-  onAdmin: (next: boolean) => void;
-  /** Opens the member's order history — store team with the Orders grant only. */
-  onOrders?: () => void;
+  /** Opens the member's detail screen (profile, contact, roles, password, orders). */
+  onOpen: () => void;
 }) {
   const name = row.displayName || row.email.split("@")[0] || "Member";
   // Community admins can't act on another admin, or take back someone removed — only the store team can.
   const canReview = isTeam || !row.isAdmin;
-  const dial = row.phone.replace(/[^\d+]/g, "");
+  const showApprove = canReview && row.status !== "approved" && (isTeam || row.status === "pending");
+  const showReject = canReview && (row.status === "pending" || row.status === "approved") && row.status !== "approved";
+  const when = `Applied ${formatRelative(row.submittedAt)}${row.reviewedAt ? ` · reviewed ${formatRelative(row.reviewedAt)}` : ""}`;
   return (
-    <View style={[{ backgroundColor: CHAT.surface, borderRadius: RADII.lg, padding: 14, gap: 12 }, SHADOWS.hairline]}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+    <View style={[{ backgroundColor: CHAT.surface, borderRadius: RADII.lg, overflow: "hidden" }, SHADOWS.hairline]}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}. ${LABEL[row.status]}.`}
+        accessibilityHint="Opens their profile, contact details and password reset"
+        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: pressed ? CHAT.surfacePressed : CHAT.surface })}
+      >
         <Avatar name={name} hue={hueFromString(row.customerId)} size={44} />
-        <View style={{ flex: 1, gap: 1 }}>
+        <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <ChatText variant="headline" numberOfLines={1} style={{ flexShrink: 1 }}>
               {name}
@@ -170,62 +159,39 @@ function ApplicationCard({
             {row.isAdmin ? <RoleBadge role="admin" /> : null}
             {row.verifiedReseller ? <RoleBadge role="reseller" /> : null}
           </View>
+          {isTeam && row.email ? (
+            <ChatText variant="subhead" color={CHAT.inkMuted} numberOfLines={1}>
+              {row.email}
+            </ChatText>
+          ) : null}
           <SafetyBadges row={row} />
           <ChatText variant="footnote" numberOfLines={1}>
-            {`Applied ${formatRelative(row.submittedAt)}${row.reviewedAt ? ` · reviewed ${formatRelative(row.reviewedAt)}` : ""}`}
+            {when}
           </ChatText>
         </View>
-      </View>
-      {row.email ? (
-        <View style={{ gap: 4, backgroundColor: CHAT.surfaceAlt, borderRadius: RADII.md, padding: 10 }}>
-          <Contact icon="mail-outline" value={row.email} onPress={() => void Linking.openURL(`mailto:${row.email}`)} />
-          <Contact icon="call-outline" value={row.phone || "No number given"} onPress={dial ? () => void Linking.openURL(`tel:${dial}`) : undefined} />
-        </View>
-      ) : null}
-      {onOrders ? (
-        <ChatButton label="Order history" icon="receipt-outline" tone="outline" accessibilityLabel={`${name}'s order history`} onPress={onOrders} />
-      ) : null}
-      {isTeam && row.status === "approved" ? (
-        <>
-          <MemberSwitch
-            icon="star-outline"
-            title="Community admin"
-            body="Manages channels and approves or removes members. Can't use store tools."
-            value={row.isAdmin === true}
-            busy={adminBusy}
-            onChange={onAdmin}
-          />
-          <MemberSwitch
-            icon="shield-checkmark-outline"
-            title="Verified reseller"
-            body="Posts their on-hand products in the Verified Resellers Hub, with a verified tag in chat."
-            value={row.verifiedReseller}
-            busy={resellerBusy}
-            onChange={onReseller}
-          />
-        </>
-      ) : null}
+        <Ionicons name="chevron-forward" size={18} color={CHAT.inkFaint} />
+      </Pressable>
       {row.reason && (row.status === "rejected" || row.status === "revoked") ? (
-        <View style={{ borderLeftWidth: 3, borderLeftColor: CHAT.danger, paddingLeft: 10 }}>
+        <View style={{ marginHorizontal: 14, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: CHAT.danger, paddingLeft: 10 }}>
           <ChatText variant="footnote" color={CHAT.danger}>
             Reason given
           </ChatText>
-          <ChatText variant="subhead" color={CHAT.ink}>
+          <ChatText variant="subhead" color={CHAT.ink} numberOfLines={2}>
             {row.reason}
           </ChatText>
         </View>
       ) : null}
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {canReview && (row.status === "pending" || row.status === "approved") ? (
-          <ChatButton label={row.status === "approved" ? "Revoke" : "Reject"} tone="danger" disabled={busy} onPress={onReject} style={{ flex: 1 }} />
-        ) : null}
-        {canReview && row.status !== "approved" && (isTeam || row.status === "pending") ? <ChatButton label="Approve" icon="checkmark" loading={busy} onPress={onApprove} style={{ flex: 1.4 }} /> : null}
-      </View>
+      {showApprove || showReject ? (
+        <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingBottom: 14 }}>
+          {showReject ? <ChatButton label="Reject" tone="danger" disabled={busy} onPress={onReject} style={{ flex: 1 }} /> : null}
+          {showApprove ? <ChatButton label="Approve" icon="checkmark" loading={busy} onPress={onApprove} style={{ flex: 1.4 }} /> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function RejectSheet({ row, onClose, onSubmit, busy }: { row: MemberApplication | null; onClose: () => void; onSubmit: (reason: string) => void; busy: boolean }) {
+export function RejectSheet({ row, onClose, onSubmit, busy }: { row: MemberApplication | null; onClose: () => void; onSubmit: (reason: string) => void; busy: boolean }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const revoking = row?.status === "approved";
@@ -334,18 +300,12 @@ export function MembersScreen({ asTab = false, headerRight }: { asTab?: boolean;
   const b = useChatBrand();
   const { me } = useSignedIn();
   const isTeam = me.community.isModerator;
-  // Order history is a store tool: the team's Orders grant, never a community admin's.
-  const canSeeOrders = me.can.orders;
   const joinMode = me.community.joinMode;
   const open = joinMode === "open";
   // An open community has no queue: start on the people already in.
   const [tab, setTab] = useState<MemberStatus>(open ? "approved" : "pending");
   const q = useMembers(tab);
   const review = useReviewMember();
-  const reseller = useSetVerifiedReseller();
-  const admin = useSetMemberAdmin();
-  const [resellerBusyId, setResellerBusyId] = useState<string | null>(null);
-  const [adminBusyId, setAdminBusyId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<MemberApplication | null>(null);
@@ -372,31 +332,7 @@ export function MembersScreen({ asTab = false, headerRight }: { asTab?: boolean;
     );
   };
 
-  const setReseller = (row: MemberApplication, value: boolean) => {
-    setResellerBusyId(row.customerId);
-    setActionError(null);
-    reseller.mutate(
-      { customerId: row.customerId, value },
-      {
-        onSuccess: () => void Haptics.selectionAsync().catch(() => undefined),
-        onError: (e) => setActionError(e.message),
-        onSettled: () => setResellerBusyId(null),
-      },
-    );
-  };
 
-  const setAdmin = (row: MemberApplication, value: boolean) => {
-    setAdminBusyId(row.customerId);
-    setActionError(null);
-    admin.mutate(
-      { customerId: row.customerId, value },
-      {
-        onSuccess: () => void Haptics.selectionAsync().catch(() => undefined),
-        onError: (e) => setActionError(e.message),
-        onSettled: () => setAdminBusyId(null),
-      },
-    );
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: CHAT.canvas }}>
@@ -444,17 +380,9 @@ export function MembersScreen({ asTab = false, headerRight }: { asTab?: boolean;
               row={item}
               isTeam={isTeam}
               busy={busyId === item.customerId}
-              resellerBusy={resellerBusyId === item.customerId}
-              adminBusy={adminBusyId === item.customerId}
               onApprove={() => decide(item, true)}
               onReject={() => setRejecting(item)}
-              onReseller={(next) => setReseller(item, next)}
-              onAdmin={(next) => setAdmin(item, next)}
-              onOrders={
-                canSeeOrders
-                  ? () => router.push({ pathname: "/customer-account/[id]", params: { id: item.customerId } })
-                  : undefined
-              }
+              onOpen={() => router.push({ pathname: "/community/member/[id]", params: { id: item.customerId } })}
             />
           )}
         />

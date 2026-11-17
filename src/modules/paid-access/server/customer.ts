@@ -304,7 +304,7 @@ export async function cancelJoin(input: Base): Promise<JoinResult> {
     ]);
     return (await settleSlots(db, input.tenantId, m.groupBuyId, m.flowId, now)).promoted;
   });
-  if (!promoted) return fail("conflict", "That changed just now — please refresh.");
+  if (!promoted) return fail("conflict", "That changed just now. Please refresh.");
   notifyPromoted(input.tenantId, promoted);
   return { ok: true, state: await stateFor(ctx, input.tenantId, input.customer.id, now) };
 }

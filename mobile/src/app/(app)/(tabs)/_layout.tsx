@@ -10,6 +10,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE, TOUCH } from "@/theme/tokens";
 import { BrandMark } from "@/ui/BrandMark";
 import { AppText, type IconName } from "@/ui/primitives";
+import { readingScreenLayout } from "@/ui/ReadingColumn";
 
 function tabIcon(name: IconName, active: IconName) {
   return function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
@@ -121,6 +122,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenLayout={readingScreenLayout}
       screenOptions={{
         // The website's header bar (its own colours, or its surface when unset).
         headerStyle: { backgroundColor: t.brand.headerBackground },

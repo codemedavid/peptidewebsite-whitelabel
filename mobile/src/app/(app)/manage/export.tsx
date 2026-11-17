@@ -49,7 +49,7 @@ export default function ExportScreen() {
       <FormPage>
         <Section title="Your data is yours">
           <AppText variant="body" color="muted">
-            Download your products, customers and complete order history at any time — no request, no waiting. The spreadsheets open in Excel,
+            Download your products, customers and complete order history at any time, with no request and no waiting. The spreadsheets open in Excel,
             Numbers or Google Sheets, and the JSON file is what a developer would use to import your store somewhere else. Orders you have
             deleted are included too, flagged “Deleted”, so nothing is left behind.
           </AppText>
@@ -60,7 +60,7 @@ export default function ExportScreen() {
             disabled={!!busy || !online}
             onPress={() => void exportFiles(null)}
           />
-          <Hint>Saves all five files — your phone opens the share sheet for each one, so you can save them to Files or Drive, or send them.</Hint>
+          <Hint>Saves all five files. Your phone opens the share sheet for each one, so you can save them to Files or Drive, or send them.</Hint>
           {bundle ? (
             <Hint>
               {`Last export: ${bundle.counts.products} products · ${bundle.counts.orders} orders · ${bundle.counts.orderItems} order lines · ${bundle.counts.customers} customers.`}
@@ -105,7 +105,7 @@ function Inside({ label, text }: { label: string; text: string }) {
       <AppText variant="caption" style={{ fontWeight: "700" }}>
         {label}
       </AppText>
-      {` — ${text}`}
+      {`: ${text}`}
     </AppText>
   );
 }

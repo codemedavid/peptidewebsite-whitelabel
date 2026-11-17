@@ -71,7 +71,7 @@ export function InvoiceCard({
       {value.enabled ? (
         <>
           <View style={{ gap: SPACE.xs }}>
-            <SummaryLine icon="cube-outline" text={`Shipping ${value.shippingFee > 0 ? money(value.shippingFee, currency) : "free"} — once per customer per round`} />
+            <SummaryLine icon="cube-outline" text={`Shipping ${value.shippingFee > 0 ? money(value.shippingFee, currency) : "free"}, once per customer per round`} />
             <SummaryLine icon="add-circle-outline" text="Ordering again in the same round adds to the same invoice" />
             <SummaryLine
               icon="wallet-outline"
@@ -209,7 +209,7 @@ export function InvoiceEditor({
           onChangeText={setUnit}
           maxLength={GB_INVOICE_LIMITS.unit}
           placeholder="vial"
-          hint="Shown after each quantity — “2 vials”. Leave blank for just the number."
+          hint="Shown after each quantity, like “2 vials”. Leave blank for just the number."
         />
       </Section>
 
@@ -235,7 +235,7 @@ export function InvoiceEditor({
               value={m.details}
               multiline
               maxLength={GB_INVOICE_LIMITS.methodDetails}
-              placeholder="016793762828 - Account Name"
+              placeholder="016793762828, Account Name"
               onChangeText={(details) => patchMethod(m.id, { details })}
             />
             <ImageField
@@ -277,7 +277,7 @@ export function InvoiceEditor({
         ) : null}
       </Section>
 
-      <Section title="Preview" hint="A sample customer with two orders in one round — one shipping fee.">
+      <Section title="Preview" hint="A sample customer with two orders in one round, charged one shipping fee.">
         <View style={[styles.bubble, { backgroundColor: t.colors.surfaceAlt, borderLeftColor: t.brand.primary }]}>
           <AppText variant="caption" color="muted" style={styles.bubbleHead}>
             ORDER UPDATES · BOT
@@ -312,7 +312,7 @@ function sentMessage(r: SendResult): string {
   const parts = [
     r.sent > 0 ? `${r.sent} invoice${r.sent === 1 ? "" : "s"} sent in Chats.` : "No new invoices to send.",
     r.unchanged > 0 ? `${r.unchanged} customer${r.unchanged === 1 ? " already has" : "s already have"} an up-to-date invoice.` : "",
-    r.guests > 0 ? `${r.guests} guest order${r.guests === 1 ? "" : "s"} can't get one — no app account to message.` : "",
+    r.guests > 0 ? `${r.guests} guest order${r.guests === 1 ? "" : "s"} can't get one (no app account to message).` : "",
   ];
   return parts.filter(Boolean).join("\n");
 }

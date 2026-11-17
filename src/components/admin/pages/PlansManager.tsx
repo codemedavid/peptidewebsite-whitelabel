@@ -287,7 +287,7 @@ export function PlansManager({
                     style={{ width: 130, fontSize: 12 }}
                     value={p.tag}
                     maxLength={40}
-                    placeholder="Badge — e.g. Popular"
+                    placeholder="Badge, e.g. Popular"
                     onChange={(e) => patchPlan(p.key, { tag: e.target.value })}
                   />
                 </div>
@@ -318,7 +318,7 @@ export function PlansManager({
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <label className="field-label">First-month price (₱) — optional</label>
+                  <label className="field-label">First-month price (₱), optional</label>
                   <input
                     className="input"
                     style={{ width: "100%", marginTop: 4 }}
@@ -331,7 +331,7 @@ export function PlansManager({
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <label className="field-label">Yearly price (₱) — prepaid 12 months</label>
+                  <label className="field-label">Yearly price (₱), prepaid 12 months</label>
                   <input
                     className="input"
                     style={{ width: "100%", marginTop: 4 }}
@@ -343,7 +343,7 @@ export function PlansManager({
                   />
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <label className="field-label">Setup fee (₱) — one-time</label>
+                  <label className="field-label">Setup fee (₱), one-time</label>
                   <input
                     className="input"
                     style={{ width: "100%", marginTop: 4 }}
@@ -363,7 +363,7 @@ export function PlansManager({
                       checked={p.setupFeeWaived}
                       onChange={(e) => patchPlan(p.key, { setupFeeWaived: e.target.checked })}
                     />
-                    Waived — show as &ldquo;FREE setup&rdquo; with the fee struck through
+                    Waived: show as &ldquo;FREE setup&rdquo; with the fee struck through
                   </label>
                 </div>
                 <div style={{ marginTop: 10 }}>

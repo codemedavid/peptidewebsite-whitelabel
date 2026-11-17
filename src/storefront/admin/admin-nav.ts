@@ -94,6 +94,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   { view: "fee", label: "Checkout Fee", hint: "Shipping / service fee", icon: "tag", tint: "yellow", group: "occasional" },
   { view: "checkout", label: "Smart Checkout", hint: "Cart & checkout rules", icon: "shield", tint: "cyan", group: "occasional" },
   { view: "pay", label: "Payments", hint: "Manage methods", icon: "card", tint: "purple", group: "occasional" },
+  { view: "contact", label: "Contact Methods", hint: "WhatsApp, Messenger & more for orders", icon: "help", tint: "green", group: "occasional", ownerOnly: true },
   { view: "faq", label: "FAQ", hint: "Manage content", icon: "help", tint: "green", group: "occasional" },
   { view: "proto", label: "Protocols", hint: "Peptide guides", icon: "shield", tint: "pink", group: "occasional" },
   { view: "articles", label: "Articles", hint: "Blog posts & guides", icon: "folder", tint: "cyan", group: "occasional" },

@@ -423,7 +423,7 @@ export function normalizeCalendarEventInput(raw: CalendarEventInput): CalendarNo
   // Round-trip guards against a well-formed but impossible date (Feb 30),
   // which Date would otherwise roll forward into the next month.
   if (Number.isNaN(startsAt.getTime()) || utcDayIso(startsAt) !== day) {
-    return { ok: false, error: "That date doesn't exist — pick another." };
+    return { ok: false, error: "That date doesn't exist. Pick another." };
   }
 
   const kindRaw = trimmedOrNull(raw.kind) ?? "note";

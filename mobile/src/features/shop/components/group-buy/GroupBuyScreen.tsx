@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, Stack } from "expo-router";
@@ -23,6 +23,7 @@ import { CartButton, Notice } from "../ShopUI";
 import { CatalogError } from "../ShopStates";
 import { groupBuyBand, LiveDot, RoundClock, SlotBar, URGENCY_COLOR } from "./GroupBuyParts";
 import { GroupBuyJoinScreen } from "./GroupBuyJoin";
+import { useGrid } from "@/ui/responsive";
 
 const GAP = SPACE.md;
 const GUTTER = SPACE.lg;
@@ -97,11 +98,10 @@ function useShareMode(): ShareMode {
 function RoundBody({ round, catalog, refreshing, onRefresh }: { round: ShopGroupBuy; catalog: ShopCatalog; refreshing: boolean; onRefresh: () => void }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { columns, tile } = useGrid(GUTTER, GAP);
   const shop = useShop();
   const mode = useShareMode();
   const [sharing, setSharing] = useState(false);
-  const tile = Math.floor((width - GUTTER * 2 - GAP) / 2);
   const products = useMemo(() => roundProducts(catalog), [catalog]);
   const open = useCallback((id: string) => router.push(shop.paths.product(id)), [shop.paths]);
   const canShare = mode !== null && round.ordering === "open";
@@ -111,8 +111,9 @@ function RoundBody({ round, catalog, refreshing, onRefresh }: { round: ShopGroup
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <FlatList
         data={products}
+        key={`grid-${columns}`}
         keyExtractor={(p) => p.id}
-        numColumns={2}
+        numColumns={columns}
         columnWrapperStyle={{ gap: GAP, paddingHorizontal: GUTTER }}
         ItemSeparatorComponent={Separator}
         contentContainerStyle={{ paddingBottom: SPACE.xxxl + insets.bottom + barHeight }}
@@ -123,7 +124,7 @@ function RoundBody({ round, catalog, refreshing, onRefresh }: { round: ShopGroup
             <View style={{ paddingHorizontal: GUTTER, gap: SPACE.md }}>
               {round.ordering === "closed" ? (
                 <Notice tone="warning" icon="pause-circle">
-                  Ordering is paused for this round. Prices are shown so you can plan — check back soon.
+                  Ordering is paused for this round. Prices are shown so you can plan. Check back soon.
                 </Notice>
               ) : !catalog.open ? (
                 <Notice tone="warning" icon="moon">

@@ -71,12 +71,12 @@ export function unavailableLineViolation(products: readonly GuardProduct[], item
     const prod = products.find((x) => (it.productId ? x.id === it.productId : x.name === it.name));
     if (!prod) continue;
     if (prod.available === false || !hasListedOption(prod)) {
-      return `"${prod.name}" isn't available right now — please remove it from your cart.`;
+      return `"${prod.name}" isn't available right now. Please remove it from your cart.`;
     }
     if (!it.variation) continue;
     const option = (prod.variations ?? []).find((v) => v.name === it.variation);
     if (option && !isVariationListed(option)) {
-      return `"${prod.name} ${it.variation}" isn't available right now — please remove it from your cart.`;
+      return `"${prod.name} ${it.variation}" isn't available right now. Please remove it from your cart.`;
     }
   }
   return null;

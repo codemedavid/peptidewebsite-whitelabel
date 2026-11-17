@@ -98,7 +98,7 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
       setMode(null);
       setDone(
         res.changed === 0
-          ? "Already up to date — nothing changed."
+          ? "Already up to date. Nothing changed."
           : `Applied. ${res.changed} change${res.changed === 1 ? "" : "s"} written.`,
       );
     });
@@ -114,7 +114,7 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
       setMode(null);
       setDone(
         res.changed === 0
-          ? "This preset is not applied — nothing changed."
+          ? "This preset is not applied. Nothing changed."
           : `Removed. ${res.changed} change${res.changed === 1 ? "" : "s"} written, ` +
               `${res.revoked} entitlement${res.revoked === 1 ? "" : "s"} revoked.`,
       );
@@ -134,7 +134,7 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
         <div>
           <h3 className="card-title">Store preset</h3>
           <div className="card-sub">
-            Stamp a whole store shape onto this tenant — layout, modules and entitlements.
+            Stamp a whole store shape onto this tenant: layout, modules and entitlements.
             Additive: name, logo, colors, theme, catalog and lab reports are never touched, and existing
             group-buy rules, copy and round defaults are kept as the owner set them. Removing
             switches the shape back off and revokes its entitlements; the theme, catalog and those
@@ -280,7 +280,7 @@ export function ApplyTenantPresetCard({ slug }: { slug: string }) {
               <div style={{ fontSize: 12, color: "var(--warning, #9A6206)" }}>
                 Included in this tenant&rsquo;s plan:{" "}
                 <span className="mono">{mode.data.planGranted.join(", ")}</span>. Revoking writes a
-                block that outlasts the preset — the store loses a feature it pays for until you
+                block that outlasts the preset, so the store loses a feature it pays for until you
                 re-enable it under Features.
               </div>
             )}

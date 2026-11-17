@@ -47,15 +47,15 @@ import {
  *  absent: it is a sold module whose grant lives with the operator, so offering
  *  it here would be a control that silently does nothing for most tenants. */
 const OWNER_LAYOUTS: Record<string, Brand["homeLayout"]> = {
-  "Classic — hero, category chips, catalog": "classic",
-  "Boutique — banner, category tiles, catalog": "boutique",
-  "Editorial — side menu, category index, catalog": "editorial",
-  "Showcase — promise bar, split hero, featured shelf": "showcase",
+  "Classic: hero, category chips, catalog": "classic",
+  "Boutique: banner, category tiles, catalog": "boutique",
+  "Editorial: side menu, category index, catalog": "editorial",
+  "Showcase: promise bar, split hero, featured shelf": "showcase",
   // Sells by group buy ONLY — needs the Group Buy module, else it renders classic.
-  "Group buy only — the round is the home": "groupbuy",
+  "Group buy only: the round is the home": "groupbuy",
   // Content lives in branding.config.intlLocal, edited by the store owner in
   // #admin → Website Layout (defaults apply until they edit it).
-  "Intl & Local — mega-menu, market cards, learn cards": "intl-local",
+  "Intl & Local: mega-menu, market cards, learn cards": "intl-local",
 };
 
 /** Shown, but not selectable, for a tenant the operator granted it to — so
@@ -160,7 +160,7 @@ export function BoutiqueEditor({
           {assurances.length === 0 && (
             <TweakRow label="Assurances">
               <span style={{ fontSize: 12, opacity: 0.7 }}>
-                None yet — the strip is hidden until you add one.
+                None yet. The strip is hidden until you add one.
               </span>
             </TweakRow>
           )}

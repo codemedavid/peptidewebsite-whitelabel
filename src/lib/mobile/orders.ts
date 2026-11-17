@@ -13,9 +13,24 @@ import { isOrderStatus } from "@/lib/storefront/order-status";
 import type { Order } from "@/storefront/types";
 import { formatMoney } from "@/lib/storefront/currency";
 import { normalizeGroupBuyInvoice } from "@/lib/storefront/gb-invoice";
-import type { OrderDetail, OrderListResponse, OrderUpdateRequest, WaybillsResponse } from "./contract";
+import type {
+  OrderDetail,
+  OrderListResponse,
+  OrderPaymentFilter,
+  OrderStatus,
+  OrderUpdateRequest,
+  WaybillsResponse,
+} from "./contract";
 import type { MobileContext } from "./auth";
-import { queueCountsFrom, statusCountsFrom, statusesForFilter, toOrderDetail, toOrderSummary } from "./order-view";
+import {
+  facetCountsFrom,
+  paymentFilterOf,
+  queueCountsFrom,
+  statusesForFilter,
+  toOrderDetail,
+  toOrderSummary,
+} from "./order-view";
+import { folderWhere, loadFolderRounds, parseFolder } from "./order-folder-scope";
 import { loadRoundRows, scheduledRoundsOn } from "./order-rounds.server";
 import { roundFacets, roundWhere, type RoundCount, type RoundRow } from "./order-rounds";
 import { toWaybill, WAYBILL_LIMIT, type WaybillQuery } from "./waybill";
@@ -35,16 +50,35 @@ const MAX_PAGE_SIZE = 50;
 const MAX_QUERY = 80;
 const TO_FULFIL = statusesForFilter("to-fulfil")!;
 
-/** Every status's count in ONE grouped query: the per-status tab badges plus
- *  the two legacy queue badges derived from the same rows. */
-async function allStatusCounts(db: TenantTx) {
+/** Status x payment counts in ONE grouped query over the folder/round scope:
+ *  the status tabs, payment chips and queue badges, each counted under the
+ *  other facet's choice (facetCountsFrom). */
+async function facetCounts(
+  db: TenantTx,
+  scope: Prisma.StorefrontOrderWhereInput,
+  statuses: readonly OrderStatus[] | null,
+  payment: OrderPaymentFilter,
+) {
   const groups = await db.storefrontOrder.groupBy({
-    by: ["status"],
-    where: ACTIVE_ORDERS_WHERE,
+    by: ["status", "paymentStatus"],
+    where: scope,
     _count: { _all: true },
   });
-  const rows = groups.map((g) => ({ status: g.status, count: g._count._all }));
-  return { counts: queueCountsFrom(rows), statusCounts: statusCountsFrom(rows) };
+  return facetCountsFrom(
+    groups.map((g) => ({ status: g.status, paymentStatus: g.paymentStatus, count: g._count._all })),
+    statuses,
+    payment,
+  );
+}
+
+/** "Marked paid", case-insensitive like isPaid (a legacy "PAID" row is paid). */
+const PAID_WHERE: Prisma.StorefrontOrderWhereInput = { paymentStatus: { equals: "paid", mode: "insensitive" } };
+
+/** The payment chip as a where-clause; "unpaid" = the web's "Not confirmed". */
+function paymentWhere(payment: OrderPaymentFilter): Prisma.StorefrontOrderWhereInput | null {
+  if (payment === "paid") return PAID_WHERE;
+  if (payment === "unpaid") return { AND: [{ NOT: PAID_WHERE }, { status: { not: "cancelled" } }] };
+  return null;
 }
 
 /** Both queue badges in one grouped query (see queueCountsFrom). */
@@ -100,47 +134,63 @@ export async function listOrders(
   params: URLSearchParams,
 ): Promise<OrderListResponse> {
   const statuses = statusesForFilter(params.get("filter"));
+  const payment = paymentFilterOf(params.get("payment"));
   const q = (params.get("q") ?? "").trim().slice(0, MAX_QUERY);
   const cursor = decodeCursor(params.get("cursor"));
   const limit = Math.min(Math.max(Number(params.get("limit")) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
   const round = roundWhere(params.get("round"));
+  const folder = parseFolder(params.get("folder"));
+  // loadGroupBuys opens its own transaction, so the rounds are read first.
+  const folderRounds = await loadFolderRounds(ctx.tenantId, ctx.slug, folder);
 
   const result = await withTenant(ctx.tenantId, async (db) => {
-    const ids = q ? await searchIds(db, ctx.tenantId, q) : null;
-    // The view before the round filter — what the round bar counts.
-    const view: Prisma.StorefrontOrderWhereInput = {
+    const [ids, inFolder] = await Promise.all([
+      q ? searchIds(db, ctx.tenantId, q) : Promise.resolve(null),
+      folderWhere(db, folder, folderRounds),
+    ]);
+    // The folder (web Orders hub) and round scope — what the chips count.
+    const scope: Prisma.StorefrontOrderWhereInput = {
       ...ACTIVE_ORDERS_WHERE,
-      ...(statuses ? { status: { in: statuses } } : {}),
-      ...(ids ? { id: { in: ids } } : {}),
+      AND: [inFolder ?? {}, round ?? {}],
     };
+    const filters: Prisma.StorefrontOrderWhereInput[] = [
+      inFolder ?? {},
+      statuses ? { status: { in: statuses } } : {},
+      paymentWhere(payment) ?? {},
+      ids ? { id: { in: ids } } : {},
+    ];
+    // The view before the round filter — what the round bar counts.
+    const view: Prisma.StorefrontOrderWhereInput = { ...ACTIVE_ORDERS_WHERE, AND: filters };
     const where: Prisma.StorefrontOrderWhereInput = {
-      ...view,
-      ...(round ?? {}),
-      ...(cursor
-        ? {
-            OR: [
-              { createdAt: { lt: cursor.createdAt } },
-              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-            ],
-          }
-        : {}),
+      ...ACTIVE_ORDERS_WHERE,
+      AND: [
+        ...filters,
+        round ?? {},
+        cursor
+          ? {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {},
+      ],
     };
-    const [rows, { counts, statusCounts }, rounds] = await Promise.all([
+    const [rows, facets, rounds] = await Promise.all([
       db.storefrontOrder.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
       }),
-      allStatusCounts(db),
+      facetCounts(db, scope, statuses, payment),
       cursor ? Promise.resolve(null) : roundBar(db, view),
     ]);
     const page = rows.slice(0, limit);
     return {
       orders: page.map((r) => toOrderSummary(dbOrderToStorefront(r as DbOrderRow), currencyOf(ctx))),
       nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null,
-      counts,
-      statusCounts,
+      ...facets,
       rounds,
     };
   });

@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, StyleSheet, TextInput, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
-import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
 import type { StoreChoice } from "@contract";
 import { ApiError } from "@/api/client";
 import { readLastEmail } from "@/auth/storage";
 import { useSession } from "@/auth/SessionProvider";
-import { APP_NAME, GUEST_BROWSING, SUPPORT_URL } from "@/config";
+import { GUEST_BROWSING } from "@/config";
 import { AuthField } from "@/features/session/sign-in/AuthField";
 import { BackButton, Banner, PrimaryCta, StoreLogo, TextLink, useAuthAccent } from "@/features/session/sign-in/parts";
 import { SheetHeading, StorePicker } from "@/features/session/sign-in/StoreSteps";
@@ -84,19 +83,10 @@ export default function SignIn() {
     }
   }
 
+  // Opens the in-app reset: the member messages the store (email pre-written)
+  // on the apps the owner turned on in Contact Methods.
   function forgotPassword() {
-    Alert.alert(
-      "Forgot your password?",
-      linked
-        ? `Customers: message ${linked.name} and ask them to reset it. They'll send you a temporary password.\n\nStore team: ask the store owner, or contact ${APP_NAME}.`
-        : `Shoppers: message the store you shop at and ask them to reset it. They'll send you a temporary password.\n\nStore owners: contact ${APP_NAME} and we'll reset it.\n\nStaff: ask your store owner to reset your password.`,
-      [
-        { text: "Close", style: "cancel" },
-        linked
-          ? { text: "Message the store", onPress: () => void WebBrowser.openBrowserAsync(linked.websiteUrl) }
-          : { text: `Contact ${APP_NAME}`, onPress: () => void WebBrowser.openBrowserAsync(SUPPORT_URL) },
-      ],
-    );
+    router.push({ pathname: "/forgot-password", params: email.trim() ? { email: email.trim() } : {} });
   }
 
   const backToWelcome = () => (router.canGoBack() ? router.back() : router.replace("/welcome"));

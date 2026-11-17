@@ -123,7 +123,7 @@ function categoriesFor(brand: Brand, products: ShopProduct[]): ShopCategory[] {
 function closedCopy(brand: Brand): { open: boolean; closedMessage: string } {
   const status = normalizeStoreStatus(brand.storeStatus);
   if (status.open) return { open: true, closedMessage: "" };
-  const copy = [status.headline, status.message].filter(Boolean).join(" — ");
+  const copy = [status.headline, status.message].filter(Boolean).join(" · ");
   return { open: false, closedMessage: copy || STORE_CLOSED_BLOCK_MESSAGE };
 }
 

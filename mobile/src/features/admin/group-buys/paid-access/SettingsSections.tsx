@@ -81,7 +81,7 @@ export function PaymentSection({ draft, texts, onDraft, onTexts, errorFor, curre
         {errorFor("payment.method") ? (
           <Hint tone="danger">{errorFor("payment.method")}</Hint>
         ) : !onlineAvailable ? (
-          <Hint>Online payments aren&apos;t connected for this store yet — use proof upload for now.</Hint>
+          <Hint>Online payments aren&apos;t connected for this store yet. Use proof upload for now.</Hint>
         ) : null}
       </View>
       <View style={{ gap: SPACE.xs }}>
@@ -211,7 +211,7 @@ export function CopySection({ draft, onDraft, errorFor }: SectionProps) {
         label="Note under the button"
         value={copy.note}
         onChangeText={(note) => set({ note })}
-        placeholder="Already approved? Verify your email on the next screen — no account needed."
+        placeholder="Already approved? Verify your email on the next screen. No account needed."
         maxLength={COPY_LIMITS.note}
         multiline
         error={errorFor("copy.note")}

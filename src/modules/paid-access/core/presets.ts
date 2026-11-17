@@ -13,7 +13,7 @@ export type PaidAccessPresetId = (typeof PAID_ACCESS_PRESET_IDS)[number];
 export type PaidAccessPreset = { id: PaidAccessPresetId; label: string; description: string; steps: readonly PaidAccessStep[] };
 
 export const PAID_ACCESS_PRESETS: readonly PaidAccessPreset[] = [
-  { id: "open", label: "Open", description: "Anyone can join instantly — no payment, no approval.", steps: [] },
+  { id: "open", label: "Open", description: "Anyone can join instantly: no payment, no approval.", steps: [] },
   { id: "pay_to_join", label: "Pay to join", description: "Members get in as soon as their payment is confirmed.", steps: ["payment"] },
   {
     id: "pay_then_approve",

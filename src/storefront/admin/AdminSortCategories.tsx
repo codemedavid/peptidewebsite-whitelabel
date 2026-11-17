@@ -176,7 +176,7 @@ export function AdminSortCategories({
 
         <p className="admin-hint">
           This is the “Sort” menu on your shop page, top to bottom. A{" "}
-          <strong>category</strong> is your own group — assign products to it when you add
+          <strong>category</strong> is your own group. Assign products to it when you add
           or edit them, and choosing it brings those products to the front. A{" "}
           <strong>built-in</strong> sorts the whole catalog automatically. Turning one off
           hides it from the menu; it never hides your products.
@@ -313,7 +313,7 @@ export function AdminSortCategories({
 
           {cats.length === 0 && (
             <div className="admin-empty-set" style={{ gridColumn: "1 / -1" }}>
-              Your sort menu is empty — shoppers will see the default Name and Price
+              Your sort menu is empty. Shoppers will see the default Name and Price
               options until you add your own.
               <button className="admin-empty-set__cta" onClick={addGroup}>
                 + Add your first category

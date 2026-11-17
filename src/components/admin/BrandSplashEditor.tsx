@@ -37,7 +37,7 @@ const DESIGN_LABELS: Record<SplashDesign, { label: string; help: string }> = {
   ring: { label: "Spinner", help: "A brand-colored ring turns beneath the mark." },
   bar: { label: "Bar", help: "An indeterminate progress bar beneath the mark." },
   wordmark: { label: "Wordmark", help: "An oversized mark carries the screen on its own." },
-  fade: { label: "Still", help: "No motion at all — the mark simply fades away." },
+  fade: { label: "Still", help: "No motion at all. The mark simply fades away." },
 };
 
 export function splashSummary(value: unknown): string {
@@ -76,7 +76,7 @@ export function BrandSplashEditor({
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Shown while this tenant&apos;s storefront loads. On for every store by default — the
+        Shown while this tenant&apos;s storefront loads. On for every store by default, so the
         shopper sees this brand, not a blank page. The store owner cannot see or change it.
       </p>
 
@@ -149,7 +149,7 @@ export function BrandSplashEditor({
                 help={
                   splash.logoUrl
                     ? "Shown while the store loads."
-                    : "Optional. Leave empty to use the store's header logo — upload one only when the loading screen wants a different mark."
+                    : "Optional. Leave empty to use the store's header logo. Upload one only when the loading screen wants a different mark."
                 }
                 value={splash.logoUrl || null}
                 onChange={onLogoUploaded}
@@ -158,7 +158,7 @@ export function BrandSplashEditor({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {brandingLogoUrl
                     ? "Currently using the header logo."
-                    : "This tenant has no logo at all — the loading screen will draw their initials."}
+                    : "This tenant has no logo at all, so the loading screen will draw their initials."}
                 </p>
               )}
             </div>
@@ -230,7 +230,7 @@ export function BrandSplashEditor({
             </h3>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
               The screen lifts as soon as the store is ready. These are the floor and the
-              ceiling around that — the ceiling also runs in CSS, so the store still appears
+              ceiling around that. The ceiling also runs in CSS, so the store still appears
               if the page&apos;s scripts fail.
             </p>
             <div className="mt-2">

@@ -88,7 +88,7 @@ export function AdminTrackNote({ brand, onBack }: { brand: Brand; onBack: () => 
       setTweak({ trackNote: draft });
       toast(enabled ? "Delivery note on" : "Delivery note off");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -187,7 +187,7 @@ export function AdminTrackNote({ brand, onBack }: { brand: Brand; onBack: () => 
           {/* ── Live preview column ───────────────────────────────────────── */}
           <div className="sf-notice-editor__preview">
             <div className="admin-field__hint" style={{ marginBottom: 10 }}>
-              Live preview — your storefront theme{enabled ? "" : " (currently hidden from customers)"}
+              Live preview: your storefront theme{enabled ? "" : " (currently hidden from customers)"}
             </div>
             <div className="sf-root">
               <TrackNoteCard config={draft} />

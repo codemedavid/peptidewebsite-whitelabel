@@ -9,6 +9,8 @@ import { useSignedIn } from "@/auth/SessionProvider";
 import { revenuePoints } from "@/features/insights/SalesHero";
 import { breakdownTitle, PeriodBreakdown } from "@/features/insights/PeriodBreakdown";
 import { PeriodSheet, PRESET_LABELS } from "@/features/insights/PeriodSheet";
+import { periodTableCsv, periodTableFileName } from "@/features/insights/csv";
+import { shareCsv } from "@/features/insights/shareCsv";
 import { LiveStrip } from "@/features/live/LiveStrip";
 import { STATUS_META } from "@/features/orders/status";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -97,12 +99,35 @@ function RevenuePanel({ data, onGranularity }: { data: InsightsResponse; onGranu
   );
 }
 
+/** The website's note: International (foreign-currency) orders, shown apart from every figure. */
+function InternationalNote({ rows }: { rows: NonNullable<InsightsResponse["international"]> }) {
+  if (rows.length === 0) return null;
+  const list = rows.map((r) => `${r.code}: ${r.orders} order${r.orders === 1 ? "" : "s"} · ${r.totalLabel}`).join(" · ");
+  return (
+    <Panel style={{ gap: SPACE.sm }}>
+      <Pill tone="info" icon="globe-outline" label="International orders" />
+      <AppText variant="caption" color="muted">
+        {`${list}. These are shown separately and not included in the figures below.`}
+      </AppText>
+    </Panel>
+  );
+}
+
+function exportPeriodTable(data: InsightsResponse): void {
+  const period = data.period;
+  if (!period) return;
+  const csv = periodTableCsv(data.series, period.granularity, Boolean(period.compareRangeLabel));
+  void shareCsv(periodTableFileName(period.from, period.to, period.granularity), csv);
+}
+
 function Report({ data, onGranularity }: { data: InsightsResponse; onGranularity: (g: InsightsGranularity) => void }) {
   const k = data.kpis;
   const mix = data.customerMix;
   const period = data.period;
   return (
     <>
+      <InternationalNote rows={data.international ?? []} />
+
       <RevenuePanel data={data} onGranularity={onGranularity} />
 
       <View style={styles.grid}>
@@ -114,7 +139,11 @@ function Report({ data, onGranularity }: { data: InsightsResponse; onGranularity
 
       {period && data.series.length > 1 ? (
         <View>
-          <SectionHeader eyebrow="Compare" title={breakdownTitle(period.granularity)} />
+          <SectionHeader
+            eyebrow="Compare"
+            title={breakdownTitle(period.granularity)}
+            action={{ label: "Export CSV", onPress: () => exportPeriodTable(data) }}
+          />
           <Panel>
             <PeriodBreakdown series={data.series} granularity={period.granularity} comparing={Boolean(period.compareRangeLabel)} />
           </Panel>
@@ -171,6 +200,24 @@ function Report({ data, onGranularity }: { data: InsightsResponse; onGranularity
           <BarList rows={data.places} empty="No deliveries in this period yet." />
         </Panel>
       </View>
+
+      {data.groupBuys ? (
+        <View>
+          <SectionHeader
+            eyebrow="Group buys"
+            title="Revenue by round"
+            action={{ label: "Group Buys", onPress: () => router.push("/manage/group-buys") }}
+          />
+          <Panel style={{ gap: SPACE.md }}>
+            <BarList rows={data.groupBuys.rows} empty="No group-buy orders in this period." />
+            {data.groupBuys.rows.length > 0 ? (
+              <AppText variant="caption" color="muted">
+                {`${data.groupBuys.totalLabel} from group buys this period · share is of group-buy revenue.`}
+              </AppText>
+            ) : null}
+          </Panel>
+        </View>
+      ) : null}
 
       {data.statusMix.length > 0 ? (
         <View>

@@ -3,8 +3,9 @@
 import { normalizeMethodMarkets } from "@/lib/storefront/intl-market";
 import { Prisma } from "@prisma/client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
-import { isDemoMode, getDemoBranding, saveDemoBranding } from "@/lib/demo/fixtures";
+import { isDemoMode, getDemoBranding } from "@/lib/demo/fixtures";
 import { prisma } from "@/lib/db/prisma";
+import { patchBrandingConfig, updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
 import {
   setStorefrontAdminCookie,
@@ -152,7 +153,7 @@ export async function changeStorefrontAdminPasswordAction(
     if (!stored || !verifyPassword((currentPassword ?? "").trim(), stored)) {
       return { error: "Current password is incorrect." };
     }
-    saveDemoBranding(tenantId, { config: { ...current, adminPasswordHash: hashPassword(next) } });
+    await patchBrandingConfig(tenantId, { adminPasswordHash: hashPassword(next) });
     revalidateTenant(tenantId, slug);
     return { ok: true };
   }
@@ -227,18 +228,7 @@ export async function savePaymentMethodsAction(methods: unknown): Promise<Action
 
   const slug = await getTenantSlug();
   const paymentMethods = normalizeMethods(methods);
-  const current = await readConfig(tenantId);
-  const config = { ...current, paymentMethods };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { paymentMethods });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -284,18 +274,7 @@ export async function saveCategoriesAction(categories: unknown): Promise<ActionR
 
   const slug = await getTenantSlug();
   const normalized = normalizeCategories(categories);
-  const current = await readConfig(tenantId);
-  const config = { ...current, categories: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { categories: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -316,18 +295,7 @@ export async function saveProductsFollowCategoriesAction(
 
   const slug = await getTenantSlug();
   const on = enabled === true;
-  const current = await readConfig(tenantId);
-  const config = { ...current, productsFollowCategories: on };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { productsFollowCategories: on });
 
   revalidateTenant(tenantId, slug);
   return { ok: true, enabled: on };
@@ -352,18 +320,7 @@ export async function saveSortCategoriesAction(categories: unknown): Promise<Act
   const normalized = normalizeSortCategories(
     Array.isArray(categories) ? categories.slice(0, 200) : categories,
   );
-  const current = await readConfig(tenantId);
-  const config = { ...current, sortCategories: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { sortCategories: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -384,18 +341,7 @@ export async function saveProductOrderAction(order: unknown): Promise<ActionResu
 
   const slug = await getTenantSlug();
   const normalized = normalizeProductOrder(order);
-  const current = await readConfig(tenantId);
-  const config = { ...current, productOrder: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { productOrder: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -438,25 +384,8 @@ export async function saveCategoryProductOrderAction(
     return { ...current, categoryProductOrder: next };
   };
 
-  if (isDemoMode()) {
-    const config = merge(await readConfig(tenantId));
-    if (!config) return { error: "That category no longer exists — refresh and try again." };
-    saveDemoBranding(tenantId, { config });
-  } else {
-    const saved = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
-      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
-      const config = merge((row?.config ?? {}) as Record<string, unknown>);
-      if (!config) return false;
-      await tx.branding.upsert({
-        where: { tenantId },
-        update: { config: config as Prisma.InputJsonValue },
-        create: { tenantId, config: config as Prisma.InputJsonValue },
-      });
-      return true;
-    });
-    if (!saved) return { error: "That category no longer exists — refresh and try again." };
-  }
+  const saved = await updateBrandingConfig(tenantId, merge);
+  if (!saved) return { error: "That category no longer exists. Refresh and try again." };
 
   revalidateTenant(tenantId, slug);
   return { ok: true, order: ids };
@@ -483,18 +412,7 @@ export async function saveStoreStatusAction(input: unknown): Promise<ActionResul
 
   const slug = await getTenantSlug();
   const normalized = normalizeStoreStatus(input);
-  const current = await readConfig(tenantId);
-  const config = { ...current, storeStatus: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { storeStatus: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -527,20 +445,12 @@ export async function saveCurrencyAction(input: unknown): Promise<ActionResult> 
 
   const slug = await getTenantSlug();
   const money = normalizeCurrency(input);
-  const current = await readConfig(tenantId);
-  const config = { ...current, currency: money.symbol };
+  await patchBrandingConfig(tenantId, { currency: money.symbol });
 
   if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
     revalidateTenant(tenantId, slug);
     return { ok: true };
   }
-
-  await prisma.branding.upsert({
-    where: { tenantId },
-    update: { config: config as Prisma.InputJsonValue },
-    create: { tenantId, config: config as Prisma.InputJsonValue },
-  });
 
   // A custom glyph has no ISO identity, so the code columns keep whatever the
   // store already had rather than being filled with something invented.
@@ -623,18 +533,7 @@ export async function saveCouriersAction(couriers: unknown): Promise<ActionResul
 
   const slug = await getTenantSlug();
   const normalized = normalizeCouriers(couriers);
-  const current = await readConfig(tenantId);
-  const config = { ...current, couriers: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { couriers: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -685,18 +584,7 @@ export async function saveShippingLocationsAction(locations: unknown): Promise<A
 
   const slug = await getTenantSlug();
   const normalized = normalizeShippingLocations(locations);
-  const current = await readConfig(tenantId);
-  const config = { ...current, shippingLocations: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { shippingLocations: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -717,18 +605,7 @@ export async function savePromoCodesAction(codes: unknown): Promise<ActionResult
 
   const slug = await getTenantSlug();
   const promoCodes = normalizePromoCodes(codes);
-  const current = await readConfig(tenantId);
-  const config = { ...current, promoCodes };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { promoCodes });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -764,18 +641,7 @@ export async function saveOrderNotificationsAction(input: unknown): Promise<Acti
   if ("error" in normalized) return normalized;
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config = { ...current, orderNotifications: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { orderNotifications: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -796,28 +662,18 @@ export async function saveNoticeModalAction(input: unknown): Promise<ActionResul
   if (!tenantId) return { error: NO_ACCESS };
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
+  const owned = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
 
   // The operator grant is the source of truth for availability. Read it from the
-  // stored config; the owner can neither set nor bypass it from the client.
-  const storedNotice = (current.noticeModal ?? {}) as Record<string, unknown>;
-  const operatorEnabled = storedNotice.operatorEnabled === true;
-  if (!operatorEnabled) return { error: NO_ACCESS };
-
-  const owned = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-  // Force the server-held grant on top of whatever the client sent.
-  const normalized = normalizeNoticeModal({ ...owned, operatorEnabled });
-  const config = { ...current, noticeModal: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  // locked stored config; the owner can neither set nor bypass it from the client.
+  const saved = await updateBrandingConfig(tenantId, (current) => {
+    const storedNotice = (current.noticeModal ?? {}) as Record<string, unknown>;
+    const operatorEnabled = storedNotice.operatorEnabled === true;
+    if (!operatorEnabled) return null;
+    // Force the server-held grant on top of whatever the client sent.
+    return { ...current, noticeModal: normalizeNoticeModal({ ...owned, operatorEnabled }) };
+  });
+  if (!saved) return { error: NO_ACCESS };
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -838,24 +694,12 @@ export async function saveTrackNoteAction(input: unknown): Promise<ActionResult>
   // Business/Automated exclusive (trial system, FEATURES.STORE_TRACK_NOTE):
   // locked during an active trial and whenever the entitlement is revoked.
   if (await isBusinessExclusiveLocked(tenantId, FEATURES.STORE_TRACK_NOTE)) {
-    return { error: "Delivery Note is a Business feature — upgrade to unlock it." };
+    return { error: "Delivery Note is a Business feature. Upgrade to unlock it." };
   }
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-
   const normalized = normalizeTrackNote(input);
-  const config = { ...current, trackNote: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { trackNote: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -876,18 +720,7 @@ export async function saveTimelineAction(input: unknown): Promise<ActionResult> 
   }
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config = { ...current, timeline: normalizeTimeline(input) };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { timeline: normalizeTimeline(input) });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -918,18 +751,7 @@ export async function saveHeroContentAction(input: unknown): Promise<ActionResul
   // Coerced through the same pure core the storefront renders from, so a stored
   // banner can never carry an unsafe src or a javascript: click target.
   const heroMedia = normalizeHeroMedia(input);
-  const current = await readConfig(tenantId);
-  const config = { ...current, ...hero, ...links, heroMedia };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { ...hero, ...links, heroMedia });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -954,18 +776,7 @@ export async function saveBannerAction(input: unknown): Promise<ActionResult> {
 
   const slug = await getTenantSlug();
   const banner = normalizeBanner(input);
-  const current = await readConfig(tenantId);
-  const config = { ...current, banner };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { banner });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -987,18 +798,7 @@ export async function saveAnnouncementPopupAction(input: unknown): Promise<Actio
   if (problems.length > 0) return { error: problems[0].message };
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config = { ...current, announcementPopup: preparePopupForSave(draft) };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { announcementPopup: preparePopupForSave(draft) });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1021,18 +821,7 @@ export async function saveCheckoutRulesAction(rules: unknown): Promise<ActionRes
 
   const slug = await getTenantSlug();
   const checkoutRules = normalizeCheckoutRules(rules);
-  const current = await readConfig(tenantId);
-  const config = { ...current, checkoutRules };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { checkoutRules });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1053,18 +842,7 @@ export async function saveGroupBuyRulesAction(rules: unknown): Promise<ActionRes
 
   const slug = await getTenantSlug();
   const groupBuyRules = normalizeGroupBuyRules(rules);
-  const current = await readConfig(tenantId);
-  const config = { ...current, groupBuyRules };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { groupBuyRules });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1091,24 +869,15 @@ export async function saveStoreAdminFeeAction(input: unknown): Promise<ActionRes
   // and whenever the entitlement is revoked — the UI tile mirrors this lock,
   // but a stale/forged client must not write through it.
   if (await isBusinessExclusiveLocked(tenantId, FEATURES.STORE_ADMIN_FEE)) {
-    return { error: "Checkout Fee is a Business feature — upgrade to unlock it." };
+    return { error: "Checkout Fee is a Business feature. Upgrade to unlock it." };
   }
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
   // Keeps the stored oncePerGroupBuy when this editor doesn't send it (the app).
-  const adminFee = mergeAdminFeeInput(current.adminFee, input);
-  const config = { ...current, adminFee };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await updateBrandingConfig(tenantId, (current) => ({
+    ...current,
+    adminFee: mergeAdminFeeInput(current.adminFee, input),
+  }));
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1193,8 +962,6 @@ export async function saveResellerSettingsAction(input: unknown): Promise<Action
   const clear = o.clear === true;
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const cred = readResellerCredential(current);
 
   // A blank submission is NOT a removal — that has to be asked for explicitly,
   // or an owner who saved the page copy with the (unreadable) password box empty
@@ -1206,28 +973,24 @@ export async function saveResellerSettingsAction(input: unknown): Promise<Action
     return { error: "Use a password of at least 4 characters." };
   }
 
-  const config: Record<string, unknown> = {
-    ...current,
-    ...readResellerPageCopyPatch(o, current),
-  };
-  if (clear || rawCode) {
-    Object.assign(config, nextCredential(clear ? "" : (rawCode ?? ""), cred));
-    // `nextCredential` sets the legacy plaintext key to undefined so it is
-    // dropped rather than left beside the new hash; strip it explicitly because
-    // an undefined value would otherwise survive into the stored JSON as null.
-    delete config.resellerAccessCode;
-    if (clear) delete config.resellerAccessCodeHash;
-  }
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  // Built from the LOCKED config: the credential version bump must count from
+  // the stored value, or two saves at once would hand out the same version.
+  await updateBrandingConfig(tenantId, (current) => {
+    const cred = readResellerCredential(current);
+    const config: Record<string, unknown> = {
+      ...current,
+      ...readResellerPageCopyPatch(o, current),
+    };
+    if (clear || rawCode) {
+      Object.assign(config, nextCredential(clear ? "" : (rawCode ?? ""), cred));
+      // `nextCredential` sets the legacy plaintext key to undefined so it is
+      // dropped rather than left beside the new hash; strip it explicitly because
+      // an undefined value would otherwise survive into the stored JSON as null.
+      delete config.resellerAccessCode;
+      if (clear) delete config.resellerAccessCodeHash;
+    }
+    return config;
+  });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1360,23 +1123,14 @@ export async function saveCardDesignAction(design: unknown): Promise<ActionResul
   const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config: Record<string, unknown> = { ...current };
-  if (design === null || design === undefined) {
-    delete config.cardDesign;
-  } else {
-    config.cardDesign = normalizeCardDesign(design);
-  }
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  const cardDesign =
+    design === null || design === undefined ? null : normalizeCardDesign(design);
+  await updateBrandingConfig(tenantId, (current) => {
+    const config: Record<string, unknown> = { ...current };
+    if (cardDesign) config.cardDesign = cardDesign;
+    else delete config.cardDesign;
+    return config;
+  });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1407,18 +1161,7 @@ export async function saveCardTemplatesAction(templates: unknown): Promise<Actio
   const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config = { ...current, cardTemplates: normalizeCardTemplates(templates) };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { cardTemplates: normalizeCardTemplates(templates) });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1439,18 +1182,7 @@ export async function saveFaqAction(groups: unknown): Promise<ActionResult> {
 
   const slug = await getTenantSlug();
   const normalized = normalizeFaqGroups(groups);
-  const current = await readConfig(tenantId);
-  const config = { ...current, faqGroups: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { faqGroups: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1471,18 +1203,7 @@ export async function saveCoaReportsAction(reports: unknown): Promise<ActionResu
 
   const slug = await getTenantSlug();
   const normalized = normalizeCoaReports(reports);
-  const current = await readConfig(tenantId);
-  const config = { ...current, coaReports: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { coaReports: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1504,18 +1225,7 @@ export async function saveReviewsAction(reviews: unknown): Promise<ActionResult>
 
   const slug = await getTenantSlug();
   const normalized = normalizeReviews(reviews);
-  const current = await readConfig(tenantId);
-  const config = { ...current, reviews: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { reviews: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1568,18 +1278,7 @@ export async function saveProtocolsNoteAction(note: unknown): Promise<ActionResu
   const tenantId = ctx.tenantId;
 
   const slug = await getTenantSlug();
-  const current = await readConfig(tenantId);
-  const config = { ...current, protocolsNote: normalizeOwnerNote(note) };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { protocolsNote: normalizeOwnerNote(note) });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };
@@ -1592,18 +1291,7 @@ export async function saveProtocolsAction(protocols: unknown): Promise<ActionRes
 
   const slug = await getTenantSlug();
   const normalized = normalizeProtocols(protocols);
-  const current = await readConfig(tenantId);
-  const config = { ...current, protocols: normalized };
-
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-  } else {
-    await prisma.branding.upsert({
-      where: { tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId, config: config as Prisma.InputJsonValue },
-    });
-  }
+  await patchBrandingConfig(tenantId, { protocols: normalized });
 
   revalidateTenant(tenantId, slug);
   return { ok: true };

@@ -31,7 +31,7 @@ export async function savePackagePaymentAction(
 
   const config = normalizePackagePayment(input);
   if (!config.methods.some((m) => m.active && m.method.trim())) {
-    return { error: "Keep at least one active payment method — clients need a way to pay." };
+    return { error: "Keep at least one active payment method. Clients need a way to pay." };
   }
   for (const m of config.methods) {
     if (!m.method.trim()) return { error: "Every payment method needs a name." };
@@ -50,7 +50,7 @@ export async function savePackagePaymentAction(
       create: { key: PACKAGE_PAYMENT_KEY, value: config as Prisma.InputJsonValue },
     });
   } catch {
-    return { error: "Could not save — has the platform_settings table been pushed? (npm run db:push)" };
+    return { error: "Could not save. Has the platform_settings table been pushed? (npm run db:push)" };
   }
 
   revalidateTag(platformSettingTag(PACKAGE_PAYMENT_KEY));

@@ -10,7 +10,6 @@
 //
 // Single-row writes go through updateMany/deleteMany so forTenant() scopes them.
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
@@ -19,6 +18,7 @@ import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 import {
   normalizeAssessmentConfig,
@@ -105,7 +105,7 @@ export async function submitAssessmentAction(input: unknown): Promise<{ ok: true
   if (!config.enabled) return { error: UNAVAILABLE };
 
   const limit = rateLimit(`assessment:${tenantId}:${await clientIp()}`, SUBMIT_LIMIT, SUBMIT_WINDOW_MS);
-  if (!limit.ok) return { error: "You've sent a few assessments already — please try again later." };
+  if (!limit.ok) return { error: "You've sent a few assessments already. Please try again later." };
 
   const parsed = validateAssessmentSubmission(input, config);
   if (!parsed.ok) return parsed;
@@ -174,13 +174,7 @@ export async function saveAssessmentConfigAction(
   if (isDemoMode()) return { error: "Quiz settings need the live database." };
 
   const normalized = normalizeAssessmentConfig(input);
-  const branding = await prisma.branding.findUnique({ where: { tenantId }, select: { config: true } });
-  const config = { ...((branding?.config ?? {}) as Record<string, unknown>), assessment: normalized };
-  await prisma.branding.upsert({
-    where: { tenantId },
-    update: { config: config as Prisma.InputJsonValue },
-    create: { tenantId, config: config as Prisma.InputJsonValue },
-  });
+  await patchBrandingConfig(tenantId, { assessment: normalized });
   revalidateTenant(tenantId, await getTenantSlug());
   return { ok: true, config: normalized };
 }

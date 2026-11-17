@@ -12,10 +12,13 @@ import { parseCustomerSignUp } from "@/lib/storefront/customer-account";
 import type { ApiErrorCode, LoginResponse } from "./contract";
 import { storeAvailability } from "./auth";
 import { parseSignUpDetails } from "./sign-up-details";
+import { APP_GUEST_PASSWORD_HASH } from "./app-guest";
 import { openSession } from "./login";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
 import { customerAppOpen } from "@/lib/mobile/customer-app";
+import { absorbAppGuest, findAppGuest, type GuestHandle } from "./guest-session";
+import { revokeSession } from "./sessions";
 
 /**
  * POST /auth/register — a shopper creates their customer account in the app.
@@ -92,11 +95,19 @@ export async function mobileRegister(
   if (await isEmailTaken(store.id, email)) return failure("conflict", EMAIL_TAKEN);
 
   const passwordHash = hashPassword(password);
+  // Signing up from a guest phone (app-guest.ts): the account IS the guest row,
+  // so every order the guest placed stays theirs.
+  const guest = await findAppGuest(body.guestToken, store.id);
   // An email that joined a group buy without an account: sign-up claims that row.
   const claimed = await claimGuestCustomer(store.id, email, { name, phone, age, gender, passwordHash });
   let customerId: string;
   if (claimed) {
     customerId = claimed.id;
+    if (guest) await absorbAppGuest(guest, claimed.id);
+  } else if (guest) {
+    const upgraded = await upgradeAppGuest(guest, { name, email, phone, age, gender, passwordHash });
+    if (!upgraded) return failure("conflict", EMAIL_TAKEN);
+    customerId = guest.customerId;
   } else {
     try {
       const row = await withTenant(store.id, (db) =>
@@ -119,4 +130,30 @@ export async function mobileRegister(
   if (!session.ok) return session;
   // openSession only ever returns tokens + me for a single named store.
   return { ok: true, data: session.data as LoginResponse };
+}
+
+/**
+ * Turn the app guest's row into the account, in place. The password change
+ * moves its credential stamp, so the old guest session stops resolving; it is
+ * also revoked outright, dropping its push registration (the app registers the
+ * new session). Null when the email was taken in a race (unique index).
+ */
+async function upgradeAppGuest(
+  guest: GuestHandle,
+  data: { name: string; email: string; phone: string; age: number; gender: string | null; passwordHash: string },
+): Promise<{ id: string } | null> {
+  try {
+    const done = await withTenant(guest.tenantId, (db) =>
+      db.storefrontCustomer.updateMany({
+        where: { id: guest.customerId, passwordHash: APP_GUEST_PASSWORD_HASH },
+        data: { ...data, lastLoginAt: new Date(), sessionVersion: { increment: 1 } },
+      }),
+    );
+    if (done.count !== 1) return null;
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return null;
+    throw e;
+  }
+  await revokeSession(guest.sessionId);
+  return { id: guest.customerId };
 }

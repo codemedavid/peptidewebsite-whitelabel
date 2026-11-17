@@ -37,8 +37,8 @@ const STATUS_LABEL: Record<Order["status"], string> = {
 };
 
 const SOURCE_HINT = {
-  customer: "Remembered from this buyer's earlier order — save to link it here too.",
-  checkout: "The WhatsApp number the buyer typed at checkout — save to confirm it.",
+  customer: "Remembered from this buyer's earlier order. Save to link it here too.",
+  checkout: "The WhatsApp number the buyer typed at checkout. Save to confirm it.",
 } as const;
 
 const PLACEHOLDER: Record<BuyerApp, string> = {
@@ -135,17 +135,17 @@ export function OrderBuyerContact({ brand, order, allOrders, onSaved }: OrderBuy
       // Telegram can't receive the text through the link, so an empty clipboard
       // would open a chat with nothing to paste — stay here and say so instead.
       if (!(await copyText(text))) {
-        showFlash("Couldn't copy — select the message, copy it, then try again");
+        showFlash("Couldn't copy. Select the message, copy it, then try again");
         return;
       }
-      showFlash("Message copied — paste it in the Telegram chat");
+      showFlash("Message copied. Paste it in the Telegram chat");
     }
     window.open(buyerChannelLink(target, text), "_blank", "noopener,noreferrer");
     setIsNudged(false);
   };
 
   const copyDraft = async () => {
-    showFlash((await copyText(draft.trim())) ? "Message copied" : "Couldn't copy — select the text instead");
+    showFlash((await copyText(draft.trim())) ? "Message copied" : "Couldn't copy. Select the text instead");
   };
 
   const sendLabel = !target
@@ -244,7 +244,7 @@ export function OrderBuyerContact({ brand, order, allOrders, onSaved }: OrderBuy
       <div className="bc-msg">
         <div className="bc-msg-head">
           <span className="od-label bc-msg-label">Update message · {STATUS_LABEL[order.status]}</span>
-          {isNudged && <span className="bc-badge">Status changed — tell the buyer</span>}
+          {isNudged && <span className="bc-badge">Status changed: tell the buyer</span>}
         </div>
         {order.status === "shipped" && !order.trackingNumber.trim() && (
           <p className="bc-hint">Save a tracking number and it will be added to this message.</p>

@@ -109,7 +109,7 @@ export function AdminStaffList({ brand, onBack, onAdd, onEdit }: Props) {
         <div className="admin__tip" style={{ marginTop: 0, textAlign: "left" }}>
           <strong>How admin sign-in works:</strong> with no staff, the admin login asks
           for your password only. As soon as you add your first staff member below, the
-          login also asks for a <strong>username</strong> — you sign in as{" "}
+          login also asks for a <strong>username</strong>. You sign in as{" "}
           <code>owner</code> with your admin password, and each staff member signs in
           with the username you give them.
         </div>
@@ -120,7 +120,7 @@ export function AdminStaffList({ brand, onBack, onAdd, onEdit }: Props) {
             <div className="staff-empty">
               <p className="staff-empty__title">No staff yet</p>
               <p className="admin-field__hint">
-                Add a staff member to give a teammate limited access to this admin — they&apos;ll only
+                Add a staff member to give a teammate limited access to this admin. They&apos;ll only
                 see the modules you allow.
               </p>
               <button className="admin-form__save" onClick={onAdd}>

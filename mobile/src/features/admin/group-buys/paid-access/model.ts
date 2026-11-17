@@ -47,7 +47,7 @@ export type PaidAccessPresetId = (typeof PAID_ACCESS_PRESET_IDS)[number];
 export type PaidAccessPreset = { id: PaidAccessPresetId; label: string; description: string; steps: readonly PaidAccessStep[] };
 
 export const PAID_ACCESS_PRESETS: readonly PaidAccessPreset[] = [
-  { id: "open", label: "Open", description: "Anyone can join instantly — no payment, no approval.", steps: [] },
+  { id: "open", label: "Open", description: "Anyone can join instantly. No payment, no approval.", steps: [] },
   { id: "pay_to_join", label: "Pay to join", description: "Members get in as soon as their payment is confirmed.", steps: ["payment"] },
   { id: "pay_then_approve", label: "Pay then approve", description: "Members pay, then you approve each one before they get in.", steps: ["payment", "approval"] },
   { id: "approve_then_pay", label: "Approve then pay", description: "You approve first; approved members then pay to get in.", steps: ["approval", "payment"] },
@@ -184,6 +184,22 @@ export type QueueRow = {
 
 export type QueueCounts = { payments: number; approvals: number; refunds: number; waitlist: number; active: number; total: number };
 export type QueueResult = { ok: true; rows: QueueRow[]; counts: QueueCounts };
+
+/** One audit-log entry (src/modules/paid-access/server/admin.ts HistoryEvent). */
+export type HistoryEvent = {
+  kind: string;
+  membershipId: string | null;
+  fromStatus: string | null;
+  toStatus: string | null;
+  actorKind: string;
+  actorId: string | null;
+  reason: string;
+  createdAt: string;
+};
+export type HistoryResult = { ok: true; events: HistoryEvent[] };
+
+/** expirePaidAccessHoldsAction: holds released + waitlisters moved in. */
+export type ExpireResult = { ok: true; expired: number; promoted: number };
 
 export type PaidAccessDecision =
   | { action: "approve"; membershipId: string }

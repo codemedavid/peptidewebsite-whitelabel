@@ -16,7 +16,7 @@ export const STATUS_ORDER: readonly OrderStatus[] = [
 ];
 
 export const STATUS_META: Record<OrderStatus, { label: string; icon: IconName; tone: Tone; help: string }> = {
-  new: { label: "New", icon: "flash", tone: "info", help: "Just placed — waiting for you to confirm." },
+  new: { label: "New", icon: "flash", tone: "info", help: "Just placed, waiting for you to confirm." },
   confirmed: { label: "Confirmed", icon: "checkmark-circle", tone: "neutral", help: "Accepted. Stock has been set aside." },
   processing: { label: "Processing", icon: "construct-outline", tone: "neutral", help: "Being prepared." },
   ready: { label: "Ready to ship", icon: "cube-outline", tone: "neutral", help: "Packed and waiting for the courier." },

@@ -52,14 +52,14 @@ const DIRECTIONS: { key: RatioDirection; label: string; hint: string }[] = [
 
 /** Auto-add only tops a cart UP to a floor, so it isn't offered under a cap. */
 const MODES: { key: RatioMode; label: string; hint: string; floorOnly?: boolean }[] = [
-  { key: "strict", label: "Strict — block checkout", hint: "Customers can't check out until the cart complies." },
+  { key: "strict", label: "Strict: block checkout", hint: "Customers can't check out until the cart complies." },
   {
     key: "auto_add",
-    label: "Auto-add — keep the cart in sync",
+    label: "Auto-add: keep the cart in sync",
     hint: "Adding a peptide automatically tops the cart up with the required bac water.",
     floorOnly: true,
   },
-  { key: "warn", label: "Warn — allow checkout", hint: "Show a reminder when the rule is broken, but let the order through." },
+  { key: "warn", label: "Warn: allow checkout", hint: "Show a reminder when the rule is broken, but let the order through." },
 ];
 
 /**
@@ -115,7 +115,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
   const bacWaterOptions = useMemo(() => {
     const all = products.data ?? [];
     const tagged = all.filter(isBacWaterProduct);
-    return [{ value: "", label: "— Select a product —" }, ...(tagged.length > 0 ? tagged : all).map((p) => ({ value: p.id, label: p.name }))];
+    return [{ value: "", label: "Select a product" }, ...(tagged.length > 0 ? tagged : all).map((p) => ({ value: p.id, label: p.name }))];
   }, [products.data]);
 
   const autoAddNeedsProduct = ratio.enabled && !isCap && ratio.mode === "auto_add" && !ratio.defaultBacWaterProductId;
@@ -143,7 +143,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} disabled={autoAddNeedsProduct} onSave={onSave} />}>
       <Section
         title="Engine"
-        hint="Tie bacteriostatic water to the peptides in the cart — either requiring it or limiting it. Classify each product as peptide or bac water in the product editor; this rule counts the cart by those tags."
+        hint="Tie bacteriostatic water to the peptides in the cart, either requiring it or limiting it. Classify each product as peptide or bac water in the product editor; this rule counts the cart by those tags."
       >
         <ToggleRow
           label="Enable Group Buy rules"
@@ -189,12 +189,12 @@ function Editor({ brand }: { brand: AdminBrand }) {
                   label="Default bacteriostatic water product"
                   hint={
                     products.isError
-                      ? "Couldn't load your products — pull back and try again."
+                      ? "Couldn't load your products. Pull back and try again."
                       : "Auto-add tops the cart up with this product. Required for auto-add mode."
                   }
                   value={ratio.defaultBacWaterProductId ?? ""}
                   options={bacWaterOptions}
-                  placeholder={products.isPending ? "Loading products…" : "— Select a product —"}
+                  placeholder={products.isPending ? "Loading products…" : "Select a product"}
                   onChange={(id) => patchRatio({ defaultBacWaterProductId: id || null })}
                 />
               ) : null}
@@ -235,7 +235,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
           />
           <ToggleRow
             label="Validate at checkout"
-            hint="Re-check on the server at order placement (recommended — can't be bypassed)."
+            hint="Re-check on the server at order placement (recommended, can't be bypassed)."
             value={rules.validation.checkout}
             onChange={(checkout) => update((r) => ({ ...r, validation: { ...r.validation, checkout } }))}
           />

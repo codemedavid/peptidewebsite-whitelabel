@@ -52,6 +52,8 @@ type SessionApi = {
   signIn: (email: string, password: string, store?: string) => Promise<StoreChoice[] | null>;
   /** Create a customer account on a store; signs it straight in. */
   signUp: (details: RegisterRequest) => Promise<void>;
+  /** Shop as a guest of `store`: a real session, no account (community stays locked). */
+  startGuest: (store: string) => Promise<void>;
   signOut: (notice?: string) => Promise<void>;
   reloadMe: () => Promise<void>;
   retry: () => void;
@@ -61,7 +63,8 @@ const SessionContext = createContext<SessionApi | null>(null);
 
 // Mode is part of the scope: the same email can be a store's admin and its
 // customer, and their cached data must never mix.
-const scopeOf = (me: MeResponse) => `${me.store.slug}:${me.mode}:${me.actor.email.toLowerCase()}`;
+const scopeOf = (me: MeResponse) =>
+  `${me.store.slug}:${me.mode}:${me.actor.kind === "customer" && me.actor.guest ? "guest" : me.actor.email.toLowerCase()}`;
 const isOffline = (e: unknown) => e instanceof ApiError && (e.code === "network" || e.code === "timeout");
 
 /** Retry a sign-out that couldn't reach the server earlier (stops stale pushes). */
@@ -79,6 +82,11 @@ async function flushPendingLogout(): Promise<void> {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<SessionState>({ status: "loading" });
+  // Read by sign-in/sign-up (is this phone a guest?) without re-creating them.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const tokens = useRef<TokenPair | null>(null);
   const refreshing = useRef<Promise<RefreshOutcome> | null>(null);
   const epoch = useRef(0);
@@ -217,22 +225,45 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [applyMe, queryClient],
   );
 
+  /**
+   * A guest phone signing in or up sends its session token, so the server can
+   * carry the guest's orders over to the account (lib/mobile/app-guest.ts).
+   */
+  const guestToken = useCallback((): string | undefined => {
+    const s = stateRef.current;
+    return s.status === "signedIn" && s.me.actor.kind === "customer" && s.me.actor.guest ? tokens.current?.accessToken : undefined;
+  }, []);
+
   const signIn = useCallback(
     async (email: string, password: string, store?: string): Promise<StoreChoice[] | null> => {
       // Never make the login wait on an old sign-out retry (up to ~40s offline).
       void flushPendingLogout();
-      const res = await authApi.login(store ? { store, email, password } : { email, password });
+      const fromGuest = guestToken();
+      const res = await authApi.login({ ...(store ? { store } : {}), email, password, ...(fromGuest ? { guestToken: fromGuest } : {}) });
       if ("chooseStore" in res) return res.chooseStore;
+      // The guest session was revoked server-side with its push registration.
+      if (fromGuest) await forgetPushToken();
       await adopt(res, email);
       return null;
     },
-    [adopt],
+    [adopt, guestToken],
   );
 
   const signUp = useCallback(
     async (details: RegisterRequest): Promise<void> => {
       void flushPendingLogout();
-      await adopt(await authApi.register(details), details.email);
+      const fromGuest = guestToken();
+      const res = await authApi.register(fromGuest ? { ...details, guestToken: fromGuest } : details);
+      if (fromGuest) await forgetPushToken();
+      await adopt(res, details.email);
+    },
+    [adopt, guestToken],
+  );
+
+  const startGuest = useCallback(
+    async (store: string): Promise<void> => {
+      void flushPendingLogout();
+      await adopt(await authApi.guest(store), "");
     },
     [adopt],
   );
@@ -243,6 +274,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       lastSignedIn,
       signIn,
       signUp,
+      startGuest,
       signOut,
       reloadMe,
       retry: () => {
@@ -250,7 +282,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setBootAttempt((n) => n + 1);
       },
     }),
-    [state, lastSignedIn, signIn, signUp, signOut, reloadMe],
+    [state, lastSignedIn, signIn, signUp, startGuest, signOut, reloadMe],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

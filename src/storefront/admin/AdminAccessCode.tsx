@@ -59,7 +59,7 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
       setHeading(payload.heading);
       toast(payload.enabled ? "Access gate is ON" : "Access gate is OFF");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSavingSettings(false);
     }
@@ -82,9 +82,9 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
       setHasCode(true);
       setEnabled(true);
       setNewCode("");
-      toast("Code saved — the gate is now ON. Visitors need the code, and anyone already in was signed out.");
+      toast("Code saved. The gate is now ON. Visitors need the code, and anyone already in was signed out.");
     } catch {
-      toast("Couldn't update the code — please sign in again and retry.");
+      toast("Couldn't update the code. Please sign in again and retry.");
     } finally {
       setRotating(false);
     }
@@ -117,15 +117,15 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
 
           {loading ? null : enabled && hasCode ? (
             <div className="admin-field__hint" style={{ color: "#1e7e34", marginBottom: 14 }}>
-              ✅ Gate is ON — visitors need the code to view {brand.name || "your store"}.
+              ✅ Gate is ON: visitors need the code to view {brand.name || "your store"}.
             </div>
           ) : hasCode ? (
             <div className="admin-field__hint" style={{ marginBottom: 14 }}>
-              A code is set but the gate is OFF — your store is currently open to everyone.
+              A code is set but the gate is OFF, so your store is currently open to everyone.
             </div>
           ) : (
             <div className="admin-field__hint" style={{ marginBottom: 14 }}>
-              No code set yet. Set a code below — that turns the gate on automatically.
+              No code set yet. Set a code below to turn the gate on automatically.
             </div>
           )}
 
@@ -142,7 +142,7 @@ export function AdminAccessCode({ brand, onBack }: { brand: Brand; onBack: () =>
           </label>
           {!hasCode && (
             <div className="admin-field__hint" style={{ marginTop: 6 }}>
-              Set a code first — the gate can’t be enabled without one.
+              Set a code first. The gate can’t be enabled without one.
             </div>
           )}
         </div>

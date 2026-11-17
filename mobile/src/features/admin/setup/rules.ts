@@ -50,6 +50,8 @@ const PAGE_OPTIONS: { route: string; label: string; visible: (b: AdminBrand) => 
   { route: "calculator", label: "Reconstitution Calculator", visible: (b) => b.showPageCalculator !== false },
   { route: "track", label: "Track Order", visible: (b) => b.showPageTrack !== false },
   { route: "merchant", label: "Wholesale", visible: (b) => b.showPageMerchant === true },
+  { route: "articles", label: "Articles", visible: (b) => b.showPageArticles === true },
+  { route: "assessment", label: "Assessment", visible: (b) => b.showPageAssessment === true },
 ];
 
 export const HERO_LINK_PAGES: ReadonlySet<string> = new Set(PAGE_OPTIONS.map((o) => o.route));
@@ -77,7 +79,7 @@ export function normalizeStoreStatus(value: unknown): StoreStatus {
 /** What the storefront's closed banner will say (buildStoreClosedNotice). */
 export function storeClosedNotice(status: StoreStatus, name: string): { headline: string; message: string } {
   const n = name.trim();
-  const auto = n ? `Hello — ${n} is currently closed` : "Hello — this store is currently closed";
+  const auto = n ? `Hello! ${n} is currently closed` : "Hello! This store is currently closed";
   return { headline: status.headline || auto, message: status.message };
 }
 
@@ -87,7 +89,17 @@ export const ADMIN_FEE_LABEL_MAX = 60;
 export const ADMIN_FEE_LABEL_DEFAULT = "Admin fee";
 export const ADMIN_FEE_AMOUNT_MAX = 1_000_000;
 export const FEE_LABEL_PRESETS = ["Shipping fee", "Service fee", "Admin fee", "Processing fee"];
-export type AdminFee = { enabled: boolean; label: string; mode: "fixed" | "percentage"; amount: number; percent: number };
+export type AdminFee = {
+  enabled: boolean;
+  label: string;
+  mode: "fixed" | "percentage";
+  amount: number;
+  percent: number;
+  /** Group buys: charge only on a customer's first order in each round. */
+  oncePerGroupBuy: boolean;
+  /** Dual-currency stores: the fixed fee on International (USD) orders. */
+  usdAmount?: number;
+};
 
 function clampRound(raw: unknown, max: number): number {
   const n = Number(raw);
@@ -102,6 +114,8 @@ export function normalizeAdminFee(input: unknown): AdminFee {
     mode: x.mode === "percentage" ? "percentage" : "fixed",
     amount: clampRound(x.amount, ADMIN_FEE_AMOUNT_MAX),
     percent: clampRound(x.percent, 100),
+    oncePerGroupBuy: x.oncePerGroupBuy === true,
+    ...(Number(x.usdAmount) > 0 ? { usdAmount: clampRound(x.usdAmount, ADMIN_FEE_AMOUNT_MAX) } : {}),
   };
 }
 

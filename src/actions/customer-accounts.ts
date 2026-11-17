@@ -8,6 +8,7 @@
 // tenant always comes from the request host, never from input, and the session
 // resolver refuses a cookie minted on another store.
 
+import { APP_GUEST_PASSWORD_HASH } from "@/lib/mobile/app-guest";
 import { Prisma } from "@prisma/client";
 import { getTenantIdOrNull } from "@/lib/tenant/headers";
 import { isDemoMode } from "@/lib/demo/fixtures";
@@ -364,6 +365,9 @@ export async function listStoreCustomersAction(): Promise<
   try {
     const [rows, ledger, unlinked] = await withTenant(tenantId, async (db) => [
       await db.storefrontCustomer.findMany({
+        // App guests (Continue as guest) aren't accounts; their orders still
+        // show in Orders under the name typed at checkout.
+        where: { passwordHash: { not: APP_GUEST_PASSWORD_HASH } },
         orderBy: { createdAt: "desc" },
         take: 2000,
         select: {

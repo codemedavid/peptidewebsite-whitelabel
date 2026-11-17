@@ -106,7 +106,7 @@ function SortEditor({ brand }: { brand: AdminBrand }) {
       <OfflineBanner />
       <KeyboardAwareScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" bottomOffset={SPACE.xl}>
         <AppText variant="body" color="muted">
-          The “Sort” menu on your shop, top to bottom. A category is your own group — file products under it from the product form,
+          The “Sort” menu on your shop, top to bottom. A category is your own group: file products under it from the product form,
           and choosing it brings them to the front. A built-in sorts the whole catalog. Turning one off hides it from the menu; it never
           hides products.
         </AppText>
@@ -114,7 +114,7 @@ function SortEditor({ brand }: { brand: AdminBrand }) {
 
         {cats.length === 0 ? (
           <AppText variant="body" color="muted">
-            Your sort menu is empty — shoppers will see the default Name and Price options until you add your own.
+            Your sort menu is empty. Shoppers will see the default Name and Price options until you add your own.
           </AppText>
         ) : (
           <Card padded={false}>

@@ -11,7 +11,12 @@ import type { AdminBrand } from "@/features/admin/bridge";
 
 // ── shapes (src/storefront/types.ts) ─────────────────────────────────────────
 
-export type Category = { id: string; label: string };
+export type Category = {
+  id: string;
+  label: string;
+  /** Uploaded tile image (showcase home); absent = the first product's photo. */
+  image?: string;
+};
 
 export type Variation = {
   name: string;
@@ -22,9 +27,16 @@ export type Variation = {
   image?: string;
   extraImages?: string[];
   available?: boolean;
-  /** What this option comes with ("Complete set includes: …"), one item per line — set on the website. */
+  /** What this option comes with ("Complete set includes: …"), one item per line. */
   includes?: string;
+  /** International (USD) price — dual-currency stores only. */
+  usdPrice?: number;
+  /** Vials in this option's supplier kit (Bunuan/Ligwak) — no editor, carried through. */
+  kitSize?: number;
 };
+
+/** Which shop(s) a product sells in — dual-currency stores (src/lib/storefront/intl-market). */
+export type ProductMarket = "local" | "international" | "both";
 
 /** A product exactly as listProductsAction / saveProductAction return it. */
 export type CatalogProduct = {
@@ -65,6 +77,12 @@ export type CatalogProduct = {
   saleCampaignOnly?: boolean;
   madeToOrder?: boolean;
   productClass?: ProductClass;
+  /** Dual-currency market tag; absent = Local only. */
+  market?: ProductMarket;
+  usdPrice?: number;
+  usdDiscountPrice?: number;
+  /** Vials per supplier kit (group-buy-only stores). */
+  vialsPerKit?: number;
 };
 
 export type ProductClass = "peptide" | "bacWater" | "other";
@@ -216,6 +234,20 @@ export const resellerVisible = (brand: AdminBrand): boolean => brand.resellerPri
 
 /** The "Made to order" checkbox renders only when the operator granted it. */
 export const madeToOrderVisible = (brand: AdminBrand): boolean => brand.madeToOrderEntitled === true;
+
+/** Dual-currency store: products carry a market tag + USD prices (brand.dualMarket). */
+export const dualMarketVisible = (brand: AdminBrand): boolean => brand.dualMarket === true;
+
+/**
+ * Group-buy-only store (src/storefront/visibility.ts isGroupBuyOnlyStore): the
+ * group-buy module is on and the on-hand path is hidden — products then plan
+ * per supplier kit ("Vials per kit").
+ */
+export function groupBuyOnlyStore(brand: AdminBrand): boolean {
+  const caps = brand.groupBuyCaps as { enabled?: unknown } | undefined;
+  const mode = brand.twoWaysMode as { onHand?: unknown } | undefined;
+  return caps?.enabled === true && mode?.onHand === "hidden";
+}
 
 /** The storefront's default reseller minimum (src/lib/storefront/wholesale.ts). */
 export const RESELLER_MIN_QTY = 10;

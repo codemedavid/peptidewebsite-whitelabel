@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
+import { ViewGate } from "@/features/admin/content/page-guard";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import type { AdminBrand } from "@/features/admin/bridge";
@@ -56,7 +57,13 @@ export default function CardStudioScreen() {
   return (
     <>
       <Stack.Screen options={{ title: "Card Studio" }} />
-      <Loadable query={brand}>{(b) => <Studio brand={b} />}</Loadable>
+      <Loadable query={brand}>
+        {(b) => (
+          <ViewGate brand={b} view="design" label="Card Studio">
+            <Studio brand={b} />
+          </ViewGate>
+        )}
+      </Loadable>
     </>
   );
 }
@@ -278,7 +285,7 @@ function Studio({ brand }: { brand: AdminBrand }) {
             <AppText variant="overline" color="link" accessibilityRole="header">
               DESIGN GALLERY
             </AppText>
-            <Hint>{CARD_PRESETS.length} professional styles — tap to apply, touch and hold a preview to play its hover effect.</Hint>
+            <Hint>{CARD_PRESETS.length} professional styles. Tap to apply, or touch and hold a preview to play its hover effect.</Hint>
           </View>
           <GalleryGrid>
             {CARD_PRESETS.map((p) => renderTile({ key: presetKey(p.id), name: p.name, tagline: p.tagline, design: p.design }))}
@@ -339,7 +346,7 @@ function LivePreview({
     return (
       <Section title="Pick a card design below">
         <AppText variant="body" color="muted">
-          Tap any design to apply it to your product cards and unlock the customization panel — borders, colors, shadows,
+          Tap any design to apply it to your product cards and unlock the customization panel: borders, colors, shadows,
           typography, buttons and more. Your cards currently use the classic theme style.
         </AppText>
       </Section>

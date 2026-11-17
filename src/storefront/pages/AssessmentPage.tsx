@@ -190,7 +190,7 @@ function StepBody({
     return (
       <>
         <h2 className="asm-step__title">What are your goals?</h2>
-        <p className="asm-step__hint">Select all that apply — your first pick is treated as your main goal.</p>
+        <p className="asm-step__hint">Select all that apply. Your first pick is treated as your main goal.</p>
         <div className="asm-options">
           {config.goals.map((g) => (
             <Option key={g.id} type="checkbox" name="goals" checked={a.goals.includes(g.label)}
@@ -298,7 +298,7 @@ function Results({
             {primary.map((p, i) => <RecCard key={p.id} product={p} top={i === 0} />)}
           </div>
         ) : (
-          <div className="cp-empty">No direct match in our shop yet — message us and we&apos;ll help you choose.</div>
+          <div className="cp-empty">No direct match in our shop yet. Message us and we&apos;ll help you choose.</div>
         )}
       </section>
 

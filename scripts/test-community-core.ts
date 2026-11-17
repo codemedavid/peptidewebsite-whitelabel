@@ -83,7 +83,7 @@ import {
   nextReadMarker,
   countUnreadChats,
 } from "../src/lib/community/unread";
-import { buildTopicPush, parseMuteRequest, topicPushAudience } from "../src/lib/community/topic-push";
+import { buildTopicPush, channelMuteKey, parseMuteRequest, teamPushAudience, topicPushAudience } from "../src/lib/community/topic-push";
 import {
   classifyUpload,
   imageSize,
@@ -675,6 +675,21 @@ test("topic push audience: everyone who can see it, minus the sender and anyone 
   assert.deepEqual(topicPushAudience(ids, { senderKey: "c:a", mutedKeys: new Set(["c:c"]) }), ["b", "d"]);
   assert.deepEqual(topicPushAudience(ids, { senderKey: "store", mutedKeys: new Set() }), ["a", "b", "c", "d"], "a store post reaches every member once");
   assert.deepEqual(topicPushAudience([], { senderKey: "store", mutedKeys: new Set() }), []);
+});
+test("team push audience: every team member once, minus the writer and anyone who muted it for themselves", () => {
+  const keys = ["owner", "s:a", "s:b", "s:a"];
+  assert.deepEqual(teamPushAudience(keys, { senderAuthorKey: null, mutedKeys: new Set() }), ["owner", "s:a", "s:b"], "a member's message reaches the whole team");
+  assert.deepEqual(teamPushAudience(keys, { senderAuthorKey: "s:a", mutedKeys: new Set() }), ["owner", "s:b"], "the writer's own phones stay quiet");
+  assert.deepEqual(teamPushAudience(keys, { senderAuthorKey: null, mutedKeys: new Set(["team:s:b"]) }), ["owner", "s:a"], "a team mute is personal");
+  assert.deepEqual(teamPushAudience(keys, { senderAuthorKey: null, mutedKeys: new Set(["store", "c:s:b"]) }), ["owner", "s:a", "s:b"], "member keys never mute the team");
+});
+test("channel mute key: members as themselves, each team member personally, nobody in preview", () => {
+  assert.equal(channelMuteKey({ key: "c:x", customerId: "x", authorKey: null }), "c:x");
+  assert.equal(channelMuteKey({ key: "store", isTeam: true, authorKey: "owner", customerId: null }), "team:owner");
+  assert.equal(channelMuteKey({ key: "store", isTeam: true, authorKey: "s:abc", customerId: null }), "team:s:abc");
+  assert.equal(channelMuteKey({ key: "store", isTeam: true, authorKey: null, customerId: null }), null);
+  assert.equal(channelMuteKey({ key: "c:x", customerId: "x", authorKey: null, preview: { enabled: true } }), null);
+  assert.equal(channelMuteKey({ key: "c:x", customerId: null, authorKey: null }), null);
 });
 test("mute request: only an explicit boolean is accepted", () => {
   assert.equal(parseMuteRequest({ muted: true }), true);

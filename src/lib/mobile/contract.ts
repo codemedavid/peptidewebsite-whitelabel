@@ -24,7 +24,10 @@ export type ApiResponse<T> = ApiOk<T> | ApiError;
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 /** `store` is optional — only sent after the admin picks one from `chooseStore`. */
-export type LoginRequest = { store?: string; email: string; password: string };
+/** `guestToken`: signing in from a guest phone — the guest's orders move onto the account. */
+export type LoginRequest = { store?: string; email: string; password: string; guestToken?: string };
+/** POST /auth/guest — continue as a guest of `store` (answers LoginResponse). */
+export type GuestStartRequest = { store: string };
 /**
  * POST /auth/register — a shopper creates their customer account on `store`
  * (accounts are per store) and is signed straight in: answers LoginResponse.
@@ -39,6 +42,8 @@ export type RegisterRequest = {
   /** Optional — omitted or null = not said. */
   gender?: SignUpGender | null;
   password: string;
+  /** Signing up from a guest phone: the guest becomes this account, orders and all. */
+  guestToken?: string;
 };
 export type SignUpGender = "female" | "male" | "other";
 /**
@@ -82,7 +87,29 @@ export type StorePreview = {
   signUpUrl: string;
   /** The store's customers can sign in to the app (App shopping or App community). */
   customerSignIn: boolean;
+  /** Shoppers may continue without an account (not private, not members-only). */
+  guestShopping?: boolean;
+  /** Where to message the store (its live order-contact channels). Older servers omit it. */
+  contactChannels?: StoreContactChannel[];
   theme: MobileBrandTheme;
+};
+
+export type StoreContactChannelType = "whatsapp" | "telegram" | "messenger" | "viber" | "gmail" | "instagram";
+/** One enabled channel: WhatsApp/Viber digits, a Telegram/Messenger/Instagram handle, or an email. */
+export type StoreContactChannel = { type: StoreContactChannelType; label: string; destination: string };
+
+/** POST /community/members/:customerId/password (store team) — `password` omitted = generate one. */
+export type MemberPasswordRequest = { password?: string };
+export type MemberPasswordResponse = { customerId: string; password: string; generated: boolean };
+
+/** GET /community/members/:customerId — one member's full card for the detail screen. */
+export type MemberDetail = MemberApplication & {
+  avatarUrl: string | null;
+  bio: string;
+  joinedAt: string;
+  lastLoginAt: string | null;
+  /** The account has a password the team can replace (not a guest / partner-app login). */
+  canResetPassword: boolean;
 };
 
 // ── Identity, permissions, branding ──────────────────────────────────────────
@@ -114,6 +141,32 @@ export type MobileBrandTheme = {
   fonts: MobileBrandFonts;
   /** The website's page/card/text colours, translated for the app (every text pair ≥ 4.5:1). */
   palette: MobilePalette;
+  /**
+   * The store's branded loading screen — the website's brand splash
+   * (branding.config.brandSplash), resolved to plain colours. Absent from
+   * older servers: the app then builds one from the palette and logo.
+   */
+  splash?: MobileSplash;
+};
+
+/** The website's loading animations (lib/storefront/brand-splash.ts SPLASH_DESIGNS). */
+export type MobileSplashDesign = "logo-pulse" | "ring" | "bar" | "wordmark" | "fade";
+
+export type MobileSplash = {
+  /** false = the operator turned the splash off: the app shows a plain spinner. */
+  enabled: boolean;
+  design: MobileSplashDesign;
+  /** Splash-only mark, else the store logo; null → a monogram of the store name. */
+  logoUrl: string | null;
+  /** Backdrop, spinner/bar, and tagline colours — already resolved (never empty). */
+  background: string;
+  accent: string;
+  text: string;
+  /** "" when hidden or unset. */
+  tagline: string;
+  /** Hold at least this long (no flash), lift by this at the latest. */
+  minDurationMs: number;
+  maxDurationMs: number;
 };
 
 /**
@@ -144,7 +197,8 @@ export type MobileActor =
   | { kind: "staff"; displayName: string; email: string };
 
 /** A shopper signed in with their storefront customer account. */
-export type CustomerActor = { kind: "customer"; displayName: string; email: string };
+/** `guest`: shopping without an account (Continue as guest) — no community until they sign up. */
+export type CustomerActor = { kind: "customer"; displayName: string; email: string; guest?: boolean };
 
 /** A store-admin module the app can deep-link to on the website. */
 export type WebModuleLink = { key: string; label: string; url: string };
@@ -179,6 +233,131 @@ export type MeResponse = {
   community: CommunityMe;
   /** Name, nickname and photo — editable by every account. */
   account: AccountProfileView;
+  /** Peptide Tracker (docs/mobile-admin/TRACKER.md). Absent on older servers = off. */
+  tracker?: TrackerMe;
+  /** Promo & event notifications (lib/mobile/promo-push.ts). Absent on older servers = off. */
+  promoPush?: PromoPushMe;
+  /** "Get our app" bar on the store's website (lib/storefront/app-promo.ts). Store team only. */
+  appPromo?: AppPromoMe;
+};
+
+/** The website's "Get our app" bar, as the store team sees it. */
+export type AppPromoMe = {
+  /** The store has an app to offer (App shopping or App community is on). */
+  available: boolean;
+  /** The owner switched it on (it shows only while `available`). */
+  enabled: boolean;
+  /** Owner, or staff with Announcement Banner. */
+  canEdit: boolean;
+};
+
+/** PUT /admin/app-promo — show or hide the website's "Get our app" bar. */
+export type AppPromoRequest = { enabled: boolean };
+export type AppPromoResponse = { enabled: boolean };
+
+/** Store promo & event notifications, as this account sees them. */
+export type PromoPushMe = {
+  /** The store offers them (granted, customer app open). */
+  enabled: boolean;
+  /** Store team: may send one (owner, or staff with Promo Codes). */
+  canSend: boolean;
+  /** Customer: turned "Promos & events" on. Always false for the team. */
+  optedIn: boolean;
+};
+
+/** PUT /account/promo-push — a customer turns promo notifications on or off. */
+export type PromoOptInRequest = { on: boolean };
+export type PromoOptInResponse = { optedIn: boolean };
+
+/** POST /promo-push — the store team sends one. */
+export type PromoPushRequest = { headline: string; message: string };
+export type PromoPushSent = { id: string; recipients: number; sent: number };
+
+/** GET /promo-push — the composer: audience, sends left today, recent sends. */
+export type PromoPushStatus = {
+  /** Phones that will get it (opted-in customers with notifications on). */
+  audience: number;
+  sendsLeft: number;
+  /** When a send frees up again, when none are left (ISO). */
+  nextFreeAt: string | null;
+  recent: { id: string; headline: string; message: string; recipients: number; sentAt: string }[];
+};
+
+/** What this store's app offers in the Tracker tab (server: trackerAccess). */
+export type TrackerMe = {
+  /** Offer the tracker (customers: the Tracker tab; store team: More → Tracker) and serve /tracker/*. */
+  enabled: boolean;
+  /** Offer "Start from the store's guide" in protocol setup. */
+  guideImport: boolean;
+};
+
+// ── Peptide Tracker sync (docs/mobile-admin/TRACKER.md §5) ───────────────────
+// The phone is the source of truth; records sync through one generic table.
+// Last write wins on the record's own `updatedAt`; deletes are tombstones.
+
+export type TrackerRecordKind = "protocol" | "dose" | "skip" | "vial" | "checkin" | "settings";
+
+export type TrackerSyncRecord = {
+  kind: TrackerRecordKind;
+  /** Client-made id (stable across devices). Unique per customer + kind. */
+  id: string;
+  /** The whole record (features/tracker/lib/types.ts), validated per kind on the server. */
+  data: unknown;
+  /** Client clock, ISO. Decides last-write-wins. */
+  updatedAt: string;
+  /** Tombstone, ISO, or null. */
+  deletedAt: string | null;
+};
+
+/** POST /tracker/sync — push local changes, pull everything newer than `cursor`. */
+export type TrackerSyncRequest = {
+  /** Opaque; null on the first sync (pulls everything). */
+  cursor: string | null;
+  /** At most 500 per call. */
+  push: TrackerSyncRecord[];
+};
+
+export type TrackerSyncResponse = {
+  /** Records changed on the server since `cursor` (including this push's winners). */
+  pulled: TrackerSyncRecord[];
+  /** Pass back on the next sync. */
+  cursor: string;
+  /** Pushed records the server refused (bad shape / too large); the client drops them from its outbox. */
+  rejected: { kind: TrackerRecordKind; id: string; reason: string }[];
+  /** More pulled records waiting — sync again straight away. */
+  hasMore: boolean;
+};
+
+/** GET /tracker/order-vials — delivered order lines the buyer may turn into vials. */
+export type TrackerOrderVial = {
+  /** Stable per order line, so the app can hide lines already added. */
+  key: string;
+  orderNumber: string;
+  deliveredAt: string | null;
+  productId: string;
+  name: string;
+  /** Variation label as sold, e.g. "10mg". */
+  variation: string | null;
+  /** Parsed from the name/variation when it states one. */
+  strength: { value: number; unit: "mg" | "mcg" | "iu" } | null;
+  quantity: number;
+  imageUrl: string | null;
+};
+
+export type TrackerOrderVialsResponse = { vials: TrackerOrderVial[] };
+
+/** GET /tracker/store-guides → TrackerStoreGuidesResponse. */
+export type TrackerStoreGuidesResponse = { guides: TrackerStoreGuide[] };
+
+/** GET /tracker/store-guides — the store's Protocols, when guide import is granted. */
+export type TrackerStoreGuide = {
+  name: string;
+  category: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  storage: string;
+  notes: string[];
 };
 
 // ── Orders ───────────────────────────────────────────────────────────────────
@@ -195,6 +374,10 @@ export type OrderStatus =
 /** One tab per real status, plus "all". "to-fulfil" (confirmed + processing +
  *  ready) is kept as an alias for the Home "To ship" tile and older app builds. */
 export type OrderFilterKey = OrderStatus | "to-fulfil" | "all";
+
+/** The web Orders screen's payment chips: "unpaid" = "Not confirmed" (not
+ *  marked paid and not cancelled); "paid" = marked paid. */
+export type OrderPaymentFilter = "all" | "unpaid" | "paid";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -235,11 +418,26 @@ export type StockMove = "deduct" | "restock" | null;
 export type OrderDetail = OrderSummary & {
   /** Opaque concurrency token — send back as `expectedUpdatedAt`. */
   updatedAt: string;
-  customer: { name: string; email: string; phone: string; contactMethod: string };
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    contactMethod: string;
+    /** The WhatsApp number / name typed at checkout ("" when none). Optional:
+     *  older servers don't send them. */
+    whatsapp?: string;
+    whatsappName?: string;
+  };
   shipping: {
     addressLine: string;
     region: string;
     bookingText: string;
+    /** The web detail's address rows (optional: older servers omit them). */
+    street?: string;
+    barangay?: string;
+    /** "City, Province Postal". */
+    cityProvince?: string;
+    country?: string;
   };
   items: Array<{ name: string; qty: number; unitPriceLabel: string; lineTotalLabel: string }>;
   money: {
@@ -301,13 +499,25 @@ export type OrderRoundFacet = {
 /** `round` query value that selects orders placed outside any group buy. */
 export const ON_HAND_ROUND = "on-hand";
 
+/**
+ * `folder` query value for the web's "Outside a group buy" folder. Any other
+ * value is a round id. Unlike `round` (the order's stamped groupBuyId), a
+ * folder files orders exactly like the web Orders hub (resolveRoundOrders):
+ * stamped orders plus unstamped ones placed inside the round's window.
+ */
+export const OUTSIDE_FOLDER = "outside";
+
 export type OrderListResponse = {
   orders: OrderSummary[];
   nextCursor: string | null;
   counts: { new: number; toFulfil: number };
-  /** Active (non-trashed) orders per status, for the per-status tabs. Optional
-   *  so an older server's response still type-checks in a newer app. */
+  /** Active (non-trashed) orders per status in the current folder/round, under
+   *  the payment filter, for the per-status tabs. Optional so an older
+   *  server's response still type-checks in a newer app. */
   statusCounts?: Partial<Record<OrderStatus, number>>;
+  /** Orders per payment chip in the current folder/round, under the status
+   *  filter. Optional: older servers don't send it. */
+  paymentCounts?: Record<OrderPaymentFilter, number>;
   /** First page only (null on later pages): rounds with orders in this view, live first. */
   rounds: OrderRoundFacet[] | null;
 };
@@ -375,13 +585,87 @@ export type OrderConflict = { current: OrderDetail };
 export type DashboardResponse = {
   store: { open: boolean };
   queue: { newOrders: number; toFulfil: number };
-  /** Present only when this account + plan may see money figures. */
-  today: { orders: number; revenueLabel: string } | null;
+  /**
+   * Present only when this account + plan may see money figures. Store-currency
+   * orders only: International (foreign-currency) orders are never summed into
+   * it — `international` counts them (absent from older servers).
+   */
+  today: { orders: number; revenueLabel: string; international?: number } | null;
   /** Products at or below the low-stock line (incl. out of stock). */
   lowStockCount: number;
   recent: OrderSummary[];
   lowStock: Array<{ id: string; name: string; units: number; tone: "out" | "low" }>;
+  // ── website dashboard parity (absent from older servers) ──
+  /** Catalog tiles (Products / Units in stock / Out of stock); null without a catalog grant. */
+  catalog?: DashboardCatalog | null;
+  /** "Stock levels": worst first, bars relative to the best-stocked product. */
+  stockLevels?: DashboardStockRow[];
+  /** "Top categories": products per category, busiest first. */
+  topCategories?: DashboardCategoryShare[];
+  /** "Needs attention" (low stock, orders to pack, empty categories) — each gated on its grant. */
+  attention?: DashboardAlert[];
 };
+
+export type DashboardCatalog = { products: number; featured: number; units: number; outOfStock: number };
+
+export type DashboardStockRow = { id: string; name: string; units: number; pct: number; tone: "out" | "low" | "ok" };
+
+export type DashboardCategoryShare = { id: string; label: string; count: number; pct: number };
+
+/** Where a dashboard alert leads in the app. */
+export type DashboardAlertTarget = "inventory" | "orders" | "categories" | "gb-joins" | "gb-round" | "group-buys";
+
+export type DashboardAlert = {
+  id: string;
+  title: string;
+  sub: string;
+  tone: "neutral" | "good" | "warn" | "bad";
+  target: DashboardAlertTarget;
+};
+
+export type DashboardGbKit = {
+  id: string;
+  name: string;
+  /** "7/10 · 3 more closes kit 2" / "2 kits full ✓" */
+  note: string;
+  pct: number;
+  tone: "full" | "close" | "filling" | "risk";
+};
+
+/** A round the card names: its id + name for the round screen link. */
+export type DashboardGbRoundRef = { id: string; name: string };
+
+/**
+ * GET /dashboard/group-buy — the website dashboard's Group Buy card
+ * (lib/storefront/admin-dashboard-gb), display-ready.
+ *   off   — the store / account can't see group buys (no card)
+ *   empty — no live or finished round yet (`next` = the next scheduled one)
+ *   ready — the live round, or the last finished one as a recap
+ */
+export type DashboardGroupBuyResponse =
+  | { status: "off" }
+  | { status: "empty"; next: (DashboardGbRoundRef & { opensLabel: string }) | null }
+  | {
+      status: "ready";
+      mode: "live" | "recap";
+      round: DashboardGbRoundRef;
+      timing: { label: string; tone: "neutral" | "good" | "warn" | "bad" };
+      orders: number;
+      buyers: number;
+      vials: number;
+      unpaidOrders: number;
+      /** "₱12,400" — null unless this account may see money. */
+      unpaidLabel: string | null;
+      /** null when the store has no paid join flow. */
+      joinsWaiting: number | null;
+      kits: DashboardGbKit[];
+      untrackedProducts: number;
+      /** "Supplier order so far: 4 full kits + 2 partial (5 vials short)" */
+      supplierLabel: string | null;
+      next: (DashboardGbRoundRef & { opensLabel: string }) | null;
+      /** Group-buy entries for "Needs attention" (live rounds only). */
+      alerts: DashboardAlert[];
+    };
 
 // ── Products ─────────────────────────────────────────────────────────────────
 
@@ -530,6 +814,18 @@ export type InsightsResponse = {
   cancelled: number;
   /** Absent from older servers. */
   period?: InsightsPeriod;
+  /**
+   * International (foreign-currency) orders, all time, cancelled excluded —
+   * kept OUT of every figure above (₱ + $ is not a number) and listed per
+   * currency. Absent from older servers; [] when there are none.
+   */
+  international?: Array<{ code: string; orders: number; totalLabel: string }>;
+  /**
+   * Revenue per group buy in the window (the website's "Group Buys" card).
+   * null when the store doesn't have the group-buy analytics section; absent
+   * from older servers.
+   */
+  groupBuys?: { rows: RankedRow[]; totalLabel: string } | null;
 };
 
 // ── Customers ────────────────────────────────────────────────────────────────
@@ -879,13 +1175,32 @@ export type CommunityChannel = {
   /** Moderators only: what people in preview get here. Older servers omit it. */
   previewAccess?: ChannelPreviewAccess;
   /**
-   * Members: this channel's chat messages don't push my phones (drops and
-   * group buys still do). Omitted for the store team and by older servers.
+   * This channel's chat messages don't push my phones (drops and group buys
+   * still do). Personal: a team member's mute is theirs alone. Omitted for
+   * people in preview and by older servers.
    */
   muted?: boolean;
 };
 
-/** PUT /community/channels/:id/mute — members only. */
+/**
+ * Notification sounds, shared by the server (what each push asks for) and the
+ * app (the Android channels it creates + the bundled files). iOS plays the
+ * named file; Android takes its sound from the CHANNEL, and a channel's sound
+ * can never change once created — so a new sound means a NEW channel id.
+ * Builds that don't have a channel yet show the push in Android's fallback
+ * channel with the default sound; iOS builds without the file play the default.
+ */
+export const PUSH_SOUND_CHANNELS = {
+  /** New orders (store team): a bright two-note chime. */
+  orders: { androidChannelId: "orders_chime", name: "New orders", sound: "order_chime.wav" },
+  /** Community chats, drops, group buys and order updates: a soft pop. */
+  messages: { androidChannelId: "chat_pop", name: "Chats and drops", sound: "chat_pop.wav" },
+  /** Store promos & events (opt-in only): the soft pop, on its own channel so Android can mute just these. */
+  promos: { androidChannelId: "promos", name: "Promos & events", sound: "chat_pop.wav" },
+} as const;
+export type PushSoundChannel = keyof typeof PUSH_SOUND_CHANNELS;
+
+/** PUT /community/channels/:id/mute — members, and each store-team member for themselves. */
 export type ChannelMuteRequest = { muted: boolean };
 export type ChannelMuteResponse = { channelId: string; muted: boolean };
 
@@ -941,6 +1256,11 @@ export type ThreadInfo = {
   /** The composer's placeholder in a hub topic ("What are you looking for?"). Older servers omit it. */
   composerHint?: string | null;
   canManage: boolean;
+  /**
+   * Topics: whether I muted this thread's channel (no chat pushes). Omitted for
+   * DMs, for people in preview, and by older servers — then there's no bell.
+   */
+  channelMuted?: boolean;
 };
 
 /**

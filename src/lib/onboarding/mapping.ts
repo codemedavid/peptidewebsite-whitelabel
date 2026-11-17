@@ -117,7 +117,7 @@ function brandConfigFrom(payload: OnboardingPayload, symbol: string): Partial<Br
     heroLine1: payload.businessName,
     heroSub:
       payload.description?.trim() ||
-      `Shop ${payload.businessName} — quality products, fast checkout.`,
+      `Shop ${payload.businessName}: quality products, fast checkout.`,
     metaDescription: (payload.description || "").trim().slice(0, META_DESCRIPTION_MAX),
   };
   if (payload.logoUrl) config.logoUrl = payload.logoUrl;

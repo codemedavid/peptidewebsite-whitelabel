@@ -37,9 +37,9 @@ export function AdminMemberSignIn() {
         return;
       }
       setEnabled(res.enabled);
-      toast(res.enabled ? "Members-only is ON — visitors sign in first" : "Members-only is OFF — your shop is open to everyone");
+      toast(res.enabled ? "Members-only is ON. Visitors sign in first" : "Members-only is OFF. Your shop is open to everyone");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -54,8 +54,8 @@ export function AdminMemberSignIn() {
           </h2>
           <p className="cx-empty" style={{ marginTop: 4 }}>
             {enabled
-              ? "On — visitors must sign in or create an account before they see your shop. New sign-ups appear in this list."
-              : "Off — anyone with your link can browse. Turn on to make visitors sign in or create an account first."}
+              ? "On: visitors must sign in or create an account before they see your shop. New sign-ups appear in this list."
+              : "Off: anyone with your link can browse. Turn on to make visitors sign in or create an account first."}
           </p>
         </div>
         <button

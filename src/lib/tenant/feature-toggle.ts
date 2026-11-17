@@ -184,7 +184,7 @@ function readList(
     }
     if (resolved.reason === "ambiguous") {
       errors.push(
-        `${at}: "${entry.trim()}" matches more than one feature (${resolved.candidates.join(", ")}) — send the exact key.`,
+        `${at}: "${entry.trim()}" matches more than one feature (${resolved.candidates.join(", ")}). Send the exact key.`,
       );
       return;
     }
@@ -220,7 +220,7 @@ export function buildFeatureTogglePlan(input: FeatureTogglePlanInput): FeatureTo
 
   if (!errors.length && !enable.length && !disable.length) {
     errors.push(
-      "Nothing to change — send at least one feature name in enable or disable.",
+      "Nothing to change. Send at least one feature name in enable or disable.",
     );
   }
 
@@ -229,7 +229,7 @@ export function buildFeatureTogglePlan(input: FeatureTogglePlanInput): FeatureTo
   const disableSet = new Set<FeatureKey>(disable);
   for (const key of new Set(enable)) {
     if (disableSet.has(key)) {
-      errors.push(`"${key}" (${labelOf(key)}) is in both enable and disable — pick one.`);
+      errors.push(`"${key}" (${labelOf(key)}) is in both enable and disable. Pick one.`);
     }
   }
 
@@ -240,7 +240,7 @@ export function buildFeatureTogglePlan(input: FeatureTogglePlanInput): FeatureTo
     const required = requiredPlanFor(key);
     errors.push(
       required
-        ? `"${key}" (${labelOf(key)}) is not part of the ${planLabel} package — it needs the ${planMeta(required).label} plan. Change the tenant's plan first.`
+        ? `"${key}" (${labelOf(key)}) is not part of the ${planLabel} package. It needs the ${planMeta(required).label} plan. Change the tenant's plan first.`
         : `"${key}" (${labelOf(key)}) is not available on any plan.`,
     );
   }

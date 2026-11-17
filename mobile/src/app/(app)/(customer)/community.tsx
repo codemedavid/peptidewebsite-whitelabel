@@ -3,6 +3,8 @@ import { router } from "expo-router";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { Avatar } from "@/features/community/components/Avatar";
 import { ChatsScreen } from "@/features/community/components/ChatsScreen";
+import { useCommunityAccess } from "@/features/community/hooks/useInbox";
+import { GuestCommunityLock } from "@/features/session/guest/GuestScreens";
 
 /** Your own avatar, top-right — like the inspiration, it opens Me. */
 function MeButton() {
@@ -16,7 +18,9 @@ function MeButton() {
   );
 }
 
-/** Customer app: Chats (members only — guarded in the tab layout). */
+/** Customer app: Chats (members only — guarded in the tab layout). A guest sees the sign-up lock. */
 export default function CustomerChatsTab() {
+  const access = useCommunityAccess();
+  if (access.guestLocked) return <GuestCommunityLock />;
   return <ChatsScreen headerRight={<MeButton />} />;
 }

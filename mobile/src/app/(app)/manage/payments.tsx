@@ -9,7 +9,7 @@ import { removeRows, toggleActive, useCollection, type ListOp } from "@/features
 import { ImageField } from "@/features/admin/setup/ImageField";
 import { QRPH_FEE_PERCENT, newId, str, type Row } from "@/features/admin/setup/rules";
 import { SEED_PAYMENT_METHODS } from "@/features/admin/setup/seeds";
-import { EditorSheet, ItemCard, ListPage, Loadable, ToggleRow, confirmDelete } from "@/features/admin/setup/ui";
+import { EditorSheet, Hint, ItemCard, ListPage, Loadable, ToggleRow, confirmDelete } from "@/features/admin/setup/ui";
 import { Field } from "@/ui/inputs";
 import { Pill } from "@/ui/primitives";
 
@@ -30,6 +30,9 @@ export default function PaymentsScreen() {
         {(brand) => {
           // Default-OFF feature: anything but a literal true is "not entitled".
           const qrphEntitled = brand.qrphFeeEntitled === true;
+          // Same hide-don't-clear rule for the Paid Access join-fee tag and the market ticks.
+          const paidAccessEntitled = (brand.groupBuyCaps as { paidAccess?: unknown } | undefined)?.paidAccess === true;
+          const dualMarket = brand.dualMarket === true;
           const startAdd = () =>
             setEditing({
               row: { id: newId("pm"), name: "", number: "", account: "", qrImage: "", order: list.items.length + 1, active: true },
@@ -53,9 +56,13 @@ export default function PaymentsScreen() {
                     leading={<QrThumb uri={str(m.qrImage)} />}
                     lines={[str(m.number), `Account: ${str(m.account) || "—"}`, `ID: ${str(m.id)} · Order: #${String(m.order ?? "")}`]}
                     badges={
-                      qrphEntitled && m.qrph === true ? (
-                        <Pill tone="info" size="sm" icon="qr-code-outline" label={`QR PH · ${QRPH_FEE_PERCENT}%`} />
-                      ) : null
+                      <>
+                        {qrphEntitled && m.qrph === true ? (
+                          <Pill tone="info" size="sm" icon="qr-code-outline" label={`QR PH · ${QRPH_FEE_PERCENT}%`} />
+                        ) : null}
+                        {paidAccessEntitled && m.paidAccess === true ? <Pill tone="info" size="sm" icon="people-outline" label="Join fee" /> : null}
+                        {dualMarket ? <Pill tone="neutral" size="sm" label={marketsLabel(m)} /> : null}
+                      </>
                     }
                     active={m.active === true}
                     disabled={list.saving}
@@ -73,6 +80,9 @@ export default function PaymentsScreen() {
                   initial={editing.row}
                   isNew={editing.isNew}
                   qrphEntitled={qrphEntitled}
+                  paidAccessEntitled={paidAccessEntitled}
+                  dualMarket={dualMarket}
+                  currency={str(brand.currency) || "₱"}
                   saving={list.saving}
                   onCancel={() => setEditing(null)}
                   onSave={async (row) => {
@@ -113,6 +123,9 @@ function MethodEditor({
   initial,
   isNew,
   qrphEntitled,
+  paidAccessEntitled,
+  dualMarket,
+  currency,
   saving,
   onCancel,
   onSave,
@@ -120,6 +133,9 @@ function MethodEditor({
   initial: Row;
   isNew: boolean;
   qrphEntitled: boolean;
+  paidAccessEntitled: boolean;
+  dualMarket: boolean;
+  currency: string;
   saving: boolean;
   onCancel: () => void;
   onSave: (row: Row) => void;
@@ -129,6 +145,8 @@ function MethodEditor({
   const [account, setAccount] = useState(str(initial.account));
   const [qrImage, setQrImage] = useState(str(initial.qrImage));
   const [qrph, setQrph] = useState(initial.qrph === true);
+  const [paidAccess, setPaidAccess] = useState(initial.paidAccess === true);
+  const [markets, setMarkets] = useState(() => methodMarkets(initial));
 
   const canSave = !!name.trim() && !!number.trim() && !!account.trim();
   const dirty =
@@ -136,7 +154,9 @@ function MethodEditor({
     number !== str(initial.number) ||
     account !== str(initial.account) ||
     qrImage !== str(initial.qrImage) ||
-    qrph !== (initial.qrph === true);
+    qrph !== (initial.qrph === true) ||
+    paidAccess !== (initial.paidAccess === true) ||
+    JSON.stringify(markets) !== JSON.stringify(methodMarkets(initial));
 
   return (
     <EditorSheet
@@ -147,7 +167,19 @@ function MethodEditor({
       saving={saving}
       onCancel={onCancel}
       // Every other key on the row (id, order, active, anything newer) rides through.
-      onSave={() => onSave({ ...initial, name, number, account, qrImage, qrph })}
+      onSave={() =>
+        onSave({
+          ...initial,
+          name,
+          number,
+          account,
+          qrImage,
+          qrph,
+          paidAccess,
+          // Untouched (Local only) stays unset, as on the website.
+          markets: normalizeMethodMarkets(markets),
+        })
+      }
     >
       <Field label="Payment Method Name *" value={name} onChangeText={setName} placeholder="e.g., GCash, Maya, Bank Transfer" />
       <Field
@@ -157,15 +189,40 @@ function MethodEditor({
         placeholder="09XX XXX XXXX or Account: 1234-5678-9012"
       />
       <Field label="Account Name *" value={account} onChangeText={setAccount} placeholder="ACCOUNT NAME" autoCapitalize="characters" />
+      {dualMarket ? (
+        <>
+          <ToggleRow label={`Show in the Local cart (${currency})`} value={markets.local} onChange={(local) => setMarkets((m) => ({ ...m, local }))} />
+          <ToggleRow
+            label="Show in the International cart (USD)"
+            value={markets.international && !qrph}
+            disabled={qrph}
+            onChange={(international) => setMarkets((m) => ({ ...m, international }))}
+          />
+          <Hint tone={!markets.local && !markets.international ? "warning" : undefined}>
+            {`Each cart checks out with its own payment methods, e.g. GCash for Local, PayPal or a USD bank account for International.${
+              qrph ? " QR PH is a peso payment, so it's Local only." : ""
+            }${!markets.local && !markets.international ? " Tick at least one, or no shopper will see this method." : ""}`}
+          </Hint>
+        </>
+      ) : null}
+      {paidAccessEntitled ? (
+        <ToggleRow
+          label="Group buy join fee only (Paid Access)"
+          hint="Shown only on a group buy's join payment step, never at checkout. If no method is tagged, the join step shows your checkout methods."
+          value={paidAccess}
+          onChange={setPaidAccess}
+        />
+      ) : null}
       {qrphEntitled ? (
         <ToggleRow
           label="QR PH account"
-          hint={`Tag this if it's your QR PH account. QR PH charges you a percentage on what it collects, so a ${QRPH_FEE_PERCENT}% processing fee is added to the customer's total when they pay this way — shown as its own line before they place the order. Your other payment methods are never charged.`}
+          hint={`Tag this if it's your QR PH account. QR PH charges you a percentage on what it collects, so a ${QRPH_FEE_PERCENT}% processing fee is added to the customer's total when they pay this way, shown as its own line before they place the order. Your other payment methods are never charged.`}
           value={qrph}
           onChange={setQrph}
         />
       ) : null}
       <ImageField
+        kind="payment-qr"
         label="QR Code Image (Optional)"
         hint="Upload a QR code image or paste an image URL. If upload fails, you can use the URL field below."
         value={qrImage}
@@ -196,3 +253,19 @@ const styles = StyleSheet.create({
     marginRight: SPACE.xs,
   },
 });
+
+// src/lib/storefront/intl-market.ts methodMarkets / normalizeMethodMarkets / methodSellsIn (copied).
+type MethodMarkets = { local: boolean; international: boolean };
+function methodMarkets(m: Row): MethodMarkets {
+  const x = (m.markets ?? {}) as Partial<MethodMarkets>;
+  return { local: x.local !== false, international: x.international === true };
+}
+/** Persists only a non-default choice, so untouched methods stay untouched. */
+function normalizeMethodMarkets(m: MethodMarkets): MethodMarkets | undefined {
+  return m.local && !m.international ? undefined : m;
+}
+function marketsLabel(m: Row): string {
+  const ticks = methodMarkets(m);
+  const list = [ticks.local && "Local", ticks.international && m.qrph !== true && "International"].filter(Boolean);
+  return list.length ? list.join(" + ") : "Hidden";
+}

@@ -90,7 +90,7 @@ function Editor({
       if ("url" in res) set({ coverUrl: res.url });
       else toast(res.error);
     } catch {
-      toast("Image upload failed — please try again.");
+      toast("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -174,7 +174,7 @@ function Editor({
           </div>
 
           <aside className="art-admin__preview" aria-label="Live preview">
-            <div className="admin-field__hint" style={{ marginBottom: 12 }}>Live preview — your store&apos;s theme</div>
+            <div className="admin-field__hint" style={{ marginBottom: 12 }}>Live preview: your store&apos;s theme</div>
             <div className="sf-root">
               <h2 className="art-post__title" style={{ fontSize: 26, marginTop: 0 }}>{d.title || "Untitled article"}</h2>
               {d.body.trim() ? <ArticleBody text={d.body} /> : <p className="admin-field__hint">Your article will appear here.</p>}
@@ -265,7 +265,7 @@ export function AdminArticles({ onBack }: { brand: Brand; onBack: () => void }) 
           ) : rows.length === 0 ? (
             <div className="staff-empty">
               <p className="staff-empty__title">No articles yet</p>
-              <p className="admin-field__hint">Write your first guide — for example, how to reconstitute a vial.</p>
+              <p className="admin-field__hint">Write your first guide, for example, how to reconstitute a vial.</p>
               <button className="admin-btn" onClick={() => setEditing(BLANK)} style={{ marginTop: 10 }}>
                 Write an article
               </button>

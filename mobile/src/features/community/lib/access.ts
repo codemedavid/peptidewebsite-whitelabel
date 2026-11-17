@@ -18,6 +18,10 @@ export type CommunityAccess = {
   customerChatsTab: boolean;
   /** Customer app: the Me tab shows this membership card instead of the profile. */
   membershipCard: MembershipCard | null;
+  /** Customer app: shopping as a guest (no account yet). */
+  guest: boolean;
+  /** Guest of a store with a community: Chats shows the sign-up lock, nothing else. */
+  guestLocked: boolean;
 };
 
 /** What an older server (no `community` in /me) means: the community is off. */
@@ -34,15 +38,18 @@ const COMMUNITY_OFF: CommunityMe = {
 };
 
 export function communityAccess(
-  me: Partial<Pick<MeResponse, "mode">> & { community?: CommunityMe | null },
+  me: Partial<Pick<MeResponse, "mode" | "actor">> & { community?: CommunityMe | null },
 ): CommunityAccess {
   const c = me.community ?? COMMUNITY_OFF;
+  // A guest of a store WITH a community sees the Chats tab, locked behind sign-up.
+  const guest = me.mode === "customer" && me.actor?.kind === "customer" && me.actor.guest === true;
+  const guestLocked = guest && c.enabled;
   const moderator = c.enabled && c.isModerator;
   const approved = c.enabled && c.membership === "approved";
   const inCommunity = approved || moderator;
   const communityAdmin = approved && c.isAdmin === true;
   let membershipCard: MembershipCard | null = null;
-  if (me.mode === "customer" && !approved) {
+  if (me.mode === "customer" && !approved && !guest) {
     const m = c.membership;
     membershipCard = c.enabled && (m === "pending" || m === "rejected" || m === "revoked") ? m : "none";
   }
@@ -52,7 +59,9 @@ export function communityAccess(
     communityAdmin,
     runsCommunity: moderator || communityAdmin,
     adminChatsTab: me.mode === "admin" && moderator,
-    customerChatsTab: me.mode === "customer" && approved,
+    customerChatsTab: me.mode === "customer" && (approved || guestLocked),
     membershipCard,
+    guest,
+    guestLocked,
   };
 }

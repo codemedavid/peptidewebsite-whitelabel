@@ -15,7 +15,7 @@ export function UnreachableScreen() {
       <EmptyState
         icon="cloud-offline-outline"
         title="Can't reach your store"
-        body="Either your internet is down or the store server is. Your sign-in is saved — nothing has been lost."
+        body="Either your internet is down or the store server is. Your sign-in is saved, so nothing has been lost."
         action={{ label: "Try again", onPress: retry }}
       />
       <View style={{ padding: SPACE.xl }}>

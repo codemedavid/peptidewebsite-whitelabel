@@ -224,7 +224,7 @@ const msgLines = msg.split("\n");
 eq(
   "the message names the order and the store",
   msgLines[0],
-  "Order #1042 — Peptide Lab",
+  "Order #1042 · Peptide Lab",
 );
 eq(
   "no store name → the order still names itself",
@@ -234,8 +234,8 @@ eq(
 
 ok(
   "every item lists quantity and line total",
-  msg.includes("• Semaglutide — 5mg ×2 — ₱6,000") &&
-    msg.includes("• Bacteriostatic Water ×1 — ₱250"),
+  msg.includes("• Semaglutide — 5mg ×2 · ₱6,000") &&
+    msg.includes("• Bacteriostatic Water ×1 · ₱250"),
   JSON.stringify(msg),
 );
 
@@ -258,7 +258,7 @@ const withOption = buildOrderConfirmation(
 );
 ok(
   "a variation the stored name lacks is appended so the store knows the size",
-  formatOrderMessage(withOption).includes("• Retatrutide (10mg) ×1 — ₱4,000"),
+  formatOrderMessage(withOption).includes("• Retatrutide (10mg) ×1 · ₱4,000"),
   JSON.stringify(formatOrderMessage(withOption)),
 );
 
@@ -342,7 +342,7 @@ const sparseMsg = formatOrderMessage(
 );
 ok(
   "an order missing every optional field still formats cleanly",
-  !/undefined|null|NaN/.test(sparseMsg) && sparseMsg.includes("• Mystery vial ×1 — 100"),
+  !/undefined|null|NaN/.test(sparseMsg) && sparseMsg.includes("• Mystery vial ×1 · 100"),
   JSON.stringify(sparseMsg),
 );
 

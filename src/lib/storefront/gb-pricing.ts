@@ -99,7 +99,7 @@ export function gbPriceError(product: Product, next: number): string | null {
   if (next <= 0) return "The group-buy price has to be more than 0.";
   const regular = Math.max(0, product.price || 0);
   if (next >= regular) {
-    return `The group-buy price (${next.toLocaleString()}) has to be below the regular price (${regular.toLocaleString()}) — otherwise the storefront shows no saving.`;
+    return `The group-buy price (${next.toLocaleString()}) has to be below the regular price (${regular.toLocaleString()}). Otherwise the storefront shows no saving.`;
   }
   return null;
 }

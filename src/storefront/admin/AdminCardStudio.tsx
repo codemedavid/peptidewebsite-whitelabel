@@ -384,7 +384,7 @@ export function AdminCardStudio({
 
   const apply = (d: CardDesign, name: string) => {
     setCardDesign({ ...d });
-    toast(`Applied "${name}" — saving…`);
+    toast(`Applied "${name}". Saving…`);
     // The customization workbench mounts above the gallery — bring it into
     // view so applying from deep in the gallery visibly opens the panel.
     setTimeout(
@@ -592,7 +592,7 @@ export function AdminCardStudio({
             <input
               className="admin-input"
               autoFocus
-              placeholder="Template name — e.g. Holiday promo cards"
+              placeholder="Template name, e.g. Holiday promo cards"
               value={templateName}
               maxLength={80}
               onChange={(e) => setTemplateName(e.target.value)}
@@ -877,7 +877,7 @@ export function AdminCardStudio({
             <h2>Pick a card design below</h2>
             <p>
               Click any design to apply it to your product cards instantly and unlock the
-              customization panel — borders, colors, shadows, typography, buttons and more.
+              customization panel: borders, colors, shadows, typography, buttons and more.
               Your current cards use the classic theme style.
             </p>
           </div>
@@ -914,7 +914,7 @@ export function AdminCardStudio({
         <h2 className="cstudio-section-title">
           Design Gallery
           <span className="cstudio-section-sub">
-            {CARD_PRESETS.length} professional styles — hover to preview, click to apply
+            {CARD_PRESETS.length} professional styles. Hover to preview, click to apply
           </span>
         </h2>
         <div className="cstudio-gallery">

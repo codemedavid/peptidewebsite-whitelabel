@@ -113,7 +113,7 @@ export function buildStoreClosedNotice(value: unknown, brandName: string): Store
   const status = normalizeStoreStatus(value);
   const name = typeof brandName === "string" ? brandName.trim() : "";
   const auto = name
-    ? `Hello — ${name} is currently closed`
-    : "Hello — this store is currently closed";
+    ? `Hello! ${name} is currently closed`
+    : "Hello! This store is currently closed";
   return { headline: status.headline || auto, message: status.message };
 }

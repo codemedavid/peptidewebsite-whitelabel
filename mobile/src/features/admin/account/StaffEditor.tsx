@@ -49,7 +49,11 @@ export function StaffEditor({
   const allOn = modules.length > 0 && modules.every((m) => permissions.includes(m.key));
   const toggle = (key: string) =>
     setPermissions((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  const toggleAll = () => setPermissions(allOn ? [] : modules.map((m) => m.key));
+  // Only the modules shown here flip: a grant this store can't offer right now
+  // (or one a newer website added) is kept, never silently wiped.
+  const shown = new Set(modules.map((m) => m.key));
+  const toggleAll = () =>
+    setPermissions((prev) => (allOn ? prev.filter((k) => !shown.has(k)) : [...prev.filter((k) => !shown.has(k)), ...modules.map((m) => m.key)]));
 
   return (
     <EditorSheet

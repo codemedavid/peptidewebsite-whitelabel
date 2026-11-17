@@ -85,12 +85,12 @@ function ArticleList({ brand, onBack }: { brand: Brand; onBack: () => void }) {
         <span className="cp-eyebrow">Journal</span>
         <h1 className="cp-title">{brand.articlesTitle || "Articles"}</h1>
         <p className="cp-lede">
-          {brand.articlesIntro || "Guides, explainers and notes from our team — read before you research."}
+          {brand.articlesIntro || "Guides, explainers and notes from our team. Read before you research."}
         </p>
       </header>
 
       {!lead ? (
-        <div className="cp-empty">No articles yet — check back soon.</div>
+        <div className="cp-empty">No articles yet. Check back soon.</div>
       ) : (
         <>
           <a className="art-feature" href={articleHash(lead.slug)}>

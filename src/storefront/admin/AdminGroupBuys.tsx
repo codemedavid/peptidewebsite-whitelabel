@@ -332,13 +332,13 @@ function GroupBuyModal({
             min={0}
             step={1}
             value={slotGoal || ""}
-            placeholder="Off — leave blank to hide the progress bar"
+            placeholder="Off. Leave blank to hide the progress bar"
             onChange={(e) => setSlotGoal(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
           />
           <div className="admin-field__hint">
             {slotGoal > 0
               ? `Storefront shows “${slotGoal} slots” with a fill bar as orders come in.`
-              : "Off — no progress bar shows for this group buy."}
+              : "Off. No progress bar shows for this group buy."}
           </div>
         </div>
 
@@ -350,7 +350,7 @@ function GroupBuyModal({
             className="admin-input"
             maxLength={64}
             value={batchNumber}
-            placeholder={`Blank uses the name — “${name || "this round"}”`}
+            placeholder={`Blank uses the name: “${name || "this round"}”`}
             onChange={(e) => setBatchNumber(e.target.value)}
           />
           <div className="admin-field__hint">
@@ -367,7 +367,7 @@ function GroupBuyModal({
               className="admin-input"
               maxLength={32}
               value={orderPrefix}
-              placeholder="e.g. MNMGB123 — blank uses your store's order numbers"
+              placeholder="e.g. MNMGB123. Blank uses your store's order numbers"
               autoCapitalize="characters"
               aria-invalid={prefixError ? true : undefined}
               onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())}
@@ -377,7 +377,7 @@ function GroupBuyModal({
                 ? prefixError
                 : cleanPrefix
                   ? `This round's orders are numbered ${formatGroupBuyOrderNumber(cleanPrefix, 1)}, ${formatGroupBuyOrderNumber(cleanPrefix, 2)}…`
-                  : "Blank — orders in this round keep your store's usual numbers."}
+                  : "Blank: orders in this round keep your store's usual numbers."}
             </div>
           </div>
         ) : null}
@@ -442,9 +442,9 @@ function GroupBuyModal({
             <label className="admin-field__label">Products</label>
             <div className="admin-field__hint" style={{ marginBottom: 6 }}>
               {productIds.length === 0
-                ? "No selection — the group buy covers the whole catalog."
+                ? "No selection, so the group buy covers the whole catalog."
                 : `${productIds.length} product${productIds.length === 1 ? "" : "s"} assigned.`}
-              {" "}Products with sizes show “options” — untick a size to leave it out of this group buy only.
+              {" "}Products with sizes show “options”. Untick a size to leave it out of this group buy only.
             </div>
             <div
               style={{
@@ -507,7 +507,7 @@ function GroupBuyModal({
                           // product is the checkbox above.
                           const last = on && onCount === 1;
                           return (
-                            <label key={name} className="admin-check" style={{ fontSize: 13, opacity: last ? 0.7 : 1 }} title={last ? "Keep at least one option — untick the product to leave it out" : undefined}>
+                            <label key={name} className="admin-check" style={{ fontSize: 13, opacity: last ? 0.7 : 1 }} title={last ? "Keep at least one option. Untick the product to leave it out" : undefined}>
                               <input type="checkbox" checked={on} disabled={last} onChange={() => toggleOption(p.id, name)} />
                               <span style={on ? undefined : { textDecoration: "line-through", color: "var(--brand-text-muted)" }}>{name}</span>
                             </label>
@@ -683,7 +683,7 @@ function ReportModal({
       </table>`
         : "";
     return `
-      <h1>Group Buy Report — ${esc(groupBuy.name)}</h1>
+      <h1>Group Buy Report: ${esc(groupBuy.name)}</h1>
       <p>${counts.totalOrders} order(s) · ${counts.activeOrders} active · ${counts.confirmedOrders} confirmed · ${counts.pendingOrders} pending · ${counts.cancelledOrders} cancelled<br/>
          ${counts.totalVials} vials · ${esc(money(counts.totalSales))} in sales <em>(cancelled orders excluded)</em></p>
       ${supplierTable}
@@ -802,7 +802,7 @@ function ReportModal({
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "86vh", overflowY: "auto" }}
       >
-        <h2 className="admin-modal__title">Round Report — {groupBuy.name}</h2>
+        <h2 className="admin-modal__title">Round Report: {groupBuy.name}</h2>
 
         {error && (
           <div className="admin-modal__row" role="alert" style={{ color: "#d33", fontSize: 13 }}>
@@ -1001,7 +1001,7 @@ function ReportModal({
             <button
               className="admin-btn admin-btn--ghost"
               onClick={downloadSupplierExcel}
-              title="Product quantities only — safe to send to the supplier"
+              title="Product quantities only, safe to send to the supplier"
             >
               Supplier .xlsx
             </button>
@@ -1010,7 +1010,7 @@ function ReportModal({
             <button
               className="admin-btn admin-btn--ghost"
               onClick={downloadCustomerExcel}
-              title="Customers, orders and totals — your copy, do not send to the supplier"
+              title="Customers, orders and totals. Your copy, do not send to the supplier"
             >
               Customers .xlsx
             </button>
@@ -1559,7 +1559,7 @@ export function AdminGroupBuys({
             <div style={{ fontWeight: 600 }}>Ways to order</div>
             <div className="admin-field__hint" style={{ marginTop: 2 }}>
               Two separate switches per order path. <strong>Visibility</strong> decides whether
-              customers see the section at all — <strong>Hidden</strong> takes it off the
+              customers see the section at all: <strong>Hidden</strong> takes it off the
               storefront entirely and the store reads as a one-way store (you can’t hide both).{" "}
               <strong>Accept orders</strong> decides whether they can buy: turn it{" "}
               <strong>Disabled</strong> to keep the products and prices on show for reference while
@@ -1744,8 +1744,8 @@ export function AdminGroupBuys({
               </span>
               <span className="admin-field__hint" style={{ display: "block", marginTop: 2 }}>
                 When a group buy is live, products that aren’t assigned to it stay on the
-                storefront. With this off, customers can only buy the group-buy products —
-                everything else shows “Available after group buy” and can’t be added to cart.
+                storefront. With this off, customers can only buy the group-buy products.
+                Everything else shows “Available after group buy” and can’t be added to cart.
               </span>
             </span>
           </label>
@@ -1769,7 +1769,7 @@ export function AdminGroupBuys({
           <span>
             <span style={{ fontWeight: 600 }}>Storefront copy</span>
             <span className="admin-field__hint" style={{ display: "block", marginTop: 2 }}>
-              “{content.howTitle}” — {content.steps.length} step
+              “{content.howTitle}”: {content.steps.length} step
               {content.steps.length === 1 ? "" : "s"} and the live-round terms line, shown on
               the store home and the group-buy page.
             </span>
@@ -1850,7 +1850,7 @@ export function AdminGroupBuys({
                         onClick={() => setReporting(gb)}
                         title={
                           awaitingReport.has(gb.id)
-                            ? "This round has finished — download the supplier and customer reports"
+                            ? "This round has finished. Download the supplier and customer reports"
                             : "Supplier and customer reports for this round"
                         }
                       >

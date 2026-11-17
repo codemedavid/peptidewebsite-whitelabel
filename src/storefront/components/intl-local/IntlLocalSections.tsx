@@ -234,7 +234,7 @@ export function IlNewsletterSection({
       }
       setState("done");
     } catch {
-      setError("Couldn't subscribe right now — please try again.");
+      setError("Couldn't subscribe right now. Please try again.");
       setState("idle");
     }
   };

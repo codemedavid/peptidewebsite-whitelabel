@@ -19,7 +19,7 @@ export const ROLE_KEYS = [
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
 export const ROLE_META: Record<RoleKey, { label: string; help: string }> = {
-  main: { label: "Main", help: "Brand color — logo text, headings, key surfaces" },
+  main: { label: "Main", help: "Brand color: logo text, headings, key surfaces" },
   accent: { label: "Accent", help: "Links, highlights, focus rings, active states" },
   button: { label: "Button", help: "Primary / CTA button background" },
   buttonText: { label: "Button text", help: "Text + icons on primary buttons" },

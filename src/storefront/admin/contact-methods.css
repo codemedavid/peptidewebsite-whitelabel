@@ -1,0 +1,115 @@
+/* Store admin → Contact Methods (AdminContactMethods.tsx).
+   Brand tokens for surfaces/text; each app keeps its own recognisable colour. */
+.sf-root .cm-layout {
+  --cm-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --cm-danger: #b42318;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .sf-root .cm-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.sf-root .cm-intro { margin: -8px 0 18px; max-width: 60ch; }
+.sf-root .cm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.sf-root .cm-row--whatsapp { --cm-c: #128c4a; }
+.sf-root .cm-row--telegram, .sf-root .cm-chip--telegram { --cm-c: #1b7fb8; }
+.sf-root .cm-row--messenger, .sf-root .cm-chip--messenger { --cm-c: #0866ff; }
+.sf-root .cm-row--viber, .sf-root .cm-chip--viber { --cm-c: #7360f2; }
+.sf-root .cm-row--gmail, .sf-root .cm-chip--gmail { --cm-c: #c5221f; }
+.sf-root .cm-row--instagram, .sf-root .cm-chip--instagram { --cm-c: #c13584; }
+.sf-root .cm-chip--whatsapp { --cm-c: #128c4a; }
+
+.sf-root .cm-row {
+  border: var(--brand-border-width, 1px) solid var(--brand-border, rgba(0, 0, 0, 0.1));
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--brand-surface, #fff);
+  transition: border-color 200ms var(--cm-ease), box-shadow 200ms var(--cm-ease);
+}
+.sf-root .cm-row.is-on {
+  border-color: color-mix(in srgb, var(--cm-c) 45%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--cm-c) 18%, transparent), 0 6px 18px -12px var(--cm-c);
+}
+.sf-root .cm-row__head { display: flex; align-items: center; gap: 12px; }
+.sf-root .cm-row__label { flex: 1; font-weight: 700; cursor: pointer; }
+.sf-root .cm-row__body { margin-top: 10px; padding-left: 44px; opacity: 0.6; transition: opacity 200ms var(--cm-ease); }
+.sf-root .cm-row.is-on .cm-row__body, .sf-root .cm-row:focus-within .cm-row__body { opacity: 1; }
+@media (max-width: 480px) { .sf-root .cm-row__body { padding-left: 0; } }
+.sf-root .cm-input.is-invalid { border-color: var(--cm-danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cm-danger) 15%, transparent); }
+.sf-root .cm-error { color: var(--cm-danger); font-weight: 600; }
+
+.sf-root .cm-badge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: var(--cm-c);
+}
+
+.sf-root .cm-switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--brand-text, #111) 18%, transparent);
+  transition: background 200ms var(--cm-ease);
+}
+.sf-root .cm-switch[aria-checked="true"] { background: var(--cm-c); }
+.sf-root .cm-switch:focus-visible { outline: 3px solid color-mix(in srgb, var(--cm-c) 40%, transparent); outline-offset: 2px; }
+.sf-root .cm-switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 220ms var(--cm-ease);
+}
+.sf-root .cm-switch[aria-checked="true"] .cm-switch__knob { transform: translateX(18px); }
+
+.sf-root .cm-preview { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sf-root .cm-phone {
+  border-radius: 28px;
+  padding: 22px 16px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--brand-background, #fafafa);
+  border: 6px solid color-mix(in srgb, var(--brand-text, #111) 85%, transparent);
+}
+.sf-root .cm-phone__title { margin: 0 0 6px; font-weight: 800; font-size: 15px; }
+.sf-root .cm-phone__empty { margin: 0; font-size: 13px; opacity: 0.7; line-height: 1.45; }
+.sf-root .cm-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  background: color-mix(in srgb, var(--cm-c) 10%, var(--brand-surface, #fff));
+  color: var(--cm-c);
+  animation: cm-in 260ms var(--cm-ease);
+}
+.sf-root .cm-chip .cm-badge { width: 26px; height: 26px; border-radius: 8px; font-size: 10px; }
+@keyframes cm-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sf-root .cm-row, .sf-root .cm-row__body, .sf-root .cm-switch, .sf-root .cm-switch__knob { transition: none; }
+  .sf-root .cm-chip { animation: none; }
+}

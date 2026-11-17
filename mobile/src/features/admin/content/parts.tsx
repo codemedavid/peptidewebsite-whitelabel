@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
-import { pickAndUploadImage } from "../setup/ImageField";
+import { pickAndUploadImages } from "../setup/ImageField";
 import { AppText, type IconName } from "@/ui/primitives";
 
 /** Shared pieces for the content editors (FAQ, Lab Results, Protocols, Reviews). */
@@ -107,8 +107,9 @@ export function GalleryEditor({
 
   async function add() {
     try {
-      const res = await pickAndUploadImage(() => setUploading(true));
-      if (res) onChange([...images, res.url].slice(0, max));
+      // Several at once, up to the space left — the website's multi-file picker.
+      const urls = await pickAndUploadImages(max - images.length, () => setUploading(true));
+      if (urls.length) onChange([...images, ...urls].slice(0, max));
     } finally {
       setUploading(false);
     }

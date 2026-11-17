@@ -5,7 +5,8 @@ import {
   startPaidAccessOnlinePaymentAction,
   submitPaidAccessFormAction,
 } from "@/modules/paid-access/actions";
-import { withCustomer } from "@/lib/mobile/http";
+import { fail, withCustomer } from "@/lib/mobile/http";
+import { GUEST_GROUP_BUY_LOCKED } from "@/lib/mobile/app-guest";
 import { respond } from "@/lib/mobile/paid-access-http";
 import { asShopper } from "@/lib/mobile/shop";
 
@@ -27,6 +28,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   return withCustomer(req, { route: "shop/group-buy/join" }, async (ctx) => {
+    // A membership belongs to an account: guests sign up first (app-guest.ts).
+    if (ctx.customer.guest) return fail("forbidden", GUEST_GROUP_BUY_LOCKED);
     const body = ((await req.json().catch(() => null)) ?? {}) as { roundId?: unknown; action?: unknown; answers?: unknown };
     const store = { tenantId: ctx.tenantId, slug: ctx.slug, customer: ctx };
     const id = body.roundId;

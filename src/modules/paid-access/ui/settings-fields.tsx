@@ -58,7 +58,7 @@ export function StepsEditor({ draft, onChange, errorFor }: FieldsProps) {
   return (
     <Fieldset title="Steps, in order" hint="Change the order or add and remove steps. No steps means anyone gets in instantly.">
       {draft.steps.length === 0 ? (
-        <div className="admin-empty-set">No steps — the round is open to everyone.</div>
+        <div className="admin-empty-set">No steps. The round is open to everyone.</div>
       ) : (
         <ol className="bnn-steps">
           {draft.steps.map((s, i) => (
@@ -118,8 +118,8 @@ export function PaymentFields({ draft, onChange, errorFor, currency, money, onli
           <span className="admin-field__label">How members pay</span>
           <select className="admin-input" value={p.method} onChange={(e) => set({ method: e.target.value as PaidAccessSettings["payment"]["method"] })} aria-invalid={!!errorFor("payment.method")}>
             <option value="manual">Proof upload (GCash, bank)</option>
-            <option value="online" disabled={!onlineAvailable}>Online payment{onlineAvailable ? "" : " — not connected yet"}</option>
-            <option value="either" disabled={!onlineAvailable}>Either{onlineAvailable ? "" : " — not connected yet"}</option>
+            <option value="online" disabled={!onlineAvailable}>Online payment{onlineAvailable ? "" : " (not connected yet)"}</option>
+            <option value="either" disabled={!onlineAvailable}>Either{onlineAvailable ? "" : " (not connected yet)"}</option>
           </select>
           <FieldError message={errorFor("payment.method")} />
         </label>
@@ -266,7 +266,7 @@ export function RulesFields({ draft, onChange, errorFor, onlineAvailable }: Fiel
           {(["manual", "auto", "none"] as const).map((r) => (
             <label key={r} className="bnn-choice">
               <input type="radio" checked={draft.refundOnReject === r} disabled={r === "auto" && !onlineAvailable} onChange={() => onChange({ ...draft, refundOnReject: r })} />
-              {r === "manual" ? "I refund them myself, then mark it refunded" : r === "auto" ? `Refund automatically (online payments)${onlineAvailable ? "" : " — not connected yet"}` : "No refund"}
+              {r === "manual" ? "I refund them myself, then mark it refunded" : r === "auto" ? `Refund automatically (online payments)${onlineAvailable ? "" : " (not connected yet)"}` : "No refund"}
             </label>
           ))}
           <FieldError message={errorFor("refundOnReject")} />
@@ -276,7 +276,7 @@ export function RulesFields({ draft, onChange, errorFor, onlineAvailable }: Fiel
         {(["summary", "nothing"] as const).map((v) => (
           <label key={v} className="bnn-choice">
             <input type="radio" checked={draft.pendingVisibility === v} onChange={() => onChange({ ...draft, pendingVisibility: v })} />
-            {v === "summary" ? "A summary — name, dates, description, how many products (never prices)" : "Nothing but their own progress"}
+            {v === "summary" ? "A summary: name, dates, description, how many products (never prices)" : "Nothing but their own progress"}
           </label>
         ))}
       </Fieldset>

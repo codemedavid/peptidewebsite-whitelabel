@@ -239,7 +239,7 @@ export function PaidAccessJoinPage({ brand, teaser, onBack, onSignIn }: Props) {
                 <p className="bnnjoin__muted">{state.stepper.detail}</p>
                 {state.status === "rejected" && state.refundStatus === "refunded" && <p className="bnnjoin__muted">Your payment was refunded.</p>}
                 {!state.window.open && state.window.message && state.status !== "active" && <p className="bnnjoin__muted">{state.window.message}</p>}
-                {isWaiting && <p className="bnnjoin__muted">No need to come back and check — this page unlocks by itself once you’re approved.</p>}
+                {isWaiting && <p className="bnnjoin__muted">No need to come back and check. This page unlocks by itself once you’re approved.</p>}
               </div>
             )}
             {error && <div className="bnnjoin__card bnnjoin__alert" role="alert">{error}</div>}
@@ -308,7 +308,7 @@ function GuestJoin({ state, email, onEmail, isBusy, onRun, join, groupBuyId }: G
         <span>Your email</span>
         <input type="email" inputMode="email" autoComplete="email" placeholder="you@gmail.com" value={email} onChange={(e) => onEmail(e.target.value)} required />
       </label>
-      <p className="bnnjoin__hint">No account needed — this email is how the store knows it’s you. We’ll unlock checkout for it once you’re approved.</p>
+      <p className="bnnjoin__hint">No account needed. This email is how the store knows it’s you. We’ll unlock checkout for it once you’re approved.</p>
     </div>
   );
 

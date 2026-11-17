@@ -181,14 +181,14 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                 {ONBOARDING_STATUS_LABELS[liveStatus] ?? liveStatus}
               </span>
               {isLead ? (
-                <span className="badge badge-neutral">No store yet — not paid</span>
+                <span className="badge badge-neutral">No store yet (not paid)</span>
               ) : livePublished ? (
                 <span className="badge badge-success">
                   <span className="bdot" />
                   Live
                 </span>
               ) : (
-                <span className="badge badge-neutral">Hidden — not published</span>
+                <span className="badge badge-neutral">Hidden (not published)</span>
               )}
               {!isLead && submission.tenantId && (
                 <span className={"badge " + (submission.detailsSubmittedAt ? "badge-success" : "badge-warn")}>
@@ -251,14 +251,14 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
               v: isLead
                 ? "Not paid yet"
                 : liveTrial.trial
-                ? `${submission.packageLabel} — Trial (${
+                ? `${submission.packageLabel} · Trial (${
                     submission.amountDueCents != null ? formatPesos(submission.amountDueCents) : "₱699"
                   })`
                 : submission.amountDueCents != null
                   ? `${submission.packageLabel} · ${formatPesos(submission.amountDueCents)}`
                   : submission.packageLabel,
               sub: isLead
-                ? "Saved step 1 only — follow up on WhatsApp"
+                ? "Saved step 1 only. Follow up on WhatsApp"
                 : liveTrial.trial && liveTrial.startsAt && liveTrial.endsAt
                   ? `${humanDate(liveTrial.startsAt)} → ${humanDate(liveTrial.endsAt)}`
                   : // What they actually prepaid — the operator needs it to set the
@@ -346,14 +346,14 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                   className={"btn btn-sm" + (!draftIsTrial ? " btn-accent" : "")}
                   onClick={() => setDraftIsTrial(false)}
                 >
-                  Active — full package
+                  Active: full package
                 </button>
                 <button
                   type="button"
                   className={"btn btn-sm" + (draftIsTrial ? " btn-accent" : "")}
                   onClick={() => setDraftIsTrial(true)}
                 >
-                  Trial — ₱699 / 1 month
+                  Trial: ₱699 / 1 month
                 </button>
               </div>
             </div>
@@ -639,7 +639,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                     k: "Store details",
                     v: submission.detailsSubmittedAt
                       ? `Details submitted ${humanDate(submission.detailsSubmittedAt)}`
-                      : "Details pending — collect on WhatsApp",
+                      : "Details pending. Collect on WhatsApp",
                   },
                 ]}
               />
@@ -734,7 +734,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                     className="btn btn-accent btn-sm"
                     onClick={() => doStatus("customizing")}
                     disabled={pending || liveStatus === "customizing" || liveStatus === "completed"}
-                    aria-label="Start Setup — move to Customizing"
+                    aria-label="Start Setup: move to Customizing"
                   >
                     <Ic.Wand /> Start Setup
                   </button>
@@ -742,7 +742,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                     className="btn btn-sm"
                     onClick={() => doStatus("revision")}
                     disabled={pending || liveStatus === "revision" || liveStatus === "completed"}
-                    aria-label="Request Revision — move to Revision Phase"
+                    aria-label="Request Revision: move to Revision Phase"
                   >
                     <Ic.Edit /> Request Revision
                   </button>
@@ -779,7 +779,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                       padding: "8px 0",
                     }}
                   >
-                    No tenant provisioned yet — provision a tenant first before publishing.
+                    No tenant provisioned yet. Provision a tenant first before publishing.
                   </div>
                 ) : (
                   <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -788,7 +788,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                         className="btn btn-sm btn-danger"
                         onClick={doUnpublish}
                         disabled={pending}
-                        aria-label="Unpublish — hide the store from visitors"
+                        aria-label="Unpublish: hide the store from visitors"
                       >
                         <Ic.Eye /> Unpublish Store
                       </button>
@@ -797,7 +797,7 @@ export function OnboardingDetail({ submission }: { submission: OnboardingDetailV
                         className="btn btn-accent btn-sm"
                         onClick={doPublish}
                         disabled={pending}
-                        aria-label="Publish — make the store live"
+                        aria-label="Publish: make the store live"
                       >
                         <Ic.Globe /> Publish Store
                       </button>

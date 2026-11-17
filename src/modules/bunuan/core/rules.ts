@@ -69,7 +69,7 @@ function rejection<L extends BunuanLine>(line: L, key: string, allowed: number):
         asked: line.qty,
         allowed: 0,
         reason: "not_open",
-        message: `${name} isn't open right now — its kit is already full.`,
+        message: `${name} isn't open right now. Its kit is already full.`,
       };
 }
 
@@ -128,7 +128,7 @@ export function bunuanEditWarnings(deltas: Readonly<Record<string, number>>, tal
     warnings.push(
       open > 0
         ? `${name}: adding ${vialsWord(added)}, but only ${vialsWord(open)} ${open === 1 ? "is" : "are"} open in Bunuan.`
-        : `${name}: adding ${vialsWord(added)}, but its kit is already full — this starts a new partial kit.`,
+        : `${name}: adding ${vialsWord(added)}, but its kit is already full, so this starts a new partial kit.`,
     );
   }
   return warnings;

@@ -203,9 +203,9 @@ function Editor({ brand }: { brand: AdminBrand }) {
         />
       </Section>
 
-      <Section title="Preview" hint={draft.enabled ? "What customers see on Track Order." : "Currently hidden from customers — this is how it would look."}>
+      <Section title="Preview" hint={draft.enabled ? "What customers see on Track Order." : "Currently hidden from customers. This is how it would look."}>
         <TrackNotePreview config={preview} />
-        {draft.enabled && !live ? <Hint tone="warning">Add a title or at least one row — an empty note stays hidden.</Hint> : null}
+        {draft.enabled && !live ? <Hint tone="warning">Add a title or at least one row. An empty note stays hidden.</Hint> : null}
       </Section>
     </FormPage>
   );

@@ -8,6 +8,8 @@ import { buildTheme } from "./branding";
 import { normalizeStoreIdentifier } from "./store-identifier";
 import { findStoreByHost, MOBILE_ROOT } from "./store-lookup";
 import { customerAppOpen } from "@/lib/mobile/customer-app";
+import { guestShoppingOpen } from "./guest-session";
+import { publicContactChannels } from "@/lib/storefront/contact-methods";
 
 /**
  * GET /stores/:store — what a store link opens, before anyone signs in.
@@ -34,10 +36,11 @@ export async function loadStorePreview(input: unknown): Promise<Result> {
   const store = await findStoreByHost(host);
   if (!store || store.status === "pending_setup") return NOT_FOUND;
 
-  const [unavailable, tenant, customerSignIn] = await Promise.all([
+  const [unavailable, tenant, customerSignIn, guestShopping] = await Promise.all([
     storeAvailability(store),
     getTenantContext(store.id),
     customerAppOpen(store.id),
+    guestShoppingOpen(store.id),
   ]);
   if (unavailable) return NOT_FOUND;
   const theme = await buildTheme({ tenant });
@@ -52,6 +55,8 @@ export async function loadStorePreview(input: unknown): Promise<Result> {
       websiteUrl,
       signUpUrl: `${websiteUrl}/#account`,
       customerSignIn,
+      guestShopping,
+      contactChannels: publicContactChannels((tenant.branding?.config as { contactChannels?: unknown } | null)?.contactChannels),
       theme,
     },
   };

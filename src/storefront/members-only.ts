@@ -62,7 +62,7 @@ export function membersOnlyCopy(teaser: Teaser): MembersOnlyCopy {
         ? `${plural(count)} waiting in this group buy. Members see the prices and can order.`
         : "This group buy is for members. Members see the products and prices and can order."),
     cta: getAccessLabel(teaser),
-    note: own?.note.trim() || "Already approved? Verify your email on the next screen — no account needed.",
+    note: own?.note.trim() || "Already approved? Verify your email on the next screen. No account needed.",
   };
 }
 

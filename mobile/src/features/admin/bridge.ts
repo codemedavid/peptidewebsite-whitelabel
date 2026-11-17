@@ -36,8 +36,9 @@ export const adminBridge = {
   call: <T = unknown>(fn: string, ...args: unknown[]) =>
     api<T>("/admin/call", { method: "POST", body: { fn, args }, retryable: false }),
   /** Run an allowlisted FormData action (image uploads). The file goes in `field`. */
-  upload: <T = unknown>(fn: string, field: string, file: UploadFile, signal?: AbortSignal) =>
-    apiUpload<T>(`/admin/upload/${encodeURIComponent(fn)}?field=${encodeURIComponent(field)}`, field, file, signal),
+  /** `fields` ride along as text parts — e.g. `{ kind: "review" }`, the website's media-library tag. */
+  upload: <T = unknown>(fn: string, field: string, file: UploadFile, signal?: AbortSignal, fields?: Record<string, string>) =>
+    apiUpload<T>(`/admin/upload/${encodeURIComponent(fn)}?field=${encodeURIComponent(field)}`, field, file, signal, fields),
 };
 
 /** Website actions answer `{ error }` on a rule failure — surface it as a thrown Error. */

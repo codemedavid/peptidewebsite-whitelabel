@@ -63,7 +63,7 @@ function CurrencyEditor({ brand }: { brand: AdminBrand }) {
       void reloadMe();
       successTap();
       allowLeave();
-      Alert.alert(`Now selling in ${draft.label}`, "Your prices kept their numbers — only the currency beside them changed.");
+      Alert.alert(`Now selling in ${draft.label}`, "Your prices kept their numbers. Only the currency beside them changed.");
       router.back();
     },
     onError: (e) => Alert.alert("Couldn't save the currency", e.message),
@@ -96,7 +96,7 @@ function CurrencyEditor({ brand }: { brand: AdminBrand }) {
           </View>
           {changed ? (
             <Notice tone="info">
-              {`Your prices do not change. A product priced ${SAMPLE.toLocaleString()} stays ${SAMPLE.toLocaleString()} — only the currency beside it changes, on every product you already have. If your prices should be different numbers, edit them in Manage Products after saving.`}
+              {`Your prices do not change. A product priced ${SAMPLE.toLocaleString()} stays ${SAMPLE.toLocaleString()}. Only the currency beside it changes, on every product you already have. If your prices should be different numbers, edit them in Manage Products after saving.`}
             </Notice>
           ) : null}
         </Card>

@@ -47,6 +47,8 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "sort-categories", label: "Product Sort Categories" },
   { key: "hero", label: "Hero Section" },
   { key: "banner", label: "Announcement Banner" },
+  { key: "popup", label: "Announcement Pop-up" },
+  { key: "site-layout", label: "Website Layout" },
   { key: "orders", label: "Orders" },
   { key: "customers", label: "Customers" },
   { key: "inv", label: "Inventory" },
@@ -58,6 +60,9 @@ export const STAFF_MODULES: readonly StaffModule[] = [
   { key: "pay", label: "Payments" },
   { key: "faq", label: "FAQ" },
   { key: "proto", label: "Protocols" },
+  { key: "articles", label: "Articles" },
+  // Quiz submissions hold self-reported medical history — grant deliberately.
+  { key: "assessments", label: "Assessments" },
   { key: "reseller", label: "Reseller Portal" },
   { key: "design", label: "Card Studio" },
   { key: "analytics", label: "Sales Analytics" },
@@ -89,6 +94,8 @@ const VIEW_TOGGLE: Record<string, (b: AdminBrand) => boolean> = {
   "access-code": (b) => b.showAdminAccessCode === true,
   groupbuys: (b) => (b.groupBuyCaps as { enabled?: unknown } | undefined)?.enabled === true,
   customers: (b) => b.customerAccountsEnabled === true,
+  articles: (b) => b.articlesEntitled === true,
+  assessments: (b) => b.assessmentEntitled === true,
 };
 
 export function grantableModules(brand: AdminBrand): StaffModule[] {
@@ -234,7 +241,7 @@ export const STARTER_COMBOS: readonly { id: "a" | "b"; title: string; sub: strin
 /** TrialPlansScreen businessFeatures. */
 export const BUSINESS_FEATURES: readonly { text: string; exclusive?: boolean }[] = [
   { text: "Unlimited products" },
-  { text: "Everything in your trial — orders, inventory, shipping" },
+  { text: "Everything in your trial: orders, inventory, shipping" },
   { text: "Promo codes, couriers, lab results & protocols" },
   { text: "Hero, banner & FAQ management" },
   { text: "Sales Analytics", exclusive: true },
@@ -253,9 +260,9 @@ export type ExportBundle = {
 
 /** What each file in the bundle is, in the owner's words (FILE_BLURB). */
 export const EXPORT_FILES: readonly { match: string; label: string; hint: string }[] = [
-  { match: "-products-", label: "Products", hint: "Your full catalog — one row per size/option, with prices and stock." },
+  { match: "-products-", label: "Products", hint: "Your full catalog, one row per size/option, with prices and stock." },
   { match: "-orders-", label: "Orders", hint: "Every order with its customer, address, fees and total." },
-  { match: "-order-items-", label: "Order items", hint: "One row per line item — what was bought, how many, at what price." },
+  { match: "-order-items-", label: "Order items", hint: "One row per line item: what was bought, how many, at what price." },
   { match: "-customers-", label: "Customers", hint: "Your customer list, merged across repeat orders, with lifetime spend." },
   { match: "-store-data-", label: "Everything (JSON)", hint: "The same data in developer format, for importing elsewhere." },
 ];

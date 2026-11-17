@@ -172,7 +172,7 @@ export function ShareLinkButton({
             className="sf-share__manual-input"
             value={url}
             readOnly
-            aria-label={`${Noun} link — select and copy`}
+            aria-label={`${Noun} link, select and copy`}
             onFocus={(e) => e.currentTarget.select()}
           />
           <button

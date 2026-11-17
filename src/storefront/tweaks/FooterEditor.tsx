@@ -237,10 +237,10 @@ export function FooterEditor({
                 />
                 <p style={isInvalid ? s.hintBad : s.hint}>
                   {isInvalid
-                    ? "That isn't a web address — use a full link, e.g. https://…"
+                    ? "That isn't a web address. Use a full link, e.g. https://…"
                     : href
                       ? platform.hint
-                      : "No link yet — this icon is hidden on the site."}
+                      : "No link yet. This icon is hidden on the site."}
                 </p>
                 {href !== "" && (
                   <label

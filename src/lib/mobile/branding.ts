@@ -12,6 +12,11 @@ import { storeDisplayName, storeLogoUrl } from "./store-name";
 import type { MeResponse, MobileBrandFonts, MobileBrandTheme, WebModuleLink } from "./contract";
 import type { MobileContext, Principal } from "./auth";
 import { buildMobileTheme } from "./theme";
+import { normalizeBrandSplash } from "@/lib/storefront/brand-splash";
+import { trackerAccess } from "./tracker-access";
+import { PROMO_STAFF_MODULE, promoPushEnabled } from "./promo-push";
+import { readPromoOptIn } from "./promo-push.server";
+import { APP_PROMO_STAFF_MODULE, normalizeAppPromo } from "@/lib/storefront/app-promo";
 
 /**
  * Identity + permissions + tenant theme for the signed-in phone (GET /me, and
@@ -98,6 +103,8 @@ export async function buildTheme(ctx: { tenant: TenantContext }): Promise<Mobile
   return buildMobileTheme({
     name: storeDisplayName(ctx.tenant),
     logoUrl: storeLogoUrl(ctx.tenant),
+    // The website's loading screen, so a store loads the same in the app.
+    splash: normalizeBrandSplash(config.brandSplash),
     palette,
     fontFiles: await fontFiles(palette.headingFont, palette.bodyFont),
   });
@@ -141,10 +148,12 @@ export async function buildMe(principal: Principal): Promise<MeResponse> {
   const config = cfg(ctx.tenant.branding?.config);
   const websiteUrl = appStorefrontOrigin(ctx.slug) ?? "";
   const adminUrl = `${websiteUrl}/#admin`;
-  const [theme, community, account] = await Promise.all([
+  const promoOn = promoPushEnabled((key) => ctx.tenant.has(key));
+  const [theme, community, account, optedIn] = await Promise.all([
     buildTheme(ctx),
     buildCommunityMe(principal),
     loadAccountProfileSafe(principal),
+    promoOn && principal.kind === "customer" ? readPromoOptIn(ctx.tenantId, principal.ctx.customer.id) : Promise.resolve(false),
   ]);
   const admin = principal.kind === "admin" ? principal.ctx : null;
 
@@ -163,5 +172,18 @@ export async function buildMe(principal: Principal): Promise<MeResponse> {
     theme,
     community,
     account,
+    tracker: trackerAccess((key) => ctx.tenant.has(key)),
+    appPromo: admin
+      ? {
+          available: ctx.tenant.has(FEATURES.MOBILE_SHOP) || ctx.tenant.has(FEATURES.MOBILE_COMMUNITY),
+          enabled: normalizeAppPromo((config as { appPromo?: unknown }).appPromo).enabled,
+          canEdit: isModuleAllowed(admin.actor, APP_PROMO_STAFF_MODULE),
+        }
+      : undefined,
+    promoPush: {
+      enabled: promoOn,
+      canSend: promoOn && admin !== null && isModuleAllowed(admin.actor, PROMO_STAFF_MODULE),
+      optedIn,
+    },
   };
 }

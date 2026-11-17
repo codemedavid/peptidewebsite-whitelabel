@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { MobileBrandTheme, MobileBrandFonts, MobilePalette } from "./contract";
+import type { BrandSplash } from "@/lib/storefront/brand-splash";
+import type { MobileBrandTheme, MobileBrandFonts, MobilePalette, MobileSplash } from "./contract";
 
 /**
  * Website branding → the signed-in app's theme, so a store's admin app looks
@@ -45,6 +46,8 @@ export const DEFAULT_MOBILE_THEME = {
 export type ThemeInput = {
   name: string | null | undefined;
   logoUrl?: string | null;
+  /** The website's normalized brand splash (normalizeBrandSplash); absent → the default. */
+  splash?: BrandSplash;
   palette: {
     main?: string;
     accent?: string;
@@ -238,8 +241,29 @@ export function buildMobileTheme(input: ThemeInput): MobileBrandTheme {
       files: cleanFontFiles(input.fontFiles),
     },
     palette,
+    ...(input.splash ? { splash: buildSplash(input.splash, httpsUrl(input.logoUrl), palette, main) } : {}),
   };
 
   const version = createHash("sha256").update(JSON.stringify(base)).digest("hex").slice(0, 16);
   return { version, ...base };
+}
+
+/**
+ * The website's brand splash, resolved for the app. Same fallbacks as the
+ * storefront stylesheet: unset backdrop → the theme surface, unset accent →
+ * the brand's main colour, unset text → the theme text; splash-only logo →
+ * the store logo → none (the app draws a monogram).
+ */
+function buildSplash(splash: BrandSplash, storeLogo: string | null, palette: MobilePalette, main: string): MobileSplash {
+  return {
+    enabled: splash.enabled,
+    design: splash.design,
+    logoUrl: httpsUrl(splash.logoUrl) ?? storeLogo,
+    background: hexOr(splash.bgColor, palette.surface),
+    accent: hexOr(splash.accentColor, main),
+    text: hexOr(splash.textColor, palette.text),
+    tagline: splash.showTagline ? splash.tagline : "",
+    minDurationMs: splash.minDurationMs,
+    maxDurationMs: splash.maxDurationMs,
+  };
 }

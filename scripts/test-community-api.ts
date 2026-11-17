@@ -380,6 +380,78 @@ async function main() {
     assert.deepEqual(codes, ["ok", "ok", "ok", "ok", "ok", "rate_limited"]);
   });
 
+  console.log("\napp guests (Continue as guest — lib/mobile/app-guest.ts)");
+  const guestRoute = await h("auth/guest/route", "POST");
+  const startGuest = (store: string) => {
+    (globalThis as { __testClientIp?: string }).__testClientIp = `203.0.113.${++ipSeq % 250}`;
+    return call(guestRoute, req("POST", "/auth/guest", undefined, { store }));
+  };
+  const guestRow = async (accessToken: string) => {
+    const r = await call(me, req("GET", "/me", accessToken));
+    return r;
+  };
+  await test("a guest gets a real customer session, with no email shown and no community", async () => {
+    const r = await startGuest("beta");
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    const { me: m } = r.json.data;
+    assert.equal(m.mode, "customer");
+    assert.equal(m.actor.guest, true);
+    assert.equal(m.actor.email, "", "the placeholder email never reaches the app");
+    assert.equal(m.community.membership, "none");
+    assert.equal(await db.communityMember.count({ where: { tenantId: B.id, customer: { passwordHash: "app-guest" } } }), 0, "a guest never joins");
+    const box = await call(inbox, req("GET", "/community/inbox", r.json.data.accessToken));
+    assert.equal(box.status, 403, "the community is locked for guests");
+    assert.match(box.json.error.message, /account/i);
+    assert.equal((await guestRow(r.json.data.accessToken)).status, 200);
+  });
+  await test("a guest's orders survive creating an account (same row, upgraded in place)", async () => {
+    const g = await startGuest("beta");
+    const access = g.json.data.accessToken as string;
+    const row = await db.storefrontCustomer.findFirst({ where: { tenantId: B.id, passwordHash: "app-guest" }, orderBy: { createdAt: "desc" } });
+    assert.ok(row);
+    await db.storefrontOrder.create({ data: { tenantId: B.id, orderNumber: "G-1", customerAccountId: row.id } });
+    const up = await signUp({ ...NEW_SHOPPER, email: "gina@buyer.test", firstName: "Gina", guestToken: access });
+    assert.equal(up.status, 200, JSON.stringify(up.json));
+    assert.equal(up.json.data.me.actor.guest, undefined);
+    const after = await db.storefrontCustomer.findFirst({ where: { id: row.id } });
+    assert.equal(after?.email, "gina@buyer.test", "the guest row became the account");
+    assert.ok(after?.passwordHash.startsWith("scrypt$"));
+    const order = await db.storefrontOrder.findFirst({ where: { orderNumber: "G-1", tenantId: B.id } });
+    assert.equal(order?.customerAccountId, row.id, "the order is still theirs");
+    assert.equal((await call(me, req("GET", "/me", access))).status, 401, "the guest session is gone");
+  });
+  await test("a guest signing in to an existing account brings their orders along", async () => {
+    const g = await startGuest("beta");
+    const access = g.json.data.accessToken as string;
+    const row = await db.storefrontCustomer.findFirst({ where: { tenantId: B.id, passwordHash: "app-guest" }, orderBy: { createdAt: "desc" } });
+    assert.ok(row);
+    await db.storefrontOrder.create({ data: { tenantId: B.id, orderNumber: "G-2", customerAccountId: row.id } });
+    (globalThis as { __testClientIp?: string }).__testClientIp = `198.51.100.${++ipSeq % 250}`;
+    const r = await call(login, req("POST", "/auth/login", undefined, { email: "nina@buyer.test", password: "nina-pass-1", store: "beta", guestToken: access }));
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    const nina = await db.storefrontCustomer.findFirst({ where: { tenantId: B.id, email: "nina@buyer.test" } });
+    const order = await db.storefrontOrder.findFirst({ where: { orderNumber: "G-2", tenantId: B.id } });
+    assert.equal(order?.customerAccountId, nina?.id, "the guest order moved to the account");
+    assert.equal(await db.storefrontCustomer.count({ where: { id: row.id } }), 0, "the guest row is gone");
+  });
+  await test("a guest token from another store is ignored (nothing moves)", async () => {
+    const g = await startGuest("beta");
+    const row = await db.storefrontCustomer.findFirst({ where: { tenantId: B.id, passwordHash: "app-guest" }, orderBy: { createdAt: "desc" } });
+    assert.ok(row);
+    await db.storefrontOrder.create({ data: { tenantId: B.id, orderNumber: "G-3", customerAccountId: row.id } });
+    const other = await signUp({ ...NEW_SHOPPER, store: "alpha", email: "otto@buyer.test", guestToken: g.json.data.accessToken });
+    assert.equal(other.status, 200, JSON.stringify(other.json));
+    const order = await db.storefrontOrder.findFirst({ where: { orderNumber: "G-3", tenantId: B.id } });
+    assert.equal(order?.customerAccountId, row.id);
+    assert.equal(await db.storefrontCustomer.count({ where: { id: row.id, passwordHash: "app-guest" } }), 1);
+    // Leave alpha's member queue as the later moderation tests expect it.
+    await db.storefrontCustomer.deleteMany({ where: { tenantId: A.id, email: "otto@buyer.test" } });
+  });
+  await test("guests can't start on a store without the customer app", async () => {
+    const r = await startGuest("delta-nope");
+    assert.equal(r.status, 404, JSON.stringify(r.json));
+  });
+
   console.log("\nsupabase exchange (a partner app's login becomes a store customer)");
   // A fake Supabase Auth: GET /auth/v1/user answers per bearer token.
   const supabaseUsers: Record<string, Json> = {
@@ -870,6 +942,71 @@ async function main() {
     const row = await db.mobilePushDevice.findUnique({ where: { expoPushToken: annDevice }, include: { session: true } });
     assert.equal(row!.session.subject, `customer:${ann.id}`);
   });
+  console.log("\npromo & event notifications (lib/mobile/promo-push.ts)");
+  {
+    const promoGet = await h("promo-push/route", "GET");
+    const promoPost = await h("promo-push/route", "POST");
+    const optIn = await h("account/promo-push/route", "PUT");
+    const promo = (tok: string, headline: string, message: string) => call(promoPost, req("POST", "/promo-push", tok, { headline, message }));
+    await test("not granted → 404 for the team, 404 for a customer's opt-in", async () => {
+      assert.equal((await call(promoGet, req("GET", "/promo-push", ownerTok))).status, 404);
+      assert.equal((await call(optIn, req("PUT", "/account/promo-push", annTok, { on: true }))).status, 404);
+    });
+    const fPromo = await db.feature.create({ data: { key: "mobile.promo_push" } });
+    await db.tenantFeatureOverride.create({ data: { tenantId: A.id, featureId: fPromo.id, enabled: true } });
+    await test("granted: /me says enabled; the owner may send; customers start opted OUT", async () => {
+      const o = await call(me, req("GET", "/me", ownerTok));
+      assert.deepEqual(o.json.data.promoPush, { enabled: true, canSend: true, optedIn: false });
+      const a = await call(me, req("GET", "/me", annTok));
+      assert.deepEqual(a.json.data.promoPush, { enabled: true, canSend: false, optedIn: false });
+      const st = await call(promoGet, req("GET", "/promo-push", ownerTok));
+      assert.equal(st.status, 200, JSON.stringify(st.json));
+      assert.equal(st.json.data.audience, 0, "nobody opted in yet");
+      assert.equal(st.json.data.sendsLeft, 3);
+    });
+    await test("a customer opts in (consent time kept); the team can't use the customer switch", async () => {
+      const r = await call(optIn, req("PUT", "/account/promo-push", annTok, { on: true }));
+      assert.deepEqual(r.json.data, { optedIn: true });
+      const row = await db.storefrontCustomer.findUniqueOrThrow({ where: { id: ann.id } });
+      assert.equal(row.promoPushOptIn, true);
+      assert.ok(row.promoPushOptInAt instanceof Date);
+      assert.equal((await call(optIn, req("PUT", "/account/promo-push", ownerTok, { on: true }))).status, 403);
+      assert.equal((await call(optIn, req("PUT", "/account/promo-push", annTok, { on: "yes" }))).status, 400);
+      assert.equal((await call(me, req("GET", "/me", annTok))).json.data.promoPush.optedIn, true);
+    });
+    await test("a send reaches ONLY opted-in customers' phones, titled with the store's name", async () => {
+      pushed.length = 0;
+      const r = await promo(ownerTok, "11.11 Mega Sale", "20% off everything until Sunday.");
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.data.recipients, 1);
+      assert.deepEqual(pushed.map((m) => m.to), [annDevice], "not Bob (no opt-in), not the owner's phone");
+      assert.equal(pushed[0].title, "Alpha Glow", "the store's display name");
+      assert.equal(pushed[0].body, "11.11 Mega Sale — 20% off everything until Sunday.");
+      assert.equal(pushed[0].channelId, "promos");
+      assert.equal(pushed[0].data.type, "promo");
+      assert.equal(await db.storePromoPush.count({ where: { tenantId: A.id } }), 1);
+    });
+    await test("customers can't send; blank or too-long input is refused", async () => {
+      assert.equal((await promo(annTok, "Sale", "Hi")).status, 403);
+      assert.equal((await promo(ownerTok, "", "Hi")).status, 400);
+      assert.equal((await promo(ownerTok, "Sale", "x".repeat(181))).status, 400);
+    });
+    await test("at most 3 a day: the 4th is refused and the composer says when the next frees up", async () => {
+      assert.equal((await promo(ownerTok, "Event", "Live Q&A tonight at 8.")).status, 200);
+      assert.equal((await promo(ownerTok, "Restock", "BPC-157 is back.")).status, 200);
+      const fourth = await promo(ownerTok, "One more", "Too many.");
+      assert.equal(fourth.status, 429, JSON.stringify(fourth.json));
+      const st = await call(promoGet, req("GET", "/promo-push", ownerTok));
+      assert.equal(st.json.data.sendsLeft, 0);
+      assert.equal(typeof st.json.data.nextFreeAt, "string");
+      assert.deepEqual(st.json.data.recent.map((x: Json) => x.headline), ["Restock", "Event", "11.11 Mega Sale"]);
+    });
+    await test("opting out stops them", async () => {
+      await call(optIn, req("PUT", "/account/promo-push", annTok, { on: false }));
+      assert.equal((await call(promoGet, req("GET", "/promo-push", ownerTok))).json.data.audience, 0);
+    });
+  }
+
   let dmId = "";
   await test("opening a DM is idempotent from either side", async () => {
     const r = await call(dms, req("POST", "/community/dms", annTok, { peerKey: "store" }));
@@ -929,32 +1066,41 @@ async function main() {
     assert.equal((await list(bobTok, "dm", dmId)).status, 404, "outsiders can't read a DM");
   });
   let pushTopicId = "";
-  await test("channel mute: members only, a visible channel, an explicit boolean", async () => {
+  await test("channel mute: members and each team member personally, a visible channel, an explicit boolean", async () => {
     const mute = (tok: string, id: string, body: Json) => call(channelMute, req("PUT", `/community/channels/${id}/mute`, tok, body), { id });
-    assert.equal((await mute(ownerTok, communityChannelId, { muted: true })).status, 403, "the store team gets no channel pushes");
+    const own = await mute(ownerTok, communityChannelId, { muted: true });
+    assert.equal(own.status, 200, JSON.stringify(own.json));
+    assert.equal(await db.communityChannelMute.count({ where: { channelId: communityChannelId, participantKey: "team:owner" } }), 1, "the owner mutes for themselves, not as `store`");
+    const bobBefore = await call(inbox, req("GET", "/community/inbox", bobTok));
+    assert.equal(bobBefore.json.data.channels.find((c: Json) => c.id === communityChannelId).muted, false, "a team mute is personal");
     assert.equal((await mute(bobTok, communityChannelId, { muted: "yes" })).status, 400);
     assert.equal((await mute(bobTok, "no-such-channel", { muted: true })).status, 404);
     const r = await mute(bobTok, communityChannelId, { muted: true });
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.deepEqual(r.json.data, { channelId: communityChannelId, muted: true });
     assert.equal((await mute(bobTok, communityChannelId, { muted: true })).status, 200, "muting twice is fine");
-    assert.equal(await db.communityChannelMute.count({ where: { channelId: communityChannelId } }), 1);
+    assert.equal(await db.communityChannelMute.count({ where: { channelId: communityChannelId, participantKey: `c:${bob.id}` } }), 1);
     const box = await call(inbox, req("GET", "/community/inbox", bobTok));
     assert.equal(box.json.data.channels.find((c: Json) => c.id === communityChannelId).muted, true);
     const teamBox = await call(inbox, req("GET", "/community/inbox", ownerTok));
-    assert.equal(teamBox.json.data.channels.find((c: Json) => c.id === communityChannelId).muted, undefined, "no toggle for the team");
+    assert.equal(teamBox.json.data.channels.find((c: Json) => c.id === communityChannelId).muted, true, "the team sees its own toggle");
+    const modBox = await call(inbox, req("GET", "/community/inbox", modTok));
+    assert.equal(modBox.json.data.channels.find((c: Json) => c.id === communityChannelId).muted, false, "…and only its own");
+    const thread = await list(ownerTok, "topic", generalId);
+    assert.equal(thread.json.data.thread.channelMuted, true, "the chat header's bell reads the same mute");
+    assert.equal((await list(bobTok, "topic", generalId)).json.data.thread.channelMuted, true);
   });
-  await test("a channel message pushes the other members, never the sender or anyone who muted it", async () => {
+  await test("a channel message pushes the other members and the team, never the sender or anyone who muted it", async () => {
     await flushAfter();
     pushed.length = 0;
     await send(annTok, "topic", generalId, { clientId: "c-muted", kind: "text", body: "Secret restock chat" });
     await flushAfter();
-    assert.equal(pushed.length, 0, "bob muted the channel, ann sent it, the store gets no channel pushes");
+    assert.equal(pushed.length, 0, "bob and the owner muted the channel, ann sent it");
   });
   await test("unmuted again, the member is pushed — channel and sender named, never the message", async () => {
     const r = await call(channelMute, req("PUT", `/community/channels/${communityChannelId}/mute`, bobTok, { muted: false }), { id: communityChannelId });
     assert.equal(r.status, 200, JSON.stringify(r.json));
-    assert.equal(await db.communityChannelMute.count({ where: { channelId: communityChannelId } }), 0);
+    assert.equal(await db.communityChannelMute.count({ where: { channelId: communityChannelId } }), 1, "only the owner's own mute is left");
     // A fresh topic: the General topic's earlier messages already used bob's throttle slot.
     const t = await call(topicsPost, req("POST", `/community/channels/${communityChannelId}/topics`, ownerTok, { name: "Restock talk", emoji: "📦", imageUrl: null }), { id: communityChannelId });
     assert.equal(t.status, 200, JSON.stringify(t.json));
@@ -972,6 +1118,22 @@ async function main() {
     await send(annTok, "topic", pushTopicId, { clientId: "c-again", kind: "text", body: "and another" });
     await flushAfter();
     assert.equal(pushed.length, 0, "bob was just pushed for this topic");
+  });
+  await test("unmuted, the store team's phones get group-chat pushes too — but never for their own message", async () => {
+    const r = await call(channelMute, req("PUT", `/community/channels/${communityChannelId}/mute`, ownerTok, { muted: false }), { id: communityChannelId });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    pushed.length = 0;
+    await send(annTok, "topic", pushTopicId, { clientId: "c-team", kind: "text", body: "Secret question for the store" });
+    await flushAfter();
+    assert.deepEqual(pushed.map((p) => p.to), [ownerDevice], "bob is still throttled; the owner hears it");
+    assert.deepEqual(pushed[0].data, { type: "topic", threadId: pushTopicId });
+    assert.equal(pushed[0].sound, "chat_pop.wav", "chats pop");
+    assert.equal(pushed[0].channelId, "chat_pop");
+    assert.ok(!JSON.stringify(pushed[0]).includes("Secret"));
+    pushed.length = 0;
+    await send(ownerTok, "topic", pushTopicId, { clientId: "c-owner", kind: "text", body: "Answering" });
+    await flushAfter();
+    assert.deepEqual(pushed.map((p) => p.to), [annDevice], "the owner's own phone stays quiet; ann hasn't been pushed for this topic yet");
   });
   let dropId = "";
   await test("a drop posts into the channel's General topic and pushes every member", async () => {
@@ -1791,6 +1953,83 @@ async function main() {
     assert.equal((await call(channelGet, req("GET", `/community/channels/${dChat.id}`, piaTok), { id: dChat.id })).status, 200);
   });
 
+
+  console.log("\nmember passwords (team reset, member detail, change your own)");
+  {
+    const P = await mkTenant("pwreset", "Pw Reset", true); // open community
+    const mia = await mkCustomer(P.id, "mia@buyer.test", "Mia Member", "mia-pass-1");
+    const ned = await mkCustomer(P.id, "ned@buyer.test", "Ned Neighbour", "ned-pass-1");
+    await db.storefrontStaff.create({
+      data: { tenantId: P.id, fullName: "Cam Comm", email: "cam@pwreset.test", username: "cam", passwordHash: hashPassword("cam-pass"), permissions: ["community"] },
+    });
+    await db.storefrontStaff.create({
+      data: { tenantId: P.id, fullName: "Cy Cust", email: "cy@pwreset.test", username: "cy", passwordHash: hashPassword("cy-pass"), permissions: ["community", "customers"] },
+    });
+    const pOwnerTok = await token("owner@pwreset.test", "owner-pass");
+    let miaTok = await token("mia@buyer.test", "mia-pass-1"); // first sign-in joins
+    const nedTok = await token("ned@buyer.test", "ned-pass-1");
+    const camTok = await token("cam@pwreset.test", "cam-pass");
+    const cyTok = await token("cy@pwreset.test", "cy-pass");
+    const detail = await h("community/members/[customerId]/route", "GET");
+    const reset = await h("community/members/[customerId]/password/route", "POST");
+    const ownPassword = await h("account/password/route", "POST");
+    const getDetail = (tok: string, customerId: string) => call(detail, req("GET", `/community/members/${customerId}`, tok), { customerId });
+    const resetPw = (tok: string, customerId: string, body: Json = {}) =>
+      call(reset, req("POST", `/community/members/${customerId}/password`, tok, body), { customerId });
+
+    await test("the team opens a member's full card; members can't", async () => {
+      const r = await getDetail(pOwnerTok, mia.id);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.data.email, "mia@buyer.test");
+      assert.equal(r.json.data.status, "approved");
+      assert.equal(r.json.data.canResetPassword, true);
+      assert.equal((await getDetail(nedTok, mia.id)).status, 403);
+      assert.equal((await getDetail(pOwnerTok, ann.id)).status, 404, "another store's customer is not found");
+    });
+    await test("staff without Customers access see the card but can't reset", async () => {
+      const r = await getDetail(camTok, mia.id);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.data.canResetPassword, false);
+      assert.equal((await resetPw(camTok, mia.id)).status, 403);
+      assert.equal((await resetPw(nedTok, mia.id)).status, 403, "a member can't reset someone else");
+    });
+    await test("owner generates a password: shown once, old one dead, member signed out", async () => {
+      const r = await resetPw(pOwnerTok, mia.id);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.data.generated, true);
+      assert.match(r.json.data.password, /^[a-z2-9]{10}$/);
+      assert.equal((await call(me, req("GET", "/me", miaTok))).status, 401, "the old phone is signed out");
+      assert.equal((await signIn("mia@buyer.test", "mia-pass-1")).status, 401, "the old password no longer works");
+      miaTok = await token("mia@buyer.test", r.json.data.password);
+    });
+    await test("staff with Customers access can set a typed password; short ones are refused", async () => {
+      assert.equal((await resetPw(cyTok, ned.id, { password: "short" })).status, 400);
+      assert.equal((await resetPw(cyTok, ned.id, { password: " padded-pass " })).status, 400);
+      const r = await resetPw(cyTok, ned.id, { password: "chosen-by-cy" });
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.deepEqual(r.json.data, { customerId: ned.id, password: "chosen-by-cy", generated: false });
+      await token("ned@buyer.test", "chosen-by-cy");
+    });
+    await test("a member changes their own password and stays signed in on this phone", async () => {
+      const temp = (await resetPw(pOwnerTok, mia.id)).json.data.password as string;
+      miaTok = await token("mia@buyer.test", temp);
+      const otherPhone = await token("mia@buyer.test", temp);
+      const wrong = await call(ownPassword, req("POST", "/account/password", miaTok, { currentPassword: "nope-nope", newPassword: "mia-own-pass" }));
+      assert.equal(wrong.status, 400);
+      const tooShort = await call(ownPassword, req("POST", "/account/password", miaTok, { currentPassword: temp, newPassword: "abc" }));
+      assert.equal(tooShort.status, 400);
+      const ok = await call(ownPassword, req("POST", "/account/password", miaTok, { currentPassword: temp, newPassword: "mia-own-pass" }));
+      assert.equal(ok.status, 200, JSON.stringify(ok.json));
+      assert.equal((await call(me, req("GET", "/me", miaTok))).status, 200, "this phone stays signed in");
+      assert.equal((await call(me, req("GET", "/me", otherPhone))).status, 401, "other phones are signed out");
+      await token("mia@buyer.test", "mia-own-pass");
+    });
+    await test("the store team still changes its own password through the same route", async () => {
+      const r = await call(ownPassword, req("POST", "/account/password", pOwnerTok, { currentPassword: "owner-pass", newPassword: "owner-pass-2" }));
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal((await call(me, req("GET", "/me", pOwnerTok))).status, 200);
+    });
+  }
 
   capture.close();
   await pg.close();

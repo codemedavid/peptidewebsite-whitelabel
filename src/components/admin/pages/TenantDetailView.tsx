@@ -457,7 +457,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         // Core window saved, but the price column isn't on the live DB yet —
         // tell the operator instead of silently dropping their figure.
         setErr(
-          "Window saved — but the monthly price wasn't stored: the subscriptionPriceCents column is missing on the database (run db:push), then save again.",
+          "Window saved, but the monthly price wasn't stored: the subscriptionPriceCents column is missing on the database (run db:push), then save again.",
         );
         showToast("Saved without the monthly price.");
         router.refresh();
@@ -492,7 +492,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         <div>
           <h3 className="card-title">Subscription window</h3>
           <div className="card-sub">
-            Pick a billing cycle and start date — the due date fills in automatically and can be adjusted.
+            Pick a billing cycle and start date. The due date fills in automatically and can be adjusted.
           </div>
         </div>
       </div>
@@ -500,7 +500,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
           Billing cycle
           <select value={cycle} onChange={(e) => handleCycle(e.target.value as BillingCycle | "")} style={inputStyle}>
-            <option value="">— none —</option>
+            <option value="">None</option>
             {BILLING_CYCLES.map((c) => (
               <option key={c} value={c}>
                 {BILLING_CYCLE_LABELS[c]}
@@ -519,7 +519,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
           </label>
         </div>
         <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
-          Amount paid (₱) — what the tenant paid for this term
+          Amount paid (₱): what the tenant paid for this term
           <input
             type="number"
             inputMode="decimal"
@@ -535,7 +535,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
           <div style={{ fontSize: 12, color: "var(--danger)" }}>Enter a valid amount (0 or more).</div>
         )}
         <label style={{ display: "grid", gap: 4, fontSize: 12, color: "var(--ink-400)" }}>
-          Monthly price due (₱) — the tenant's recurring monthly fee
+          Monthly price due (₱): the tenant's recurring monthly fee
           <input
             type="number"
             inputMode="decimal"
@@ -552,7 +552,7 @@ function SubscriptionWindowCard({ tenant }: { tenant: TenantDetail }) {
         )}
         {tenant.status === "trial" && (
           <div style={{ fontSize: 12, color: "var(--ink-400)" }}>
-            This tenant is on a trial — the window activates once they move to a paid plan.
+            This tenant is on a trial. The window activates once they move to a paid plan.
           </div>
         )}
         {dueBeforeStart && (
@@ -925,7 +925,7 @@ function PaymentReviewDrawer({ payment, onClose }: { payment: TenantSubscription
               </button>
             ) : (
               <div style={{ border: "1px dashed var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--ink-400)", fontSize: 13 }}>
-                No screenshot uploaded — the tenant filed this payment without a proof image.
+                No screenshot uploaded. The tenant filed this payment without a proof image.
               </div>
             )}
           </div>

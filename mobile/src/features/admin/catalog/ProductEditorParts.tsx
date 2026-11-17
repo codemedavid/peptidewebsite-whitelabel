@@ -15,6 +15,7 @@ import {
   blankVariation,
   makeMainPhoto,
   MAX_EXTRA_PHOTOS,
+  MAX_INCLUDES_LENGTH,
   withMainPhoto,
   VARIATION_PRESETS,
   type InclusionDraft,
@@ -67,7 +68,7 @@ export function ProductImageField({
       onBusy(true);
       onChange(await uploadProductPhoto(picked[0], signal));
     } catch (e) {
-      if (!isAbort(e)) setError(e instanceof Error ? e.message : "Upload failed — please try again.");
+      if (!isAbort(e)) setError(e instanceof Error ? e.message : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
       onBusy(false);
@@ -90,7 +91,7 @@ export function ProductImageField({
           <View style={styles.previewEmpty}>
             <Ionicons name="image-outline" size={32} color={t.colors.textFaint} />
             <AppText variant="caption" color="muted">
-              No image yet — optional
+              No image yet (optional)
             </AppText>
           </View>
         )}
@@ -109,7 +110,7 @@ export function ProductImageField({
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        hint="JPG, PNG, WebP, GIF or HEIC — max 10 MB."
+        hint="JPG, PNG, WebP, GIF or HEIC, max 10 MB."
       />
     </View>
   );
@@ -173,7 +174,7 @@ export function PhotoStrip({
     onBusy(false);
     if (urls.length) onChange([...photos, ...urls].slice(0, MAX_EXTRA_PHOTOS));
     if (firstError) setError(`${firstError} (${urls.length} of ${batch.length} uploaded)`);
-    else if (picked.length > batch.length) setError(`Only ${MAX_EXTRA_PHOTOS} extra photos fit — ${picked.length - batch.length} skipped.`);
+    else if (picked.length > batch.length) setError(`Only ${MAX_EXTRA_PHOTOS} extra photos fit. ${picked.length - batch.length} skipped.`);
   }
 
   function move(from: number, delta: number) {
@@ -250,7 +251,7 @@ function toSaleHint(price: string, sale: string): string | null {
   const p = Number(price) || 0;
   if (!(p > 0) || s >= p) return "Sale price must be lower than the price to take effect.";
   const off = Math.round(((p - s) / p) * 100);
-  return off >= 1 ? `On sale — ${off}% off. Shoppers see the price struck through.` : "On sale. Shoppers see the price struck through.";
+  return off >= 1 ? `On sale: ${off}% off. Shoppers see the price struck through.` : "On sale. Shoppers see the price struck through.";
 }
 
 export function VariationsEditor({
@@ -258,6 +259,7 @@ export function VariationsEditor({
   update,
   currency,
   showGbPrice,
+  showUsdPrice = false,
   onBusy,
 }: {
   items: VariationDraft[];
@@ -265,6 +267,8 @@ export function VariationsEditor({
   currency: string;
   /** Per-option group-buy price: only a group-buy product can carry one. */
   showGbPrice: boolean;
+  /** Dual-currency store selling this product internationally: each option's USD price. */
+  showUsdPrice?: boolean;
   onBusy: (busy: boolean) => void;
 }) {
   const t = useTheme();
@@ -301,7 +305,7 @@ export function VariationsEditor({
       const url = await uploadProductPhoto(picked[0], signal);
       patch(i, { image: url });
     } catch (e) {
-      if (!isAbort(e)) setError(e instanceof Error ? e.message : "Upload failed — please try again.");
+      if (!isAbort(e)) setError(e instanceof Error ? e.message : "Upload failed. Please try again.");
     } finally {
       setBusyRow(null);
       onBusy(false);
@@ -388,7 +392,7 @@ export function VariationsEditor({
             value={it.salePrice}
             onChangeText={(v) => patch(i, { salePrice: numeric(v) })}
             keyboardType="decimal-pad"
-            placeholder="Optional — leave blank for no sale"
+            placeholder="Optional. Leave blank for no sale"
             accessibilityHint="A discounted price for this option. It only applies when it is lower than the price."
           />
           {toSaleHint(it.price, it.salePrice) ? (
@@ -398,7 +402,7 @@ export function VariationsEditor({
           ) : null}
           <View style={{ gap: SPACE.xs }}>
             <AppText variant="caption" color="muted">
-              {it.image || it.extraImages?.length ? "More photos of this option — tap one to move, set as main or remove." : "Add photos — the first becomes this option's main photo."}
+              {it.image || it.extraImages?.length ? "More photos of this option. Tap one to move, set as main or remove." : "Add photos. The first becomes this option's main photo."}
             </AppText>
             <PhotoStrip
               photos={it.extraImages ?? []}
@@ -408,13 +412,27 @@ export function VariationsEditor({
               onMakeMain={(url) => patch(i, makeMainPhoto(it.image, it.extraImages ?? [], url))}
             />
           </View>
+          {showUsdPrice ? (
+            <Field
+              label="International price (USD)"
+              value={it.usdPrice}
+              onChangeText={(v) => patch(i, { usdPrice: numeric(v) })}
+              keyboardType="decimal-pad"
+              placeholder="Leave blank if not sold internationally"
+            />
+          ) : null}
+          <IncludesField
+            name={it.name}
+            value={it.includes}
+            onChange={(includes) => patch(i, { includes })}
+          />
           {showGbPrice ? (
             <Field
               label={`Group buy price (${currency})`}
               value={it.gbPrice}
               onChangeText={(v) => patch(i, { gbPrice: numeric(v) })}
               keyboardType="decimal-pad"
-              placeholder="None — sells at its own price"
+              placeholder="None (sells at its own price)"
             />
           ) : null}
         </View>
@@ -437,10 +455,44 @@ export function VariationsEditor({
           icon="images-outline"
           variant="ghost"
           disabled={busy}
-          accessibilityHint="Pick many photos — each is matched to the option whose name it shares."
+          accessibilityHint="Pick many photos. Each is matched to the option whose name it shares."
           onPress={() => void bulkPhotos()}
         />
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * What THIS option ships with (AdminAddProduct.tsx's per-option "includes").
+ * Kept per option, not in the description, so "Vials only" buyers never see
+ * the set's extras — the storefront shows it only once this option is picked.
+ */
+function IncludesField({ name, value, onChange }: { name: string; value: string | undefined; onChange: (v: string | undefined) => void }) {
+  const label = name.trim();
+  if (value === undefined) {
+    return (
+      <Button
+        label={`What's included${label ? ` with ${label}` : ""}`}
+        icon="add"
+        variant="ghost"
+        accessibilityHint="Add a packing list customers see when they pick this option."
+        onPress={() => onChange("")}
+      />
+    );
+  }
+  return (
+    <View style={{ gap: SPACE.xs }}>
+      <Field
+        label={label ? `${label} includes` : "This option includes"}
+        value={value}
+        onChangeText={onChange}
+        multiline
+        maxLength={MAX_INCLUDES_LENGTH}
+        placeholder={"10ml vial\n10 pcs insulin syringes\n20 pcs alcohol pads\n1 hard case"}
+        hint="One item per line. Customers see it only when they pick this option."
+      />
+      <Button label="Remove list" icon="trash-outline" variant="ghost" onPress={() => onChange(undefined)} />
     </View>
   );
 }

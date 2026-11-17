@@ -66,7 +66,7 @@ test("a newcomer: the round, how many products wait, and one Get access door", (
   assert.strictEqual(c.cta, GET_ACCESS_LABEL);
   assert.match(c.body, /^8 products are waiting/);
   assert.match(c.eyebrow, /^Members only · Opens Nov/);
-  assert.match(c.note, /no account needed/);
+  assert.match(c.note, /No account needed/);
 });
 test("one product reads singular; a live round says so", () => {
   const c = membersOnlyCopy(teaser({ state: "live", summary: { description: "", deliveryEta: "", productCount: 1, maxSlots: null, slotsTaken: 0 } }));
@@ -89,7 +89,7 @@ test("blank copy keeps every built-in line", () => {
   const c = membersOnlyCopy(teaser({ copy: { intro: "  ", button: "", note: "" } }));
   assert.match(c.body, /^8 products are waiting/);
   assert.strictEqual(c.cta, GET_ACCESS_LABEL);
-  assert.match(c.note, /no account needed/);
+  assert.match(c.note, /No account needed/);
 });
 test("typed copy replaces the description, button and note", () => {
   const t = teaser({ copy: { intro: "Batch 10 ships Dec 1.", button: "Join the batch", note: "Questions? Message us." } });

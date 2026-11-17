@@ -5,13 +5,13 @@
 // the wall is made of customer accounts: it needs the same entitlement, and
 // the same staff grant, as managing those accounts.
 
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo/fixtures";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { getTenantSlug } from "@/lib/tenant/headers";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { normalizeAccountGate, type AccountGateConfig } from "@/lib/storefront/account-gate";
 
@@ -42,14 +42,7 @@ export async function setAccountGateAction(input: unknown): Promise<({ ok: true 
     if ("error" in t) return t;
     const next = normalizeAccountGate(input);
 
-    const row = await prisma.branding.findUnique({ where: { tenantId: t.tenantId }, select: { config: true } });
-    const current = (row?.config ?? {}) as Record<string, unknown>;
-    const config = { ...current, accountGate: next };
-    await prisma.branding.upsert({
-      where: { tenantId: t.tenantId },
-      update: { config: config as Prisma.InputJsonValue },
-      create: { tenantId: t.tenantId, config: config as Prisma.InputJsonValue },
-    });
+    await patchBrandingConfig(t.tenantId, { accountGate: next });
     revalidateTenant(t.tenantId, await getTenantSlug());
     return { ok: true, ...next };
   } catch (err) {

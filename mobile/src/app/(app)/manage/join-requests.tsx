@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router, Stack, type Href } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { success } from "@/features/admin/setup/data";
+import { success, useAdminBrand } from "@/features/admin/setup/data";
+import { PaidAccessMembers } from "@/features/admin/group-buys/paid-access/Members";
+import { Segmented } from "@/ui/inputs";
 import { useGroupBuyList } from "@/features/admin/group-buys/hooks";
 import type { GroupBuy } from "@/features/admin/group-buys/model";
 import { usePaidAccessDecide, usePaidAccessQueue } from "@/features/admin/group-buys/paid-access/hooks";
@@ -17,7 +19,8 @@ import { AppText } from "@/ui/primitives";
 /**
  * Paid Access join queue (src/modules/paid-access): proofs of payment to check,
  * approvals, refunds owed and the waitlist — across every round — plus each
- * round's "Join settings". Reached from Group buys and from the
+ * round's "Join settings"; the Members tab is one round's roster (paid-access/
+ * Members.tsx). Reached from Group buys and from the
  * `gb_join_request` push. Every decision is decidePaidAccessAction on the server.
  */
 
@@ -46,6 +49,8 @@ const settingsRoute = (gb: GroupBuy): Href =>
 export default function JoinQueueScreen() {
   const t = useTheme();
   const online = useOnline();
+  const brand = useAdminBrand();
+  const [view, setView] = useState<"queue" | "members">("queue");
   const [tab, setTab] = useState<QueueTab>("payments");
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const queue = usePaidAccessQueue(tab);
@@ -81,11 +86,40 @@ export default function JoinQueueScreen() {
 
   const counts = queue.data?.counts;
   const editable = (rounds.data?.groupBuys ?? []).filter((g) => EDITABLE_ROUND.has(g.status));
+  const currency = typeof brand.data?.currency === "string" && brand.data.currency ? brand.data.currency : "₱";
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Stack.Screen options={{ title: "Join requests" }} />
       <OfflineBanner />
+      {/* Website Group Buys tabs: "Members" = who is in one round; the queue = every round's requests. */}
+      <View style={styles.segments}>
+        <Segmented
+          segments={[
+            { key: "queue", label: "Requests", count: counts ? counts.payments + counts.approvals : undefined },
+            { key: "members", label: "Members" },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      </View>
+      {view === "members" ? (
+        rounds.isError ? (
+          <ErrorState message={rounds.error.message} onRetry={() => void rounds.refetch()} />
+        ) : !rounds.data ? (
+          <View style={styles.list}>
+            <SkeletonList rows={3} />
+          </View>
+        ) : (
+          <PaidAccessMembers
+            rounds={rounds.data.groupBuys}
+            currency={currency}
+            busy={decide.isPending || !online}
+            onDecide={confirmThen}
+            onPrompt={(row, action) => setPrompt({ row, action })}
+          />
+        )
+      ) : (
       <FlatList
         data={queue.data && !queue.isError ? queue.data.rows : []}
         keyExtractor={(r) => r.id}
@@ -144,6 +178,7 @@ export default function JoinQueueScreen() {
           />
         )}
       />
+      )}
       <ReasonSheet
         prompt={prompt}
         roundName={prompt ? roundName(prompt.row.groupBuyId) : ""}
@@ -164,7 +199,7 @@ function JoinSettingsList({ rounds }: { rounds: GroupBuy[] }) {
       <View style={{ gap: 2 }}>
         <AppText variant="heading">Join settings</AppText>
         <AppText variant="caption" color="muted">
-          How customers get into each round: pay, apply, get approved — or open to everyone.
+          How customers get into each round: pay, apply, get approved, or open to everyone.
         </AppText>
       </View>
       {rounds.map((r) => (
@@ -192,6 +227,7 @@ function JoinSettingsList({ rounds }: { rounds: GroupBuy[] }) {
 
 const styles = StyleSheet.create({
   list: { padding: SPACE.lg, paddingBottom: SPACE.xxxl, flexGrow: 1 },
+  segments: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md },
   chips: { gap: SPACE.sm, paddingRight: SPACE.lg },
   chip: { minHeight: 40, paddingHorizontal: SPACE.lg, borderRadius: RADIUS.pill, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   card: { padding: SPACE.lg, borderRadius: RADIUS.lg, borderWidth: 1, gap: SPACE.md },

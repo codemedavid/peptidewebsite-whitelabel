@@ -13,6 +13,7 @@
 import { withTenant } from "@/lib/db/tenant-client";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
+import { isStorefrontActionBlocked, STOREFRONT_BLOCKED_MESSAGE } from "@/lib/auth/storefront-blocked";
 import { hasFeature } from "@/lib/features/entitlements";
 import { FEATURES } from "@/lib/features/catalog";
 import { isDemoMode } from "@/lib/demo/fixtures";
@@ -130,6 +131,7 @@ export async function getPublishedArticleAction(slug: string): Promise<{ ok: tru
   if (isDemoMode()) return { error: NOT_FOUND };
   const tenantId = await getTenantIdOrNull();
   if (!tenantId || !(await hasFeature(tenantId, FEATURES.SITE_BLOG))) return { error: NOT_FOUND };
+  if (await isStorefrontActionBlocked(tenantId)) return { error: STOREFRONT_BLOCKED_MESSAGE };
   if (typeof slug !== "string" || !/^[a-z0-9-]{1,80}$/.test(slug)) return { error: NOT_FOUND };
   const row = await withTenant(tenantId, (db) =>
     db.blogPost.findFirst({ where: { slug, status: "published" } }),

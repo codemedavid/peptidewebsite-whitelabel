@@ -92,7 +92,7 @@ export function TenantPresetPicker({ value, onChange }: Props) {
       </div>
       <p className="text-xs text-muted-foreground">
         A preset provisions the storefront layout, module settings and entitlements. Products are
-        never copied — the new tenant starts with its own empty catalog.
+        never copied. The new tenant starts with its own empty catalog.
       </p>
       <input type="hidden" name="presetId" value={value} />
     </div>

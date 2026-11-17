@@ -131,7 +131,7 @@ export function AdminTelegramBot({
               label="Bot token"
               hint={
                 configured
-                  ? "A token is stored (hidden). Paste a new one to replace it — the webhook URL is preserved."
+                  ? "A token is stored (hidden). Paste a new one to replace it. The webhook URL is preserved."
                   : "In Telegram, message @BotFather → /newbot → copy the token it returns."
               }
             >
@@ -270,7 +270,7 @@ export function AdminTelegramBot({
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                   {recipients.length === 0 ? (
                     <p style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
-                      No chats linked — nothing is sent until at least one is.
+                      No chats linked. Nothing is sent until at least one is.
                     </p>
                   ) : (
                     recipients.map((r) => (
@@ -389,7 +389,7 @@ function RecipientRow({
         Can confirm orders
         {isGroup && (
           <span style={{ fontSize: 12, color: "var(--ink-500)" }}>
-            — only the person who linked this group; other members are refused
+            (only the person who linked this group; other members are refused)
           </span>
         )}
       </label>
@@ -404,7 +404,7 @@ function RecipientRow({
         Include customer name, contact and address
         {isGroup && (
           <span style={{ fontSize: 12, color: "var(--ink-500)" }}>
-            — off by default for groups
+            (off by default for groups)
           </span>
         )}
       </label>
@@ -416,7 +416,7 @@ function RecipientRow({
           </summary>
           <div style={{ fontSize: 12, color: "var(--ink-500)", margin: "8px 0 10px", lineHeight: 1.6 }}>
             If this group has Topics turned on, paste each topic&apos;s link and orders will be
-            filed under their status — and move between topics as the status changes. Open the
+            filed under their status, and move between topics as the status changes. Open the
             topic → tap its name → Copy Link. Leave a status blank to post it in the group&apos;s
             main area.
           </div>

@@ -188,7 +188,7 @@ const planOf = (state: RoundState) => suggestLigwak(state.kitOrders, state.produ
 function closedGuard(state: RoundState): GbFail | null {
   const stage = effectiveStage(state.round);
   if (stage === "open" || stage === "bunuan") {
-    return gbFail("conflict", "Close the round first — Ligwak reviews a closed round.");
+    return gbFail("conflict", "Close the round first. Ligwak reviews a closed round.");
   }
   return null;
 }
@@ -277,7 +277,7 @@ export async function decideLigwak(ctx: LigwakCtx, roundId: unknown, rawDecision
     if (!state) return NOT_FOUND;
     const closed = closedGuard(state);
     if (closed) return closed;
-    if (state.round.ligwakLockedAt) return gbFail("conflict", "Ligwak is locked — press Recalculate to change a decision.");
+    if (state.round.ligwakLockedAt) return gbFail("conflict", "Ligwak is locked. Press Recalculate to change a decision.");
     const plan = planOf(state);
     const { alloc, entries } = await currentAllocation(db, roundId);
     const merged = new Map(decisionsFrom(entries).map((d) => [d.entryId, d]));
@@ -452,13 +452,13 @@ export async function recalculateLigwak(ctx: LigwakCtx, roundId: unknown, rawRea
     if (!(await lockRound(db, ctx.tenantId, roundId))) return NOT_FOUND;
     const state = await loadRoundState(db, roundId);
     if (!state) return NOT_FOUND;
-    if (!state.round.ligwakLockedAt) return gbFail("conflict", "Ligwak isn't locked — there's nothing to recalculate.");
+    if (!state.round.ligwakLockedAt) return gbFail("conflict", "Ligwak isn't locked, so there's nothing to recalculate.");
     if (effectiveStage(state.round) === "payment") {
-      return gbFail("conflict", "Payment time has started — amounts due are final.");
+      return gbFail("conflict", "Payment time has started, so amounts due are final.");
     }
     const moving = state.orders.filter((o) => o.refundStatus === "refund_pending" || o.refundStatus === "refunded");
     if (moving.length) {
-      return gbFail("blocked", `A refund is already on its way for ${moving.map((o) => o.orderNumber).join(", ")} — recalculating would change it.`);
+      return gbFail("blocked", `A refund is already on its way for ${moving.map((o) => o.orderNumber).join(", ")}, and recalculating would change it.`);
     }
     const { alloc, entries } = await currentAllocation(db, roundId);
     const decisions = decisionsFrom(entries);

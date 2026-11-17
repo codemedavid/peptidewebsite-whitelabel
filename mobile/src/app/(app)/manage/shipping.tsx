@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Stack } from "expo-router";
-import { listFrom, removeRows, toggleActive, upsertRow, useCollection } from "@/features/admin/setup/data";
+import { INTL_SHIPPING_ACCESS, listFrom, removeRows, toggleActive, upsertRow, useCollection } from "@/features/admin/setup/data";
 import { currencyOf, newId, str, type Row } from "@/features/admin/setup/rules";
 import { SEED_COURIERS, SEED_SHIPPING_LOCATIONS } from "@/features/admin/setup/seeds";
 import { ChoicePills, EditorSheet, Hint, ItemCard, ListPage, Loadable, ToggleRow, confirmDelete } from "@/features/admin/setup/ui";
-import { Field } from "@/ui/inputs";
+import { Field, Segmented } from "@/ui/inputs";
 import { Pill } from "@/ui/primitives";
 
 /**
@@ -13,9 +13,18 @@ import { Pill } from "@/ui/primitives";
  * carry a fee; a blank fee means "no per-location fee" (not ₱0). Every change
  * saves the whole list.
  */
+const INTL_SYMBOL = "$";
+
 export default function ShippingScreen() {
-  const list = useCollection("shippingLocations", "saveShippingLocationsAction", SEED_SHIPPING_LOCATIONS, "shipping locations");
+  const local = useCollection("shippingLocations", "saveShippingLocationsAction", SEED_SHIPPING_LOCATIONS, "shipping locations");
+  // Dual-currency stores keep a second, International (USD) rate list in
+  // branding.config.intlMarket, saved through saveIntlMarketAction.
+  const intlList = useCollection("intlShipping", "saveIntlMarketAction", [], "international shipping rates", INTL_SHIPPING_ACCESS);
+  const [market, setMarket] = useState<"local" | "international">("local");
   const [editing, setEditing] = useState<{ row: Row; isNew: boolean } | null>(null);
+  const dual = local.brand.data?.dualMarket === true;
+  const intl = dual && market === "international";
+  const list = intl ? intlList : local;
 
   return (
     <>
@@ -23,7 +32,8 @@ export default function ShippingScreen() {
       <Loadable query={list.brand}>
         {(brand) => {
           const couriers = listFrom(brand, "couriers", SEED_COURIERS);
-          const currency = currencyOf(brand);
+          // INTL_CURRENCY.symbol (src/lib/storefront/markets.ts) for the USD list.
+          const currency = intl ? INTL_SYMBOL : currencyOf(brand);
           const courierName = (id: unknown) =>
             str(couriers.find((c) => c.id === id)?.name) || (id ? "Unknown courier" : "No courier");
           const startAdd = () => {
@@ -50,6 +60,28 @@ export default function ShippingScreen() {
                 empty={{ icon: "location-outline", title: "No shipping locations yet.", action: "Add your first location" }}
                 refreshing={list.brand.isRefetching}
                 onRefresh={() => void list.brand.refetch()}
+                toolbar={
+                  dual ? (
+                    <>
+                      <Segmented
+                        segments={[
+                          { key: "local", label: `Local (${currencyOf(brand)})` },
+                          { key: "international", label: "International (USD)" },
+                        ]}
+                        value={market}
+                        onChange={(m) => {
+                          setEditing(null);
+                          setMarket(m);
+                        }}
+                      />
+                      {intl ? (
+                        <Hint>
+                          {"What International (USD) orders pay for shipping. Link each rate to a courier (e.g. DHL). The International checkout only offers couriers that have a rate here."}
+                        </Hint>
+                      ) : null}
+                    </>
+                  ) : null
+                }
               >
                 {list.items.map((l) => {
                   const price = typeof l.price === "number" ? l.price : 0;
@@ -156,7 +188,7 @@ function LocationEditor({
       {options.length ? (
         <ChoicePills label="Courier *" options={options} value={courierId} onChange={setCourierId} />
       ) : (
-        <Hint tone="warning">No couriers yet — add one first.</Hint>
+        <Hint tone="warning">No couriers yet. Add one first.</Hint>
       )}
       <Hint>{"Which courier this location's fee applies to. Customers pick the courier first, then only its locations are shown."}</Hint>
       <Field
@@ -168,14 +200,14 @@ function LocationEditor({
         autoCapitalize="characters"
         autoCorrect={false}
       />
-      <Field label="Name *" value={name} onChangeText={setName} placeholder="e.g., LBC - Metro Manila" />
+      <Field label="Name *" value={name} onChangeText={setName} placeholder="e.g., LBC Metro Manila" />
       <Field
         label={`Shipping Fee (${currency})`}
         value={price}
         onChangeText={setPrice}
         placeholder="Leave blank for no fee"
         keyboardType="decimal-pad"
-        hint="Leave this blank to charge no fee for this location — useful when you charge a single flat shipping fee elsewhere instead of per-location rates."
+        hint="Leave this blank to charge no fee for this location, useful when you charge a single flat shipping fee elsewhere instead of per-location rates."
       />
       <ToggleRow label="Active" hint="Customers can select this location at checkout." value={active} onChange={setActive} />
     </EditorSheet>

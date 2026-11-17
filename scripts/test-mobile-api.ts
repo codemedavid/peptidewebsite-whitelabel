@@ -91,6 +91,7 @@ async function main() {
   const storeStatus = (await import("../src/app/api/mobile/v1/store-status/route")).PUT as Handler;
   const password = (await import("../src/app/api/mobile/v1/account/password/route")).POST as Handler;
   const dashboard = (await import("../src/app/api/mobile/v1/dashboard/route")).GET as Handler;
+  const dashboardGb = (await import("../src/app/api/mobile/v1/dashboard/group-buy/route")).GET as Handler;
   const profileRoute = await import("../src/app/api/mobile/v1/account/profile/route");
   const photoRoute = await import("../src/app/api/mobile/v1/account/profile/photo/route");
   const { notifyNewOrder } = await import("../src/lib/mobile/push");
@@ -310,6 +311,61 @@ async function main() {
     }
   });
 
+  await test("folders file like the web Orders hub; payment chips + facet counts", async () => {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const past = await db.groupBuy.create({
+      data: {
+        tenantId: A.id,
+        name: "Round 6",
+        status: "closed",
+        startsAt: new Date(now - 3 * DAY),
+        endsAt: new Date(now - DAY),
+      },
+    });
+    const foreign = await db.groupBuy.create({ data: { tenantId: B.id, name: "Beta round", status: "active" } });
+    const a2 = await db.storefrontOrder.findFirst({ where: { tenantId: A.id, orderNumber: "ALP-1002" } });
+    await db.storefrontOrder.update({ where: { id: a2!.id }, data: { groupBuyId: past.id, groupBuyName: "Round 6" } });
+    // Unstamped but placed inside Round 6's window (the k-glow drift case), already paid.
+    const drift = await mkOrder(A.id, "ALP-1003", "Cara Lim");
+    await db.storefrontOrder.update({
+      where: { id: drift.id },
+      data: { placedAt: new Date(now - 2 * DAY), paymentStatus: "paid" },
+    });
+    const nums = (r: { json: Json }) => r.json.data.orders.map((o: Json) => o.orderNumber).sort();
+    try {
+      const folder = await call(orders, req("GET", `/orders?filter=all&folder=${past.id}`, aTok));
+      assert.deepEqual(nums(folder), ["ALP-1002", "ALP-1003"], "stamped + in-window unstamped");
+      assert.deepEqual(folder.json.data.paymentCounts, { all: 2, unpaid: 1, paid: 1 });
+      assert.deepEqual(folder.json.data.statusCounts, { new: 1, confirmed: 1 });
+
+      const stamped = await call(orders, req("GET", `/orders?filter=all&round=${past.id}`, aTok));
+      assert.deepEqual(nums(stamped), ["ALP-1002"], "round= stays the stamped id only");
+
+      const outside = await call(orders, req("GET", "/orders?filter=all&folder=outside", aTok));
+      assert.deepEqual(nums(outside), ["ALP-1001"]);
+
+      const paid = await call(orders, req("GET", `/orders?filter=all&payment=paid&folder=${past.id}`, aTok));
+      assert.deepEqual(nums(paid), ["ALP-1003"]);
+      assert.deepEqual(paid.json.data.statusCounts, { new: 1 }, "status tabs count under the payment chip");
+
+      const unpaidNew = await call(orders, req("GET", `/orders?filter=new&payment=unpaid&folder=${past.id}`, aTok));
+      assert.deepEqual(nums(unpaidNew), []);
+      assert.deepEqual(unpaidNew.json.data.paymentCounts, { all: 1, unpaid: 0, paid: 1 }, "payment chips count under the tab");
+
+      const theirs = await call(orders, req("GET", `/orders?filter=all&folder=${foreign.id}`, aTok));
+      assert.deepEqual(theirs.json.data.orders, [], "another store's round is an empty folder, never the store");
+      assert.deepEqual(theirs.json.data.paymentCounts, { all: 0, unpaid: 0, paid: 0 });
+
+      const junk = await call(orders, req("GET", "/orders?filter=all&payment=bogus", aTok));
+      assert.deepEqual(nums(junk), ["ALP-1001", "ALP-1002", "ALP-1003"], "junk payment = all");
+    } finally {
+      await db.storefrontOrder.delete({ where: { id: drift.id } });
+      await db.storefrontOrder.update({ where: { id: a2!.id }, data: { groupBuyId: null, groupBuyName: null } });
+      await db.groupBuy.deleteMany({ where: { id: { in: [past.id, foreign.id] } } });
+    }
+  });
+
   let a1Updated = a1.updatedAt.toISOString();
   await test("confirm runs the website engine: status, journey, stock deduction", async () => {
     const r = await call(
@@ -423,6 +479,8 @@ async function main() {
     assert.equal(pushed.length, 1);
     assert.equal(pushed[0].to, TOKEN);
     assert.deepEqual(pushed[0].data, { type: "order", orderId: b1.id });
+    assert.equal(pushed[0].sound, "order_chime.wav", "new orders ring with their own chime (iOS)");
+    assert.equal(pushed[0].channelId, "orders_chime", "…and their own Android channel");
     assert.ok(!JSON.stringify(pushed[0]).includes("Ana"), "no customer name on the lock screen");
     const alert = await db.mobileOrderAlert.findUnique({ where: { orderId: b1.id } });
     assert.equal(alert!.sent, 1);
@@ -470,6 +528,56 @@ async function main() {
     const packerDash = await call(dashboard, req("GET", "/dashboard", packerTok));
     assert.equal(packerDash.json.data.today, null, "no orders grant → no money");
     assert.equal(packerDash.json.data.recent.length, 0);
+  });
+  await test("dashboard: website parity — catalog tiles, stock levels, categories, needs attention", async () => {
+    const d = (await call(dashboard, req("GET", "/dashboard", a2))).json.data;
+    // Units = live stock of the tracked products (earlier tests deduct some);
+    // the made-to-order kit holds no stock and is never "out".
+    const tracked = await db.product.findMany({ where: { tenantId: A.id, id: { not: mto.id } }, select: { stock: true } });
+    const units = tracked.reduce((sum, p) => sum + Math.max(0, p.stock ?? 0), 0);
+    assert.deepEqual(d.catalog, { products: 3, featured: 0, units, outOfStock: 0 });
+    assert.equal(d.stockLevels[0].name, "TB-500");
+    assert.equal(d.stockLevels[0].tone, "low");
+    assert.ok(!d.stockLevels.some((r: Json) => r.name === "Custom Kit"), "made-to-order is not a stock row");
+    assert.ok(d.topCategories.length > 0, "seed categories when none are saved");
+    const targets = (d.attention as Json[]).map((a) => a.target);
+    assert.deepEqual(targets, ["inventory", "orders", "categories"], "low stock, orders to pack, empty categories — website order");
+    const packing = (d.attention as Json[]).find((a) => a.id === "unfulfilled")!;
+    assert.match(packing.title, /^2 orders are waiting to be packed$/);
+    assert.ok(packing.sub.includes("ALP-100"));
+    // Products-only staff: catalog yes; no alert leads where they can't go.
+    const packer = (await call(dashboard, req("GET", "/dashboard", packerTok))).json.data;
+    assert.equal(packer.catalog.products, 3);
+    assert.deepEqual(packer.attention, []);
+  });
+  await test("dashboard: International (foreign-currency) orders are counted, never summed into today", async () => {
+    const before = (await call(dashboard, req("GET", "/dashboard", a2))).json.data.today;
+    const usd = await db.storefrontOrder.create({
+      data: {
+        tenantId: A.id,
+        orderNumber: "ALP-INTL-1",
+        status: "delivered",
+        currency: "USD",
+        paymentMethod: "Card",
+        customer: { name: "Intl Buyer", email: "intl@buyer.test", phone: "", contactMethod: "sms" },
+        shipping: { address: "1 Main", city: "LA", province: "CA", postal: "90001", country: "US", region: "", fee: 0 },
+        items: [{ name: "BPC-157", qty: 1, price: 99, productId: p1.id }],
+        statusHistory: [{ status: "delivered", at: new Date().toISOString() }],
+      },
+    });
+    try {
+      const after = (await call(dashboard, req("GET", "/dashboard", a2))).json.data.today;
+      assert.equal(after.orders, before.orders, "a USD order never joins the ₱ count");
+      assert.equal(after.revenueLabel, before.revenueLabel, "…or the ₱ total");
+      assert.equal(after.international, (before.international ?? 0) + 1);
+    } finally {
+      await db.storefrontOrder.delete({ where: { id: usd.id } });
+    }
+  });
+  await test("dashboard group-buy card: off for a store without group buys", async () => {
+    const r = await call(dashboardGb, req("GET", "/dashboard/group-buy", a2));
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.deepEqual(r.json.data, { status: "off" });
   });
 
   console.log("\naccount profiles");

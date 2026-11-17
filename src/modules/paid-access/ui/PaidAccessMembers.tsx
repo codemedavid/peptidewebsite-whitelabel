@@ -214,7 +214,7 @@ function RoundMembers({ round, currency, onOpenJoinFlow, onChanged }: RoundProps
         <div className="pam-setup" role="status">
           <div>
             <strong>Nobody can join this round yet.</strong>
-            <p className="admin-field__hint">Choose how people get in first — open, pay to join, or approve each one.</p>
+            <p className="admin-field__hint">Choose how people get in first: open, pay to join, or approve each one.</p>
           </div>
           <button type="button" className="admin-btn pam-primary" onClick={onOpenJoinFlow}>Set up join flow</button>
         </div>

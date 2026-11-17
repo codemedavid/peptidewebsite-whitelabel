@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -16,6 +16,7 @@ import { useShop } from "../ShopProvider";
 import { Gallery } from "./Gallery";
 import { CartButton, Notice, PriceTag, QtyStepper } from "./ShopUI";
 import { CatalogError } from "./ShopStates";
+import { READING_MAX_WIDTH, useAppWidth } from "@/ui/responsive";
 
 const STOCK_TONE = { out: "danger", low: "warning", in: "success", untracked: "neutral" } as const;
 const STOCK_ICON = { out: "close-circle", low: "alert-circle", in: "checkmark-circle", untracked: "hammer-outline" } as const;
@@ -59,7 +60,8 @@ export function ProductDetail({ id }: { id: string }) {
 function ProductBody({ product, catalog }: { product: ShopProduct; catalog: ShopCatalog }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  // Phones: full width. Wide screens: a centred reading column (ui/responsive).
+  const width = Math.min(useAppWidth(), READING_MAX_WIDTH);
   const shop = useShop();
   const options = useMemo(() => optionsFor(product), [product]);
   const [optionKey, setOptionKey] = useState(() => defaultOption(product)?.key ?? "");
@@ -91,13 +93,13 @@ function ProductBody({ product, catalog }: { product: ShopProduct; catalog: Shop
     if (!option || !canBuy) return;
     const r = shop.add({ productId: product.id, variation: option.variation, qty: Math.min(qty, max) }, maxQtyFor(option));
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    setAdded(r.capped ? `Added ${r.added} — that's all that's left.` : `Added ${r.added} to your cart.`);
+    setAdded(r.capped ? `Added ${r.added}. That's all that's left.` : `Added ${r.added} to your cart.`);
     setQty(1);
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: SPACE.xxxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: SPACE.xxxl, width: "100%", maxWidth: READING_MAX_WIDTH, alignSelf: "center" }}>
         <Gallery key={images[0] ?? "none"} images={images} width={width} name={product.name} />
         <View style={styles.body}>
           <View style={{ gap: SPACE.sm }}>
@@ -164,7 +166,7 @@ function ProductBody({ product, catalog }: { product: ShopProduct; catalog: Shop
         ) : null}
         {preview ? (
           <AppText variant="caption" color="muted" style={{ textAlign: "center" }}>
-            {"Preview — this is what shoppers see. They add to cart from here."}
+            {"Preview: this is what shoppers see. They add to cart from here."}
           </AppText>
         ) : (
           <Button

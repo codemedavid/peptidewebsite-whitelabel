@@ -256,7 +256,7 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
       savedTimer.current = setTimeout(() => setShowSaved(false), 2200);
       toast("Hero section saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -304,7 +304,7 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
             <h2 className="admin-form__section" style={{ margin: "0 0 8px" }}>Homepage Hero</h2>
             <p className="admin-field__hint" style={{ fontSize: 14, lineHeight: 1.6 }}>
               The big banner at the top of your storefront homepage. Choose how it
-              looks — write your own copy, or upload a single image and use that
+              looks: write your own copy, or upload a single image and use that
               instead. Colors, fonts and layout are set by your provider.
             </p>
 
@@ -362,7 +362,7 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
 
             <div className="admin-form__row">
               <div className="admin-field">
-                <label className="admin-field__label">Headline — line 1</label>
+                <label className="admin-field__label">Headline, line 1</label>
                 <input
                   className="admin-input"
                   value={fields.line1}
@@ -373,7 +373,7 @@ export function AdminHeroSettings({ brand, onBack }: { brand: Brand; onBack: () 
               </div>
               <div className="admin-field">
                 <label className="admin-field__label">
-                  Headline — line 2 <span style={{ color: "var(--brand-text-muted)", fontWeight: 500 }}>(accent)</span>
+                  Headline, line 2 <span style={{ color: "var(--brand-text-muted)", fontWeight: 500 }}>(accent)</span>
                 </label>
                 <input
                   className="admin-input"

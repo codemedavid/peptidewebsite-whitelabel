@@ -142,13 +142,13 @@ export function buyableLines(rows: CartRow[]): CartLine[] {
 export function issueCopy(issue: CartIssue, max: number): string | null {
   switch (issue) {
     case "missing":
-      return "No longer available — remove it to continue.";
+      return "No longer available. Remove it to continue.";
     case "unavailable":
       return "Can't be ordered right now.";
     case "soldOut":
-      return "Sold out — remove it to continue.";
+      return "Sold out. Remove it to continue.";
     case "reduced":
-      return `Only ${max} left — we lowered the quantity.`;
+      return `Only ${max} left, so we lowered the quantity.`;
     default:
       return null;
   }

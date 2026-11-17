@@ -51,7 +51,7 @@ export function memberNoticeText(input: {
   const round = input.roundName || "the group buy";
   const next =
     input.status === "active"
-      ? "You're in — the group buy is open to you now."
+      ? "You're in! The group buy is open to you now."
       : input.status === "payment_pending"
         ? `Pay ${input.amountLabel} to get in.`
         : input.status === "approval_pending"
@@ -65,7 +65,7 @@ export function memberNoticeText(input: {
     case "approved":
       return input.status === "active" ? `You're in! ${round} is open to you now.` : `You're approved for ${round}! ${next}`.trim();
     case "promoted":
-      return `A slot opened in ${round} — you're off the waitlist. ${next}`.trim();
+      return `A slot opened in ${round}, so you're off the waitlist. ${next}`.trim();
     case "rejected": {
       const refund =
         input.refundStatus === "pending"

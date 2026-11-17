@@ -118,7 +118,7 @@ export function ReviewEditor({
         })
       }
     >
-      <ImageField label="Image" hint="A screenshot or photo — PNG, JPG" value={image} onChange={(url) => setImage(url)} />
+      <ImageField kind="review" label="Image" hint="A screenshot or photo (PNG, JPG)" value={image} onChange={(url) => setImage(url)} />
       <ProductPicker products={products} error={productsError} selected={productIds} onToggle={toggleProduct} />
       <Field label="Headline (image overlay)" value={headline} onChangeText={setHeadline} placeholder="e.g. Plateau breaker 🔥" maxLength={MAX_REVIEW_TEXT} />
       <Field label="Title" value={title} onChangeText={setTitle} placeholder="Card title" maxLength={MAX_REVIEW_TEXT} />
@@ -135,7 +135,7 @@ export function ReviewEditor({
 
       <Section
         title="Description style"
-        hint={`Applies to the subtitle everywhere it appears — the reviews page and every connected product. Leave a control on "Default" to inherit the store's style.`}
+        hint={`Applies to the subtitle everywhere it appears: the reviews page and every connected product. Leave a control on "Default" to inherit the store's style.`}
       >
         <ChoicePills
           label="Description font"
@@ -219,7 +219,7 @@ function ProductPicker({
         {error ? (
           <Hint tone="warning">{`Couldn't load products: ${error}`}</Hint>
         ) : products.length === 0 ? (
-          <Hint>No products yet — add one first.</Hint>
+          <Hint>No products yet. Add one first.</Hint>
         ) : (
           shown.map((p) => {
             const on = selected.includes(p.id);

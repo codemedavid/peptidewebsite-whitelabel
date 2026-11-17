@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, type Href } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -7,17 +7,67 @@ import Constants from "expo-constants";
 import { useSession, useSignedIn } from "@/auth/SessionProvider";
 import { APP_NAME } from "@/config";
 import { communityAccess } from "@/features/community/lib/access";
+import { trackerAccess } from "@/features/tracker/access";
+import { trackerHref } from "@/features/tracker/components/routes";
 import { welcomeCardLine } from "@/features/community/lib/welcome";
 import { useWelcome } from "@/features/community/hooks/useCommunityData";
 import { WelcomeSheet } from "@/features/community/components/WelcomeEditor";
 import { useSwitchView } from "@/features/community/useAppView";
 import { adminBridge, type AdminMenuItem } from "@/features/admin/bridge";
+import { appPromoApi } from "@/api/endpoints";
+import { ApiError } from "@/api/client";
 import { NATIVE_VIEW_ROUTES } from "@/features/admin/native-views";
 import { Avatar } from "@/features/community/components/Avatar";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SPACE } from "@/theme/tokens";
 import { BrandMark } from "@/ui/BrandMark";
 import { AppText, Card, Divider, Pill, Row, SectionLabel, type IconName } from "@/ui/primitives";
+
+/**
+ * "Get our app" on the store's website (server: lib/storefront/app-promo.ts):
+ * a bar on every page linking visitors to the store's app page. Shown here
+ * only when the store has an app to offer (App shopping or App community).
+ */
+function AppPromoSwitch() {
+  const t = useTheme();
+  const { me } = useSignedIn();
+  const { reloadMe } = useSession();
+  const [pending, setPending] = useState<boolean | null>(null);
+  const isOn = pending ?? me.appPromo?.enabled === true;
+
+  const set = async (on: boolean) => {
+    setPending(on);
+    try {
+      await appPromoApi.set(on);
+      await reloadMe();
+    } catch (e) {
+      Alert.alert("Couldn't save that", e instanceof ApiError ? e.message : "Check your connection and try again.");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <View style={styles.switchRow}>
+      <View style={[styles.switchIcon, { backgroundColor: t.colors.surfaceAlt }]}>
+        <Ionicons name="phone-portrait-outline" size={20} color={t.colors.text} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <AppText variant="bodyStrong">Show the app on your website</AppText>
+        <AppText variant="caption" color="muted">
+          {isOn ? "Visitors see a \u201cGet the app\u201d bar on every page" : "A \u201cGet the app\u201d bar for website visitors"}
+        </AppText>
+      </View>
+      <Switch
+        value={isOn}
+        disabled={pending !== null}
+        onValueChange={(v) => void set(v)}
+        accessibilityLabel="Show the app on your website"
+        accessibilityHint="Adds a Get the app bar to your store's website"
+      />
+    </View>
+  );
+}
 
 /** The automated welcome messages every new member gets — opens the editor in place. */
 function WelcomeMessagesRow() {
@@ -137,6 +187,38 @@ export default function More() {
             <Row icon="add-circle-outline" label="New channel" onPress={() => router.push("/community/channel-new")} />
             <Divider inset={62} />
             <Row icon="flash-outline" label="Broadcast a drop" detail="Pushes to every member" onPress={() => router.push("/community/drop-new")} />
+          </Card>
+        </>
+      ) : null}
+
+      {me.promoPush?.canSend || (me.appPromo?.available && me.appPromo.canEdit) ? (
+        <>
+          <SectionLabel>Customers</SectionLabel>
+          <Card padded={false}>
+            {me.promoPush?.canSend ? (
+              <Row
+                icon="megaphone-outline"
+                label="Send a promo or event"
+                detail="A notification from your store to customers who turned on promos"
+                onPress={() => router.push("/manage/promo-push" as Href)}
+              />
+            ) : null}
+            {me.promoPush?.canSend && me.appPromo?.available && me.appPromo.canEdit ? <Divider inset={62} /> : null}
+            {me.appPromo?.available && me.appPromo.canEdit ? <AppPromoSwitch /> : null}
+          </Card>
+        </>
+      ) : null}
+
+      {trackerAccess(me).team ? (
+        <>
+          <SectionLabel>For you</SectionLabel>
+          <Card padded={false}>
+            <Row
+              icon="pulse-outline"
+              label="Peptide Tracker"
+              detail="Your own doses, vials and progress, private to you"
+              onPress={() => router.push(trackerHref.home())}
+            />
           </Card>
         </>
       ) : null}
@@ -309,6 +391,8 @@ function ManageStore() {
 }
 
 const styles = StyleSheet.create({
+  switchRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, minHeight: 64 },
+  switchIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   page: { padding: SPACE.lg, paddingBottom: SPACE.xxxl },
   account: { flexDirection: "row", alignItems: "center", gap: SPACE.lg },
   // The store's mark, tucked on the person's avatar: who you are, in which store.

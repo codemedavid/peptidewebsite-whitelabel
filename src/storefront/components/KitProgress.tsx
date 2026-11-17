@@ -11,10 +11,10 @@ function kitLabel(kit: KitProgress): string {
   if (kit.remaining === 0) {
     return kit.fullKits > 1
       ? `${kit.fullKits} kits complete`
-      : `Kit complete — ${kit.perKit} of ${kit.perKit} vials`;
+      : `Kit complete: ${kit.perKit} of ${kit.perKit} vials`;
   }
   const which = kit.fullKits > 0 ? `kit ${kit.fullKits + 1}` : "the kit";
-  return `${kit.inKit} of ${kit.perKit} vials — ${kit.remaining} more to complete ${which}`;
+  return `${kit.inKit} of ${kit.perKit} vials, ${kit.remaining} more to complete ${which}`;
 }
 
 export function KitProgressBar({ kit }: { kit: KitProgress }) {

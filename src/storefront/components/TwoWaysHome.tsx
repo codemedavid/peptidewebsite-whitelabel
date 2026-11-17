@@ -147,7 +147,7 @@ export function TwoWaysHome({
               <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Paused</span>
               <span className="sf-twh__way-name font-display">On-Hand</span>
               <span className="sf-twh__way-copy">
-                Ships-now orders are paused right now — follow us for the next restock.
+                Ships-now orders are paused right now. Follow us for the next restock.
               </span>
             </div>
           )}
@@ -181,14 +181,14 @@ export function TwoWaysHome({
               <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Closed</span>
               <span className="sf-twh__way-name font-display">Group Buy</span>
               <span className="sf-twh__way-copy">
-                Ordering is closed — browse the group buy prices.
+                Ordering is closed. Browse the group buy prices.
               </span>
             </a>
           ) : (
             <div className="sf-twh__way sf-twh__way--closed">
               <span className="sf-twh__way-tag sf-twh__way-tag--closed">○ Closed</span>
               <span className="sf-twh__way-name font-display">Group Buy</span>
-              <span className="sf-twh__way-copy">No open GB right now — follow us for the next one.</span>
+              <span className="sf-twh__way-copy">No open GB right now. Follow us for the next one.</span>
             </div>
           )}
         </div>
@@ -210,7 +210,7 @@ export function TwoWaysHome({
         </div>
         {onHandState === "closed" && view.onHand.count > 0 && (
           <p className="sf-twh__empty">
-            Ships-now orders are paused right now — these are listed for reference only.
+            Ships-now orders are paused right now. These are listed for reference only.
           </p>
         )}
         {view.onHand.count >= MIN_ITEMS_FOR_SEARCH && (
@@ -229,8 +229,8 @@ export function TwoWaysHome({
         {view.onHand.count === 0 ? (
           <p className="sf-twh__empty">
             {gbLive
-              ? "Nothing on hand right now — everything is in the open group buy."
-              : "Nothing on hand right now — follow us for the next drop."}
+              ? "Nothing on hand right now. Everything is in the open group buy."
+              : "Nothing on hand right now. Follow us for the next drop."}
           </p>
         ) : onHandLines.length === 0 ? (
           <ListingFilterEmpty query={query} onReset={resetFilter} />
@@ -297,8 +297,8 @@ export function TwoWaysHome({
             )}
 
             <div className="sf-twh__gb-count">
-              {view.gb.count} {view.gb.count === 1 ? "item" : "items"} in this round —
-              browse them on the group buy page
+              {view.gb.count} {view.gb.count === 1 ? "item" : "items"} in this round.
+              Browse them on the group buy page
             </div>
 
             <button

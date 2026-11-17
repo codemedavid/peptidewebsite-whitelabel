@@ -258,7 +258,7 @@ export function planSettlement(input: SettlementPlanInput): SettlementResult<Set
   const { tenant } = input;
 
   if (tenant.status === "trial") {
-    return { ok: false, error: "This tenant is still on trial — convert them to a paid plan first." };
+    return { ok: false, error: "This tenant is still on trial. Convert them to a paid plan first." };
   }
 
   const periodEnd = parseDay(input.dueDay);
@@ -404,7 +404,7 @@ export function planSettlementReversal(
   if (!input.settlement.fromCalendar) {
     return {
       ok: false,
-      error: "The tenant filed this payment — review it on their Billing tab instead.",
+      error: "The tenant filed this payment. Review it on their Billing tab instead.",
     };
   }
 

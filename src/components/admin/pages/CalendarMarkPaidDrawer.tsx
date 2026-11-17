@@ -100,7 +100,7 @@ export function CalendarMarkPaidDrawer({ target, todayIso, pending, onCancel, on
       <div className="sa-drawer" role="dialog" aria-modal="true" aria-label="Record subscription payment">
         <div className="drawer-head">
           <div>
-            <div className="drawer-title">Mark paid — {target.tenantName}</div>
+            <div className="drawer-title">Mark paid: {target.tenantName}</div>
             <div className="drawer-sub">Due {readableDay(target.dueDay)}</div>
           </div>
           <button type="button" className="drawer-close" onClick={onCancel} aria-label="Close">
@@ -167,7 +167,7 @@ export function CalendarMarkPaidDrawer({ target, todayIso, pending, onCancel, on
           />
           <div className="field-hint mb-3">
             Leave blank to keep their current price. For a yearly cycle, type the whole year&rsquo;s
-            amount — it&rsquo;s split back to a monthly rate for MRR.
+            amount. It&rsquo;s split back to a monthly rate for MRR.
           </div>
 
           <label className="field-label" htmlFor="bill-cycle">

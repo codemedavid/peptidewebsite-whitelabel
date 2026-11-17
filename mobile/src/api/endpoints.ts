@@ -3,6 +3,8 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   GroupBuyBroadcastResponse,
   LiveGroupBuyResponse,
   ChannelDetailResponse,
+  ChannelMuteRequest,
+  ChannelMuteResponse,
   ChannelInput,
   CommunityChannel,
   CommunityDrop,
@@ -44,6 +46,7 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   CustomerListResponse,
   CustomerSort,
   DashboardResponse,
+  DashboardGroupBuyResponse,
   InsightsQuery,
   InsightsRange,
   InsightsResponse,
@@ -52,6 +55,7 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   DeviceResponse,
   LoginChoiceResponse,
   LoginRequest,
+  GuestStartRequest,
   LoginResponse,
   MeResponse,
   AccountProfileView,
@@ -60,6 +64,7 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   OrderDetail,
   OrderFilterKey,
   OrderListResponse,
+  OrderPaymentFilter,
   OrderUpdateRequest,
   ProductListResponse,
   ProductRow,
@@ -70,6 +75,17 @@ import type { DropsResponse, EndDropResponse, JoinMode, ProtocolsResponse,
   TokenPair,
   CommunityTagsResponse,
   CommunityTagsUpdateRequest,
+  TrackerOrderVialsResponse,
+  TrackerStoreGuidesResponse,
+  TrackerSyncRequest,
+  PromoOptInRequest,
+  PromoOptInResponse,
+  PromoPushRequest,
+  PromoPushSent,
+  PromoPushStatus,
+  AppPromoRequest,
+  AppPromoResponse,
+  TrackerSyncResponse,
 } from "@contract";
 import { api, apiUpload, type UploadFile } from "./client";
 
@@ -89,6 +105,9 @@ export const authApi = {
   /** Never retried: a resend after a lost answer would meet "email taken". */
   register: (body: RegisterRequest) =>
     api<LoginResponse>("/auth/register", { method: "POST", body, auth: false, timeoutMs: 45_000 }),
+  /** Continue as a guest of `store` (no account; sign up later keeps the orders). Never retried: a resend would make a second guest. */
+  guest: (store: string) =>
+    api<LoginResponse>("/auth/guest", { method: "POST", body: { store } satisfies GuestStartRequest, auth: false }),
   refresh: (refreshToken: string) =>
     api<TokenPair>("/auth/refresh", { method: "POST", body: { refreshToken }, auth: false }),
   logout: (accessToken: string | null, refreshToken: string | null) =>
@@ -125,6 +144,8 @@ export const meApi = {
 
 export const dashboardApi = {
   get: () => api<DashboardResponse>("/dashboard"),
+  /** The website dashboard's Group Buy card (heavier — not polled with /dashboard). */
+  groupBuy: () => api<DashboardGroupBuyResponse>("/dashboard/group-buy"),
 };
 
 /** A preset alone, or a full query (custom dates, view-by, comparison). */
@@ -165,11 +186,28 @@ export const customersApi = {
   get: (key: string) => api<CustomerDetailResponse>(`/customers/${encodeURIComponent(key)}`),
 };
 
+/**
+ * Where an order list looks beyond its status tab: the payment chip, a
+ * group-buy folder (a round id or OUTSIDE_FOLDER — filed like the web Orders
+ * hub) or a stamped round. Omitted parts = the whole store, every payment.
+ */
+export type OrderListView = {
+  payment?: OrderPaymentFilter;
+  folder?: string | null;
+  round?: string | null;
+  /** Page size (server caps it at 50). */
+  limit?: number;
+};
+
 export const ordersApi = {
-  list: (filter: OrderFilterKey, q: string, cursor: string | null) => {
+  list: (filter: OrderFilterKey, q: string, cursor: string | null, view: OrderListView = {}) => {
     const params = new URLSearchParams({ filter });
     if (q.trim()) params.set("q", q.trim());
     if (cursor) params.set("cursor", cursor);
+    if (view.payment && view.payment !== "all") params.set("payment", view.payment);
+    if (view.folder) params.set("folder", view.folder);
+    if (view.round) params.set("round", view.round);
+    if (view.limit) params.set("limit", String(view.limit));
     return api<OrderListResponse>(`/orders?${params.toString()}`);
   },
   get: (id: string) => api<OrderDetail>(`/orders/${encodeURIComponent(id)}`),
@@ -209,6 +247,9 @@ export const communityApi = {
   updateChannel: (id: string, body: ChannelInput) =>
     api<CommunityChannel>(`/community/channels/${enc(id)}`, { method: "PATCH", body }),
   deleteChannel: (id: string) => api<{ deleted: true }>(`/community/channels/${enc(id)}`, { method: "DELETE" }),
+  /** Silence (or resume) this channel's chat notifications on my phones — mine alone. */
+  muteChannel: (id: string, body: ChannelMuteRequest) =>
+    api<ChannelMuteResponse>(`/community/channels/${enc(id)}/mute`, { method: "PUT", body }),
   createTopic: (channelId: string, body: TopicInput) =>
     api<CommunityTopic>(`/community/channels/${enc(channelId)}/topics`, { method: "POST", body }),
   updateTopic: (id: string, body: TopicInput) =>
@@ -262,6 +303,15 @@ export const communityApi = {
     api<GroupBuyBroadcastResponse>("/community/group-buy/broadcast", { method: "POST", body, retryable: true }),
 
   members: (status: MemberStatus) => api<MembersResponse>(`/community/members?status=${status}`),
+  /** One member's full card (store team). */
+  memberDetail: (customerId: string) => api<import("@contract").MemberDetail>(`/community/members/${enc(customerId)}`),
+  /** Store team: give a member a new password (omit `password` to generate one). Shown once. */
+  resetMemberPassword: (customerId: string, password?: string) =>
+    api<import("@contract").MemberPasswordResponse>(`/community/members/${enc(customerId)}/password`, {
+      method: "POST",
+      body: password ? { password } : {},
+      retryable: false,
+    }),
   review: (customerId: string, body: ReviewMemberRequest) =>
     api<{ reviewed: true }>(`/community/members/${enc(customerId)}/review`, { method: "POST", body }),
   setJoinMode: (joinMode: JoinMode) => api<{ joinMode: JoinMode }>("/community/members", { method: "PATCH", body: { joinMode } }),
@@ -290,6 +340,34 @@ export const communityApi = {
 };
 
 /**
+ * Peptide Tracker (customer app, docs/mobile-admin/TRACKER.md §5). 404 = the
+ * store's tracker grant is off; 403 = not a customer session.
+ */
+export const trackerApi = {
+  /** Push local changes, pull everything newer than the cursor. Idempotent on record ids, so safe to resend. */
+  sync: (body: TrackerSyncRequest) => api<TrackerSyncResponse>("/tracker/sync", { method: "POST", body, retryable: true }),
+  /** Delivered order lines the buyer may turn into vials. */
+  orderVials: () => api<TrackerOrderVialsResponse>("/tracker/order-vials").then((r) => r.vials),
+  /** The store's protocol guides (only when guide import is granted). */
+  storeGuides: () => api<TrackerStoreGuidesResponse>("/tracker/store-guides").then((r) => r.guides),
+};
+
+/** The website's "Get our app" bar (server: lib/storefront/app-promo.ts). Store team. */
+export const appPromoApi = {
+  set: (enabled: boolean) => api<AppPromoResponse>("/admin/app-promo", { method: "PUT", body: { enabled } satisfies AppPromoRequest, retryable: true }),
+};
+
+/** Store promo & event notifications (server: lib/mobile/promo-push.ts). */
+export const promoApi = {
+  /** Team: who'll get it, sends left today, recent sends. */
+  status: () => api<PromoPushStatus>("/promo-push"),
+  /** Team: send one. Never retried — a resend would notify customers twice. */
+  send: (body: PromoPushRequest) => api<PromoPushSent>("/promo-push", { method: "POST", body }),
+  /** Customer: turn "Promos & events" on or off for this account. */
+  setOptIn: (on: boolean) => api<PromoOptInResponse>("/account/promo-push", { method: "PUT", body: { on } satisfies PromoOptInRequest, retryable: true }),
+};
+
+/**
  * React Query keys. Every key starts with the SESSION scope (store + account),
  * so one store's cached data can never be served to another — and signing out
  * clears the whole cache anyway.
@@ -298,7 +376,10 @@ export const qk = {
   scope: (scope: string) => [scope] as const,
   me: (scope: string) => [scope, "me"] as const,
   dashboard: (scope: string) => [scope, "dashboard"] as const,
-  orders: (scope: string, filter: OrderFilterKey, q: string) => [scope, "orders", filter, q] as const,
+  /** Under `dashboard`, so anything that refreshes Home refreshes the card too. */
+  dashboardGroupBuy: (scope: string) => [scope, "dashboard", "group-buy"] as const,
+  orders: (scope: string, filter: OrderFilterKey, q: string, view: OrderListView = {}) =>
+    [scope, "orders", filter, q, view.payment ?? "all", view.folder ?? "", view.round ?? ""] as const,
   ordersAll: (scope: string) => [scope, "orders"] as const,
   order: (scope: string, id: string) => [scope, "order", id] as const,
   products: (scope: string) => [scope, "products"] as const,
@@ -328,4 +409,7 @@ export const qk = {
   communityModeration: (scope: string, status: FlagStatus) => [scope, "community", "moderation", status] as const,
   communityModerationAll: (scope: string) => [scope, "community", "moderation"] as const,
   communitySavedReplies: (scope: string) => [scope, "community", "saved-replies"] as const,
+  trackerOrderVials: (scope: string) => [scope, "tracker", "order-vials"] as const,
+  trackerStoreGuides: (scope: string) => [scope, "tracker", "store-guides"] as const,
+  promoPush: (scope: string) => [scope, "promo-push"] as const,
 };

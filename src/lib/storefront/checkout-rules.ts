@@ -101,11 +101,11 @@ export const CHECKOUT_RULES_DEFAULTS: CheckoutRulesConfig = {
  *  `{min}` / `{count}` interpolate in the min-quantity message. */
 export const CHECKOUT_RULE_DEFAULT_MESSAGES: CheckoutRuleMessages = {
   singleOrderType:
-    "Reseller (wholesale) and retail items can't be combined in one order — please place them separately.",
-  mixedCart: "Your cart mixes product categories — please order one category at a time.",
-  minQuantity: "This store requires at least {min} items per order — you have {count}.",
+    "Reseller (wholesale) and retail items can't be combined in one order. Please place them separately.",
+  mixedCart: "Your cart mixes product categories. Please order one category at a time.",
+  minQuantity: "This store requires at least {min} items per order, and you have {count}.",
   bacWater:
-    "Peptide vials need bacteriostatic water for reconstitution — please add bacteriostatic water to your order.",
+    "Peptide vials need bacteriostatic water for reconstitution. Please add bacteriostatic water to your order.",
 };
 
 function bool(v: unknown, dflt: boolean): boolean {

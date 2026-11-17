@@ -431,7 +431,7 @@ export function AdminOrdersHub({
                 ))}
               </section>
             ) : (
-              <div className="ogb-nolive">No group buy is open right now — past rounds are below.</div>
+              <div className="ogb-nolive">No group buy is open right now. Past rounds are below.</div>
             )}
             <FolderSection title="Upcoming" folders={data.folders.upcoming} money={money} onOpen={open} />
             <FolderSection title="Recent group buys" folders={data.folders.recent} money={money} onOpen={open} />
@@ -448,7 +448,7 @@ export function AdminOrdersHub({
               <ul className="ogb-list">
                 <PlainRow title="Outside a group buy" meta="On-hand orders and anything placed between rounds" onOpen={() => onFolder("outside")} />
                 <PlainRow title="All orders" meta="Every order in one list, plus the trash" onOpen={() => onFolder("all")} />
-                <PlainRow title="Member tracker" meta="How many group buys each member joined — by month, last 3 months, or all time" onOpen={() => onFolder("members")} />
+                <PlainRow title="Member tracker" meta="How many group buys each member joined, by month, last 3 months, or all time" onOpen={() => onFolder("members")} />
               </ul>
             </section>
           </>

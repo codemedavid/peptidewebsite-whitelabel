@@ -93,7 +93,7 @@ export default function Customers() {
             ? () => (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Customer accounts — disable or re-enable sign-ins"
+                  accessibilityLabel="Customer accounts: disable or re-enable sign-ins"
                   hitSlop={10}
                   onPress={() => router.push("/manage/customer-accounts")}
                 >

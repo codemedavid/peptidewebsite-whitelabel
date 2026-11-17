@@ -28,7 +28,7 @@ import { JoinStepper } from "./JoinStepper";
 const LEAVABLE = new Set(["waitlisted", "form_pending", "payment_pending"]);
 
 const REFUND_COPY: Record<string, { tone: "info" | "success"; text: string }> = {
-  pending: { tone: "info", text: "You're owed a refund — the store will send it back to you." },
+  pending: { tone: "info", text: "You're owed a refund. The store will send it back to you." },
   processing: { tone: "info", text: "Your refund is on its way." },
   refunded: { tone: "success", text: "Your payment was refunded." },
 };
@@ -166,7 +166,7 @@ function JoinBody({ state, roundId, onOpenRound }: BodyProps) {
       ) : null}
       {action?.kind === "join" && state.window.open && full ? (
         <Notice tone="warning" icon="people-outline">
-          {state.capacity.waitlist ? "Every slot is taken — joining puts you on the waitlist." : "Every slot is taken right now."}
+          {state.capacity.waitlist ? "Every slot is taken. Joining puts you on the waitlist." : "Every slot is taken right now."}
         </Notice>
       ) : null}
       {actionError ? (

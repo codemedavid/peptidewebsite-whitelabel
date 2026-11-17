@@ -15,7 +15,7 @@ export function ContactSection({ form, set }: { form: CheckoutForm; set: Set }) 
     <FormSection title="Contact" hint="So the store can reach you about this order.">
       <Field label="Full name" value={form.name} onChangeText={(name) => set({ name })} autoComplete="name" textContentType="name" returnKeyType="next" />
       <Field label="Email" value={form.email} onChangeText={(email) => set({ email })} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" />
-      <Field label="Mobile number" value={form.phone} onChangeText={(phone) => set({ phone })} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" hint="Optional — leave blank to use the one on your account." />
+      <Field label="Mobile number" value={form.phone} onChangeText={(phone) => set({ phone })} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" hint="Optional. Leave blank to use the one on your account." />
     </FormSection>
   );
 }
@@ -106,7 +106,7 @@ export function PromoSection({
     <FormSection title="Promo code">
       {auto && !applied ? (
         <Notice tone="success" icon="pricetag">
-          {`${auto.code} applied automatically — you save ${auto.saved}. Have another code? Enter it below.`}
+          {`${auto.code} applied automatically. You save ${auto.saved}. Have another code? Enter it below.`}
         </Notice>
       ) : null}
       <View style={styles.promo}>

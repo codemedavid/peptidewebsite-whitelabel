@@ -62,7 +62,7 @@ export function WaysCard({ ways, setWays }: { ways: TwoWaysMode; setWays: (m: Tw
   return (
     <Section
       title="Ways to order"
-      hint="Two switches per order path. Visibility decides whether customers see the section at all — Hidden takes it off the storefront (you can't hide both). Accept orders decides whether they can buy: Disabled keeps the products and prices on show while nothing can be added to cart."
+      hint="Two switches per order path. Visibility decides whether customers see the section at all: Hidden takes it off the storefront (you can't hide both). Accept orders decides whether they can buy: Disabled keeps the products and prices on show while nothing can be added to cart."
     >
       {WAY_ROWS.map((row) => {
         const state = ways[row.key];
@@ -113,7 +113,7 @@ export function AllowOnHandCard({ initial }: { initial: boolean }) {
     <Section title="During a live group buy">
       <ToggleRow
         label="Allow on-hand purchases during an active group buy"
-        hint="With this off, customers can only buy the group-buy products — everything else shows “Available after group buy” and can't be added to cart."
+        hint="With this off, customers can only buy the group-buy products. Everything else shows “Available after group buy” and can't be added to cart."
         value={on}
         disabled={save.isPending}
         onChange={(next) => {
@@ -129,7 +129,7 @@ export function CopyCard({ content, onEdit }: { content: GroupBuyContent; onEdit
   return (
     <Section title="Storefront copy">
       <AppText variant="body" color="muted">
-        {`“${content.howTitle}” — ${content.steps.length} step${content.steps.length === 1 ? "" : "s"} and the live-round terms line, shown on the store home and the group-buy page.`}
+        {`“${content.howTitle}”: ${content.steps.length} step${content.steps.length === 1 ? "" : "s"} and the live-round terms line, shown on the store home and the group-buy page. Product button: “${content.joinLabel}”.`}
       </AppText>
       <Button label="Edit copy" variant="secondary" icon="create-outline" onPress={onEdit} />
     </Section>
@@ -151,8 +151,13 @@ export function ContentEditor({
   const [howTitle, setHowTitle] = useState(initial.howTitle);
   const [steps, setSteps] = useState<string[]>(initial.steps);
   const [terms, setTerms] = useState(initial.terms);
+  const [joinLabel, setJoinLabel] = useState(initial.joinLabel);
 
-  const dirty = howTitle !== initial.howTitle || terms !== initial.terms || steps.join("\n") !== initial.steps.join("\n");
+  const dirty =
+    howTitle !== initial.howTitle ||
+    terms !== initial.terms ||
+    joinLabel !== initial.joinLabel ||
+    steps.join("\n") !== initial.steps.join("\n");
   const termsPreview = renderGbCopy(terms.trim() || normalizeGroupBuyContent(undefined).terms, "3–4 weeks after the group buy closes");
 
   return (
@@ -165,7 +170,7 @@ export function ContentEditor({
       saving={save.isPending}
       onCancel={onClose}
       onSave={() =>
-        save.mutate(normalizeGroupBuyContent({ howTitle, steps, terms }), {
+        save.mutate(normalizeGroupBuyContent({ howTitle, steps, terms, joinLabel }), {
           onSuccess: (res) => onSaved(res.content),
         })
       }
@@ -219,6 +224,14 @@ export function ContentEditor({
         placeholder="Pay now to lock your slot. Ships {eta}. COA posted before shipping."
         onChangeText={setTerms}
         hint={`Preview: ${termsPreview}`}
+      />
+      <Field
+        label="Product button text"
+        value={joinLabel}
+        maxLength={GB_CONTENT_LIMITS.maxLabelLen}
+        placeholder="Join GB"
+        onChangeText={setJoinLabel}
+        hint="The button on each group-buy product, e.g. “Add to cart”."
       />
     </EditorSheet>
   );

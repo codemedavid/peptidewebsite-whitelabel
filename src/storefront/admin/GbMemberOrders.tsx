@@ -138,7 +138,7 @@ function MemberRow({ member: m, money }: { member: MemberOrder; money: (n: numbe
                 <tr key={`${p.product}::${p.variation ?? ""}`}>
                   <td>
                     {p.product}
-                    {p.variation && !p.product.includes(p.variation) ? ` — ${p.variation}` : ""}
+                    {p.variation && !p.product.includes(p.variation) ? ` · ${p.variation}` : ""}
                   </td>
                   <td className="gbm__num">{p.qty}</td>
                   <td className="gbm__num">{money(p.amount)}</td>

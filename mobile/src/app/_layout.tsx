@@ -25,6 +25,9 @@ import { GUEST_BROWSING } from "@/config";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { UnreachableScreen } from "@/features/session/UnreachableScreen";
+import { BootCurtain, markBrandVisible } from "@/features/session/BootCurtain";
+import { BrandLoader } from "@/ui/BrandLoader";
+import { AppFrame } from "@/ui/AppFrame";
 import { ShopProvider } from "@/features/shop/ShopProvider";
 import { StoreLinkProvider, useStoreLink } from "@/store-link/StoreLinkProvider";
 
@@ -131,24 +134,38 @@ function Navigator() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-  const ready = state.status !== "loading" && storeLink.ready && (fontsLoaded || !!fontError);
+  // Local reads only (linked store, bundled type): the native splash covers these.
+  const localReady = storeLink.ready && (fontsLoaded || !!fontError);
+  const ready = state.status !== "loading" && localReady;
 
-  // The splash stays up until we know WHICH store to show and the type is in.
+  // The native splash is the same for every store (it's baked into the binary),
+  // so it goes as soon as we know WHICH store to show; from then on the store's
+  // own loading screen (its website brand splash) takes over.
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (!localReady) return;
+    markBrandVisible();
+    void SplashScreen.hideAsync();
+  }, [localReady]);
 
-  if (!ready) return <View style={{ flex: 1, backgroundColor: t.colors.bg }} />;
+  if (!localReady) return <View style={{ flex: 1, backgroundColor: t.colors.bg }} />;
+  // Still restoring the session (the network, when nothing is cached).
+  if (!ready) return <BrandLoader />;
   if (state.status === "unreachable") return <UnreachableScreen />;
 
   const signedIn = state.status === "signedIn";
+  // A guest (Continue as guest) is signed in, but can still open sign-in and
+  // create-account — signing up from here keeps their orders (app-guest.ts).
+  const isGuest = signedIn && state.me.actor.kind === "customer" && state.me.actor.guest === true;
   // Signed out, the app is the welcome screen and its two doors (sign in,
   // create account) — nothing else. The guest shop stays off unless
   // GUEST_BROWSING is turned back on.
   const guestShop = GUEST_BROWSING && !signedIn && !!storeLink.linked?.customerSignIn;
   return (
+    <BootCurtain>
     <ShopProvider>
       <StatusBar style={t.statusBar} />
+      {/* Phones: full screen. Tablets / desktop web: a centred frame (ui/responsive). */}
+      <AppFrame>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.colors.bg } }}>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(app)" />
@@ -159,11 +176,16 @@ function Navigator() {
         <Stack.Protected guard={!signedIn}>
           {/* First = where a signed-out app lands (cold start, sign-out, "/"). */}
           <Stack.Screen name="welcome" options={{ animation: "fade" }} />
-          <Stack.Screen name="sign-in" />
-          <Stack.Screen name="create-account" />
           <Stack.Screen name="find-store" />
         </Stack.Protected>
+        <Stack.Protected guard={!signedIn || isGuest}>
+          <Stack.Screen name="sign-in" />
+          <Stack.Screen name="create-account" />
+          <Stack.Screen name="forgot-password" />
+        </Stack.Protected>
       </Stack>
+      </AppFrame>
     </ShopProvider>
+    </BootCurtain>
   );
 }

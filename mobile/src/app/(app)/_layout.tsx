@@ -3,6 +3,8 @@ import { View } from "react-native";
 import { router, Stack } from "expo-router";
 import { useSignedIn } from "@/auth/SessionProvider";
 import { communityAccess } from "@/features/community/lib/access";
+import { trackerAccess } from "@/features/tracker/access";
+import { setTrackerHomeFor } from "@/features/tracker/components/routes";
 import { useRestoreView } from "@/features/community/useAppView";
 import { usePrefetchAdmin } from "@/features/admin/usePrefetchAdmin";
 import { useShop } from "@/features/shop/ShopProvider";
@@ -11,6 +13,7 @@ import { LiveOrders } from "@/notifications/LiveOrders";
 import { PresenceBeacon } from "@/features/live/PresenceBeacon";
 import { useNotificationRouting } from "@/notifications/useNotificationRouting";
 import { useTheme } from "@/theme/ThemeProvider";
+import { readingScreenLayout } from "@/ui/ReadingColumn";
 
 /** Everything behind sign-in. Screens here only ever render the signed-in store. */
 export default function AppLayout() {
@@ -22,20 +25,27 @@ export default function AppLayout() {
 
   const admin = me.mode === "admin";
   const community = communityAccess(me);
-  // Anyone who gets pushes: admins who handle orders, and community members
-  // (DMs + drops). Only order handlers get new-order alerts.
-  const wantsPush = me.can.orders || community.inCommunity;
+  // Peptide Tracker (docs/mobile-admin/TRACKER.md): every account of a granted
+  // store keeps its own — customers in their tab, the team from More. A guest
+  // gets the tab's sign-up lock and the disclaimer only.
+  const tracker = trackerAccess(me);
+  setTrackerHomeFor(tracker.team);
+  // Anyone who gets pushes: admins who handle orders, community members (DMs +
+  // drops), and every customer (updates on their own orders, "you're in").
+  // Only order handlers get new-order alerts.
+  const wantsPush = me.can.orders || community.inCommunity || !admin;
 
   // After each sign-in: re-bind push on a phone that already allowed it, or
-  // offer it once to anyone who handles orders (the explainer is about
-  // orders; members turn message alerts on from Me).
+  // offer it once — order handlers get the new-order explainer, customers the
+  // welcome screen (which asks in shopper terms).
   useEffect(() => {
     if (!wantsPush) return;
     void (async () => {
       if (await hasBeenAsked()) await rebindIfGranted({ newOrders: me.can.orders });
+      else if (!admin) router.push("/customer-welcome");
       else if (me.can.orders) router.push("/notifications");
     })();
-  }, [scope, wantsPush, me.can.orders]);
+  }, [scope, wantsPush, admin, me.can.orders]);
 
   // A guest who tapped Checkout and then signed in continues at their cart.
   const shop = useShop();
@@ -63,7 +73,8 @@ export default function AppLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-    <Stack screenOptions={header}>
+    {/* Wide screens: chat threads, order detail and account screens sit in a centred column (ui/responsive). */}
+    <Stack screenOptions={header} screenLayout={readingScreenLayout}>
       {/* The store admin (owner / staff). */}
       <Stack.Protected guard={admin}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "fade" }} />
@@ -94,18 +105,25 @@ export default function AppLayout() {
         <Stack.Screen name="manage/couriers" />
         <Stack.Screen name="manage/fee" />
         <Stack.Screen name="manage/promo" />
+        <Stack.Screen name="manage/promo-push" />
         <Stack.Screen name="manage/sale-campaign" />
         <Stack.Screen name="manage/order-trash" />
         <Stack.Screen name="manage/customer-accounts" />
         <Stack.Screen name="manage/banner" />
+        <Stack.Screen name="manage/popup" />
         <Stack.Screen name="manage/hero" />
+        <Stack.Screen name="manage/site-layout" />
         <Stack.Screen name="manage/faq" />
         <Stack.Screen name="manage/lab" />
         <Stack.Screen name="manage/protocols" />
+        <Stack.Screen name="manage/articles" />
         <Stack.Screen name="manage/reviews" />
+        <Stack.Screen name="manage/assessments" />
         <Stack.Screen name="manage/card-studio" />
         <Stack.Screen name="manage/notice" />
         <Stack.Screen name="manage/track-note" />
+        <Stack.Screen name="manage/contact-methods" />
+        <Stack.Screen name="manage/timeline" />
         <Stack.Screen name="manage/notify" />
         <Stack.Screen name="manage/checkout-rules" />
         <Stack.Screen name="manage/access-code" />
@@ -114,6 +132,7 @@ export default function AppLayout() {
         <Stack.Screen name="manage/group-buys-detail" />
         <Stack.Screen name="manage/join-requests" />
         <Stack.Screen name="manage/join-settings" />
+        <Stack.Screen name="manage/member-tracker" />
         <Stack.Screen name="manage/reseller" />
         <Stack.Screen name="manage/staff" />
         <Stack.Screen name="manage/billing" />
@@ -125,9 +144,6 @@ export default function AppLayout() {
         <Stack.Screen name="storefront-group-buy" options={{ title: "Group buy" }} />
       </Stack.Protected>
 
-      {/* Every account — owner, staff and customer (Apple 5.1.1(v)). */}
-      <Stack.Screen name="delete-account" options={{ title: "Delete account" }} />
-
       {/* The customer app (docs/mobile-admin/COMMUNITY.md). */}
       <Stack.Protected guard={!admin}>
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />
@@ -138,6 +154,26 @@ export default function AppLayout() {
         <Stack.Screen name="checkout" options={{ title: "Checkout" }} />
         <Stack.Screen name="order-placed" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="my-order/[number]" options={{ title: "" }} />
+        {/* First sign-in on this phone: welcome + notifications, asked once. */}
+        <Stack.Screen name="customer-welcome" options={{ presentation: "modal", headerShown: false }} />
+      </Stack.Protected>
+
+      {/* Peptide Tracker. Log, check-in and vial edit are sheets; setup and onboarding are full-screen. */}
+      <Stack.Protected guard={admin && tracker.active}>
+        <Stack.Screen name="tracker/home" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={tracker.active}>
+        <Stack.Screen name="tracker/log" options={{ ...sheet, sheetAllowedDetents: [1] }} />
+        <Stack.Screen name="tracker/protocol/edit" options={{ presentation: "fullScreenModal", headerShown: false }} />
+        <Stack.Screen name="tracker/protocol/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="tracker/onboarding" options={{ presentation: "fullScreenModal", headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="tracker/checkin" options={{ ...sheet, sheetAllowedDetents: [1] }} />
+        <Stack.Screen name="tracker/vial" options={{ ...sheet, sheetAllowedDetents: [1] }} />
+        <Stack.Screen name="tracker/vials" options={{ headerShown: false }} />
+        <Stack.Screen name="tracker/settings" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={tracker.tab || tracker.team}>
+        <Stack.Screen name="tracker/disclaimer" options={{ presentation: "modal", headerShown: false }} />
       </Stack.Protected>
 
       {/* Community — approved members and moderators. Chat screens draw their own bars. */}
@@ -158,6 +194,7 @@ export default function AppLayout() {
         <Stack.Screen name="community/channel-new" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen name="community/channel-edit" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen name="community/members" options={{ headerShown: false }} />
+        <Stack.Screen name="community/member/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="community/tags" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={community.moderator}>
@@ -165,6 +202,12 @@ export default function AppLayout() {
         <Stack.Screen name="community/group-buy-broadcast" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen name="community/safety" options={{ headerShown: false }} />
       </Stack.Protected>
+
+      {/* Every account — owner, staff and customer (Apple 5.1.1(v)). Keep it
+          LAST: after sign-in the stack opens on its first screen the account
+          can see, and above (customer) that was this one for every shopper. */}
+      <Stack.Screen name="delete-account" options={{ title: "Delete account" }} />
+      <Stack.Screen name="change-password" options={{ headerShown: false }} />
     </Stack>
     {me.can.orders ? <LiveOrders /> : null}
     {/* Customers only: tells the store this shopper is live (features/live). */}

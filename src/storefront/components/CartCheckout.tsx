@@ -699,7 +699,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     // The dev-only sample page (app/(tenant)/intl-local-preview) runs on a real
     // store's host with made-up products: it must never place an order.
     if (store.brand.checkoutPreviewOnly) {
-      toast("Sample page — checkout is turned off here.");
+      toast("Sample page. Checkout is turned off here.");
       return;
     }
     const draftId =
@@ -811,7 +811,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     try {
       result = await placeStorefrontOrderAction(draft);
     } catch {
-      result = { error: "Network error — please try again." };
+      result = { error: "Network error. Please try again." };
     }
 
     if (!result || "error" in result) {
@@ -887,7 +887,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
     placingRef.current = false;
     setPlacing(false);
 
-    toast(`Order ${orderNum} placed — review it before you send`);
+    toast(`Order ${orderNum} placed. Review it before you send`);
     onClose();
 
     // The customer no longer goes straight to the chat app. They land on the
@@ -968,7 +968,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
             {rules.cartWarning && <p className="sf-cart__notice">{rules.cartWarning}</p>}
             {pricesUpdated && (
               <p className="sf-cart__notice" role="status">
-                Prices updated since you added these — your total reflects the
+                Prices updated since you added these. Your total reflects the
                 latest store prices.
               </p>
             )}
@@ -1159,7 +1159,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                     <div className="sf-cart__field sf-cart__ship-cod">
                       <span>Shipping</span>
                       <p className="sf-cart__ship-cod-note">
-                        Cash on delivery — no shipping fee collected here.
+                        Cash on delivery: no shipping fee collected here.
                       </p>
                     </div>
                   ) : (
@@ -1185,7 +1185,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                                 label it "Free" (the store may charge shipping another
                                 way, e.g. a flat/admin fee). */}
                             {l.price
-                              ? `${l.name} — ${currency}${l.price.toLocaleString()}`
+                              ? `${l.name} · ${currency}${l.price.toLocaleString()}`
                               : l.name}
                           </option>
                         ))}
@@ -1222,7 +1222,7 @@ export function CartCheckout({ open, onClose }: { open: boolean; onClose: () => 
                 <span className="sf-cart__promo-label">Discount code</span>
                 {!appliedPromo && autoPromo && (
                   <p className="sf-cart__promo-auto" role="status">
-                    <strong>{autoPromo.code}</strong> applied automatically — you save{" "}
+                    <strong>{autoPromo.code}</strong> applied automatically. You save{" "}
                     {currency}
                     {discountAmount.toLocaleString()}. Have another code? Enter it below.
                   </p>

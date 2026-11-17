@@ -42,14 +42,14 @@ export function TrialPlansScreen({ onUpgrade }: { onUpgrade: () => void }) {
     const res = await downgradeToStarterAction(combo);
     setWorking(false);
     if ("error" in res) return toast(res.error);
-    toast("You're on Starter — your storefront is live again.");
+    toast("You're on Starter. Your storefront is live again.");
     // Full reload: the server re-projects brand, entitlements and page toggles.
     setTimeout(() => window.location.reload(), 600);
   };
 
   const businessFeatures: { text: string; exclusive?: boolean }[] = [
     { text: "Unlimited products" },
-    { text: "Everything in your trial — orders, inventory, shipping" },
+    { text: "Everything in your trial: orders, inventory, shipping" },
     { text: "Promo codes, couriers, lab results & protocols" },
     { text: "Hero, banner & FAQ management" },
     { text: "Sales Analytics", exclusive: true },
@@ -63,7 +63,7 @@ export function TrialPlansScreen({ onUpgrade }: { onUpgrade: () => void }) {
       <div className="admin-plans__head">
         <h1 className="admin-plans__title">Choose how to continue</h1>
         <p className="admin-plans__sub">
-          Reactivate your storefront instantly — keep everything with Business, or keep it simple
+          Reactivate your storefront instantly. Keep everything with Business, or keep it simple
           with Starter.
         </p>
       </div>
@@ -81,7 +81,7 @@ export function TrialPlansScreen({ onUpgrade }: { onUpgrade: () => void }) {
           </div>
           {ctx && ctx.quote.creditCents > 0 && (
             <div className="admin-plans__credit">
-              Your {formatPesos(ctx.quote.creditCents)} trial payment is deducted — pay only{" "}
+              Your {formatPesos(ctx.quote.creditCents)} trial payment is deducted, so you pay only{" "}
               {formatPesos(ctx.quote.dueTodayCents)} today
             </div>
           )}
@@ -98,8 +98,8 @@ export function TrialPlansScreen({ onUpgrade }: { onUpgrade: () => void }) {
             ))}
           </ul>
           <div className="admin-plans__growing">
-            <b>Always growing:</b> every new feature we launch is added to Business as an exclusive
-            — at no extra cost.
+            <b>Always growing:</b> every new feature we launch is added to Business as an exclusive,
+            at no extra cost.
           </div>
           <button className="admin-plans__cta" onClick={onUpgrade}>
             Upgrade to Business
@@ -116,7 +116,7 @@ export function TrialPlansScreen({ onUpgrade }: { onUpgrade: () => void }) {
             <span className="admin-plans__per">/ month</span>
           </div>
           <div className="admin-plans__note">
-            Pick <b>one</b> combination — the rest stays locked
+            Pick <b>one</b> combination. The rest stays locked
           </div>
           <div className="admin-plans__divider" />
           <div className="admin-plans__combos">

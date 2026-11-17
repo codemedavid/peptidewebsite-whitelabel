@@ -78,7 +78,7 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
       setRules(value);
       toast("Checkout rules saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -114,18 +114,18 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
         <div className="admin-form__card">
           <h2 className="admin-form__section">🛒 Cart Restrictions</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-            Hard limits on what a single cart may contain. These always apply — the
+            Hard limits on what a single cart may contain. These always apply, and the
             rule-based checkout switch below doesn&apos;t soften them.
           </div>
           <Toggle
             label="Single order type per cart"
-            hint="Reseller (wholesale-priced) and retail items can't be combined in one order — customers place them separately."
+            hint="Reseller (wholesale-priced) and retail items can't be combined in one order. Customers place them separately."
             checked={rules.singleOrderType}
             onChange={(v) => set({ singleOrderType: v })}
           />
           <Toggle
             label="Mixed cart prevention"
-            hint="One product category per cart — adding an item from a second category is rejected with your message below."
+            hint="One product category per cart. Adding an item from a second category is rejected with your message below."
             checked={rules.mixedCartPrevention}
             onChange={(v) => set({ mixedCartPrevention: v })}
           />
@@ -169,7 +169,7 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
           />
           <Toggle
             label="Bac water validation"
-            hint="Peptide orders must include bacteriostatic water. Off by default — a peptide-only order is a normal order. Leave it off if you use Order Ratio Control to LIMIT bac water instead, or the two rules contradict each other."
+            hint="Peptide orders must include bacteriostatic water. Off by default, so a peptide-only order is a normal order. Leave it off if you use Order Ratio Control to LIMIT bac water instead, or the two rules contradict each other."
             checked={rules.bacWaterValidation}
             onChange={(v) => set({ bacWaterValidation: v })}
           />
@@ -200,7 +200,7 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
             <input
               className="admin-input"
               value={rules.checkoutNotice}
-              placeholder="e.g. Double-check your shipping address — peptides are temperature-sensitive."
+              placeholder="e.g. Double-check your shipping address. Peptides are temperature-sensitive."
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 set({ checkoutNotice: e.target.value })
               }
@@ -209,7 +209,7 @@ export function AdminCheckoutRules({ brand, onBack }: { brand: Brand; onBack: ()
 
           <Toggle
             label="Customer note box"
-            hint="Lets the buyer add a request at checkout — a delivery window, a gate code, packaging preferences. Always optional; it never blocks an order. You'll see it on the order and in your export."
+            hint="Lets the buyer add a request at checkout: a delivery window, a gate code, packaging preferences. Always optional; it never blocks an order. You'll see it on the order and in your export."
             checked={rules.customerNoteEnabled}
             onChange={(v) => set({ customerNoteEnabled: v })}
           />

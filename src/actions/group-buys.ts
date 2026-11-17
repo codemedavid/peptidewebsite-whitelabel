@@ -26,11 +26,11 @@ import { getTenantSlug } from "@/lib/tenant/headers";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { withTenant } from "@/lib/db/tenant-client";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig, updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { ACTIVE_ORDERS_WHERE, activeOrders } from "@/lib/orders/trash";
 import {
   isDemoMode,
   getDemoBranding,
-  saveDemoBranding,
   getDemoGroupBuys,
   saveDemoGroupBuys,
   getDemoStoreOrders,
@@ -850,18 +850,7 @@ export async function saveGroupBuyAllowOnHandAction(
   const value = allowOnHand !== false;
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(slug, { config: { ...current, groupBuyAllowOnHand: value } });
-    } else {
-      const current = await readTenantConfig(tenantId);
-      const config = { ...current, groupBuyAllowOnHand: value } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId },
-        update: { config },
-        create: { tenantId, config },
-      });
-    }
+    await patchBrandingConfig(tenantId, { groupBuyAllowOnHand: value }, { demoKey: slug });
     revalidateTenant(tenantId, slug);
     return { ok: true, allowOnHand: value };
   } catch (e) {
@@ -895,20 +884,13 @@ export async function saveTwoWaysModeAction(
     "The group-buy-only layout sells by group buy only, so Ways to order doesn't apply.";
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      if (waysAreLayoutOwned(current.homeLayout)) return { error: layoutOwned };
-      saveDemoBranding(slug, { config: { ...current, twoWaysMode: value } });
-    } else {
-      const current = await readTenantConfig(tenantId);
-      if (waysAreLayoutOwned(current.homeLayout)) return { error: layoutOwned };
-      const config = { ...current, twoWaysMode: value } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId },
-        update: { config },
-        create: { tenantId, config },
-      });
-    }
+    // Null = the stored layout owns the ways; checked against the locked row.
+    const saved = await updateBrandingConfig(
+      tenantId,
+      (current) => (waysAreLayoutOwned(current.homeLayout) ? null : { ...current, twoWaysMode: value }),
+      { demoKey: slug },
+    );
+    if (!saved) return { error: layoutOwned };
     revalidateTenant(tenantId, slug);
     return { ok: true, mode: value };
   } catch (e) {
@@ -934,23 +916,15 @@ export async function saveGroupBuyContentAction(
   const gate = await requireGroupBuyAdmin();
   if ("error" in gate) return gate;
   const { tenantId, slug } = gate;
-  let content: GroupBuyContent;
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      content = mergeGroupBuyContentSave(current.groupBuyContent, input);
-      saveDemoBranding(slug, { config: { ...current, groupBuyContent: content } });
-    } else {
-      const current = await readTenantConfig(tenantId);
-      content = mergeGroupBuyContentSave(current.groupBuyContent, input);
-      const config = { ...current, groupBuyContent: content } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId },
-        update: { config },
-        create: { tenantId, config },
-      });
-    }
+    // Merged from the locked stored copy (joinLabel survives an editor that omits it).
+    const saved = await updateBrandingConfig(
+      tenantId,
+      (current) => ({ ...current, groupBuyContent: mergeGroupBuyContentSave(current.groupBuyContent, input) }),
+      { demoKey: slug },
+    );
+    const content = (saved ?? {}).groupBuyContent as GroupBuyContent;
     revalidateTenant(tenantId, slug);
     return { ok: true, content };
   } catch (e) {
@@ -977,18 +951,7 @@ export async function saveGroupBuyLiveBannerAction(
   const liveBanner = normalizeGroupBuyLiveBanner(input);
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(slug, { config: { ...current, groupBuyLiveBanner: liveBanner } });
-    } else {
-      const current = await readTenantConfig(tenantId);
-      const config = { ...current, groupBuyLiveBanner: liveBanner } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId },
-        update: { config },
-        create: { tenantId, config },
-      });
-    }
+    await patchBrandingConfig(tenantId, { groupBuyLiveBanner: liveBanner }, { demoKey: slug });
     revalidateTenant(tenantId, slug);
     return { ok: true, liveBanner };
   } catch (e) {
@@ -1013,18 +976,7 @@ export async function saveHeroCountdownAction(
   const countdown = normalizeHeroCountdown(input);
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(slug, { config: { ...current, heroCountdown: countdown } });
-    } else {
-      const current = await readTenantConfig(tenantId);
-      const config = { ...current, heroCountdown: countdown } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId },
-        update: { config },
-        create: { tenantId, config },
-      });
-    }
+    await patchBrandingConfig(tenantId, { heroCountdown: countdown }, { demoKey: slug });
     revalidateTenant(tenantId, slug);
     return { ok: true, countdown };
   } catch (e) {
@@ -1048,25 +1000,22 @@ export async function saveGroupBuyInvoiceAction(
   const { tenantId, slug } = gate;
 
   try {
-    if (isDemoMode()) {
-      const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-      const invoice = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
-      saveDemoBranding(slug, { config: syncGbPaymentModeToInvoice({ ...current, groupBuyInvoice: invoice }) });
-      return { ok: true, invoice };
-    }
     // Row-locked read-modify-write: enabledAt is merged from what is stored,
     // and a concurrent config save elsewhere must not be overwritten.
-    const invoice = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
-      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
-      const current = (row?.config ?? {}) as Record<string, unknown>;
-      const merged = mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input);
-      // The payment mode follows the switch (gb-payment-mode.ts), so the two
-      // never disagree about whether a round order is paid now.
-      const config = syncGbPaymentModeToInvoice({ ...current, groupBuyInvoice: merged }) as Prisma.InputJsonValue;
-      await tx.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
-      return merged;
-    });
+    // The payment mode follows the switch (gb-payment-mode.ts), so the two
+    // never disagree about whether a round order is paid now.
+    const saved = await updateBrandingConfig(
+      tenantId,
+      (current) =>
+        syncGbPaymentModeToInvoice({
+          ...current,
+          groupBuyInvoice: mergeGroupBuyInvoiceSave(current.groupBuyInvoice, input),
+        }),
+      { demoKey: slug },
+    );
+    // syncGbPaymentModeToInvoice leaves groupBuyInvoice as merged.
+    const invoice = (saved ?? {}).groupBuyInvoice as GroupBuyInvoiceConfig;
+    if (isDemoMode()) return { ok: true, invoice };
     revalidateTenant(tenantId, slug);
     return { ok: true, invoice };
   } catch (e) {
@@ -1090,21 +1039,12 @@ export async function saveGroupBuyPaymentModeAction(
   if (!mode) return { error: "Choose how customers pay." };
 
   try {
-    if (isDemoMode()) {
-      const next = withGbPaymentMode(getDemoBranding(slug).config ?? {}, mode);
-      saveDemoBranding(slug, { config: next });
-      return { ok: true, mode, invoice: normalizeGroupBuyInvoice(next.groupBuyInvoice) };
-    }
     // Row-locked like the invoice save: the invoice's enabledAt is merged from
     // what is stored, and a concurrent config save must not be overwritten.
-    const next = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
-      const row = await tx.branding.findUnique({ where: { tenantId }, select: { config: true } });
-      const merged = withGbPaymentMode(row?.config ?? {}, mode);
-      const config = merged as Prisma.InputJsonValue;
-      await tx.branding.upsert({ where: { tenantId }, update: { config }, create: { tenantId, config } });
-      return merged;
-    });
+    const next = (await updateBrandingConfig(tenantId, (current) => withGbPaymentMode(current, mode), {
+      demoKey: slug,
+    })) ?? {};
+    if (isDemoMode()) return { ok: true, mode, invoice: normalizeGroupBuyInvoice(next.groupBuyInvoice) };
     revalidateTenant(tenantId, slug);
     return { ok: true, mode, invoice: normalizeGroupBuyInvoice(next.groupBuyInvoice) };
   } catch (e) {
@@ -1241,7 +1181,7 @@ export async function getGroupBuySupplierReportAction(
     // (after Bunuan), and counts by the kit rule (success vials only).
     const kits = isDemoMode() ? null : await loadReportKits(tenantId, gbId, caps);
     if (kits && !kits.ready) {
-      return { error: "The supplier report is ready once ordering ends — close the round (or let Bunuan finish) first." };
+      return { error: "The supplier report is ready once ordering ends. Close the round (or let Bunuan finish) first." };
     }
 
     // Load the CANDIDATES, not "the round's orders". A round's orders can't be
@@ -1556,7 +1496,7 @@ function applyOp(
     ...(removal.emptiesRound
       ? {
           warning:
-            "That was the last product assigned to a group buy — the round now covers your whole catalog. Assign products to it, or close it.",
+            "That was the last product assigned to a group buy, so the round now covers your whole catalog. Assign products to it, or close it.",
         }
       : {}),
   };
@@ -1596,22 +1536,15 @@ export async function saveGroupBuySettingsAction(
       if (!listDemoTenants().some((t) => t.slug === tenantSlug)) {
         return { error: `Tenant not found: ${tenantSlug}` };
       }
-      const current = (getDemoBranding(tenantSlug).config ?? {}) as Record<string, unknown>;
-      saveDemoBranding(tenantSlug, { config: { ...current, groupBuySettings: settings } });
+      await patchBrandingConfig(tenantSlug, { groupBuySettings: settings }, { demoKey: tenantSlug });
       revalidateTenant(tenantSlug, tenantSlug);
     } else {
       const tenant = await prisma.tenant.findUnique({
         where: { slug: tenantSlug },
-        select: { id: true, branding: { select: { config: true } } },
+        select: { id: true },
       });
       if (!tenant) return { error: `Tenant not found: ${tenantSlug}` };
-      const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-      const config = { ...current, groupBuySettings: settings } as Prisma.InputJsonValue;
-      await prisma.branding.upsert({
-        where: { tenantId: tenant.id },
-        update: { config },
-        create: { tenantId: tenant.id, config },
-      });
+      await patchBrandingConfig(tenant.id, { groupBuySettings: settings });
       revalidateTenant(tenant.id, tenantSlug);
     }
     revalidatePath(`/admin/tenants/${tenantSlug}/features`);

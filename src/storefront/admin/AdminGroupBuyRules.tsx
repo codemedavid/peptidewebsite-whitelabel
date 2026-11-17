@@ -43,16 +43,16 @@ const DIRECTION_COPY: Record<RatioDirection, { label: string; hint: string }> = 
  *  can't be fixed by adding more water. Under a cap it behaves like strict. */
 const MODE_COPY: Record<RatioMode, { label: string; hint: string; floorOnly?: boolean }> = {
   strict: {
-    label: "Strict — block checkout",
+    label: "Strict: block checkout",
     hint: "Customers can't check out until the cart complies.",
   },
   auto_add: {
-    label: "Auto-add — keep the cart in sync",
+    label: "Auto-add: keep the cart in sync",
     hint: "Adding a peptide automatically tops the cart up with the required bac water.",
     floorOnly: true,
   },
   warn: {
-    label: "Warn — allow checkout",
+    label: "Warn: allow checkout",
     hint: "Show a reminder when the rule is broken, but let the order through.",
   },
 };
@@ -138,13 +138,13 @@ export function AdminGroupBuyRules({ brand, onBack }: { brand: Brand; onBack: ()
       const value = normalizeGroupBuyRules(rules);
       const res = await saveGroupBuyRulesAction(value);
       if ("error" in res) {
-        toast(res.error ?? "Couldn't save — please sign in again and retry.");
+        toast(res.error ?? "Couldn't save. Please sign in again and retry.");
         return;
       }
       setTweak({ groupBuyRules: value });
       toast("Group Buy rules saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -174,7 +174,7 @@ export function AdminGroupBuyRules({ brand, onBack }: { brand: Brand; onBack: ()
       <div className="admin-form__card">
         <h2 className="admin-form__section">⚙️ Engine</h2>
         <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
-          Tie bacteriostatic water to the peptides in the cart — either requiring it or limiting it.
+          Tie bacteriostatic water to the peptides in the cart, either requiring it or limiting it.
           Classify each product as peptide or bac water in the product editor; this rule counts the
           cart by those tags.
         </div>
@@ -259,7 +259,7 @@ export function AdminGroupBuyRules({ brand, onBack }: { brand: Brand; onBack: ()
               disabled={!ratio.enabled}
               onChange={(e) => patchRatio({ defaultBacWaterProductId: e.target.value || null })}
             >
-              <option value="">— Select a product —</option>
+              <option value="">Select a product</option>
               {bacWaterOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -310,7 +310,7 @@ export function AdminGroupBuyRules({ brand, onBack }: { brand: Brand; onBack: ()
         />
         <Toggle
           label="Validate at checkout"
-          hint="Re-check on the server at order placement (recommended — can't be bypassed)."
+          hint="Re-check on the server at order placement (recommended, can't be bypassed)."
           checked={rules.validation.checkout}
           onChange={(checkout) =>
             setRules((r) => ({ ...r, validation: { ...r.validation, checkout } }))

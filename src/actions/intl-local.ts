@@ -14,12 +14,12 @@
 // through withTenant, and the tenant is always derived from the request host,
 // never from the client.
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { withTenant } from "@/lib/db/tenant-client";
 import { getTenantIdOrNull, getTenantSlug } from "@/lib/tenant/headers";
-import { isDemoMode, getDemoBranding, saveDemoBranding } from "@/lib/demo/fixtures";
+import { isDemoMode, getDemoBranding } from "@/lib/demo/fixtures";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { requireStaffPermission } from "@/lib/auth/staff-guard";
 import { isValidEmail } from "@/lib/analytics/events";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";
@@ -42,18 +42,6 @@ async function readConfig(tenantId: string): Promise<Record<string, unknown>> {
   return (branding?.config ?? {}) as Record<string, unknown>;
 }
 
-async function writeConfig(tenantId: string, config: Record<string, unknown>): Promise<void> {
-  if (isDemoMode()) {
-    saveDemoBranding(tenantId, { config });
-    return;
-  }
-  await prisma.branding.upsert({
-    where: { tenantId },
-    update: { config: config as Prisma.InputJsonValue },
-    create: { tenantId, config: config as Prisma.InputJsonValue },
-  });
-}
-
 /**
  * Persist the layout config (read-modify-write into branding.config, so it can
  * never clobber the rest of the storefront's settings).
@@ -74,20 +62,25 @@ export async function saveIntlLocalAction(input: { config: unknown; activate?: b
   const tenantId = ctx.tenantId;
 
   try {
-    const current = await readConfig(tenantId);
-    const next: Record<string, unknown> = { ...current, intlLocal: normalizeIntlLocalConfig(input?.config) };
-    const onLayout = isIntlLocalLayout(current.homeLayout);
-    if (input?.activate === true && !onLayout) {
-      next.intlLocalPrevLayout = typeof current.homeLayout === "string" ? current.homeLayout : null;
-      next.homeLayout = "intl-local";
-    }
-    if (input?.activate === false && onLayout) {
-      const prev = current.intlLocalPrevLayout;
-      if (typeof prev === "string" && prev && !isIntlLocalLayout(prev)) next.homeLayout = prev;
-      else delete next.homeLayout;
-      delete next.intlLocalPrevLayout;
-    }
-    await writeConfig(tenantId, next);
+    const intlLocal = normalizeIntlLocalConfig(input?.config);
+    // The layout switch reads homeLayout / intlLocalPrevLayout, so it is
+    // computed from the locked row.
+    const saved = await updateBrandingConfig(tenantId, (current) => {
+      const next: Record<string, unknown> = { ...current, intlLocal };
+      const onLayout = isIntlLocalLayout(current.homeLayout);
+      if (input?.activate === true && !onLayout) {
+        next.intlLocalPrevLayout = typeof current.homeLayout === "string" ? current.homeLayout : null;
+        next.homeLayout = "intl-local";
+      }
+      if (input?.activate === false && onLayout) {
+        const prev = current.intlLocalPrevLayout;
+        if (typeof prev === "string" && prev && !isIntlLocalLayout(prev)) next.homeLayout = prev;
+        else delete next.homeLayout;
+        delete next.intlLocalPrevLayout;
+      }
+      return next;
+    });
+    const next = saved ?? {};
     revalidateTenant(tenantId, await getTenantSlug());
     return { ok: true, homeLayout: typeof next.homeLayout === "string" ? next.homeLayout : "classic" };
   } catch (e) {
@@ -112,18 +105,24 @@ export async function saveIntlMarketAction(input: {
   if (!ctx) return { error: NO_ACCESS };
   if (needsShipping && needsSwitch && !(await requireStaffPermission(MODULE))) return { error: NO_ACCESS };
   try {
-    const current = await readConfig(ctx.tenantId);
-    const prev = normalizeIntlMarket(current.intlMarket);
-    const intlMarket = normalizeIntlMarket({
-      enabled: needsSwitch ? input.enabled : prev.enabled,
-      shippingLocations: needsShipping ? input.shippingLocations : prev.shippingLocations,
+    // Each unsent half keeps the LOCKED stored value, so a switch save and a
+    // shipping save landing together both survive.
+    const saved = await updateBrandingConfig(ctx.tenantId, (current) => {
+      const prev = normalizeIntlMarket(current.intlMarket);
+      return {
+        ...current,
+        intlMarket: normalizeIntlMarket({
+          enabled: needsSwitch ? input.enabled : prev.enabled,
+          shippingLocations: needsShipping ? input.shippingLocations : prev.shippingLocations,
+        }),
+      };
     });
-    await writeConfig(ctx.tenantId, { ...current, intlMarket });
+    const intlMarket = (saved ?? {}).intlMarket as IntlMarketConfig;
     revalidateTenant(ctx.tenantId, await getTenantSlug());
     return { ok: true, intlMarket };
   } catch (e) {
     console.error("[intl-local] save intl market failed", { tenantId: ctx.tenantId, error: e instanceof Error ? e.message : e });
-    return { error: "Couldn't save — please try again." };
+    return { error: "Couldn't save. Please try again." };
   }
 }
 
@@ -137,7 +136,7 @@ export async function subscribeNewsletterAction(emailRaw: unknown, honeypot: unk
   if (!isValidEmail(email)) return { error: "Please enter a valid email address." };
 
   const limited = rateLimit(`il-newsletter:${await clientIp()}`, SUBSCRIBE_LIMIT, SUBSCRIBE_WINDOW_MS);
-  if (!limited.ok) return { error: "Too many attempts — please try again in a few minutes." };
+  if (!limited.ok) return { error: "Too many attempts. Please try again in a few minutes." };
 
   const tenantId = await getTenantIdOrNull();
   if (!tenantId) return { error: "This store isn't available." };
@@ -160,7 +159,7 @@ export async function subscribeNewsletterAction(emailRaw: unknown, honeypot: unk
     return { ok: true };
   } catch (e) {
     console.error("[intl-local] subscribe failed", { tenantId, error: e instanceof Error ? e.message : e });
-    return { error: "Couldn't subscribe right now — please try again." };
+    return { error: "Couldn't subscribe right now. Please try again." };
   }
 }
 

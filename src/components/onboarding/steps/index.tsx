@@ -187,7 +187,7 @@ export function BusinessStep({ draft, update, errors }: StepProps) {
         <Text id="biz-contact" value={draft.contactPerson} placeholder="Your name"
           onChange={(v) => update({ contactPerson: v })} />
       </Field>
-      <Field label="Short description" htmlFor="biz-desc" hint="Optional — one or two lines we can use on your homepage.">
+      <Field label="Short description" htmlFor="biz-desc" hint="Optional. One or two lines we can use on your homepage.">
         <textarea id="biz-desc" className="mk-textarea" value={draft.description}
           placeholder="What you sell and what makes you special."
           onChange={(e) => update({ description: e.target.value })} />
@@ -242,7 +242,7 @@ export function BrandingStep({ draft, update }: StepProps) {
         </Field>
       </div>
 
-      <Field label="Logo" hint="Square works best. Optional — we can design one with you.">
+      <Field label="Logo" hint="Square works best. Optional: we can design one with you.">
         <SingleUpload value={draft.logoUrl} kind="logo" label="Upload logo"
           onChange={(url) => update({ logoUrl: url })} />
       </Field>
@@ -397,7 +397,7 @@ export function PaymentsStep({ draft, update }: StepProps) {
                       placeholder="e.g. Send payment and screenshot the receipt."
                       onChange={(e) => patch(name, { instructions: e.target.value })} />
                   </Field>
-                  <Field label="QR code" hint="Optional — upload your payment QR.">
+                  <Field label="QR code" hint="Optional. Upload your payment QR.">
                     <SingleUpload value={m.qrUrl} kind="payment-qr" label="Upload QR"
                       onChange={(url) => patch(name, { qrUrl: url })} />
                   </Field>
@@ -513,7 +513,7 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
           </h3>
           <p className="mk-hint" style={{ marginTop: 0, marginBottom: 12 }}>
             Your Starter store always includes the ordering website, product catalog, and full
-            store admin. The first {STARTER_FEATURE_LIMIT} add-on pages are included — each extra
+            store admin. The first {STARTER_FEATURE_LIMIT} add-on pages are included. Each extra
             is {peso(STARTER_EXTRA_FEATURE_PRICE_CENTS)}. ({picked.length} selected)
           </p>
           <div className="mk-choices">
@@ -561,11 +561,11 @@ export function PackageStep({ draft, update, errors, packages }: StepProps) {
                 // Past the included allotment, Business is the better buy: every
                 // add-on page is bundled, plus the full storefront + cart.
                 <div className="mk-upsell">
-                  <b>Business already includes all of these — and more.</b>
+                  <b>Business already includes all of these, and more.</b>
                   <p>
                     You&apos;re paying {peso(addonCents)} extra on Starter. Business bundles every
                     add-on page, the full online storefront + cart, and sales analytics for{" "}
-                    {yearly ? `${business.yearlyPriceLabel}/year` : `${business.priceLabel}/month`} —
+                    {yearly ? `${business.yearlyPriceLabel}/year` : `${business.priceLabel}/month`},
                     with FREE setup.
                   </p>
                   <button
@@ -609,7 +609,7 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
         <div style={{ marginTop: 10 }}>
           <div className="mk-payrow">
             <span>
-              {packageLabel(draft.packageKey)} — {yearly ? "1 year (prepaid)" : "first month"}
+              {packageLabel(draft.packageKey)} · {yearly ? "1 year (prepaid)" : "first month"}
             </span>
             <span style={{ textAlign: "right" }}>{peso(quote.baseCents)}</span>
           </div>
@@ -737,7 +737,7 @@ export function CheckoutStep({ draft, update, errors, packagePayment, packages }
           <div className="mk-review-item"><span>Paid with</span><b>{chosen?.method ?? "—"}</b></div>
         </div>
         <p className="mk-hint" style={{ marginBottom: 0 }}>
-          After payment you can share your logo, products and preferences — or skip and we&apos;ll
+          After payment you can share your logo, products and preferences, or skip and we&apos;ll
           ask you on WhatsApp.
         </p>
       </div>

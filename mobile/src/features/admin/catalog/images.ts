@@ -70,5 +70,5 @@ type UploadResult = { url: string } | { error: string };
 export async function uploadProductPhoto(photo: UploadFile, signal?: AbortSignal): Promise<string> {
   const res = await adminBridge.upload<UploadResult>("uploadProductImageAction", "file", photo, signal);
   if (res && "url" in res && res.url) return res.url;
-  throw new Error((res && "error" in res && res.error) || "Upload failed — please try again.");
+  throw new Error((res && "error" in res && res.error) || "Upload failed. Please try again.");
 }

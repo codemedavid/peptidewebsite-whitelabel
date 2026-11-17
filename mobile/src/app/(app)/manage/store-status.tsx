@@ -72,7 +72,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} onSave={onSave} />}>
       <Section
         title={open ? "Your store is open" : "Your store is closed"}
-        hint="Closing stops all orders without hiding your shop. Customers can still browse your products and see your prices — every “Add to Cart” button just reads Closed until you reopen."
+        hint="Closing stops all orders without hiding your shop. Customers can still browse your products and see your prices, but every “Add to Cart” button just reads Closed until you reopen."
       >
         <Pill
           tone={open ? "success" : "warning"}
@@ -80,7 +80,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
           label={open ? "Taking orders" : "Not taking orders"}
         />
         <ToggleRow
-          label="Close my store — stop taking orders"
+          label="Close my store (stop taking orders)"
           hint="Leave this off for business as usual. Turning it on takes effect immediately, including for customers who already have items in their cart."
           value={!open}
           onChange={edit((closed: boolean) => setOpen(!closed))}
@@ -93,7 +93,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
           value={headline}
           onChangeText={edit(setHeadline)}
           maxLength={MAX_STORE_CLOSED_HEADLINE}
-          placeholder={`Hello — ${name || "your store"} is currently closed`}
+          placeholder={`Hello! ${name || "your store"} is currently closed`}
           hint="Leave this blank and we'll greet your customers by your business name automatically."
         />
         <Field
@@ -102,7 +102,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
           onChangeText={edit(setMessage)}
           maxLength={MAX_STORE_CLOSED_MESSAGE}
           multiline
-          placeholder="We're restocking this week — back open Monday 9am. Thanks for your patience!"
+          placeholder="We're restocking this week. Back open Monday 9am. Thanks for your patience!"
           hint={`Tell customers why you're closed and when you'll be back. ${message.length}/${MAX_STORE_CLOSED_MESSAGE}`}
         />
       </Section>
@@ -111,7 +111,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
         title="Preview"
         hint={
           open
-            ? "Nothing shows while your store is open — this is what customers would see if you closed it."
+            ? "Nothing shows while your store is open. This is what customers would see if you closed it."
             : "This banner sits above your catalog on every page."
         }
       >

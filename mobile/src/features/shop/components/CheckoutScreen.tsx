@@ -67,7 +67,7 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
   const lines = useMemo(() => buyableLines(rows), [rows]);
   const checkout = catalog.checkout;
   const currency = catalog.store.currency;
-  const [draft, setForm] = useState<CheckoutForm>(() => emptyForm({ name: me.actor.displayName, email: me.actor.email }));
+  const [draft, setForm] = useState<CheckoutForm>(() => emptyForm(isGuestActor(me.actor) ? { name: "", email: "" } : { name: me.actor.displayName, email: me.actor.email }));
   // The only courier / area / method is pre-picked — derived, so a catalog
   // refresh under an open checkout keeps the picks valid.
   const form = withDefaults(draft, checkout);
@@ -112,7 +112,7 @@ function CheckoutBody({ catalog }: { catalog: ShopCatalog }) {
       onError: (e) => {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
         const offline = e instanceof ApiError && (e.code === "network" || e.code === "timeout");
-        setSubmitError(offline ? `${e.message} Tap Place order again — you won't be charged twice.` : e.message);
+        setSubmitError(offline ? `${e.message} Tap Place order again. You won't be charged twice.` : e.message);
         // Fees or stock may have moved: refresh the numbers the shopper sees.
         void quote.refetch();
       },
@@ -196,3 +196,8 @@ const styles = StyleSheet.create({
   note: { padding: SPACE.lg, borderRadius: RADIUS.lg, gap: SPACE.xs },
   bar: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.md, borderTopWidth: StyleSheet.hairlineWidth, gap: SPACE.sm },
 });
+
+/** A guest has no name or email on file — "Guest" must never prefill the form. */
+function isGuestActor(actor: { kind: string; guest?: boolean }): boolean {
+  return actor.kind === "customer" && actor.guest === true;
+}

@@ -65,7 +65,7 @@ export function AdminBroadcastForm({ tenants }: { tenants: Tenant[] }) {
     }
     setResult(
       res.phones === 0
-        ? "No signed-in admin phones — nothing was sent."
+        ? "No signed-in admin phones, so nothing was sent."
         : `Sent to ${res.sent} of ${res.phones} phone${res.phones === 1 ? "" : "s"}${res.failed ? ` · ${res.failed} failed (phone offline or app removed)` : ""}.`,
     );
     setTitle("");

@@ -81,7 +81,7 @@ function ReviewModal({
       if ("url" in res) setImage(res.url);
       else alert(res.error);
     } catch {
-      alert("Image upload failed — please try again.");
+      alert("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -184,7 +184,7 @@ function ReviewModal({
                     marginTop: 4,
                   }}
                 >
-                  PNG, JPG — under 2 MB
+                  PNG or JPG, under 2 MB
                 </div>
               </>
             )}
@@ -215,7 +215,7 @@ function ReviewModal({
           >
             {products.length === 0 && (
               <div style={{ fontSize: 13, color: "var(--brand-text-muted)", padding: 4 }}>
-                No products yet — add one first.
+                No products yet. Add one first.
               </div>
             )}
             {products.map((p) => {
@@ -292,7 +292,7 @@ function ReviewModal({
             onChange={(e) => setSubtitle(e.target.value)}
           />
           <div className="admin-field__hint">
-            The typography below applies to this description everywhere it appears — the reviews
+            The typography below applies to this description everywhere it appears: the reviews
             page and every connected product. Leave a control on "Default" to inherit the store's
             style.
           </div>

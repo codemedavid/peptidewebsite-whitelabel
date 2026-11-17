@@ -101,7 +101,7 @@ export async function reportMessage(message: CommunityMessage, ctx: ReportContex
     "Please tell us what's wrong with this message:",
     "",
     "",
-    "— Details for our team (please keep) —",
+    "Details for our team (please keep):",
     `Store: ${ctx.storeName} (${ctx.storeSlug})`,
     `Message ID: ${message.id}`,
     `Sent by: ${message.sender?.name ?? "unknown"} (${message.sender?.key ?? "n/a"})`,

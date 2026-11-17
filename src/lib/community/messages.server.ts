@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma, type CommunityMessage as MessageRow } from "@prisma/client";
 import { withTenant, type TenantTx } from "@/lib/db/tenant-client";
-import type { CommunityMessage, MessagesResponse, ThreadType } from "@/lib/mobile/contract";
+import type { CommunityMessage, MessagesResponse, ThreadInfo, ThreadType } from "@/lib/mobile/contract";
 import type { CommunityActor } from "./actor.server";
 import { loadProductCards, loadProtocolCards, refKey } from "./cards.server";
 import { openRoundFor, withLiveRounds } from "./group-buy-cards.server";
@@ -13,6 +13,7 @@ import { resolveThread, threadInfo, threadWhere, type ThreadAccess } from "./thr
 import { checkForPoach, recordFlag } from "./moderation.server";
 import { findOwnUpload } from "./uploads.server";
 import { nextReadMarker } from "./unread";
+import { channelMuteKey } from "./topic-push";
 import { parseEditBody, parseMessageBody } from "./validate";
 import { buildMessageViews } from "./view.server";
 
@@ -49,6 +50,14 @@ const atOrBefore = (c: Cursor): Prisma.CommunityMessageWhereInput => ({
 });
 const NEWEST_FIRST = [{ createdAt: "desc" as const }, { id: "desc" as const }];
 
+/** A topic thread also says whether this reader muted its channel (the bell in the chat header). */
+async function withChannelMute(db: TenantTx, actor: CommunityActor, thread: ThreadInfo): Promise<ThreadInfo> {
+  const key = channelMuteKey(actor);
+  if (thread.type !== "topic" || !thread.channelId || !key) return thread;
+  const row = await db.communityChannelMute.findFirst({ where: { participantKey: key, channelId: thread.channelId }, select: { id: true } });
+  return { ...thread, channelMuted: row !== null };
+}
+
 export async function listMessages(
   actor: CommunityActor,
   type: ThreadType,
@@ -61,7 +70,7 @@ export async function listMessages(
     const access = await resolveThread(db, actor, type, id);
     if (!access) return NOT_FOUND;
     const where = threadWhere(access);
-    const thread = threadInfo(actor, access);
+    const thread = await withChannelMute(db, actor, threadInfo(actor, access));
 
     const rawAfter = params.get("after");
     if (rawAfter) {

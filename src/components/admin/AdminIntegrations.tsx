@@ -61,13 +61,13 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
       let text: string;
       if ("healthy" in res) {
         text = res.healthy
-          ? "Connection OK — events are reaching PostHog."
+          ? "Connection OK. Events are reaching PostHog."
           : "Connected, but PostHog rejected the test event. Check the key/host.";
       } else if ("sent" in res) {
         const where = testEmail.trim()
           ? `check ${testEmail.trim()}'s inbox once your workflows run`
           : "check the project's Activity feed";
-        text = `Sent ${res.sent} test event(s) — ${where}.`;
+        text = `Sent ${res.sent} test event(s); ${where}.`;
       } else {
         text = okText;
       }
@@ -193,7 +193,7 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
                   <div style={{ fontSize: 12.5, fontWeight: 600 }}>Verify end-to-end</div>
                   <div style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
                     Fires a sample <code>order_placed</code> + <code>order_status_changed</code>{" "}
-                    (shipped &amp; delivered) into this project in one click — so your workflows and
+                    (shipped &amp; delivered) into this project in one click, so your workflows and
                     emails run without a real order.
                   </div>
                 </div>
@@ -202,7 +202,7 @@ export function AdminIntegrations({ slug, name, entitled, status, demo }: AdminI
                     className="input"
                     type="email"
                     autoComplete="off"
-                    placeholder="test email (optional — to receive the emails)"
+                    placeholder="test email (optional, to receive the emails)"
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
                     style={{ maxWidth: 300 }}

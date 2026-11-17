@@ -121,7 +121,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
   return (
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={flash} onSave={onSave} />}>
       <AppText variant="body" color="muted">
-        A slim bar that appears directly under your site header — great for promos, shipping notices or launches. Turn it on,
+        A slim bar that appears directly under your site header. Great for promos, shipping notices or launches. Turn it on,
         pick a style, and add your messages.
       </AppText>
 
@@ -138,7 +138,7 @@ function Editor({ brand }: { brand: AdminBrand }) {
       </Section>
 
       <Section title="Messages">
-        {banner.slides.length === 0 ? <Hint>No messages yet — add your first one below.</Hint> : null}
+        {banner.slides.length === 0 ? <Hint>No messages yet. Add your first one below.</Hint> : null}
         {banner.slides.map((slide, i) => (
           <SlideEditor
             key={slide.id}
@@ -298,7 +298,7 @@ function Preview({ banner }: { banner: Banner }) {
       <Hint>
         {banner.enabled
           ? "The live bar uses your storefront theme and fonts."
-          : "The banner is currently turned off — the preview shows how it would look once enabled."}
+          : "The banner is currently turned off. The preview shows how it would look once enabled."}
       </Hint>
     </View>
   );

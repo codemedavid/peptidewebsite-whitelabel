@@ -73,24 +73,38 @@ export type ListOp = (list: Row[]) => Row[];
  * phone's stale copy. Ops only touch the row they target and spread every other
  * key through, so fields the app doesn't edit survive the round trip.
  */
-export function useCollection(key: string, fn: string, seed: Row[], noun: string) {
+/**
+ * Where a collection lives in the brand and how it is saved. The default is a
+ * top-level `brand[key]` list saved as `fn(list)`; a nested list (e.g. the
+ * International shipping rates in `brand.intlMarket`) supplies its own.
+ */
+export type CollectionAccess = {
+  read: (brand: AdminBrand | undefined) => Row[];
+  write: (brand: AdminBrand, list: Row[]) => AdminBrand;
+  args: (list: Row[]) => unknown[];
+};
+
+export function useCollection(key: string, fn: string, seed: Row[], noun: string, access?: CollectionAccess) {
   const { scope } = useSignedIn();
   const qc = useQueryClient();
   const brand = useAdminBrand();
   const afterSave = useAfterSave();
   const brandKey = setupKeys.brand(scope);
+  const read = access?.read ?? ((b: AdminBrand | undefined) => listFrom(b, key, seed));
+  const write = access?.write ?? ((b: AdminBrand, list: Row[]) => ({ ...b, [key]: list }));
+  const args = access?.args ?? ((list: Row[]) => [list]);
 
   const m = useMutation({
     mutationFn: async (op: ListOp) => {
       const fresh = (await adminBridge.brand()).brand;
-      const next = op(listFrom(fresh, key, seed));
-      unwrap(await adminBridge.call<{ ok: true } | { error: string }>(fn, next));
+      const next = op(read(fresh));
+      unwrap(await adminBridge.call<{ ok: true } | { error: string }>(fn, ...args(next)));
       return next;
     },
     onMutate: async (op) => {
       await qc.cancelQueries({ queryKey: brandKey });
       const previous = qc.getQueryData<AdminBrand>(brandKey);
-      if (previous) qc.setQueryData<AdminBrand>(brandKey, { ...previous, [key]: op(listFrom(previous, key, seed)) });
+      if (previous) qc.setQueryData<AdminBrand>(brandKey, write(previous, op(read(previous))));
       return { previous };
     },
     onError: (e, _op, ctx) => {
@@ -100,14 +114,14 @@ export function useCollection(key: string, fn: string, seed: Row[], noun: string
     },
     onSuccess: (next) => {
       const current = qc.getQueryData<AdminBrand>(brandKey);
-      if (current) qc.setQueryData<AdminBrand>(brandKey, { ...current, [key]: next });
+      if (current) qc.setQueryData<AdminBrand>(brandKey, write(current, next));
       afterSave();
     },
   });
 
   return {
     brand,
-    items: listFrom(brand.data, key, seed),
+    items: read(brand.data),
     saving: m.isPending,
     /** Apply `op` to the server's current list and save it. Resolves true on success. */
     apply: (op: ListOp) =>
@@ -134,3 +148,17 @@ export const toggleActive =
   (id: unknown): ListOp =>
   (list) =>
     list.map((r) => (r.id === id ? { ...r, active: !(r.active !== false) } : r));
+
+/**
+ * The International (USD) shipping rates of a dual-currency store
+ * (brand.intlMarket.shippingLocations) — saved through saveIntlMarketAction,
+ * which writes only the shipping half so the market switch is never touched.
+ */
+export const INTL_SHIPPING_ACCESS: CollectionAccess = {
+  read: (b) => {
+    const market = (b?.intlMarket ?? {}) as { shippingLocations?: unknown };
+    return Array.isArray(market.shippingLocations) ? market.shippingLocations.filter((r): r is Row => !!r && typeof r === "object") : [];
+  },
+  write: (b, list) => ({ ...b, intlMarket: { ...((b.intlMarket ?? {}) as object), shippingLocations: list } }),
+  args: (list) => [{ shippingLocations: list }],
+};

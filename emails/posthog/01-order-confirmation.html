@@ -1,6 +1,6 @@
 <!-- PostHog HTML-block fragment: paste into a full-width HTML block (no <html>/<body> —
      the editor supplies those). Put this line in PostHog's "Preheader" field:
-     We received order {{ event.properties.orderNumber }} — here's your summary. -->
+     We received order {{ event.properties.orderNumber }}. Here's your summary. -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
       <td align="center" style="padding:24px 8px;background-color:#EFEDE7;">
@@ -32,7 +32,7 @@
                       <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:0.14em;color:#B8B4A8;text-transform:uppercase;vertical-align:middle;">&nbsp;&nbsp;Order received</span>
                     </div>
                     <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#FFFFFF;">
-                      Thanks, {{ person.properties.name | default: "friend" }} — <span style="font-style:italic;">we've got your order.</span>
+                      Thanks, {{ person.properties.name | default: "friend" }}. <span style="font-style:italic;">We've got your order.</span>
                     </div>
                     <div style="padding-top:16px;">
                       <span style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:12px;letter-spacing:0.03em;color:#F1F0EC;background-color:#33312B;border:1px solid #4A473F;border-radius:6px;padding:6px 10px;">
@@ -113,7 +113,7 @@
                 <!-- Signature -->
                 <tr>
                   <td style="padding:18px 18px 28px;font-family:Georgia,'Times New Roman',serif;font-size:14px;font-style:italic;color:#8A8578;">
-                    — the {{ event.properties.brandName | default: "store" }} team
+                    The {{ event.properties.brandName | default: "store" }} team
                   </td>
                 </tr>
 

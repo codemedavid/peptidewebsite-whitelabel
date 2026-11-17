@@ -31,10 +31,74 @@ function useCopy(): [string | null, (key: string, text: string) => void] {
 
 const digits = (phone: string) => phone.replace(/[^\d+]/g, "");
 
+type Copy = (key: string, text: string) => void;
+
+/** A copy button for a row's trailing slot. */
+function CopyIcon({ id, text, label, copied, copy }: { id: string; text: string; label: string; copied: string | null; copy: Copy }) {
+  const t = useTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Copy ${label}`} hitSlop={10} onPress={() => copy(id, text)}>
+      <Ionicons name={copied === id ? "checkmark" : "copy-outline"} size={20} color={t.brand.link} />
+    </Pressable>
+  );
+}
+
+/** The web detail's address table: one copyable line per part, then Copy address. */
+function AddressRows({ order, copied, copy }: { order: OrderDetail; copied: string | null; copy: Copy }) {
+  const t = useTheme();
+  const s = order.shipping;
+  const parts = [
+    { id: "street", label: "Street", value: s.street ?? "" },
+    { id: "barangay", label: "Barangay", value: s.barangay ?? "" },
+    { id: "city", label: "City / Province", value: s.cityProvince ?? "" },
+    { id: "country", label: "Country", value: s.country ?? "" },
+  ].filter((p) => p.value);
+  // Older servers send only the one-line address.
+  if (parts.length === 0) {
+    return (
+      <Row
+        icon="location-outline"
+        label={s.addressLine}
+        detail={copied === "address" ? "Address copied ✓" : "Tap to copy the address"}
+        onPress={() => copy("address", s.addressLine)}
+        trailing={<Ionicons name={copied === "address" ? "checkmark" : "copy-outline"} size={18} color={t.colors.textFaint} />}
+      />
+    );
+  }
+  return (
+    <View style={styles.address}>
+      <View style={styles.addressHead}>
+        <Ionicons name="location-outline" size={18} color={t.colors.textMuted} />
+        <AppText variant="label" color="muted">Shipping address</AppText>
+      </View>
+      {parts.map((p) => (
+        <View key={p.id} style={styles.addressLine}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="caption" color="muted">{p.label}</AppText>
+            <AppText variant="body" selectable>{p.value}</AppText>
+          </View>
+          <CopyIcon id={p.id} text={p.value} label={p.label.toLowerCase()} copied={copied} copy={copy} />
+        </View>
+      ))}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => copy("address", s.addressLine)}
+        hitSlop={6}
+        style={styles.copyAll}
+      >
+        <Ionicons name={copied === "address" ? "checkmark" : "copy-outline"} size={16} color={t.brand.link} />
+        <AppText variant="label" color="link">{copied === "address" ? "Address copied" : "Copy address"}</AppText>
+      </Pressable>
+    </View>
+  );
+}
+
 export function CustomerSection({ order }: { order: OrderDetail }) {
   const t = useTheme();
   const [copied, copy] = useCopy();
   const { name, phone, email, contactMethod } = order.customer;
+  const whatsapp = order.customer.whatsapp ?? "";
+  const whatsappName = order.customer.whatsappName ?? "";
   const { me } = useSignedIn();
   const openDm = useOpenDm();
   // The store ⇄ customer chat — where the order bot posts this order's updates.
@@ -97,19 +161,45 @@ export function CustomerSection({ order }: { order: OrderDetail }) {
             />
           </>
         ) : null}
+        {whatsapp ? (
+          <>
+            <Divider inset={62} />
+            <Row
+              icon="logo-whatsapp"
+              label={whatsapp}
+              detail={copied === "whatsapp" ? "WhatsApp number copied ✓" : whatsappName ? `WhatsApp · ${whatsappName}` : "WhatsApp · tap to open"}
+              onPress={() => void Linking.openURL(`https://wa.me/${whatsapp.replace(/\D/g, "")}`)}
+              trailing={<CopyIcon id="whatsapp" text={whatsapp} label="WhatsApp number" copied={copied} copy={copy} />}
+            />
+          </>
+        ) : null}
+        {whatsappName && !whatsapp ? (
+          <>
+            <Divider inset={62} />
+            <Row icon="logo-whatsapp" label={whatsappName} detail="WhatsApp name" />
+          </>
+        ) : null}
         {email ? (
           <>
             <Divider inset={62} />
-            <Row icon="mail-outline" label={email} detail="Tap to email" onPress={() => void Linking.openURL(`mailto:${email}`)} />
+            <Row
+              icon="mail-outline"
+              label={email}
+              detail={copied === "email" ? "Email copied ✓" : "Tap to email"}
+              onPress={() => void Linking.openURL(`mailto:${email}`)}
+              trailing={<CopyIcon id="email" text={email} label="email" copied={copied} copy={copy} />}
+            />
           </>
         ) : null}
         {order.shipping.addressLine ? (
           <>
             <Divider inset={62} />
+            <AddressRows order={order} copied={copied} copy={copy} />
+            <Divider inset={62} />
             <Row
-              icon="location-outline"
-              label={order.shipping.addressLine}
-              detail={copied === "booking" ? "Copied for your courier ✓" : "Tap to copy name, phone & address for booking"}
+              icon="cube-outline"
+              label="Copy for courier booking"
+              detail={copied === "booking" ? "Copied for your courier ✓" : "Name, phone & address in one paste"}
               onPress={() => copy("booking", order.shipping.bookingText)}
               trailing={<Ionicons name={copied === "booking" ? "checkmark" : "copy-outline"} size={18} color={t.colors.textFaint} />}
             />
@@ -194,7 +284,7 @@ export function PaymentSection({ order }: { order: OrderDetail }) {
               </View>
             </Pressable>
             <AppText variant="caption" color="muted">
-              The customer attached this. Check it against your account before confirming — an upload alone isn't proof the money arrived.
+              The customer attached this. Check it against your account before confirming. An upload alone isn't proof the money arrived.
             </AppText>
           </>
         ) : (
@@ -207,6 +297,7 @@ export function PaymentSection({ order }: { order: OrderDetail }) {
 
 export function NotesSection({ order, onEdit }: { order: OrderDetail; onEdit?: () => void }) {
   const t = useTheme();
+  const [copied, copy] = useCopy();
   const hasShipping = !!(order.courier || order.trackingNumber || order.shippingNote);
   const shippingLabel = [order.courier, order.trackingNumber].filter(Boolean).join(" · ");
   return (
@@ -215,7 +306,12 @@ export function NotesSection({ order, onEdit }: { order: OrderDetail; onEdit?: (
       <Card padded={false}>
         {order.customerNote ? (
           <View style={[styles.quote, { borderLeftColor: t.brand.accent }]}>
-            <AppText variant="caption" color="muted">Note from the customer</AppText>
+            <View style={styles.noteHead}>
+              <AppText variant="caption" color="muted" style={{ flex: 1 }}>
+                {copied === "note" ? "Note copied ✓" : "Note from the customer"}
+              </AppText>
+              <CopyIcon id="note" text={order.customerNote} label="the customer's note" copied={copied} copy={copy} />
+            </View>
             <AppText variant="body" selectable>{order.customerNote}</AppText>
           </View>
         ) : null}
@@ -279,6 +375,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: RADIUS.pill,
   },
+  address: { paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, gap: SPACE.sm },
+  addressHead: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+  addressLine: { flexDirection: "row", alignItems: "center", gap: SPACE.md, paddingLeft: 26 },
+  copyAll: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingLeft: 26, paddingVertical: SPACE.xs },
+  noteHead: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
   quote: { margin: SPACE.lg, marginBottom: 0, paddingLeft: SPACE.md, borderLeftWidth: 3, gap: 2 },
   event: { flexDirection: "row", gap: SPACE.md },
   eventRail: { alignItems: "center", width: 28 },

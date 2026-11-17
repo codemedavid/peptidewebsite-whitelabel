@@ -59,7 +59,7 @@ export async function listUpgradeRequestsAction(): Promise<
       })),
     };
   } catch {
-    return { error: "Upgrade requests aren't available yet — run db:push to add the table." };
+    return { error: "Upgrade requests aren't available yet. Run db:push to add the table." };
   }
 }
 

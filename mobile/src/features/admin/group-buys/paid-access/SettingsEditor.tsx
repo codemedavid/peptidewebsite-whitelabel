@@ -124,7 +124,7 @@ export function SettingsEditor({ groupBuyId, view, currency }: Props) {
 
   return (
     <FormPage footer={<SaveBar dirty={dirty} saving={save.isPending} saved={shown} onSave={submit} />}>
-      {!view.exists ? <Hint>Not set up yet — this round stays members-only and nobody can join until you save how customers get in.</Hint> : null}
+      {!view.exists ? <Hint>Not set up yet. This round stays members-only and nobody can join until you save how customers get in.</Hint> : null}
       {general ? <Hint tone="danger">{general}</Hint> : null}
 
       <Section title="How customers join" hint={PAID_ACCESS_PRESETS.find((p) => p.id === preset)?.description ?? "A custom step order."}>
@@ -173,7 +173,7 @@ function StepsEditor({ steps, onChange, error }: { steps: PaidAccessStep[]; onCh
       <AppText variant="label" color="muted">
         Steps, in order
       </AppText>
-      {steps.length === 0 ? <Hint>No steps — anyone gets in instantly.</Hint> : null}
+      {steps.length === 0 ? <Hint>No steps, so anyone gets in instantly.</Hint> : null}
       {steps.map((s, i) => (
         <View key={s} style={[styles.stepRow, { borderColor: t.colors.border, backgroundColor: t.colors.bg }]}>
           <AppText variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>

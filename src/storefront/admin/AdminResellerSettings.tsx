@@ -91,7 +91,7 @@ export function AdminResellerSettings({
       }
       toast("Reseller settings saved");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -114,7 +114,7 @@ export function AdminResellerSettings({
       setCode("");
       toast("Reseller password removed");
     } catch {
-      toast("Couldn't save — please sign in again and retry.");
+      toast("Couldn't save. Please sign in again and retry.");
     } finally {
       setSaving(false);
     }
@@ -157,24 +157,24 @@ export function AdminResellerSettings({
           <h2 className="admin-form__section">🔐 Reseller Page Password</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 18 }}>
             Your reseller page lives at <code>/reseller</code>. Resellers open it, enter the password
-            below, and see your wholesale prices — regular shoppers never do. Share the link and the
+            below, and see your wholesale prices. Regular shoppers never do. Share the link and the
             password with your resellers.
           </div>
 
           {loading ? null : !available ? (
             <div className="admin-field__hint" style={{ color: "#c0392b", marginBottom: 14 }}>
-              Your plan doesn’t include the Reseller feature yet — contact your provider to enable it.
+              Your plan doesn’t include the Reseller feature yet. Contact your provider to enable it.
               You can still set a password below so it’s ready the moment they do.
             </div>
           ) : !pageAvailable ? (
             <div className="admin-field__hint" style={{ color: "#c0392b", marginBottom: 14 }}>
               The Reseller feature is on, but the <strong>Wholesale reseller page</strong> isn’t enabled
-              for your store yet — ask your provider to turn it on. Wholesale pricing on your regular
+              for your store yet. Ask your provider to turn it on. Wholesale pricing on your regular
               storefront is {wholesaleAvailable ? "already active" : "also off"}.
             </div>
           ) : hasCode ? (
             <div className="admin-field__hint" style={{ color: "#1e7e34", marginBottom: 14 }}>
-              ✅ Live — your reseller page is open at <code>/reseller</code> to anyone with the password.
+              ✅ Live: your reseller page is open at <code>/reseller</code> to anyone with the password.
             </div>
           ) : (
             <div className="admin-field__hint" style={{ marginBottom: 14 }}>
@@ -221,7 +221,7 @@ export function AdminResellerSettings({
               </div>
               <div className="admin-field__hint">
                 {hasCode
-                  ? "Your current password can’t be shown — it’s stored encrypted. Type a new one to replace it. Changing or removing it signs out every reseller using the old one."
+                  ? "Your current password can’t be shown because it’s stored encrypted. Type a new one to replace it. Changing or removing it signs out every reseller using the old one."
                   : "At least 4 characters. It’s stored encrypted and never shown again, so keep your own copy."}
               </div>
             </div>
@@ -352,7 +352,7 @@ export function AdminResellerSettings({
           </div>
           {products.length > 0 && withWholesale.length === 0 && (
             <div className="admin-field__hint" style={{ marginTop: 14 }}>
-              No products have reseller pricing yet — the reseller page will be empty until you set some.
+              No products have reseller pricing yet, so the reseller page will be empty until you set some.
             </div>
           )}
         </div>

@@ -38,7 +38,7 @@ const DEMO_BLOCKED = "Connect a database to record subscription payments.";
 
 /** Shown when subscription_payments hasn't been pushed yet ([[live-db-state]]). */
 const NOT_PUSHED =
-  "Could not save — has the subscription_payments table been pushed? (npm run db:push)";
+  "Could not save. Has the subscription_payments table been pushed? (npm run db:push)";
 
 const TENANT_SELECT = {
   id: true,

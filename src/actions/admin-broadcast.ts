@@ -21,7 +21,7 @@ export async function previewAdminBroadcastAction(
     return { ok: true, phones, stores };
   } catch (e) {
     console.error(`[admin-broadcast] preview failed: ${e instanceof Error ? e.name : "Error"}`);
-    return { error: "Couldn't count the signed-in admins — try again." };
+    return { error: "Couldn't count the signed-in admins. Try again." };
   }
 }
 
@@ -38,6 +38,6 @@ export async function sendAdminBroadcastAction(
     return { ok: true, ...res };
   } catch (e) {
     console.error(`[admin-broadcast] send failed: ${e instanceof Error ? e.name : "Error"}`);
-    return { error: "Couldn't send the notification — nothing was sent, try again." };
+    return { error: "Couldn't send the notification. Nothing was sent, so try again." };
   }
 }

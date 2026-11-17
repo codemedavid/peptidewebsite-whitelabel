@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
 import { isDemoMode, saveDemoBranding, getDemoBranding } from "@/lib/demo/fixtures";
 import { uploadTenantMedia } from "@/lib/imagekit/server";
 import { getPlatformUser } from "@/lib/auth/session";
@@ -12,6 +11,7 @@ import { mergeAdminFeeInput, normalizeAdminFee, type AdminFeeConfig } from "@/li
 import { normalizeNoticeModal } from "@/lib/storefront/notice-modal";
 import { normalizeGbPaymentMode, withGbPaymentMode } from "@/lib/storefront/gb-payment-mode";
 import { revalidateTenant } from "@/lib/tenant/revalidate";
+import { patchBrandingConfig, updateBrandingConfig } from "@/lib/tenant/branding-config-write";
 import { STOREFRONT_IMAGE_MAX_BYTES } from "@/lib/upload/limits";
 import {
   applyBrandingAsset,
@@ -49,7 +49,7 @@ export type UploadAssetResult = { url: string | null } | { error: string };
  * read-modify-write so they never clobber the rest of the storefront config.
  */
 async function writeBrandingAsset(
-  tenant: { id: string; branding: { config: Prisma.JsonValue } | null },
+  tenant: { id: string },
   kind: BrandingAssetKind,
   url: string | null,
 ): Promise<void> {
@@ -63,13 +63,7 @@ async function writeBrandingAsset(
     return;
   }
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = applyBrandingAsset(current, kind, url) as Prisma.InputJsonValue;
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await updateBrandingConfig(tenant.id, (current) => applyBrandingAsset(current, kind, url));
 }
 
 /** The demo-mode equivalent of writeBrandingAsset (no DB, file-backed fixtures). */
@@ -113,10 +107,7 @@ export async function uploadBrandingAssetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
   try {
@@ -243,10 +234,7 @@ export async function removeBrandingAssetAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
   await writeBrandingAsset(tenant, kind, null);
@@ -289,8 +277,7 @@ export async function saveContactChannelsAction(
   const contactFields = { contactChannels, checkoutTitle, checkoutNote, metaDescription };
 
   if (isDemoMode()) {
-    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, ...contactFields } });
+    await patchBrandingConfig(slug, contactFields, { demoKey: slug });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -299,20 +286,10 @@ export async function saveContactChannelsAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, ...contactFields } as Prisma.InputJsonValue;
-
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await patchBrandingConfig(tenant.id, contactFields);
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
@@ -365,8 +342,7 @@ async function patchCheckoutConfig(
   if (!/^[a-z0-9-]{2,}$/.test(slug)) return { error: "Invalid tenant slug." };
 
   if (isDemoMode()) {
-    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, ...patch } });
+    await patchBrandingConfig(slug, patch, { demoKey: slug });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -375,20 +351,10 @@ async function patchCheckoutConfig(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, ...patch } as Prisma.InputJsonValue;
-
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await patchBrandingConfig(tenant.id, patch);
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
@@ -420,8 +386,7 @@ export async function saveNoticeModalGrantAction(
   };
 
   if (isDemoMode()) {
-    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: merge(current) });
+    await updateBrandingConfig(slug, merge, { demoKey: slug });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -430,20 +395,10 @@ export async function saveNoticeModalGrantAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = merge(current) as Prisma.InputJsonValue;
-
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await updateBrandingConfig(tenant.id, merge);
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
@@ -462,7 +417,7 @@ export async function saveGbPaymentModeAction(slug: string, input: unknown): Pro
   if (!mode) return { error: "Choose how customers pay." };
 
   if (isDemoMode()) {
-    saveDemoBranding(slug, { config: withGbPaymentMode(getDemoBranding(slug).config ?? {}, mode) });
+    await updateBrandingConfig(slug, (current) => withGbPaymentMode(current, mode), { demoKey: slug });
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -476,12 +431,7 @@ export async function saveGbPaymentModeAction(slug: string, input: unknown): Pro
 
   // Row-locked read-modify-write: the invoice's enabledAt is merged from what
   // is stored, and a concurrent owner save must not be overwritten.
-  await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 FROM "branding" WHERE "tenantId" = ${tenant.id} FOR UPDATE`;
-    const row = await tx.branding.findUnique({ where: { tenantId: tenant.id }, select: { config: true } });
-    const config = withGbPaymentMode(row?.config ?? {}, mode) as Prisma.InputJsonValue;
-    await tx.branding.upsert({ where: { tenantId: tenant.id }, update: { config }, create: { tenantId: tenant.id, config } });
-  });
+  await updateBrandingConfig(tenant.id, (current) => withGbPaymentMode(current, mode));
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
@@ -511,8 +461,11 @@ export async function saveAdminFeeAction(
   }
 
   if (isDemoMode()) {
-    const current = (getDemoBranding(slug).config ?? {}) as Record<string, unknown>;
-    saveDemoBranding(slug, { config: { ...current, adminFee: mergeAdminFeeInput(current.adminFee, input) } });
+    await updateBrandingConfig(
+      slug,
+      (current) => ({ ...current, adminFee: mergeAdminFeeInput(current.adminFee, input) }),
+      { demoKey: slug },
+    );
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };
@@ -521,20 +474,13 @@ export async function saveAdminFeeAction(
   const operator = await getPlatformUser();
   if (!operator) return { error: "FORBIDDEN" };
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { id: true, branding: { select: { config: true } } },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
   if (!tenant) return { error: "Tenant not found." };
 
-  const current = (tenant.branding?.config ?? {}) as Record<string, unknown>;
-  const config = { ...current, adminFee: mergeAdminFeeInput(current.adminFee, input) } as Prisma.InputJsonValue;
-
-  await prisma.branding.upsert({
-    where: { tenantId: tenant.id },
-    update: { config },
-    create: { tenantId: tenant.id, config },
-  });
+  await updateBrandingConfig(tenant.id, (current) => ({
+    ...current,
+    adminFee: mergeAdminFeeInput(current.adminFee, input),
+  }));
 
   revalidatePath("/admin");
   revalidateTenant(tenant.id, slug);
@@ -571,9 +517,14 @@ export async function saveAdminPasswordAction(
     });
     if (!checked.ok) return { error: checked.error };
 
-    const config: Record<string, unknown> = { ...current, adminEmail: checked.email };
-    if (checked.password) config.adminPasswordHash = hashPassword(checked.password);
-    saveDemoBranding(slug, { config });
+    await patchBrandingConfig(
+      slug,
+      {
+        adminEmail: checked.email,
+        ...(checked.password ? { adminPasswordHash: hashPassword(checked.password) } : {}),
+      },
+      { demoKey: slug },
+    );
     revalidatePath("/admin");
     revalidateTenant(slug, slug);
     return { ok: true };

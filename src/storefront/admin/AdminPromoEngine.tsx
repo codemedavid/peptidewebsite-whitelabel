@@ -22,7 +22,7 @@ import {
 } from "@/lib/storefront/sale-campaign";
 import { EMPTY_FREE_SHIPPING, normalizeFreeShippingThreshold } from "@/lib/storefront/free-shipping";
 
-const SAVE_FAILED = "Couldn't save — please sign in again and retry.";
+const SAVE_FAILED = "Couldn't save. Please sign in again and retry.";
 
 /** ISO instant → the value a <input type="datetime-local"> shows (local time). */
 function toLocalInput(iso: string): string {

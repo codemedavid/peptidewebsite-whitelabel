@@ -237,8 +237,8 @@ async function main() {
     assert.equal(inv.senderKey, "store");
     assert.equal(inv.authorKey, "bot");
     const text = inv.body ?? "";
-    assert.ok(text.includes("TMB 2.0 - 2 vials = ₱3,380.00"), text);
-    assert.ok(text.includes("RT30 - 1 vial = ₱1,495.00"), text);
+    assert.ok(text.includes("TMB 2.0 × 2 vials = ₱3,380.00"), text);
+    assert.ok(text.includes("RT30 × 1 vial = ₱1,495.00"), text);
     assert.ok(text.includes("💸 Shipping Fee: ₱250.00"), text);
     assert.ok(text.includes("Total w/ SF: ₱5,125.00"), text);
     assert.ok(text.includes("🏦 GoTyme\n016793762828 - Niegel Belependio"), text);

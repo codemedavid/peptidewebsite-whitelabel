@@ -158,8 +158,8 @@ export function OrderConfirmedPage({
       const copied = await copyText(messageText);
       toast(
         copied
-          ? `Order copied — paste it in ${CHANNEL_LABELS[channel.type]}`
-          : `Opening ${CHANNEL_LABELS[channel.type]} — use "Copy order details" if it opens blank`,
+          ? `Order copied. Paste it in ${CHANNEL_LABELS[channel.type]}`
+          : `Opening ${CHANNEL_LABELS[channel.type]}. Use "Copy order details" if it opens blank`,
       );
     }
     if (typeof window !== "undefined") window.location.href = url;
@@ -173,13 +173,13 @@ export function OrderConfirmedPage({
 
   const copyOrder = async () => {
     if (await copyText(messageText)) {
-      toast("Order details copied — paste them into your message");
+      toast("Order details copied. Paste them into your message");
       return;
     }
     // Both clipboard paths refused. Put the text on screen so the customer is
     // never stuck retyping their own order.
     setShowMessage(true);
-    toast("Copy blocked by your browser — select the text below instead");
+    toast("Copy blocked by your browser. Select the text below instead");
   };
 
   if (!order || !view) {
@@ -341,13 +341,13 @@ export function OrderConfirmedPage({
             <h2 id="confirm-next" className="sf-confirm__card-title">What happens next</h2>
             <p className="sf-confirm__next-lede">
               Thank you for placing your order! We&rsquo;ve received it and it&rsquo;s now
-              waiting for confirmation. Please keep an eye out — we&rsquo;ll be in touch
+              waiting for confirmation. Please keep an eye out. We&rsquo;ll be in touch
               shortly.
             </p>
             {canTrack ? (
               <>
                 <p className="sf-confirm__note">
-                  You can check your order status any time on the Track Order page — just
+                  You can check your order status any time on the Track Order page. Just
                   search your order number, <strong>#{view.reference}</strong>. We&rsquo;ve
                   remembered it in this browser, so it should already be filled in for you.
                 </p>
@@ -357,7 +357,7 @@ export function OrderConfirmedPage({
               </>
             ) : (
               <p className="sf-confirm__note">
-                Please keep your order number, <strong>#{view.reference}</strong> — quote it
+                Please keep your order number, <strong>#{view.reference}</strong>, and quote it
                 if you need to get in touch about this order.
               </p>
             )}

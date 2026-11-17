@@ -29,7 +29,7 @@ export function PaymentAccounts({ methods, amount }: { methods: ShopPaymentMetho
     <div className="bnnjoin__card">
       <h2 className="bnnjoin__h2">Send exactly {amount} to</h2>
       {methods.length === 0 ? (
-        <p className="bnnjoin__muted">The store hasn’t listed a payment account yet — message them for where to pay.</p>
+        <p className="bnnjoin__muted">The store hasn’t listed a payment account yet. Message them for where to pay.</p>
       ) : (
         <ul className="bnnjoin__methods">
           {methods.map((m) => (

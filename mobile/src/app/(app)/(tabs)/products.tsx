@@ -10,7 +10,7 @@ import { useProducts } from "@/features/products/hooks";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RADIUS, SPACE, TOUCH } from "@/theme/tokens";
 import { EmptyState, ErrorState, OfflineBanner, SkeletonList, useOnline } from "@/ui/feedback";
-import { Button } from "@/ui/primitives";
+import { AppText, Button } from "@/ui/primitives";
 
 export default function Products() {
   const t = useTheme();
@@ -29,6 +29,16 @@ export default function Products() {
       .filter((p) => !needle || p.name.toLowerCase().includes(needle))
       .sort((a, b) => at(a) - at(b) || a.name.localeCompare(b.name));
   }, [q.data, search, arrange.rank]);
+  // The website Inventory's summary. Made-to-order products hold no stock
+  // (stock === null), so they are neither counted nor flagged.
+  const stats = useMemo(() => {
+    const stocked = (q.data?.products ?? []).filter((p) => p.stock !== null);
+    return {
+      total: stocked.reduce((sum, p) => sum + (p.stock ?? 0), 0),
+      low: stocked.filter((p) => p.stockTone === "low").length,
+      out: stocked.filter((p) => p.stockTone === "out").length,
+    };
+  }, [q.data]);
   // Arrows only over the full list — moving past hidden rows would look like nothing happened.
   const arrows = arrange.ready && !searching && rows.length > 1;
 
@@ -50,6 +60,22 @@ export default function Products() {
           />
         </View>
         <Button label="Add product" icon="add" disabled={!online} onPress={() => router.push(productEditRoute())} />
+        {q.data?.products.length ? (
+          <View style={styles.stats}>
+            {[
+              { label: "Total units", value: stats.total.toLocaleString() },
+              { label: "Low stock", value: String(stats.low) },
+              { label: "Out of stock", value: String(stats.out) },
+            ].map((s) => (
+              <View key={s.label} style={[styles.stat, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]} accessible accessibilityLabel={`${s.label}: ${s.value}`}>
+                <AppText variant="caption" color="muted">
+                  {s.label}
+                </AppText>
+                <AppText variant="heading">{s.value}</AppText>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
       {q.isPending ? (
         <SkeletonList />
@@ -92,5 +118,7 @@ export default function Products() {
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.sm, paddingBottom: SPACE.md, gap: SPACE.sm },
   search: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, minHeight: TOUCH, borderRadius: RADIUS.md, borderWidth: 1, paddingHorizontal: SPACE.md },
+  stats: { flexDirection: "row", gap: SPACE.sm },
+  stat: { flex: 1, gap: 2, padding: SPACE.md, borderRadius: RADIUS.md, borderWidth: StyleSheet.hairlineWidth },
   list: { padding: SPACE.lg, paddingTop: 0, paddingBottom: SPACE.xxxl, flexGrow: 1 },
 });

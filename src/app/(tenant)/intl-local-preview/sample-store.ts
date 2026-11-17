@@ -27,7 +27,7 @@ export function saveSample(state: SampleState): string | null {
     localStorage.setItem(KEY, JSON.stringify(state));
     return null;
   } catch {
-    return "This browser's storage is full — remove an image or two and try again.";
+    return "This browser's storage is full. Remove an image or two and try again.";
   }
 }
 
@@ -57,7 +57,7 @@ export async function readSampleImage(file: File): Promise<UploadImageResult> {
   try {
     bitmap = await createImageBitmap(file);
   } catch {
-    return { error: "Couldn't read that image — try a JPG or PNG." };
+    return { error: "Couldn't read that image. Try a JPG or PNG." };
   }
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");

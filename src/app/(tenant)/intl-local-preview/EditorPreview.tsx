@@ -13,7 +13,7 @@ import type { Brand, Product } from "@/storefront/types";
 import { loadSample, readSampleImage, saveSample, type SampleState } from "./sample-store";
 
 const NOTICE =
-  "Sample page — uploads stay in this browser and Save updates the sample website tab (/intl-local-preview). Nothing is sent to a real store. To edit a real store, use its #admin → Website Layout.";
+  "Sample page. Uploads stay in this browser and Save updates the sample website tab (/intl-local-preview). Nothing is sent to a real store. To edit a real store, use its #admin → Website Layout.";
 
 function Editor({ sample, onSaved }: { sample: SampleState; onSaved: (s: SampleState) => void }) {
   // The store's brand (not the prop) so Save's setTweak shows up here at once.

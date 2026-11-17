@@ -135,7 +135,7 @@ function MarketEditor({
       </div>
       {mismatch && (
         <p className="sb-warn" role="note">
-          This card opens this store&apos;s catalog, which prices in {storeCurrency.code} ({formatMoney(1000, storeCurrency.symbol)}) — not{" "}
+          This card opens this store&apos;s catalog, which prices in {storeCurrency.code} ({formatMoney(1000, storeCurrency.symbol)}), not{" "}
           {card.currency}. Point the button at your {card.currency} store with a custom link, or change the label.
         </p>
       )}
@@ -156,8 +156,8 @@ function MarketEditor({
             value={card.imageBlend}
             options={[
               { value: "blend", label: "Blend into the card (hides white backgrounds)" },
-              { value: "cover", label: "Fill the card — a background under the text" },
-              { value: "watermark", label: "Watermark — large and faint, behind the text" },
+              { value: "cover", label: "Fill the card (a background under the text)" },
+              { value: "watermark", label: "Watermark (large and faint, behind the text)" },
               { value: "normal", label: "Show as uploaded" },
             ]}
             onChange={(imageBlend) =>
@@ -209,7 +209,7 @@ function MarketEditor({
               label="Image opacity"
               value={card.imageOpacity}
               onChange={(imageOpacity) => set({ imageOpacity })}
-              hint={card.imageBlend === "cover" ? "Lower keeps your text the highlight — 25–45% works for most photos." : undefined}
+              hint={card.imageBlend === "cover" ? "Lower keeps your text the highlight (25–45% works for most photos)." : undefined}
             />
           </div>
         </>
@@ -234,7 +234,7 @@ function IntlSellingSwitch({ brand }: { brand: PanelProps["brand"] }) {
       if ("error" in res) return toast(res.error);
       if (intl.savesImmediately) toast(enabled ? "International shop is on" : "International shop is off");
     } catch {
-      toast("Couldn't save — please try again.");
+      toast("Couldn't save. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -253,10 +253,10 @@ function IntlSellingSwitch({ brand }: { brand: PanelProps["brand"] }) {
       />
       {on && (
         <ol className="sb-steps">
-          <li><strong>Products</strong> — set each product to Local, International or Both and give it a USD price (Manage Products → Markets).</li>
-          <li><strong>Payments</strong> — tick which methods the International cart offers (Payments).</li>
-          <li><strong>Shipping</strong> — add your International rates in USD (Shipping → International rates).</li>
-          <li><strong>Fees & promos</strong> — optional USD amounts (Checkout Fee, Promo Codes).</li>
+          <li><strong>Products</strong>: set each product to Local, International or Both and give it a USD price (Manage Products → Markets).</li>
+          <li><strong>Payments</strong>: tick which methods the International cart offers (Payments).</li>
+          <li><strong>Shipping</strong>: add your International rates in USD (Shipping → International rates).</li>
+          <li><strong>Fees & promos</strong>: optional USD amounts (Checkout Fee, Promo Codes).</li>
         </ol>
       )}
       {on && brand.homeLayout !== "intl-local" && (
@@ -470,7 +470,7 @@ function SubscriberList({
           ))}
         </ul>
       )}
-      {rows.length > 50 && <p className="sb-sub">Showing the latest 50 — download the CSV for everyone.</p>}
+      {rows.length > 50 && <p className="sb-sub">Showing the latest 50. Download the CSV for everyone.</p>}
     </div>
   );
 }
@@ -571,7 +571,7 @@ export function SectionsPanel({ cfg, update, env }: PanelProps) {
 
       <div className="sb-heading">
         <h3>Custom sections</h3>
-        <p>Extra full-width bands — an announcement, a promo, a story. Reorder them above.</p>
+        <p>Extra full-width bands: an announcement, a promo, a story. Reorder them above.</p>
       </div>
       {cfg.customSections.map((band, i) => (
         <Group key={band.id} title={band.title || "Custom section"} badge={band.show ? "On" : "Off"}>

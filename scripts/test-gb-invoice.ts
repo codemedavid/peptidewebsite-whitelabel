@@ -155,11 +155,11 @@ console.log("\nthe owner's sample invoice");
     "🗓 GB Date: GB 10/2/2026",
     "",
     "📦 List of Orders",
-    `${TMB} - 2 vials`,
-    `${RT} - 1 vial`,
+    `${TMB} × 2 vials`,
+    `${RT} × 1 vial`,
     "💵 Breakdown of Cost",
-    "TMB 2.0 - 2 vials = ₱3,380.00",
-    "RT30 - 1 vial = ₱1,495.00",
+    "TMB 2.0 × 2 vials = ₱3,380.00",
+    "RT30 × 1 vial = ₱1,495.00",
     "Total w/ SF: ₱5,125.00",
     "📝 ORDER & PAYMENT",
     "",
@@ -205,7 +205,7 @@ console.log("\nthe owner's sample invoice");
     config: cfg,
     money: peso,
   })!;
-  ok("the same product across orders merges into one line", merged.text.includes("TMB 2.0 - 3 vials = ₱5,070.00"), merged.text);
+  ok("the same product across orders merges into one line", merged.text.includes("TMB 2.0 × 3 vials = ₱5,070.00"), merged.text);
 
   const fees = buildGroupBuyInvoice({
     orders: [{ ...first, adminFee: { label: "Service fee", amount: 50 }, discount: { code: "X", label: "", amount: 100 } }],

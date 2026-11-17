@@ -76,7 +76,7 @@ export function GbMemberTracker({ brand, onBack }: { brand: Brand; onBack: () =>
         if ("error" in res) setError(res.error);
         else setOrders(res.enabled ? res.orders : []);
       })
-      .catch(() => alive && setError("Couldn't load the member tracker — please refresh."));
+      .catch(() => alive && setError("Couldn't load the member tracker. Please refresh."));
     return () => {
       alive = false;
     };

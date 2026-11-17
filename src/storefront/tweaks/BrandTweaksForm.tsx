@@ -305,7 +305,7 @@ export function composeHero(industry: string, brandName: string): Partial<Brand>
   const [l1, l2] = lines[Math.floor(Math.random() * lines.length)];
   const subs = [
     `A refined experience for ${topic}, with the details that matter and none that don't.`,
-    `${brandName || "We"} brings clarity and craft to ${topic} — verified, considered, and built to last.`,
+    `${brandName || "We"} brings clarity and craft to ${topic}: verified, considered, and built to last.`,
     `Everything you need for ${topic}, presented with intent and shipped with care.`,
   ];
   return {

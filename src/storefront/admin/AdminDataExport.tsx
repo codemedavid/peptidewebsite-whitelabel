@@ -35,9 +35,9 @@ function saveFile(file: ExportFile) {
 
 /** What each file in the bundle is, in the owner's words. */
 const FILE_BLURB: { match: string; label: string; hint: string }[] = [
-  { match: "-products-", label: "Products", hint: "Your full catalog — one row per size/option, with prices and stock." },
+  { match: "-products-", label: "Products", hint: "Your full catalog: one row per size/option, with prices and stock." },
   { match: "-orders-", label: "Orders", hint: "Every order with its customer, address, fees and total." },
-  { match: "-order-items-", label: "Order items", hint: "One row per line item — what was bought, how many, at what price." },
+  { match: "-order-items-", label: "Order items", hint: "One row per line item: what was bought, how many, at what price." },
   { match: "-customers-", label: "Customers", hint: "Your customer list, merged across repeat orders, with lifetime spend." },
   { match: "-store-data-", label: "Everything (JSON)", hint: "The same data in developer format, for importing elsewhere." },
 ];
@@ -74,7 +74,7 @@ export function AdminDataExport({ onBack }: { onBack: () => void }) {
       }
       toast("Your data is downloading…");
     } catch {
-      toast("Couldn't build the export — please sign in again and retry.");
+      toast("Couldn't build the export. Please sign in again and retry.");
     } finally {
       setBusy(false);
     }
@@ -90,7 +90,7 @@ export function AdminDataExport({ onBack }: { onBack: () => void }) {
       const file = ready?.files.find((f) => f.filename.includes(match));
       if (file) saveFile(file);
     } catch {
-      toast("Couldn't build the export — please sign in again and retry.");
+      toast("Couldn't build the export. Please sign in again and retry.");
     } finally {
       setBusy(false);
     }
@@ -121,8 +121,8 @@ export function AdminDataExport({ onBack }: { onBack: () => void }) {
         <div className="admin-form__card">
           <h2 className="admin-form__section">Your data is yours</h2>
           <div className="admin-field__hint" style={{ marginTop: -10, marginBottom: 16 }}>
-            Download your products, customers and complete order history at any time — no
-            request, no waiting. The spreadsheets open in Excel, Numbers or Google Sheets,
+            Download your products, customers and complete order history at any time, with no
+            request and no waiting. The spreadsheets open in Excel, Numbers or Google Sheets,
             and the JSON file is what a developer would use to import your store somewhere
             else. Orders you have deleted are included too, flagged <strong>Deleted</strong>,
             so nothing is left behind.
@@ -167,19 +167,19 @@ export function AdminDataExport({ onBack }: { onBack: () => void }) {
         <div className="admin-form__card">
           <h2 className="admin-form__section">What&rsquo;s inside</h2>
           <div className="admin-field__hint">
-            <strong>Products</strong> — id, name, each size/option with its own price and stock,
+            <strong>Products</strong>: id, name, each size/option with its own price and stock,
             category, description and image link.
             <br />
-            <strong>Orders</strong> — order number, date, status, payment, the customer and full
+            <strong>Orders</strong>: order number, date, status, payment, the customer and full
             shipping address, subtotal, discount, shipping fee, service fee and total.
             <br />
-            <strong>Order items</strong> — one row per product line, so you can rebuild sales by
+            <strong>Order items</strong>: one row per product line, so you can rebuild sales by
             product anywhere.
             <br />
-            <strong>Customers</strong> — one row per person (repeat orders merged), with contact
+            <strong>Customers</strong>: one row per person (repeat orders merged), with contact
             details, latest address, order count and lifetime spend.
             <br />
-            <strong>Everything (JSON)</strong> — all of the above in one structured file.
+            <strong>Everything (JSON)</strong>: all of the above in one structured file.
           </div>
         </div>
       </div>

@@ -248,7 +248,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
           <h1 className="page-title">Calendar</h1>
           <p className="page-sub">
             Every tenant&rsquo;s subscription due date, what you&rsquo;ve collected, and your own
-            schedule — in one month view
+            schedule, in one month view
           </p>
         </div>
         <div className="page-actions">
@@ -309,7 +309,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
       {!entriesAvailable && (
         <div className="cal-note">
           Tenant due dates below are live. Your own entries need the
-          <span className="mono"> platform_calendar_events </span> table — run
+          <span className="mono"> platform_calendar_events </span> table. Run
           <span className="mono"> npm run db:push </span> to switch them on.
         </div>
       )}
@@ -601,7 +601,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
             <div className="drawer-head">
               <div>
                 <div className="drawer-title">{draft.id ? "Edit entry" : "New entry"}</div>
-                <div className="drawer-sub">Your own schedule — not visible to tenants</div>
+                <div className="drawer-sub">Your own schedule (not visible to tenants)</div>
               </div>
               <button type="button" className="drawer-close" onClick={() => setDraft(null)}>
                 <Ic.X />
@@ -694,7 +694,7 @@ export function CalendarView({ data }: { data: CalendarMonthData }) {
                     id="cal-client"
                     className="input mb-3"
                     value={draft.clientLabel}
-                    placeholder="Walk-in client — Cebu"
+                    placeholder="Walk-in client, Cebu"
                     onChange={(e) => setDraft({ ...draft, clientLabel: e.target.value })}
                   />
                 </>

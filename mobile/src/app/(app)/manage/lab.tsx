@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
+import { HiddenView, isViewVisible, PreviewPublicPage } from "@/features/admin/content/page-guard";
 import { SPACE } from "@/theme/tokens";
 import { removeRows, upsertRow, useCollection } from "@/features/admin/setup/data";
 import { ImageField } from "@/features/admin/setup/ImageField";
@@ -31,6 +32,7 @@ export default function LabScreen() {
       <Stack.Screen options={{ title: "Lab results" }} />
       <Loadable query={list.brand}>
         {(brand) => {
+          if (!isViewVisible(brand, "lab")) return <HiddenView label="Lab results" />;
           const reports = list.items;
           const allSelected = reports.length > 0 && selected.size === reports.length;
           const startAdd = () =>
@@ -59,13 +61,15 @@ export default function LabScreen() {
                 isEmpty={reports.length === 0}
                 empty={{
                   icon: "shield-checkmark-outline",
-                  title: "No lab reports yet. Add one — it'll show up on your public Lab Reports page.",
+                  title: "No lab reports yet. Add one and it'll show up on your public Lab Reports page.",
                   action: "Add your first lab report",
                 }}
                 refreshing={list.brand.isRefetching}
                 onRefresh={() => void list.brand.refetch()}
                 toolbar={
-                  reports.length > 0 ? (
+                  <>
+                  <PreviewPublicPage hash="coa" />
+                  {reports.length > 0 ? (
                     <View style={styles.bulk}>
                       <Checkbox
                         checked={allSelected}
@@ -80,7 +84,8 @@ export default function LabScreen() {
                         onPress={deleteSelected}
                       />
                     </View>
-                  ) : null
+                  ) : null}
+                  </>
                 }
               >
                 {reports.map((r) => (
@@ -251,8 +256,8 @@ function ReportEditor({
         error={dateError}
       />
       <Field label="Purity (optional)" value={purity} onChangeText={setPurity} placeholder="e.g., 99.2%" maxLength={MAX_COA_TEXT} />
-      <ImageField label="Certificate image" hint="PNG, JPG — keep it under 2.5 MB" value={image} previewAspect={3 / 4} onChange={(url) => setImage(url)} />
-      <Hint>— and / or —</Hint>
+      <ImageField kind="lab-result" label="Certificate image" hint="PNG or JPG, under 2.5 MB" value={image} previewAspect={3 / 4} onChange={(url) => setImage(url)} />
+      <Hint>and / or</Hint>
       <Field
         label="Document link"
         value={link}

@@ -158,7 +158,7 @@ export function repriceEditedLines(
   }
 
   const items = [...kept, ...appended];
-  if (items.length === 0) return { ok: false, error: "An order needs at least one line — cancel the order instead." };
+  if (items.length === 0) return { ok: false, error: "An order needs at least one line. Cancel the order instead." };
   if (items.length > MAX_LINES) return { ok: false, error: `An order can hold up to ${MAX_LINES} lines.` };
   return { ok: true, items, changes, kitDeltas: kitDeltasBetween(current, items) };
 }
